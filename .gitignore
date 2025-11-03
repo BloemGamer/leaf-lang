@@ -5,3 +5,5 @@
 *.sh
 
 slang-test
+build
+.cache
