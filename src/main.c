@@ -7,12 +7,15 @@ char *read_file_to_str(const char* filename);
 
 int main(int argc, char **argv)
 {
+	char *filename = NULL;
 	if(argc < 2)
 	{
-		fprintf(stderr, "Not enough arguments, call: %s <file>\n", argv[0]);
-		exit(EXIT_FAILURE);
+		// fprintf(stderr, "Not enough arguments, call: %s <file>\n", argv[0]);
+		// exit(EXIT_FAILURE);
+		filename = "slang-test/main.sl";
+	} else {
+		filename = argv[1];
 	}
-	const char *filename = argv[1];
 	const char *file = read_file_to_str(filename);
 	if(file == NULL)
 	{
@@ -20,7 +23,13 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	printf("%s", file);
-	lex(file);
+	Token *lexed = lex(file);
+	Token l;
+	while((l = *lexed++).token_type != token_type_eof)
+	{
+		puts(token_to_string(&l));
+	}
+	puts(token_to_string(&l));
 }
 
 char *read_file_to_str(const char* filename)
