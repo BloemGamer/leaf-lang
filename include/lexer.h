@@ -1,71 +1,73 @@
 #include <stdint.h>
 
+#define SECOND(a, b, ...) a, b)
+#define Y(a, ...) X(a, SECOND(__VA_ARGS__, void))
+
 #define __tokens \
-	X(token_type_eof)				/* always appended as the End Of File (Last token, much like string terminator) */ \
-	X(token_type_invalid)			/* only used for errors */ \
+	Y(token_type_eof)					/* always appended as the End Of File (Last token, much like string terminator) */ \
+	Y(token_type_invalid)				/* only used for errors */ \
 \
 	/* simple tokens: */ \
-	X(token_type_lparen)			/* ( */ \
-	X(token_type_rparen)			/* ) */ \
-	X(token_type_lbrace)			/* { */ \
-	X(token_type_rbrace)			/* } */ \
-	X(token_type_lsqbracket)		/* [ */ \
-	X(token_type_rsqbracket)		/* ] */ \
-	X(token_type_dot)				/* . */ \
-	X(token_type_comma)				/* , */ \
-	X(token_type_plus)				/* + */ \
-	X(token_type_minus)				/* - */ \
-	X(token_type_star)				/* * */ \
-	X(token_type_slash)				/* / */ \
-	X(token_type_semicolon)			/* ; */ \
-	X(token_type_bang)				/* ! */ \
-	X(token_type_equal)				/* = */ \
-	X(token_type_greater)			/* > */ \
-	X(token_type_less)				/* < */ \
-	X(token_type_ampersand)			/* & */ \
-	X(token_type_caret)				/* ^ */ \
-	X(token_type_pipe)				/* | */ \
-	X(token_type_tilda)				/* ~ */ \
-	X(token_type_arrow)				/* -> */ \
-	X(token_type_lshift)			/* << */ \
-	X(token_type_rshift)			/* >> */ \
-	X(token_type_and)				/* && */ \
-	X(token_type_or)				/* || */ \
+	Y(token_type_lparen)				/* ( */ \
+	Y(token_type_rparen)				/* ) */ \
+	Y(token_type_lbrace)				/* { */ \
+	Y(token_type_rbrace)				/* } */ \
+	Y(token_type_lsqbracket)			/* [ */ \
+	Y(token_type_rsqbracket)			/* ] */ \
+	Y(token_type_dot)					/* . */ \
+	Y(token_type_comma)					/* , */ \
+	Y(token_type_plus)					/* + */ \
+	Y(token_type_minus)					/* - */ \
+	Y(token_type_star)					/* * */ \
+	Y(token_type_slash)					/* / */ \
+	Y(token_type_semicolon)				/* ; */ \
+	Y(token_type_bang)					/* ! */ \
+	Y(token_type_equal)					/* = */ \
+	Y(token_type_greater)				/* > */ \
+	Y(token_type_less)					/* < */ \
+	Y(token_type_ampersand)				/* & */ \
+	Y(token_type_caret)					/* ^ */ \
+	Y(token_type_pipe)					/* | */ \
+	Y(token_type_tilda)					/* ~ */ \
+	Y(token_type_arrow)					/* -> */ \
+	Y(token_type_lshift)				/* << */ \
+	Y(token_type_rshift)				/* >> */ \
+	Y(token_type_and)					/* && */ \
+	Y(token_type_or)					/* || */ \
 	/*ompound tokens: */ \
-	X(token_type_bang_equal)		/* != */ \
-	X(token_type_equal_equal)		/* == */ \
-	X(token_type_greater_equal)		/* >= */ \
-	X(token_type_less_equal)		/* <= */ \
+	Y(token_type_bang_equal)			/* != */ \
+	Y(token_type_equal_equal)			/* == */ \
+	Y(token_type_greater_equal)			/* >= */ \
+	Y(token_type_less_equal)			/* <= */ \
 	/*ignored:*/ \
-	X(token_type_whitespace)		/* \t, \n, \r or <space> */ \
-	X(token_type_comment)			/* // (both comments) */ \
+	Y(token_type_whitespace)			/* \t, \n, \r or <space> */ \
+	Y(token_type_comment)				/* // (both comments) */ \
 \
 	/*literals: */ \
-	X(token_type_string)			/* string literal "..." */ \
-	X(token_type_invalid_string)	/* invalid string literal "... EOF */ \
-	X(token_type_number)			/* any number like: 5 or 5.23 */ \
-	X(token_type_char)				/* any char like : 'E' */ \
+	Y(token_type_string, char*)				/* string literal "..." */ \
+	Y(token_type_invalid_string, char*)		/* invalid string literal "... EOF */ \
+	Y(token_type_number, int64_t)			/* any number like: 5 or 5.23 */ \
+	Y(token_type_char, char)				/* any char like : 'E' */ \
 \
 	/*identifier: */ \
-	X(token_type_identifier)		/* id */ \
-	X(token_type_type)				/* type */ \
+	Y(token_type_identifier, char*)		/* id */ \
+	Y(token_type_type, char*)			/* type */ \
 \
 	/*keywords: */ \
-	X(token_type_if)				/* if */ \
-	X(token_type_else)				/* else */ \
-	X(token_type_true)				/* true */ \
-	X(token_type_false)				/* false */ \
-	X(token_type_while)				/* while */ \
-	X(token_type_for)				/* for */ \
-	X(token_type_fun)				/* fn */ \
-	X(token_type_struct)			/* struct */ \
-	X(token_type_enum)				/* enum */ \
-	X(token_type_return)			/* return */
-
+	Y(token_type_if)					/* if */ \
+	Y(token_type_else)					/* else */ \
+	Y(token_type_true)					/* true */ \
+	Y(token_type_false)					/* false */ \
+	Y(token_type_while)					/* while */ \
+	Y(token_type_for)					/* for */ \
+	Y(token_type_fun)					/* fn */ \
+	Y(token_type_struct)				/* struct */ \
+	Y(token_type_enum)					/* enum */ \
+	Y(token_type_return)				/* return */
 
 typedef enum
 {
-#define X(x) x,
+#define X(x, _) x,
 	__tokens
 #undef X
 } Token_type;
@@ -82,6 +84,12 @@ typedef struct
 
 } Token;
 
+
+#define test(x) _Generic((x)0, \
+	void: "void", \
+	default: "defualt" ) \
+
+char *t = test(void);
 
 /// Returns an array of Token, that always ends with token_type_eof, the input can be deallocated if you want
 [[gnu::warn_unused_result]]
