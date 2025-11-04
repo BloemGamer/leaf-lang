@@ -86,4 +86,6 @@ typedef struct
 /// Returns an array of Token, that always ends with token_type_eof, the input can be deallocated if you want
 [[gnu::warn_unused_result]]
 Token *lex(const char *input);
+
+/// Returns a pointer to a string, these should not be freed
 char *token_to_string(Token *token);
