@@ -3,7 +3,7 @@
 
 typedef struct {}__token_keyword;
 typedef struct {}__token_simple;
-typedef struct {}__token_litteral;
+typedef struct {}__token_literal;
 typedef struct {}__token_identefier;
 typedef struct {}__token_ignored;
 typedef struct {}__token_invalid;
@@ -15,7 +15,7 @@ typedef struct {}__token_eof;
 
 #define __tokens \
 	Y(token_type_eof, __token_eof)							/* always appended as the End Of File (Last token, much like string terminator) */ \
-	Y(token_type_invalid, __token_invallid)					/* only used for errors */ \
+	Y(token_type_invalid, __token_invalid)					/* only used for errors */ \
 \
 	/* simple tokens: */ \
 	Y(token_type_lparen, __token_simple)					/* ( */ \
@@ -70,7 +70,7 @@ typedef struct {}__token_eof;
 	Y(token_type_false, __token_keyword)					/* false */ \
 	Y(token_type_while, __token_keyword)					/* while */ \
 	Y(token_type_for, __token_keyword)						/* for */ \
-	Y(token_type_fun, __token_keyword)						/* fn */ \
+	Y(token_type_fn, __token_keyword)						/* fn */ \
 	Y(token_type_struct, __token_keyword)					/* struct */ \
 	Y(token_type_enum, __token_keyword)						/* enum */ \
 	Y(token_type_return, __token_keyword)					/* return */

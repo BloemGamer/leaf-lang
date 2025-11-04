@@ -1,8 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
+#include <alloca.h>
+#include <ctype.h>
 
 #include "lexer.h"
+
+#define MAX2(a, b) ((a) > (b)) ? (a) : (b)
 
 typedef struct
 {
@@ -14,6 +19,7 @@ static TokenResult string_to_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
 static TokenResult string_to_keyword_token(const char *input);
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
+static size_t max(size_t arg1, ...);
 
 Token *lex(const char *input)
 {
@@ -211,21 +217,119 @@ static TokenResult string_to_simple_token(const char *input)
 static TokenResult string_to_keyword_token(const char *input)
 {
 	TokenResult token_res = { 0 };
+	size_t amount_keywords = 0;
+	if(!isalpha(input[0]))
+	{
+		token_res.size = 0;
+		return token_res;
+	}
+
+#define X(a, b, c) amount_keywords++;
+	__tokens;
+#undef X
+#define X(a, b, c) , _Generic((b){}, \
+	__token_keyword: sizeof(#a), \
+	default: 0 \
+)
+	const size_t buffer_size = max(amount_keywords __tokens);
+#undef X
+	char *buffer = (char*)alloca((buffer_size + 1) * sizeof(char));
+
+	buffer[0] = input[0];
+	size_t i;
+	for(i = 1; i < buffer_size; i++)
+	{
+		if(isalnum(input[i]))
+		{
+			buffer[i] = input[i];
+		} else {
+			break;
+		}
+	}
+	buffer[i + 1] = '\0';
+
+	if(strcmp(buffer, "if") == 0)
+	{
+		token_res.token.token_type = token_type_if;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "else") == 0)
+	{
+		token_res.token.token_type = token_type_else;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "true") == 0)
+	{
+		token_res.token.token_type = token_type_true;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "false") == 0)
+	{
+		token_res.token.token_type = token_type_false;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "while") == 0)
+	{
+		token_res.token.token_type = token_type_while;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "fn") == 0)
+	{
+		token_res.token.token_type = token_type_fn;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "struct") == 0)
+	{
+		token_res.token.token_type = token_type_struct;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "enum") == 0)
+	{
+		token_res.token.token_type = token_type_enum;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+	if(strcmp(buffer, "return") == 0)
+	{
+		token_res.token.token_type = token_type_return;
+		token_res.size = sizeof(i + 1);
+		return token_res;
+	}
+
 
 	token_res.size = 0;
 	return token_res;
 }
 
-
 char *token_to_string(Token *token)
 {
 	switch(token->token_type)
 	{
-#define X(x, _a, _b) case x: return #x " " #_a " " #_b;
+#define X(x, _a, _b) case x: return (#x) + 11;
 		__tokens;
 #undef X
 		default:
 			fprintf(stderr, "Could not find token_type: %d", token->token_type);
 			exit(EXIT_FAILURE);
 	}
+}
+
+static inline size_t max(const size_t amount, ...)
+{
+	va_list args;
+	size_t ans = 0;
+	va_start(args, amount);
+	for(size_t i = 0; i < amount; i++)
+	{
+		size_t num = va_arg(args, size_t);
+		ans = MAX2(ans, num);
+	}
+	return ans;
 }
