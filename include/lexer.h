@@ -58,6 +58,8 @@
 	X(token_type_while)				/* while */ \
 	X(token_type_for)				/* for */ \
 	X(token_type_fun)				/* fn */ \
+	X(token_type_struct)			/* struct */ \
+	X(token_type_enum)				/* enum */ \
 	X(token_type_return)			/* return */
 
 
