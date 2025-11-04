@@ -77,7 +77,7 @@ static TokenResult string_to_simple_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
-	if(isalpha(input[0]) != false)
+	if(isalnum(input[0]) != false)
 	{
 		token_res.size = 0;
 		return token_res;
