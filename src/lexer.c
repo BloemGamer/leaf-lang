@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "lexer.h"
 
@@ -81,10 +82,17 @@ static TokenResult string_to_token(const char *input)
 		case '*': { token_res.token.token_type = token_type_star; token_res.size = 1; return token_res; }
 		case '/':
 		{
-			if(input[1] == '/')
+			if(input[1] == '/') // line comments
 			{
 				token_res.token.token_type = token_type_comment;
-				token_res.size = 2;
+				size_t i = 2;
+				while(input[i++] != '\n') {};
+				token_res.size = i;
+			}else if(input[1] == '*') /* block comments, note, prob does not what it should do if a end comment is in a string */
+			{
+				token_res.token.token_type = token_type_comment;
+				const char *end_comment = strstr(input, "*/");
+				token_res.size = end_comment - input;
 			} else {
 				token_res.token.token_type = token_type_slash;
 				token_res.size = 1;
