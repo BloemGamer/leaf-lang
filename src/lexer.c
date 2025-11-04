@@ -73,142 +73,29 @@ static TokenResult string_to_token(const char *input)
 	return token_res;
 }
 
-
 static TokenResult string_to_simple_token(const char *input)
 {
 	TokenResult token_res = { 0 };
+	constexpr size_t amount_tokens = sizeof(TOKENS_TYPES_SIMPLE) / sizeof(TOKENS_TYPES_SIMPLE[0]);
 
-	switch(input[0])
+	for(size_t i = 0; i < amount_tokens; i++)
 	{
-		case '(': { token_res.token.token_type = token_type_lparen; token_res.size = 1; return token_res; }
-		case ')': { token_res.token.token_type = token_type_rparen; token_res.size = 1; return token_res; }
-		case '{': { token_res.token.token_type = token_type_lbrace; token_res.size = 1; return token_res; }
-		case '}': { token_res.token.token_type = token_type_rbrace; token_res.size = 1; return token_res; }
-		case '[': { token_res.token.token_type = token_type_lsqbracket; token_res.size = 1; return token_res; }
-		case ']': { token_res.token.token_type = token_type_rsqbracket; token_res.size = 1; return token_res; }
-		case '.': { token_res.token.token_type = token_type_dot; token_res.size = 1; return token_res; }
-		case ',': { token_res.token.token_type = token_type_comma; token_res.size = 1; return token_res; }
-		case '+': { token_res.token.token_type = token_type_plus; token_res.size = 1; return token_res; }
-		case '-':
+		if(input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
 		{
-			if(input[1] == '>')
-			{
-				token_res.token.token_type = token_type_arrow;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_minus;
-				token_res.size = 1;
-			}
+			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
+			token_res.size = 2;
 			return token_res;
 		}
-		case '*': { token_res.token.token_type = token_type_star; token_res.size = 1; return token_res; }
-		case '/':
-		{
-			if(input[1] == '/') // line comments
-			{
-				token_res.token.token_type = token_type_comment;
-				size_t i = 2;
-				while(input[i++] != '\n') {};
-				token_res.size = i;
-			}else if(input[1] == '*') /* block comments, note, prob does not what it should do if a end comment is in a string */
-			{
-				token_res.token.token_type = token_type_comment;
-				const char *end_comment = strstr(input, "*/");
-				token_res.size = end_comment - input;
-			} else {
-				token_res.token.token_type = token_type_slash;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case ';': { token_res.token.token_type = token_type_semicolon; token_res.size = 1; return token_res; }
-		case '!':
-		{
-			if(input[1] == '=')
-			{
-				token_res.token.token_type = token_type_bang_equal;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_bang;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '=':
-		{
-			if(input[1] == '=')
-			{
-				token_res.token.token_type = token_type_equal_equal;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_equal;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '<':
-		{
-			if(input[1] == '=')
-			{
-				token_res.token.token_type = token_type_less_equal;
-				token_res.size = 2;
-			} else if(input[1] == '<') {
-				token_res.token.token_type = token_type_lshift;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_less;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '>':
-		{
-			if(input[1] == '=')
-			{
-				token_res.token.token_type = token_type_greater_equal;
-				token_res.size = 2;
-			} else if(input[1] == '>') {
-				token_res.token.token_type = token_type_rshift;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_greater;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '&':
-		{
-			if(input[1] == '&')
-			{
-				token_res.token.token_type = token_type_and;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_ampersand;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '^': { token_res.token.token_type = token_type_caret; token_res.size = 1; return token_res; }
-		case '|':
-		{
-			if(input[1] == '|')
-			{
-				token_res.token.token_type = token_type_or;
-				token_res.size = 2;
-			} else {
-				token_res.token.token_type = token_type_pipe;
-				token_res.size = 1;
-			}
-			return token_res;
-		}
-		case '~': { token_res.token.token_type = token_type_caret; token_res.size = 1; return token_res; }
-		case ' ':
-		case '\t':
-		case '\n': { token_res.token.token_type = token_type_whitespace; token_res.size = 1; return token_res; }
-		default: break;
 	}
-
-
+	for(size_t i = 0; i < amount_tokens; i++)
+	{
+		if(input[0] == TOKENS_STR_IDENT_SIMPLE[i][0])
+		{
+			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
+			token_res.size = 1;
+			return token_res;
+		}
+	}
 
 	token_res.size = 0;
 	return token_res;
@@ -217,119 +104,44 @@ static TokenResult string_to_simple_token(const char *input)
 static TokenResult string_to_keyword_token(const char *input)
 {
 	TokenResult token_res = { 0 };
-	size_t amount_keywords = 0;
-	if(!isalpha(input[0]))
+
+	if(isalpha(input[0]) == false)
 	{
 		token_res.size = 0;
 		return token_res;
 	}
 
-#define X(a, b, c) amount_keywords++;
-	__tokens;
-#undef X
-#define X(a, b, c) , _Generic((b){}, \
-	__token_keyword: sizeof(#a), \
-	default: 0 \
-)
-	const size_t buffer_size = max(amount_keywords __tokens);
-#undef X
-	char *buffer = (char*)alloca((buffer_size + 1) * sizeof(char));
+	constexpr size_t buffer_size = sizeof(TOKENS_STR_IDENT_KEYWORD[0]);
+	constexpr size_t amount_tokens = sizeof(TOKENS_TYPES_KEYWORD) / sizeof(TOKENS_TYPES_KEYWORD[0]);
+	char buffer[buffer_size] = { 0 };
 
 	buffer[0] = input[0];
-	size_t i;
-	for(i = 1; i < buffer_size; i++)
+	size_t len;
+	for(len = 1; len < buffer_size; len++)
 	{
-		if(isalnum(input[i]))
+		if(isalnum(input[len]))
 		{
-			buffer[i] = input[i];
+			buffer[len] = input[len];
 		} else {
 			break;
 		}
 	}
-	buffer[i + 1] = '\0';
+	buffer[len] = '\0';
 
-	if(strcmp(buffer, "if") == 0)
+	for(size_t i = 0; i < amount_tokens; i++)
 	{
-		token_res.token.token_type = token_type_if;
-		token_res.size = sizeof(i + 1);
-		return token_res;
+		if(strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
+		{
+			token_res.token.token_type = TOKENS_TYPES_KEYWORD[i];
+			token_res.size = len;
+			return token_res;
+		}
 	}
-	if(strcmp(buffer, "else") == 0)
-	{
-		token_res.token.token_type = token_type_else;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "true") == 0)
-	{
-		token_res.token.token_type = token_type_true;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "false") == 0)
-	{
-		token_res.token.token_type = token_type_false;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "while") == 0)
-	{
-		token_res.token.token_type = token_type_while;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "fn") == 0)
-	{
-		token_res.token.token_type = token_type_fn;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "struct") == 0)
-	{
-		token_res.token.token_type = token_type_struct;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "enum") == 0)
-	{
-		token_res.token.token_type = token_type_enum;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-	if(strcmp(buffer, "return") == 0)
-	{
-		token_res.token.token_type = token_type_return;
-		token_res.size = sizeof(i + 1);
-		return token_res;
-	}
-
-
 	token_res.size = 0;
 	return token_res;
 }
 
-char *token_to_string(Token *token)
+const char *token_to_string(Token *token)
 {
-	switch(token->token_type)
-	{
-#define X(x, _a, _b) case x: return (#x) + 11;
-		__tokens;
-#undef X
-		default:
-			fprintf(stderr, "Could not find token_type: %d", token->token_type);
-			exit(EXIT_FAILURE);
-	}
-}
-
-static inline size_t max(const size_t amount, ...)
-{
-	va_list args;
-	size_t ans = 0;
-	va_start(args, amount);
-	for(size_t i = 0; i < amount; i++)
-	{
-		size_t num = va_arg(args, size_t);
-		ans = MAX2(ans, num);
-	}
-	return ans;
+	return TOKENS_STR_PR[token->token_type];
 }
