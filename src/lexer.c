@@ -11,6 +11,7 @@ typedef struct
 } TokenResult;
 
 static TokenResult string_to_token(const char *input);
+static TokenResult string_to_simple_token(const char *input);
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
 
 Token *lex(const char *input)
@@ -54,8 +55,18 @@ static TokenResult string_to_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
+	token_res = string_to_simple_token(input);
+	if(token_res.size != 0) { return token_res; }
 
-	// one of 2 chars, that are predetermined
+	token_res.token.token_type = token_type_invalid;
+	return token_res;
+}
+
+
+static TokenResult string_to_simple_token(const char *input)
+{
+	TokenResult token_res = { 0 };
+
 	switch(input[0])
 	{
 		case '(': { token_res.token.token_type = token_type_lparen; token_res.size = 1; return token_res; }
@@ -183,12 +194,12 @@ static TokenResult string_to_token(const char *input)
 		case ' ':
 		case '\t':
 		case '\n': { token_res.token.token_type = token_type_whitespace; token_res.size = 1; return token_res; }
+		default: break;
 	}
 
 
 
-	token_res.token.token_type = token_type_invalid;
-	token_res.size = 1;
+	token_res.size = 0;
 	return token_res;
 }
 
@@ -197,10 +208,9 @@ char *token_to_string(Token *token)
 {
 	switch(token->token_type)
 	{
-#define X(x) case x: return #x;
+#define X(x, _) case x: return #x;
 		__tokens;
 #undef X
-
 		default:
 			fprintf(stderr, "Could not find token_type: %d", token->token_type);
 			exit(EXIT_FAILURE);
