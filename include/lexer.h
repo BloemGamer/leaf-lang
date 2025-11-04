@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 
 
 typedef struct {}__token_keyword;
@@ -9,10 +10,29 @@ typedef struct {}__token_ignored;
 typedef struct {}__token_invalid;
 typedef struct {}__token_eof;
 
+
+
+#define __KEYWORDS \
+	X_KEY(if)		/* if */ \
+	X_KEY(else)		/* else */ \
+	X_KEY(true)		/* true */ \
+	X_KEY(false)	/* false */ \
+	X_KEY(while)	/* while */ \
+	X_KEY(for)		/* for */ \
+	X_KEY(fn)		/* fn */ \
+	X_KEY(struct)	/* struct */ \
+	X_KEY(enum)		/* enum */ \
+	X_KEY(return)	/* return */
+
+#define X_KEY(x) #x,
+	constexpr char KEYWORDS[][100] = { __KEYWORDS};
+#undef X_KEY
+
 #define SECOND(a, b, ...) b
 #define X_HELPER(a, b, c) X(a, b, c)
 #define Y(a, b, ...) X_HELPER(a, b, SECOND(a, ##__VA_ARGS__, void))
 
+#define X_KEY(x) Y(token_type_##x, __token_keyword)
 #define __tokens \
 	Y(token_type_eof, __token_eof)							/* always appended as the End Of File (Last token, much like string terminator) */ \
 	Y(token_type_invalid, __token_invalid)					/* only used for errors */ \
@@ -64,16 +84,7 @@ typedef struct {}__token_eof;
 	Y(token_type_type, __token_identefier, char*)			/* type */ \
 \
 	/*keywords: */ \
-	Y(token_type_if, __token_keyword)						/* if */ \
-	Y(token_type_else, __token_keyword)						/* else */ \
-	Y(token_type_true, __token_keyword)						/* true */ \
-	Y(token_type_false, __token_keyword)					/* false */ \
-	Y(token_type_while, __token_keyword)					/* while */ \
-	Y(token_type_for, __token_keyword)						/* for */ \
-	Y(token_type_fn, __token_keyword)						/* fn */ \
-	Y(token_type_struct, __token_keyword)					/* struct */ \
-	Y(token_type_enum, __token_keyword)						/* enum */ \
-	Y(token_type_return, __token_keyword)					/* return */
+	__KEYWORDS
 
 typedef enum
 {
