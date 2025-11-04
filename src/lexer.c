@@ -76,6 +76,13 @@ static TokenResult string_to_token(const char *input)
 static TokenResult string_to_simple_token(const char *input)
 {
 	TokenResult token_res = { 0 };
+
+	if(isalpha(input[0]) != false)
+	{
+		token_res.size = 0;
+		return token_res;
+	}
+
 	constexpr size_t amount_tokens = sizeof(TOKENS_TYPES_SIMPLE) / sizeof(TOKENS_TYPES_SIMPLE[0]);
 
 	for(size_t i = 0; i < amount_tokens; i++)
@@ -119,7 +126,7 @@ static TokenResult string_to_keyword_token(const char *input)
 	size_t len;
 	for(len = 1; len < buffer_size; len++)
 	{
-		if(isalnum(input[len]))
+		if(isalnum(input[len]) != false)
 		{
 			buffer[len] = input[len];
 		} else {
