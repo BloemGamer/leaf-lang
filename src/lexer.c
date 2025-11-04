@@ -130,6 +130,9 @@ static TokenResult string_to_token(const char *input)
 			{
 				token_res.token.token_type = token_type_less_equal;
 				token_res.size = 2;
+			} else if(input[1] == '<') {
+				token_res.token.token_type = token_type_lshift;
+				token_res.size = 2;
 			} else {
 				token_res.token.token_type = token_type_less;
 				token_res.size = 1;
@@ -141,6 +144,9 @@ static TokenResult string_to_token(const char *input)
 			if(input[1] == '=')
 			{
 				token_res.token.token_type = token_type_greater_equal;
+				token_res.size = 2;
+			} else if(input[1] == '>') {
+				token_res.token.token_type = token_type_rshift;
 				token_res.size = 2;
 			} else {
 				token_res.token.token_type = token_type_greater;

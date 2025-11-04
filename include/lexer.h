@@ -27,6 +27,8 @@
 	X(token_type_pipe)				/* | */ \
 	X(token_type_tilda)				/* ~ */ \
 	X(token_type_arrow)				/* -> */ \
+	X(token_type_lshift)			/* << */ \
+	X(token_type_rshift)			/* >> */ \
 \
 	/*ompound tokens: */ \
 	X(token_type_bang_equal)		/* != */ \
@@ -36,7 +38,7 @@
 \
 	/*ignored:*/ \
 	X(token_type_whitespace)		/* \t, \n, \r or <space> */ \
-	X(token_type_comment)			/* // */ \
+	X(token_type_comment)			/* // (both comments) */ \
 \
 	/*literals: */ \
 	X(token_type_string)			/* string literal "..." */ \
