@@ -3,8 +3,13 @@
 
 #include "lexer.h"
 
+typedef struct
+{
+	Token token;
+	size_t size;
+} TokenResult;
 
-static Token string_to_token(const char *input);
+static TokenResult string_to_token(const char *input);
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
 
 Token *lex(const char *input)
@@ -16,13 +21,13 @@ Token *lex(const char *input)
 
 	while(*input != '\0')
 	{
-		const Token next_token = string_to_token(input);
-		input++;
-		if(next_token.token_type == token_type_whitespace || next_token.token_type == token_type_comment)
+		const TokenResult next_token = string_to_token(input);
+		input += next_token.size;
+		if(next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
 		{ continue; }
-		if(next_token.token_type == token_type_invalid) // tmp
+		if(next_token.token.token_type == token_type_invalid) // tmp
 		{ continue; }
-		add_token(next_token, &tokens, &token_size, &token_max_size);
+		add_token(next_token.token, &tokens, &token_size, &token_max_size);
 	}
 	Token token = { 0 };
 	token.token_type = token_type_eof;
@@ -32,7 +37,7 @@ Token *lex(const char *input)
 	return tokens;
 }
 
-static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) 
+static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size)
 {
 	if(*token_size >= *token_max_size)
 	{
@@ -44,115 +49,133 @@ static void add_token(const Token next, Token **tokens, size_t *token_size, size
 	*token_size += 1;
 }
 
-static Token string_to_token(const char *input)
+static TokenResult string_to_token(const char *input)
 {
-	Token token = { 0 };
+	TokenResult token_res = { 0 };
+
 
 	// one of 2 chars, that are predetermined
 	switch(input[0])
 	{
-		case '(': { token.token_type = token_type_lparen; return token; }
-		case ')': { token.token_type = token_type_rparen; return token; }
-		case '{': { token.token_type = token_type_lbrace; return token; }
-		case '}': { token.token_type = token_type_rbrace; return token; }
-		case '[': { token.token_type = token_type_lsqbracket; return token; }
-		case ']': { token.token_type = token_type_rsqbracket; return token; }
-		case '.': { token.token_type = token_type_dot; return token; }
-		case ',': { token.token_type = token_type_comma; return token; }
-		case '+': { token.token_type = token_type_plus; return token; }
+		case '(': { token_res.token.token_type = token_type_lparen; token_res.size = 1; return token_res; }
+		case ')': { token_res.token.token_type = token_type_rparen; token_res.size = 1; return token_res; }
+		case '{': { token_res.token.token_type = token_type_lbrace; token_res.size = 1; return token_res; }
+		case '}': { token_res.token.token_type = token_type_rbrace; token_res.size = 1; return token_res; }
+		case '[': { token_res.token.token_type = token_type_lsqbracket; token_res.size = 1; return token_res; }
+		case ']': { token_res.token.token_type = token_type_rsqbracket; token_res.size = 1; return token_res; }
+		case '.': { token_res.token.token_type = token_type_dot; token_res.size = 1; return token_res; }
+		case ',': { token_res.token.token_type = token_type_comma; token_res.size = 1; return token_res; }
+		case '+': { token_res.token.token_type = token_type_plus; token_res.size = 1; return token_res; }
 		case '-':
 		{
 			if(input[1] == '>')
 			{
-				token.token_type = token_type_arrow;
+				token_res.token.token_type = token_type_arrow;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_minus;
+				token_res.token.token_type = token_type_minus;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
-		case '*': { token.token_type = token_type_star; return token; }
+		case '*': { token_res.token.token_type = token_type_star; token_res.size = 1; return token_res; }
 		case '/':
 		{
 			if(input[1] == '/')
 			{
-				token.token_type = token_type_comment;
+				token_res.token.token_type = token_type_comment;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_slash;
+				token_res.token.token_type = token_type_slash;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
-		case ';': { token.token_type = token_type_semicolon; return token; }
+		case ';': { token_res.token.token_type = token_type_semicolon; token_res.size = 1; return token_res; }
 		case '!':
 		{
 			if(input[1] == '=')
 			{
-				token.token_type = token_type_bang_equal;
+				token_res.token.token_type = token_type_bang_equal;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_bang;
+				token_res.token.token_type = token_type_bang;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
 		case '=':
 		{
 			if(input[1] == '=')
 			{
-				token.token_type = token_type_equal_equal;
+				token_res.token.token_type = token_type_equal_equal;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_equal;
+				token_res.token.token_type = token_type_equal;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
 		case '<':
 		{
 			if(input[1] == '=')
 			{
-				token.token_type = token_type_less_equal;
+				token_res.token.token_type = token_type_less_equal;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_less;
+				token_res.token.token_type = token_type_less;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
 		case '>':
 		{
 			if(input[1] == '=')
 			{
-				token.token_type = token_type_greater_equal;
+				token_res.token.token_type = token_type_greater_equal;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_greater;
+				token_res.token.token_type = token_type_greater;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
 		case '&':
 		{
 			if(input[1] == '&')
 			{
-				token.token_type = token_type_and;
+				token_res.token.token_type = token_type_and;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_ampersand;
+				token_res.token.token_type = token_type_ampersand;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
-		case '^': { token.token_type = token_type_caret; return token; }
+		case '^': { token_res.token.token_type = token_type_caret; token_res.size = 1; return token_res; }
 		case '|':
 		{
 			if(input[1] == '|')
 			{
-				token.token_type = token_type_or;
+				token_res.token.token_type = token_type_or;
+				token_res.size = 2;
 			} else {
-				token.token_type = token_type_pipe;
+				token_res.token.token_type = token_type_pipe;
+				token_res.size = 1;
 			}
-			return token;
+			return token_res;
 		}
-		case '~': { token.token_type = token_type_caret; return token; }
+		case '~': { token_res.token.token_type = token_type_caret; token_res.size = 1; return token_res; }
 		case ' ':
 		case '\t':
-		case '\n': { token.token_type = token_type_whitespace; return token; }
+		case '\n': { token_res.token.token_type = token_type_whitespace; token_res.size = 1; return token_res; }
 	}
 
 
 
-	token.token_type = token_type_invalid;
-	return token;
+	token_res.token.token_type = token_type_invalid;
+	token_res.size = 1;
+	return token_res;
 }
 
 
