@@ -5,13 +5,13 @@
 
 
 #define __TOKENS_SIMPLE_SINGLE \
-	Y(lparen, '(')			/* ( */ \
-	Y(rparen, ')')			/* ) */ \
-	Y(lbrace, '{')			/* { */ \
-	Y(rbrace, '}')			/* } */ \
-	Y(lsqbracket, '[')		/* [ */ \
-	Y(rsqbracket, ']')		/* ] */ \
-	Y(dot, '.')				/* . */ \
+	Y(lparen, '(')				/* ( */ \
+	Y(rparen, ')')				/* ) */ \
+	Y(lbrace, '{')				/* { */ \
+	Y(rbrace, '}')				/* } */ \
+	Y(lsqbracket, '[')			/* [ */ \
+	Y(rsqbracket, ']')			/* ] */ \
+	Y(dot, '.')					/* . */ \
 	Y(comma, ',')				/* , */ \
 	Y(plus, '+')				/* + */ \
 	Y(minus, '-')				/* - */ \
@@ -20,7 +20,7 @@
 	Y(semicolon, ';')			/* ; */ \
 	Y(bang, '!')				/* ! */ \
 	Y(equal, '=')				/* = */ \
-	Y(greater, '>')			/* > */ \
+	Y(greater, '>')				/* > */ \
 	Y(less, '<')				/* < */ \
 	Y(ampersand, '&')			/* & */ \
 	Y(caret, '^')				/* ^ */ \
@@ -35,7 +35,7 @@
 	Y(or, '|','|')				/* || */ \
 	/* compound tokens: */ \
 	Y(bang_equal, '!','=')		/* != */ \
-	Y(equal_equal, '=','=')	/* == */ \
+	Y(equal_equal, '=','=')		/* == */ \
 	Y(greater_equal, '>','=')	/* >= */ \
 	Y(less_equal, '<','=')		/* <= */
 
@@ -45,34 +45,34 @@
 
 
 #define __TOKENS_KEYWORD \
-	X(if)				/* if */ \
-	X(else)				/* else */ \
-	X(true)				/* true */ \
-	X(false)			/* false */ \
-	X(while)			/* while */ \
-	X(for)				/* for */ \
-	X(fn)				/* fn */ \
-	X(struct)			/* struct */ \
-	X(enum)				/* enum */ \
-	X(return)			/* return */
+	X(if)					/* if */ \
+	X(else)					/* else */ \
+	X(true)					/* true */ \
+	X(false)				/* false */ \
+	X(while)				/* while */ \
+	X(for)					/* for */ \
+	X(fn)					/* fn */ \
+	X(struct)				/* struct */ \
+	X(enum)					/* enum */ \
+	X(return)				/* return */
 
-#define __TOKENS_IGNORED \
-	X(whitespace)		/* \t, \n, \r or <space> */ \
-	X(comment)			/* // (both comments) */ \
+#define __TOKENS_IGNORED	 \
+	X(whitespace)			/* \t, \n, \r or <space> */ \
+	X(comment)				/* // (both comments) */ \
 
 #define __TOKENS_LITERALS \
-	X(string)			/* string literal "..." */ \
-	X(invalid_string)	/* invalid string literal "... EOF */ \
-	X(number)			/* any number like: 5 or 5.23 */ \
-	X(char)				/* any char like : 'E' */ \
+	X(string)				/* string literal "..." */ \
+	X(invalid_string)		/* invalid string literal "... EOF */ \
+	X(number)				/* any number like: 5 or 5.23 */ \
+	X(char)					/* any char like : 'E' */ \
 
 #define __TOKENS_IDENTEFIERS \
-	X(identifier)		/* id */ \
-	X(type)				/* type */ \
+	X(identifier)			/* id */ \
+	X(type)					/* type */ \
 
 #define __TOKENS_MISC \
-	X(eof)				/* always appended as the End Of File (Last token, much like string terminator) */ \
-	X(invalid)			/* only used for errors */ \
+	X(eof)					/* always appended as the End Of File (Last token, much like string terminator) */ \
+	X(invalid)				/* only used for errors */ \
 
 
 #define __TOKENS \
