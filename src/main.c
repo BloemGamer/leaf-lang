@@ -30,11 +30,15 @@ int main(int argc, char **argv)
 		puts(token_to_string(&l));
 		if(l.token_type == token_type_string)
 		{
-			printf("\t%s\n",l.token.str_val);
+			printf("\t%s\n",l.str_val);
 		}
 		if(l.token_type == token_type_char)
 		{
-			printf("\t%c\n",l.token.char_val);
+			printf("\t%s\n",l.str_val);
+		}
+		if(l.token_type == token_type_number)
+		{
+			printf("\t%s\n",l.str_val);
 		}
 	}
 	puts(token_to_string(&l));

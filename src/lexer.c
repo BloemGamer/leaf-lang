@@ -229,166 +229,70 @@ static TokenResult string_to_literals_token(const char *input)
 				token_res.size = end_str - input + 1;
 				size_t str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_string;
-				token_res.token.token.str_val = malloc((str_size) * sizeof(char));
-				memcpy(token_res.token.token.str_val, input + 1, str_size);
-				token_res.token.token.str_val[str_size] = '\0';
+				token_res.token.str_val = malloc((str_size) * sizeof(char));
+				memcpy(token_res.token.str_val, input + 1, str_size);
+				token_res.token.str_val[str_size] = '\0';
 				return token_res;
 			}
 		}
-
 	}
 	if(input[0] == '\'')
 	{
-		if(input[1] == '\'')
+		const char *end_str = input;
+		while(true)
 		{
-			assert(false && "Nothing in char place, or not terminated \'");
+			end_str = strstr(end_str + 1, "\'");
+			if(end_str == NULL)
+			{
+				token_res.size = 1;
+				token_res.token.token_type = token_type_invalid_string;
+				return token_res;
+			}
+			else if(end_str[-1] == '\\')
+			{
+				continue;
+			}
+			else
+			{
+				token_res.size = end_str - input + 1;
+				size_t str_size = token_res.size - 2;
+				token_res.token.token_type = token_type_char;
+				token_res.token.str_val = malloc((str_size) * sizeof(char));
+				memcpy(token_res.token.str_val, input + 1, str_size);
+				token_res.token.str_val[str_size] = '\0';
+				return token_res;
+			}
 		}
-		if(input[2] == '\'' && !(input[1] == '\\')) // normal character
+	}
+	if(isdigit(input[0]))
+	{
+		const char *start_str = input;
+		size_t start_str_offset = 0;
+		constexpr char num_starts[][3] = { "0b", "0x" };
+		for(size_t i = 0; i < sizeof(num_starts) /sizeof(num_starts[0]); i++)
 		{
-			token_res.token.token_type = token_type_char;
-			token_res.token.token.char_val = input[1];
-			token_res.size = 3;
-			return token_res;
-		}
-		token_res.token.token_type = token_type_char;
-		token_res.size = 4;
-		CharToken c;
-		if((c = escape_to_char(input + 1)).size != 0)
-		{
-			token_res.token.token_type = token_type_char;
-			token_res.token.token.char_val = c.char_val;
-			token_res.size = c.size + 2;
-			return token_res;
-		} else {
-			assert(false && "Not implemented");
+			if(strncmp(num_starts[i], input, 2))
+			{
+				start_str += 2;
+				start_str_offset += 2;
+				break;
+			}
 		}
 
 
+		size_t num_len = strspn(start_str, "1234567890") + start_str_offset;
+		token_res.size = num_len;
+		token_res.token.token_type = token_type_number;
+		token_res.token.str_val = malloc((num_len) * sizeof(char) + 1);
+		memcpy(token_res.token.str_val, input, num_len);
+		token_res.token.str_val[num_len] = '\0';
+		return token_res;
 	}
 
 	token_res.size = 0;
 	return token_res;
 }
 
-static CharToken escape_to_char(const char* escape)
-{
-	CharToken ret = { 0 };
-	ret.size = 0;
-	if(escape[0] != '\\')
-		return ret;
-	switch(escape[1])
-	{
-		case 'a':
-			ret.char_val = '\a';
-			ret.size = 1;
-			return ret;
-		case 'b':
-			ret.char_val = '\b';
-			ret.size = 1;
-			return ret;
-		case 'e':
-			ret.char_val = '\e';
-			ret.size = 1;
-			return ret;
-		case 'f':
-			ret.char_val = '\f';
-			ret.size = 1;
-			return ret;
-		case 'n':
-			ret.char_val = '\n';
-			ret.size = 1;
-			return ret;
-		case 'r':
-			ret.char_val = '\r';
-			ret.size = 1;
-			return ret;
-		case 't':
-			ret.char_val = '\t';
-			ret.size = 1;
-			return ret;
-		case 'v':
-			ret.char_val = '\v';
-			ret.size = 1;
-			return ret;
-		case '\\':
-			ret.char_val = '\\';
-			ret.size = 1;
-			return ret;
-		case '\'':
-			ret.char_val = '\'';
-			ret.size = 1;
-			return ret;
-		case '"':
-			ret.char_val = '\"';
-			ret.size = 1;
-			return ret;
-		case '?':
-			ret.char_val = '\?';
-			ret.size = 1;
-			return ret;
-		case 'x':
-			{
-				char c_ret = 0;
-				size_t i;
-				for(i = 0; i < 2; i++)
-				{
-					c_ret <<= 4;
-					char c = escape[2 + i];
-					if(c >= '0' && c <= '9')
-					{
-						c_ret |= c - '0';
-					}
-					else if(c >= 'A' && c <= 'F')
-					{
-						c_ret |= c - 'A';
-					}
-					else if(c >= 'a' && c <= 'f')
-					{
-						c_ret |= c - 'a';
-					}
-					else
-					{
-						break;
-					}
-				}
-				if(i == 0)
-				{
-					assert(false && "No valid character after `\\x`");
-				}
-				ret.size = i;
-				ret.char_val = c_ret;
-				return ret;
-			}
-		case '0'...'7':
-			{
-				char c_ret = 0;
-				size_t i;
-				for(i = 0; i < 2; i++)
-				{
-					c_ret <<= 2;
-					char c = escape[2 + i];
-					if(c >= '0' && c <= '7')
-					{
-						c_ret |= c - '0';
-					}
-					else
-					{
-						break;
-					}
-				}
-				if(i == 0)
-				{
-					assert(false && "No valid character after `\\`");
-				}
-				ret.size = i;
-				ret.char_val = c_ret;
-				return ret;
-			}
-		default:
-			assert(false && "not implemented or does not exist");
-	}
-	return ret;
-}
 
 const char *token_to_string(Token *token)
 {

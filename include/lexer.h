@@ -89,14 +89,7 @@ typedef enum
 typedef struct
 {
 	TokenType token_type;
-	union
-	{
-		char *str_val;
-		int64_t int_val;
-		double float_val;
-		char char_val;
-	} token;
-
+	char *str_val;
 } Token;
 
 #define X(x) token_type_##x,
