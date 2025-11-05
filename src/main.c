@@ -40,6 +40,10 @@ int main(int argc, char **argv)
 		{
 			printf("\t%s\n",l.str_val);
 		}
+		if(l.token_type == token_type_identifier)
+		{
+			printf("\t%s\n",l.str_val);
+		}
 	}
 	puts(token_to_string(&l));
 }

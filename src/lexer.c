@@ -30,7 +30,7 @@ static TokenResult string_to_ignored_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
 static TokenResult string_to_keyword_token(const char *input);
 static TokenResult string_to_literals_token(const char *input);
-static CharToken escape_to_char(const char* escape);
+static TokenResult string_to_identefier_token(const char *input);
 
 Token *lex(const char *input)
 {
@@ -46,7 +46,7 @@ Token *lex(const char *input)
 		if(next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
 		{ continue; }
 		if(next_token.token.token_type == token_type_invalid) // tmp
-		{ continue; }
+		{ assert(false && "token invallid"); }
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
 	}
 	Token token = { 0 };
@@ -83,6 +83,9 @@ static TokenResult string_to_token(const char *input)
 	if(token_res.size != 0) { return token_res; }
 
 	token_res = string_to_literals_token(input);
+	if(token_res.size != 0) { return token_res; }
+
+	token_res = string_to_identefier_token(input);
 	if(token_res.size != 0) { return token_res; }
 
 	token_res.token.token_type = token_type_invalid;
@@ -278,9 +281,7 @@ static TokenResult string_to_literals_token(const char *input)
 				break;
 			}
 		}
-
-
-		size_t num_len = strspn(start_str, "1234567890") + start_str_offset;
+		size_t num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
 		token_res.size = num_len;
 		token_res.token.token_type = token_type_number;
 		token_res.token.str_val = malloc((num_len) * sizeof(char) + 1);
@@ -290,6 +291,42 @@ static TokenResult string_to_literals_token(const char *input)
 	}
 
 	token_res.size = 0;
+	return token_res;
+}
+
+static TokenResult string_to_identefier_token(const char *input)
+{
+	TokenResult token_res = { 0 };
+
+	if(isalpha(input[0]) == false)
+	{
+		token_res.size = 0;
+		return token_res;
+	}
+
+	size_t buffer_size = 1;
+	size_t buffer_max_size = 16;
+	char *buffer = malloc(buffer_max_size * sizeof(*buffer));
+
+	buffer[0] = input[0];
+	char c;
+	while(isalnum(c = input[buffer_size]))
+	{
+		if(buffer_size >= buffer_max_size)
+		{
+			buffer_max_size *= 2;
+			buffer = realloc((void*)buffer, buffer_max_size * sizeof(*buffer));
+		}
+		buffer[buffer_size] = input[buffer_size];
+		buffer_size++;
+	}
+	buffer[buffer_size] = '\0';
+
+
+
+	token_res.token.token_type = token_type_identifier;
+	token_res.token.str_val = buffer;
+	token_res.size = buffer_size;
 	return token_res;
 }
 
