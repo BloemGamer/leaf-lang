@@ -86,7 +86,7 @@ static void add_token(const Token next, Token **tokens, size_t *token_size, size
 	{
 		if(*token_max_size == 0) { *token_max_size += 1; }
 		*token_max_size *= 2;
-		*tokens = reallocarray(*tokens, *token_max_size, sizeof(Token));
+		*tokens = (Token*)reallocarray((void*)*tokens, *token_max_size, sizeof(Token));
 	}
 	(*tokens)[*token_size] = next;
 	*token_size += 1;
@@ -255,7 +255,7 @@ static TokenResult string_to_literals_token(const char *input)
 				token_res.size = end_str - input + 1;
 				size_t str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_string;
-				token_res.token.str_val = malloc((str_size) * sizeof(char));
+				token_res.token.str_val = (char*)malloc((str_size) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
 				token_res.token.str_val[str_size] = '\0';
 				return token_res;
@@ -283,7 +283,7 @@ static TokenResult string_to_literals_token(const char *input)
 				token_res.size = end_str - input + 1;
 				size_t str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_char;
-				token_res.token.str_val = malloc((str_size) * sizeof(char));
+				token_res.token.str_val = (char*)malloc((str_size) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
 				token_res.token.str_val[str_size] = '\0';
 				return token_res;
@@ -307,7 +307,7 @@ static TokenResult string_to_literals_token(const char *input)
 		size_t num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
 		token_res.size = num_len;
 		token_res.token.token_type = token_type_number;
-		token_res.token.str_val = malloc((num_len) * sizeof(char) + 1);
+		token_res.token.str_val = (char*)malloc((num_len) * sizeof(char) + 1);
 		memcpy(token_res.token.str_val, input, num_len);
 		token_res.token.str_val[num_len] = '\0';
 		return token_res;
@@ -329,7 +329,7 @@ static TokenResult string_to_identefier_token(const char *input)
 
 	size_t buffer_size = 1;
 	size_t buffer_max_size = 16;
-	char *buffer = malloc(buffer_max_size * sizeof(*buffer));
+	char *buffer = (char*)malloc(buffer_max_size * sizeof(*buffer));
 
 	buffer[0] = input[0];
 	char c;
@@ -338,7 +338,7 @@ static TokenResult string_to_identefier_token(const char *input)
 		if(buffer_size >= buffer_max_size)
 		{
 			buffer_max_size *= 2;
-			buffer = realloc((void*)buffer, buffer_max_size * sizeof(*buffer));
+			buffer = (char*)realloc((void*)buffer, buffer_max_size * sizeof(*buffer));
 		}
 		buffer[buffer_size] = input[buffer_size];
 		buffer_size++;
