@@ -94,6 +94,7 @@ typedef struct
 		char *str_val;
 		int64_t int_val;
 		double float_val;
+		char char_val;
 	} token;
 
 } Token;

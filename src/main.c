@@ -28,6 +28,14 @@ int main(int argc, char **argv)
 	while((l = *lexed++).token_type != token_type_eof)
 	{
 		puts(token_to_string(&l));
+		if(l.token_type == token_type_string)
+		{
+			printf("\t%s\n",l.token.str_val);
+		}
+		if(l.token_type == token_type_char)
+		{
+			printf("\t%c\n",l.token.char_val);
+		}
 	}
 	puts(token_to_string(&l));
 }
