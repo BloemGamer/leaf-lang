@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -6,6 +7,7 @@
 #include <alloca.h>
 #include <ctype.h>
 
+#include "log.h"
 #include "assert.h"
 #include "lexer.h"
 
@@ -23,6 +25,7 @@ typedef struct
 
 
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
+static Pos amount_enters(const char *input, size_t size, Pos pos);
 static TokenResult string_to_token(const char *input);
 static TokenResult string_to_ignored_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
@@ -30,21 +33,27 @@ static TokenResult string_to_keyword_token(const char *input);
 static TokenResult string_to_literals_token(const char *input);
 static TokenResult string_to_identefier_token(const char *input);
 
+
+
 Token *lex(const char *input)
 {
 	Token *tokens = NULL;
 	size_t token_size = 0;
 	size_t token_max_size = 0;
-
+	Pos pos = { .line = 1, .character = 0 };
 
 	while(*input != '\0')
 	{
 		const TokenResult next_token = string_to_token(input);
+		pos = amount_enters(input, next_token.size, pos);
 		input += next_token.size;
 		if(next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
 		{ continue; }
 		if(next_token.token.token_type == token_type_invalid) // tmp
-		{ assert(false && "token invallid"); }
+		{
+			LOG_ERROR(pos, "An invallid token, found: '%c'\n", *input);
+			assert(false && "token invallid");
+		}
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
 	}
 	Token token = { 0 };
@@ -53,6 +62,21 @@ Token *lex(const char *input)
 
 
 	return tokens;
+}
+
+static Pos amount_enters(const char *input, size_t size, Pos pos)
+{
+	for(size_t i = 0; i < size; i++)
+	{
+		if(input[i] == '\n')
+		{
+			pos.line++;
+			pos.character = 0;
+		} else {
+			pos.character++;
+		}
+	}
+	return pos;
 }
 
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size)
@@ -87,7 +111,7 @@ static TokenResult string_to_token(const char *input)
 	if(token_res.size != 0) { return token_res; }
 
 	token_res.token.token_type = token_type_invalid;
-	token_res.size = 1;
+	token_res.size = 0;
 	return token_res;
 }
 

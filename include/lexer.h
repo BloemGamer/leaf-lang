@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 
@@ -94,8 +95,15 @@ typedef enum
 
 typedef struct
 {
+	size_t line;
+	size_t character;
+} Pos;
+
+typedef struct
+{
 	TokenType token_type;
 	char *str_val;
+	Pos pos;
 } Token;
 
 #define X(x) token_type_##x,
