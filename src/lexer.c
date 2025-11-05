@@ -44,7 +44,7 @@ Token *lex(const char *input)
 
 	while(*input != '\0')
 	{
-		const TokenResult next_token = string_to_token(input);
+		TokenResult next_token = string_to_token(input);
 		pos = amount_enters(input, next_token.size, pos);
 		input += next_token.size;
 		if(next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
@@ -54,6 +54,7 @@ Token *lex(const char *input)
 			LOG_ERROR(pos, "An invallid token, found: '%c'\n", *input);
 			assert(false && "token invallid");
 		}
+		next_token.token.pos = pos;
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
 	}
 	Token token = { 0 };
