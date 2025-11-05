@@ -15,11 +15,11 @@ typedef struct
 	size_t size;
 } TokenResult;
 
+static TokenResult string_to_whitespace_token(const char *input);
 static TokenResult string_to_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
 static TokenResult string_to_keyword_token(const char *input);
 static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
-static size_t max(size_t arg1, ...);
 
 Token *lex(const char *input)
 {
@@ -62,6 +62,9 @@ static TokenResult string_to_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
+	token_res = string_to_whitespace_token(input);
+	if(token_res.size != 0) { return token_res; }
+
 	token_res = string_to_simple_token(input);
 	if(token_res.size != 0) { return token_res; }
 
@@ -70,6 +73,19 @@ static TokenResult string_to_token(const char *input)
 
 	token_res.token.token_type = token_type_invalid;
 	token_res.size = 1;
+	return token_res;
+}
+
+static TokenResult string_to_whitespace_token(const char *input)
+{
+	TokenResult token_res = { 0 };
+
+	size_t i = 0;
+	while(isspace(input[i])) { i++; }
+
+	token_res.token.token_type = token_type_whitespace;
+	token_res.size = i;
+
 	return token_res;
 }
 
