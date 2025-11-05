@@ -9,8 +9,6 @@
 #include "assert.h"
 #include "lexer.h"
 
-#define MAX2(a, b) ((a) > (b)) ? (a) : (b)
-
 typedef struct
 {
 	Token token;
