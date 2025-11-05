@@ -255,7 +255,7 @@ static TokenResult string_to_literals_token(const char *input)
 				token_res.size = end_str - input + 1;
 				size_t str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_string;
-				token_res.token.str_val = (char*)malloc((str_size) * sizeof(char));
+				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
 				token_res.token.str_val[str_size] = '\0';
 				return token_res;
@@ -283,7 +283,7 @@ static TokenResult string_to_literals_token(const char *input)
 				token_res.size = end_str - input + 1;
 				size_t str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_char;
-				token_res.token.str_val = (char*)malloc((str_size) * sizeof(char));
+				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
 				token_res.token.str_val[str_size] = '\0';
 				return token_res;
@@ -354,7 +354,24 @@ static TokenResult string_to_identefier_token(const char *input)
 }
 
 
-const char *token_to_string(Token *token)
+const char *token_to_string(Token *tokens)
 {
-	return TOKENS_STR_PR[token->token_type];
+	return TOKENS_STR_PR[tokens->token_type];
+}
+
+void lex_free(Token *tokens)
+{
+	Token *tokens_old = tokens;
+	Token tok;
+	while((tok = *tokens++).token_type != token_type_eof)
+	{
+		for(size_t i = 0; i < sizeof(__TOKENS_LEX_FREE) / sizeof(__TOKENS_LEX_FREE[0]); i++)
+		{
+			if(tok.token_type == __TOKENS_LEX_FREE[i])
+			{
+				free((void*)tok.str_val);
+			}
+		}
+	}
+	free((void*)tokens_old);
 }

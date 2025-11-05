@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <log.h>
 
 #include "lexer.h"
 
@@ -24,6 +25,8 @@ int main(int argc, char **argv)
 	}
 	printf("%s", file);
 	Token *lexed = lex(file);
+	free((void*)file);
+	Token *lexed_old = lexed;
 	Token l;
 	while((l = *lexed++).token_type != token_type_eof)
 	{
@@ -45,7 +48,9 @@ int main(int argc, char **argv)
 			printf("\t%s\n",l.str_val);
 		}
 	}
+	lexed = lexed_old;
 	puts(token_to_string(&l));
+	lex_free(lexed);
 }
 
 char *read_file_to_str(const char* filename)

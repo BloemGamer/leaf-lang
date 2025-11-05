@@ -153,6 +153,9 @@ constexpr char TOKENS_STR_IDENT[][__TOKENS_STR_LEN] = { __TOKENS };
 constexpr char TOKENS_STOP[] = { ' ', '\t', '\r', '\n', __TOKENS_SIMPLE '\0'};
 #undef Y
 
+#define X(x) token_type_##x,
+constexpr TokenType __TOKENS_LEX_FREE[] = { __TOKENS_IDENTEFIERS __TOKENS_LITERALS};
+#undef X
 
 #undef __TOKENS_SIMPLE
 #undef __TOKENS_KEYWORD
