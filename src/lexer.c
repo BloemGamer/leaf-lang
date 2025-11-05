@@ -5,6 +5,7 @@
 #include <alloca.h>
 #include <ctype.h>
 
+#include "assert.h"
 #include "lexer.h"
 
 #define MAX2(a, b) ((a) > (b)) ? (a) : (b)
@@ -15,7 +16,7 @@ typedef struct
 	size_t size;
 } TokenResult;
 
-static TokenResult string_to_whitespace_token(const char *input);
+static TokenResult string_to_ignored_token(const char *input);
 static TokenResult string_to_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
 static TokenResult string_to_keyword_token(const char *input);
@@ -62,7 +63,7 @@ static TokenResult string_to_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
-	token_res = string_to_whitespace_token(input);
+	token_res = string_to_ignored_token(input);
 	if(token_res.size != 0) { return token_res; }
 
 	token_res = string_to_simple_token(input);
@@ -76,16 +77,42 @@ static TokenResult string_to_token(const char *input)
 	return token_res;
 }
 
-static TokenResult string_to_whitespace_token(const char *input)
+static TokenResult string_to_ignored_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
-	size_t i = 0;
-	while(isspace(input[i])) { i++; }
+	if(isspace(input[0]))
+	{
+		size_t i = 1;
+		while(isspace(input[i])) { i++; }
 
-	token_res.token.token_type = token_type_whitespace;
-	token_res.size = i;
+		token_res.token.token_type = token_type_whitespace;
+		token_res.size = i;
+		return token_res;
+	}
+	else if(input[0] == '/' && input [1] == '/')
+	{
+		char *endline = strchrnul(input, '\n');
 
+		token_res.token.token_type = token_type_comment;
+		token_res.size = endline - input;
+		return token_res;
+	}
+	else if(input[0] == '/' && input [1] == '*')
+	{
+		char *endline = strstr(input, "*/");
+		if(endline == NULL)
+		{
+			assert(false && "error: unterminated comment\n  198 | /*");
+		} else {
+			token_res.size = endline - input;
+		}
+		token_res.token.token_type = token_type_comment;
+
+
+		return token_res;
+	}
+	token_res.size = 0;
 	return token_res;
 }
 
