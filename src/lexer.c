@@ -1,10 +1,8 @@
-#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <alloca.h>
 #include <ctype.h>
 
 #include "utils.h"
