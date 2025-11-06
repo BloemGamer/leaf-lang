@@ -118,7 +118,7 @@ constexpr TokenType TOKENS_TYPES[] = { __TOKENS };
 #undef Y
 
 #define __TOKENS_STR_LEN 15
-#define X(x) _Static_assert(__TOKENS_STR_LEN >= sizeof(#x), "__TOKENS_STR_LEN too small");
+#define X(x) static_assert(__TOKENS_STR_LEN >= sizeof(#x), "__TOKENS_STR_LEN too small");
 #define Y(x, ...) X(x)
 __TOKENS
 #undef Y
