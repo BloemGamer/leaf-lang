@@ -51,8 +51,7 @@ Token *lex(const char *input)
 		{ continue; }
 		if(next_token.token.token_type == token_type_invalid) // tmp
 		{
-			LOG_ERROR(pos, "An invallid token, found: '%c'\n", *input);
-			assert(false && "token invallid");
+			LOG_ERROR(pos, "An invallid token, found: '%c'\n", *input++);
 		}
 		next_token.token.pos = pos;
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
@@ -61,6 +60,18 @@ Token *lex(const char *input)
 	token.token_type = token_type_eof;
 	add_token(token, &tokens, &token_size, &token_max_size);
 
+	if(amount_errors != 0)
+	{
+		errprintf("Could not finish lexing because of amount errors: %zu\n", amount_errors);
+	}
+	if(amount_warnings != 0)
+	{
+		errprintf("Fount amount warnings: %zu\n", amount_errors);
+	}
+	if(amount_errors != 0)
+	{
+		exit(EXIT_FAILURE);
+	}
 
 	return tokens;
 }
