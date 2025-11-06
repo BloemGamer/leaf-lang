@@ -73,6 +73,7 @@
 	X(mut)					/* mut */ \
 	X(static)				/* static */ \
 	X(const)				/* constexpr */ \
+	X(pub)					/* public for functions */
 
 #define __TOKENS_IDENTEFIER \
 	X(identifier)			/* id */ \
@@ -86,13 +87,13 @@
 
 
 #define __TOKENS \
+	__TOKENS_MISC \
 	__TOKENS_SIMPLE \
 	__TOKENS_KEYWORD \
 	__TOKENS_MODIFIER \
 	__TOKENS_IGNORED \
 	__TOKENS_LITERAL \
 	__TOKENS_IDENTEFIER \
-	__TOKENS_MISC \
 
 #define X(x) token_type_##x,
 #define Y(x, ...) X(x)
