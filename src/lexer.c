@@ -169,6 +169,13 @@ static TokenResult string_to_simple_token(const char *input)
 
 	for(size_t i = 0; i < amount_tokens; i++)
 	{
+		// the next part of the function only works if this returns true, otherwise it will skipt tokens
+		// I wanted this to run at compiletime, but I could not make it work sadly
+		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 2);
+	}
+
+	for(size_t i = 0; i < amount_tokens; i++)
+	{
 		if(input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
 		{
 			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
