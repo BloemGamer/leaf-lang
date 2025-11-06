@@ -238,7 +238,7 @@ static TokenResult string_to_keyword_token(const char *input)
 	size_t len;
 	for(len = 1; len < buffer_size; len++)
 	{
-		if(isalnum(input[len]) != false)
+		if(isalnum(input[len]) != false || input[len] == '_')
 		{
 			buffer[len] = input[len];
 		} else {
@@ -360,7 +360,7 @@ static TokenResult string_to_identefier_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
-	if(isalpha(input[0]) != false)
+	if(isalpha(input[0]) != false || input[0] == '_')
 	{
 		token_res.token.token_type = token_type_identifier;
 	}
@@ -380,7 +380,7 @@ static TokenResult string_to_identefier_token(const char *input)
 
 	buffer[0] = input[0];
 	char c;
-	while(isalnum(c = input[buffer_size]))
+	while(isalnum(c = input[buffer_size]) || input[buffer_size] == '_')
 	{
 		if(buffer_size >= buffer_max_size)
 		{
