@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stddef.h>
-#include <stdint.h>
 
 
 
@@ -50,6 +49,7 @@
 	X(else)					/* else */ \
 	X(true)					/* true */ \
 	X(false)				/* false */ \
+	X(do)					/* do {} while */ \
 	X(while)				/* while */ \
 	X(for)					/* for */ \
 	X(fn)					/* fn */ \
@@ -76,8 +76,9 @@
 
 #define __TOKENS_IDENTEFIER \
 	X(identifier)			/* id */ \
-	X(type)					/* type */ \
 	X(message)				/* msg to comiler, starts with @ */ \
+	X(type)					/* type */ \
+	X(function)				/* function */ \
 
 #define __TOKENS_MISC \
 	X(eof)					/* always appended as the End Of File (Last token, much like string terminator) */ \
