@@ -1,8 +1,12 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <log.h>
 
 #include "lexer.h"
+
+size_t amount_errors = 0;
+size_t amount_warnings = 0;
 
 char *read_file_to_str(const char* filename);
 
