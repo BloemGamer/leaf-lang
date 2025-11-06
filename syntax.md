@@ -30,6 +30,31 @@ string format can be done with @f"a = { a }, b = { b }, c = { c }" or @f("a = {}
 otherwise C syntax should be used
 ```
 
+Keywords:
+```
+if:		same as in C
+else:	same as in C
+true:	same as in C
+false:	same as in C
+do:		same as in C
+while:	same as in C
+for:	same as in C, but can do more than in C, read other things for more info
+fn:		defining a function, the same as in rust
+macro:	defining a macro
+struct:	same as in C
+enum:	same as in C, but I maybe want to add more, but I don't know what yet, maybe like rust and call the C enum an c_enum
+return: same as in C
+```
+
+Modifiers:
+```
+mut:	allows variables to be changed, otherwise all variables are const
+static:	the same as in C
+const:	compiler const, so constexpr in C
+
+```
+
+
 basic types:
 ```
 isize:		ssize_t
