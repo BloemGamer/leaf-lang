@@ -7,6 +7,7 @@
 #include <alloca.h>
 #include <ctype.h>
 
+#include "utils.h"
 #include "log.h"
 #include "assert.h"
 #include "lexer.h"
@@ -186,7 +187,7 @@ static TokenResult string_to_simple_token(const char *input)
 		return token_res;
 	}
 
-	constexpr size_t amount_tokens = sizeof(TOKENS_TYPES_SIMPLE) / sizeof(TOKENS_TYPES_SIMPLE[0]);
+	constexpr size_t amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
 
 	for(size_t i = 0; i < amount_tokens; i++)
 	{
@@ -228,8 +229,9 @@ static TokenResult string_to_keyword_token(const char *input)
 		return token_res;
 	}
 
-	constexpr size_t buffer_size = sizeof(TOKENS_STR_IDENT_KEYWORD[0]);
-	constexpr size_t amount_tokens = sizeof(TOKENS_TYPES_KEYWORD) / sizeof(TOKENS_TYPES_KEYWORD[0]);
+	constexpr size_t buffer_size = MAX(sizeof(TOKENS_STR_IDENT_KEYWORD[0]), sizeof(TOKENS_STR_IDENT_MODIFIER[0]));
+	constexpr size_t amount_tokens_keywords = ARRAY_SIZE(TOKENS_TYPES_KEYWORD);
+	constexpr size_t amount_tokens_modifier = ARRAY_SIZE(TOKENS_TYPES_MODIFIER);
 	char buffer[buffer_size] = { 0 };
 
 	buffer[0] = input[0];
@@ -245,11 +247,20 @@ static TokenResult string_to_keyword_token(const char *input)
 	}
 	buffer[len] = '\0';
 
-	for(size_t i = 0; i < amount_tokens; i++)
+	for(size_t i = 0; i < amount_tokens_keywords; i++)
 	{
 		if(strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
 		{
 			token_res.token.token_type = TOKENS_TYPES_KEYWORD[i];
+			token_res.size = len;
+			return token_res;
+		}
+	}
+	for(size_t i = 0; i < amount_tokens_modifier; i++)
+	{
+		if(strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
+		{
+			token_res.token.token_type = TOKENS_TYPES_MODIFIER[i];
 			token_res.size = len;
 			return token_res;
 		}
@@ -323,7 +334,7 @@ static TokenResult string_to_literals_token(const char *input)
 		const char *start_str = input;
 		size_t start_str_offset = 0;
 		constexpr char num_starts[][3] = { "0b", "0x" };
-		for(size_t i = 0; i < sizeof(num_starts) /sizeof(num_starts[0]); i++)
+		for(size_t i = 0; i < ARRAY_SIZE(num_starts); i++)
 		{
 			if(strncmp(num_starts[i], input, 2))
 			{
@@ -349,7 +360,15 @@ static TokenResult string_to_identefier_token(const char *input)
 {
 	TokenResult token_res = { 0 };
 
-	if(isalpha(input[0]) == false)
+	if(isalpha(input[0]) != false)
+	{
+		token_res.token.token_type = token_type_identifier;
+	}
+	else if(input[0] == '@')
+	{
+		token_res.token.token_type = token_type_message;
+	}
+	else
 	{
 		token_res.size = 0;
 		return token_res;
@@ -374,12 +393,6 @@ static TokenResult string_to_identefier_token(const char *input)
 	buffer[buffer_size] = '\0';
 
 
-
-	token_res.token.token_type = token_type_identifier;
-	if(buffer[0] == '@')
-	{
-		token_res.token.token_type = token_type_message;
-	}
 	token_res.token.str_val = buffer;
 	token_res.size = buffer_size;
 	return token_res;
@@ -397,7 +410,7 @@ void lex_free(Token *tokens)
 	Token tok;
 	while((tok = *tokens++).token_type != token_type_eof)
 	{
-		for(size_t i = 0; i < sizeof(__TOKENS_LEX_FREE) / sizeof(__TOKENS_LEX_FREE[0]); i++)
+		for(size_t i = 0; i < ARRAY_SIZE(__TOKENS_LEX_FREE); i++)
 		{
 			if(tok.token_type == __TOKENS_LEX_FREE[i])
 			{

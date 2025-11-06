@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 		{
 			printf("\t%s\n",l.str_val);
 		}
-		if(l.token_type == token_type_identifier)
+		if(l.token_type == token_type_identifier || l.token_type == token_type_message)
 		{
 			printf("\t%s\n",l.str_val);
 		}
