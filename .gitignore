@@ -7,3 +7,4 @@
 slang-test
 build
 .cache
+valgrind
