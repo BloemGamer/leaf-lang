@@ -376,6 +376,10 @@ static TokenResult string_to_identefier_token(const char *input)
 
 
 	token_res.token.token_type = token_type_identifier;
+	if(buffer[0] == '@')
+	{
+		token_res.token.token_type = token_type_message;
+	}
 	token_res.token.str_val = buffer;
 	token_res.size = buffer_size;
 	return token_res;

@@ -53,9 +53,10 @@
 	X(while)				/* while */ \
 	X(for)					/* for */ \
 	X(fn)					/* fn */ \
+	X(macro)				/* macro */ \
 	X(struct)				/* struct */ \
 	X(enum)					/* enum */ \
-	X(return)				/* return */
+	X(return)				/* return */ \
 
 #define __TOKENS_IGNORED	 \
 	X(whitespace)			/* \t, \n, \r or <space> */ \
@@ -71,6 +72,7 @@
 #define __TOKENS_IDENTEFIERS \
 	X(identifier)			/* id */ \
 	X(type)					/* type */ \
+	X(message)				/* msg to comiler, starts with @ */ \
 
 #define __TOKENS_MISC \
 	X(eof)					/* always appended as the End Of File (Last token, much like string terminator) */ \
