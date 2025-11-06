@@ -40,18 +40,28 @@ Token *lex(const char *input)
 	Token *tokens = NULL;
 	size_t token_size = 0;
 	size_t token_max_size = 0;
-	Pos pos = { .line = 1, .character = 0 };
+	Pos pos = { .line = 1, .character = 1 };
 
 	while(*input != '\0')
 	{
 		TokenResult next_token = string_to_token(input);
 		pos = amount_enters(input, next_token.size, pos);
-		input += next_token.size;
+		input += next_token.size > 0 ? next_token.size : 1;
 		if(next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
 		{ continue; }
-		if(next_token.token.token_type == token_type_invalid) // tmp
+		if(next_token.token.token_type == token_type_invalid)
 		{
-			LOG_ERROR(pos, "An invallid token, found: '%c'\n", *input++);
+			LOG_ERROR(pos, "An invallid token, found: '%c'\n", input[-1]);
+		}
+		if(next_token.token.token_type == token_type_invalid_comment)
+		{
+			LOG_ERROR(pos, "An invallid unclosed /*\n");
+			break;
+		}
+		if(next_token.token.token_type == token_type_invalid_string)
+		{
+			LOG_ERROR(pos, "An invallid unclosed /*\n");
+			break;
 		}
 		next_token.token.pos = pos;
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
@@ -83,7 +93,7 @@ static Pos amount_enters(const char *input, size_t size, Pos pos)
 		if(input[i] == '\n')
 		{
 			pos.line++;
-			pos.character = 0;
+			pos.character = 1;
 		} else {
 			pos.character++;
 		}
@@ -153,11 +163,11 @@ static TokenResult string_to_ignored_token(const char *input)
 		char *endline = strstr(input, "*/");
 		if(endline == NULL)
 		{
-			assert(false && "error: unterminated comment\n  198 | /*");
+			token_res.token.token_type = token_type_invalid_comment;
 		} else {
 			token_res.size = endline - input;
+			token_res.token.token_type = token_type_comment;
 		}
-		token_res.token.token_type = token_type_comment;
 
 
 		return token_res;

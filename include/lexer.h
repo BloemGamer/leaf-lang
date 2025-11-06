@@ -60,6 +60,7 @@
 #define __TOKENS_IGNORED	 \
 	X(whitespace)			/* \t, \n, \r or <space> */ \
 	X(comment)				/* // (both comments) */ \
+	X(invalid_comment)		/* unclosed block comments */
 
 #define __TOKENS_LITERALS \
 	X(string)				/* string literal "..." */ \
@@ -117,7 +118,7 @@ constexpr TokenType TOKENS_TYPES[] = { __TOKENS };
 #undef X
 #undef Y
 
-#define __TOKENS_STR_LEN 15
+#define __TOKENS_STR_LEN 16
 #define X(x) static_assert(__TOKENS_STR_LEN >= sizeof(#x), "__TOKENS_STR_LEN too small");
 #define Y(x, ...) X(x)
 __TOKENS
