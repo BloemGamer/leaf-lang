@@ -3,7 +3,7 @@
 > This document is now mostly for notes for myself, and will be split up, and written better in the future
 
 > [!NOTE]
-> There sometimes wil be name mangeling, for if you want to call things with C code, this will be defined later
+> There sometimes wil be name mangeling, for if you want to call things with C code, this will be defined later, but in this document is a prototype for this already
 
 declarations:
 ```
@@ -18,6 +18,8 @@ other things:
 `var = { }` is allowed, and will take the last token, (defined as the one after the last `;`, like rust)
 `struct.fn(args)` wil result in `fn_<struct>(&struct, args)`, so object oriented can be done, you want to call a function pointer like `struct.fn_p()` this should be done with the message `@no_fn`
 the keywords new, delete and `resize` can be used for memory allocation and deallocation, intern this just will use malloc and fee, ect
+
+you can have templates, they will be defined as fn_name<T>(args) and they result in fn_name_type(args)
 
 extra for loop syntax
 not all types work for this for supporting types
