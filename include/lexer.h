@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include "utils.h"
 
 
 
@@ -106,8 +107,8 @@ typedef enum
 
 typedef struct
 {
-	size_t line;
-	size_t character;
+	usize line;
+	usize character;
 } Pos;
 
 typedef struct

@@ -13,18 +13,18 @@
 typedef struct
 {
 	Token token;
-	size_t size;
+	usize size;
 } TokenResult;
 
 typedef struct
 {
-	size_t size;
+	usize size;
 	char char_val;
 } CharToken;
 
 
-static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size) __attribute((nonnull(2, 3, 4)));
-static Pos amount_enters(const char *input, size_t size, Pos pos);
+static void add_token(const Token next, Token **tokens, usize *token_size, usize *token_max_size) __attribute((nonnull(2, 3, 4)));
+static Pos amount_enters(const char *input, usize size, Pos pos);
 static TokenResult string_to_token(const char *input);
 static TokenResult string_to_ignored_token(const char *input);
 static TokenResult string_to_simple_token(const char *input);
@@ -37,8 +37,8 @@ static TokenResult string_to_identefier_token(const char *input);
 Token *lex(const char *input)
 {
 	Token *tokens = NULL;
-	size_t token_size = 0;
-	size_t token_max_size = 0;
+	usize token_size = 0;
+	usize token_max_size = 0;
 	Pos pos = { .line = 1, .character = 1 };
 
 	while(*input != '\0')
@@ -85,9 +85,9 @@ Token *lex(const char *input)
 	return tokens;
 }
 
-static Pos amount_enters(const char *input, size_t size, Pos pos)
+static Pos amount_enters(const char *input, usize size, Pos pos)
 {
-	for(size_t i = 0; i < size; i++)
+	for(usize i = 0; i < size; i++)
 	{
 		if(input[i] == '\n')
 		{
@@ -100,7 +100,7 @@ static Pos amount_enters(const char *input, size_t size, Pos pos)
 	return pos;
 }
 
-static void add_token(const Token next, Token **tokens, size_t *token_size, size_t *token_max_size)
+static void add_token(const Token next, Token **tokens, usize *token_size, usize *token_max_size)
 {
 	if(*token_size >= *token_max_size)
 	{
@@ -142,7 +142,7 @@ static TokenResult string_to_ignored_token(const char *input)
 
 	if(isspace(input[0]))
 	{
-		size_t i = 1;
+		usize i = 1;
 		while(isspace(input[i])) { i++; }
 
 		token_res.token.token_type = token_type_whitespace;
@@ -185,16 +185,16 @@ static TokenResult string_to_simple_token(const char *input)
 		return token_res;
 	}
 
-	constexpr size_t amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
+	constexpr usize amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
 
-	for(size_t i = 0; i < amount_tokens; i++)
+	for(usize i = 0; i < amount_tokens; i++)
 	{
 		// the next part of the function only works if this returns true, otherwise it will skipt tokens
 		// I wanted this to run at compiletime, but I could not make it work sadly
 		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 2);
 	}
 
-	for(size_t i = 0; i < amount_tokens; i++)
+	for(usize i = 0; i < amount_tokens; i++)
 	{
 		if(input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
 		{
@@ -203,7 +203,7 @@ static TokenResult string_to_simple_token(const char *input)
 			return token_res;
 		}
 	}
-	for(size_t i = 0; i < amount_tokens; i++)
+	for(usize i = 0; i < amount_tokens; i++)
 	{
 		if(input[0] == TOKENS_STR_IDENT_SIMPLE[i][0])
 		{
@@ -227,13 +227,13 @@ static TokenResult string_to_keyword_token(const char *input)
 		return token_res;
 	}
 
-	constexpr size_t buffer_size = MAX(sizeof(TOKENS_STR_IDENT_KEYWORD[0]), sizeof(TOKENS_STR_IDENT_MODIFIER[0]));
-	constexpr size_t amount_tokens_keywords = ARRAY_SIZE(TOKENS_TYPES_KEYWORD);
-	constexpr size_t amount_tokens_modifier = ARRAY_SIZE(TOKENS_TYPES_MODIFIER);
+	constexpr usize buffer_size = MAX(sizeof(TOKENS_STR_IDENT_KEYWORD[0]), sizeof(TOKENS_STR_IDENT_MODIFIER[0]));
+	constexpr usize amount_tokens_keywords = ARRAY_SIZE(TOKENS_TYPES_KEYWORD);
+	constexpr usize amount_tokens_modifier = ARRAY_SIZE(TOKENS_TYPES_MODIFIER);
 	char buffer[buffer_size] = { 0 };
 
 	buffer[0] = input[0];
-	size_t len;
+	usize len;
 	for(len = 1; len < buffer_size; len++)
 	{
 		if(isalnum(input[len]) != false || input[len] == '_')
@@ -245,7 +245,7 @@ static TokenResult string_to_keyword_token(const char *input)
 	}
 	buffer[len] = '\0';
 
-	for(size_t i = 0; i < amount_tokens_keywords; i++)
+	for(usize i = 0; i < amount_tokens_keywords; i++)
 	{
 		if(strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
 		{
@@ -254,7 +254,7 @@ static TokenResult string_to_keyword_token(const char *input)
 			return token_res;
 		}
 	}
-	for(size_t i = 0; i < amount_tokens_modifier; i++)
+	for(usize i = 0; i < amount_tokens_modifier; i++)
 	{
 		if(strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
 		{
@@ -290,7 +290,7 @@ static TokenResult string_to_literals_token(const char *input)
 			else
 			{
 				token_res.size = end_str - input + 1;
-				size_t str_size = token_res.size - 2;
+				usize str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_string;
 				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
@@ -318,7 +318,7 @@ static TokenResult string_to_literals_token(const char *input)
 			else
 			{
 				token_res.size = end_str - input + 1;
-				size_t str_size = token_res.size - 2;
+				usize str_size = token_res.size - 2;
 				token_res.token.token_type = token_type_char;
 				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
 				memcpy(token_res.token.str_val, input + 1, str_size);
@@ -330,9 +330,9 @@ static TokenResult string_to_literals_token(const char *input)
 	if(isdigit(input[0]))
 	{
 		const char *start_str = input;
-		size_t start_str_offset = 0;
+		usize start_str_offset = 0;
 		constexpr char num_starts[][3] = { "0b", "0x" };
-		for(size_t i = 0; i < ARRAY_SIZE(num_starts); i++)
+		for(usize i = 0; i < ARRAY_SIZE(num_starts); i++)
 		{
 			if(strncmp(num_starts[i], input, 2))
 			{
@@ -341,7 +341,7 @@ static TokenResult string_to_literals_token(const char *input)
 				break;
 			}
 		}
-		size_t num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
+		usize num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
 		token_res.size = num_len;
 		token_res.token.token_type = token_type_number;
 		token_res.token.str_val = (char*)malloc((num_len) * sizeof(char) + 1);
@@ -372,8 +372,8 @@ static TokenResult string_to_identefier_token(const char *input)
 		return token_res;
 	}
 
-	size_t buffer_size = 1;
-	size_t buffer_max_size = 16;
+	usize buffer_size = 1;
+	usize buffer_max_size = 16;
 	char *buffer = (char*)malloc(buffer_max_size * sizeof(*buffer));
 
 	buffer[0] = input[0];
@@ -408,7 +408,7 @@ void lex_free(Token *tokens)
 	Token tok;
 	while((tok = *tokens++).token_type != token_type_eof)
 	{
-		for(size_t i = 0; i < ARRAY_SIZE(__TOKENS_LEX_FREE); i++)
+		for(usize i = 0; i < ARRAY_SIZE(__TOKENS_LEX_FREE); i++)
 		{
 			if(tok.token_type == __TOKENS_LEX_FREE[i])
 			{
