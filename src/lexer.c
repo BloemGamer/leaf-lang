@@ -41,6 +41,11 @@ Token *lex(const char *input)
 	usize token_max_size = 0;
 	Pos pos = { .line = 1, .character = 1 };
 
+	{
+		Token token = { 0 };
+		token.token_type = token_type_sof;
+		add_token(token, &tokens, &token_size, &token_max_size);
+	}
 	while(*input != '\0')
 	{
 		TokenResult next_token = string_to_token(input);
@@ -65,9 +70,11 @@ Token *lex(const char *input)
 		next_token.token.pos = pos;
 		add_token(next_token.token, &tokens, &token_size, &token_max_size);
 	}
-	Token token = { 0 };
-	token.token_type = token_type_eof;
-	add_token(token, &tokens, &token_size, &token_max_size);
+	{
+		Token token = { 0 };
+		token.token_type = token_type_eof;
+		add_token(token, &tokens, &token_size, &token_max_size);
+	}
 
 	if(amount_errors != 0)
 	{
@@ -397,9 +404,9 @@ static TokenResult string_to_identefier_token(const char *input)
 }
 
 
-const char *token_to_string(Token *tokens)
+const char *token_to_string(const TokenType token)
 {
-	return TOKENS_STR_PR[tokens->token_type];
+	return TOKENS_STR_PR[token];
 }
 
 void lex_free(Token *tokens)

@@ -84,6 +84,7 @@
 
 #define __TOKENS_MISC \
 	X(eof)					/* always appended as the End Of File (Last token, much like string terminator) */ \
+	X(sof)					/* always at the Start Of File (firt token, so the parser can safely go back) */ \
 	X(invalid)				/* only used for errors */ \
 
 
@@ -114,7 +115,10 @@ typedef struct
 typedef struct
 {
 	TokenType token_type;
-	char *str_val;
+	union
+	{
+		char *str_val;
+	};
 	Pos pos;
 } Token;
 
@@ -194,4 +198,4 @@ Token *lex(const char *input);
 void lex_free(Token *tokens);
 
 /// Returns a pointer to a string, these should not be freed
-const char *token_to_string(Token *token);
+const char *token_to_string(const TokenType token);
