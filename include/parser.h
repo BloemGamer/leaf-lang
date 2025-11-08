@@ -7,15 +7,17 @@ typedef struct __AbstractSyntaxTree AST;
 
 typedef struct
 {
-	Token name;
-	Token type;
+	char *name;
+	char *type;
+	Token *modifiers;
+	usize modifier_count;
 	AST *ast;
 } VarDef;
 
 typedef struct
 {
-	Token name;
-	Token type;
+	char *name;
+	char *type;
 	Token *modifiers;
 	usize modifier_count;
 	AST *template_types;
@@ -29,8 +31,8 @@ typedef struct
 /// also used for enums and unions
 typedef struct
 {
-	Token name;
-	Token type;
+	char *name;
+	char *type;
 	AST **members;
 	usize param_count;
 } StructDef;
