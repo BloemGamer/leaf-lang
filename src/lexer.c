@@ -1,5 +1,4 @@
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
@@ -9,6 +8,7 @@
 #include "log.h"
 #include "assert.h"
 #include "lexer.h"
+#include "tokens.h"
 
 typedef struct
 {
@@ -404,10 +404,6 @@ static TokenResult string_to_identefier_token(const char *input)
 }
 
 
-const char *token_to_string(const TokenType token)
-{
-	return TOKENS_STR_PR[token];
-}
 
 void lex_free(Token *tokens)
 {

@@ -6,7 +6,7 @@
 #include "utils.h"
 #include "log.h"
 #include "assert.h"
-#include "lexer.h"
+#include "tokens.h"
 
 static AST parse_var(const Token *tokens);
 static AST parse_func(const Token *tokens);

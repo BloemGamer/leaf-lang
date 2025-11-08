@@ -5,6 +5,7 @@
 
 #include "lexer.h"
 #include "parser.h"
+#include "tokens.h"
 
 size_t amount_errors = 0;
 size_t amount_warnings = 0;

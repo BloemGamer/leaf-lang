@@ -21,6 +21,7 @@ add_executable(s-lang
 	src/main.c
 	src/lexer.c
 	src/parser.c
+	src/tokens.c
 )
 
 target_include_directories(s-lang
