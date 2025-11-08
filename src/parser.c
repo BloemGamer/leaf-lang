@@ -8,13 +8,19 @@
 #include "assert.h"
 #include "tokens.h"
 
-static AST parse_var(const Token *tokens);
-static AST parse_func(const Token *tokens);
-static AST parse_struct(const Token *tokens);
-static AST parse_binary_expr(const Token *tokens);
-static AST parse_literal(const Token *tokens);
-static AST parse_identefier(const Token *tokens);
-static AST parse_block(const Token *tokens);
+typedef struct
+{
+	AST ast;
+	usize size;
+} ASTSize;
+
+static ASTSize parse_var(const Token *tokens);
+static ASTSize parse_func(const Token *tokens);
+static ASTSize parse_struct(const Token *tokens);
+static ASTSize parse_binary_expr(const Token *tokens);
+static ASTSize parse_literal(const Token *tokens);
+static ASTSize parse_identefier(const Token *tokens);
+static ASTSize parse_block(const Token *tokens);
 
 static bool is_modifier(const TokenType token_type);
 
@@ -24,7 +30,7 @@ AST parse(const Token *tokens)
 	switch(tokens->token_type)
 	{
 		case token_type_fn:
-			return parse_func(tokens);
+			return parse_func(tokens).ast;
 			break;
 		default:
 			LOG_ERROR(tokens->pos, "Unexpected token: %s\n", token_to_string(tokens->token_type));
@@ -33,14 +39,14 @@ AST parse(const Token *tokens)
 
 }
 
-static AST parse_var(const Token *tokens) { AST ast = { 0 }; return ast;}
+static ASTSize parse_var(const Token *tokens) { ASTSize ast = { 0 }; return ast;}
 
-static AST parse_func(const Token *tokens)
+static ASTSize parse_func(const Token *tokens)
 {
 	const Token *const tokens_old = tokens; // I'm not a fan of this syntax, but it does what it should
 	debug_assert(tokens->token_type == token_type_fn);
 
-	AST ast = { .tree = NULL, .node.func_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } };
+	ASTSize ast = { .size = 0, .ast ={ .tree = NULL, .node.func_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } } };
 
 	{
 		usize modifier_count = 0;
@@ -57,8 +63,8 @@ static AST parse_func(const Token *tokens)
 			}
 			buffer[modifier_count] = t;
 		}
-		ast.node.func_def.modifiers = buffer;
-		ast.node.func_def.modifier_count = modifier_count;
+		ast.ast.node.func_def.modifiers = buffer;
+		ast.ast.node.func_def.modifier_count = modifier_count;
 	}
 
 	tokens = tokens_old;
@@ -66,8 +72,8 @@ static AST parse_func(const Token *tokens)
 
 	debug_assert(tokens->token_type == token_type_identifier);
 
-	ast.node.func_def.name.str_val = strdup(tokens->str_val);
-	ast.node.func_def.name.token_type = token_type_function;
+	ast.ast.node.func_def.name.str_val = strdup(tokens->str_val);
+	ast.ast.node.func_def.name.token_type = token_type_function;
 
 	tokens++;
 
@@ -82,7 +88,7 @@ static AST parse_func(const Token *tokens)
 		usize argument_count = 0;
 		usize argument_cap = 0;
 		AST *buffer = NULL;
-		AST t;
+		ASTSize t;
 		while((++tokens)->token_type != token_type_rparen)
 		{
 			debug_assert(tokens->token_type == token_type_identifier);
@@ -93,11 +99,27 @@ static AST parse_func(const Token *tokens)
 					argument_cap = MAX(argument_cap, 1);
 					buffer = (AST*)reallocarray((void*)buffer, argument_cap, sizeof(*buffer));
 				}
-				buffer[argument_count] = t;
+				buffer[argument_count] = t.ast;
 		}
-		ast.node.func_def.params = buffer;
-		ast.node.func_def.param_count = argument_count;
+		ast.ast.node.func_def.params = buffer;
+		ast.ast.node.func_def.param_count = argument_count;
 	}
+
+	tokens++;
+
+	if(tokens->token_type != token_type_arrow)
+	{
+		assert(tokens->token_type == token_type_lbrace);
+		auto _ = parse(tokens);
+		assert(false && "Do this later");
+		// return ast;
+	}
+
+	tokens++;
+
+	assert(tokens->token_type == token_type_identifier);
+
+
 
 
 	return ast;
@@ -106,11 +128,11 @@ static AST parse_func(const Token *tokens)
 
 
 
-static AST parse_struct(const Token *tokens);
-static AST parse_binary_expr(const Token *tokens);
-static AST parse_literal(const Token *tokens);
-static AST parse_identefier(const Token *tokens);
-static AST parse_block(const Token *tokens);
+static ASTSize parse_struct(const Token *tokens);
+static ASTSize parse_binary_expr(const Token *tokens);
+static ASTSize parse_literal(const Token *tokens);
+static ASTSize parse_identefier(const Token *tokens);
+static ASTSize parse_block(const Token *tokens);
 
 static bool is_modifier(const TokenType token_type)
 {
