@@ -12,11 +12,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/..)
 
 add_compile_options(-std=gnu2y)
 
+# add_compile_options(-fsanitize=address)
+# add_link_options(-fsanitize=address)
+
 
 
 add_executable(s-lang
 	src/main.c
 	src/lexer.c
+	src/parser.c
 )
 
 target_include_directories(s-lang
