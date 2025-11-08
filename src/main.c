@@ -4,6 +4,7 @@
 #include <log.h>
 
 #include "lexer.h"
+#include "parser.h"
 
 size_t amount_errors = 0;
 size_t amount_warnings = 0;
@@ -27,33 +28,38 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Could not open file: %s\n", filename);
 		exit(EXIT_FAILURE);
 	}
-	printf("%s", file);
+	// printf("%s", file);
 	Token *lexed = lex(file);
 	free((void*)file);
-	Token *lexed_old = lexed;
-	Token l;
-	while((l = *lexed++).token_type != token_type_eof)
-	{
-		puts(token_to_string(&l));
-		if(l.token_type == token_type_string)
-		{
-			printf("\t\"%s\"\n",l.str_val);
-		}
-		if(l.token_type == token_type_char)
-		{
-			printf("\t'%s'\n",l.str_val);
-		}
-		if(l.token_type == token_type_number)
-		{
-			printf("\t%s\n",l.str_val);
-		}
-		if(l.token_type == token_type_identifier || l.token_type == token_type_message)
-		{
-			printf("\t%s\n",l.str_val);
-		}
-	}
-	lexed = lexed_old;
-	puts(token_to_string(&l));
+	// Token *lexed_old = lexed;
+	// Token l;
+	// while((l = *lexed++).token_type != token_type_eof)
+	// {
+	// 	puts(token_to_string(&l));
+	// 	if(l.token_type == token_type_string)
+	// 	{
+	// 		printf("\t\"%s\"\n",l.str_val);
+	// 	}
+	// 	if(l.token_type == token_type_char)
+	// 	{
+	// 		printf("\t'%s'\n",l.str_val);
+	// 	}
+	// 	if(l.token_type == token_type_number)
+	// 	{
+	// 		printf("\t%s\n",l.str_val);
+	// 	}
+	// 	if(l.token_type == token_type_identifier || l.token_type == token_type_message)
+	// 	{
+	// 		printf("\t%s\n",l.str_val);
+	// 	}
+	// }
+	// lexed = lexed_old;
+	// puts(token_to_string(&l));
+
+	AST parsed = parse(lexed + 2);
+
+	printf("name = %s\nmodifiers = %s", parsed.node.func_def.name.str_val, token_to_string(parsed.node.func_def.modifiers->token_type));
+
 	lex_free(lexed);
 }
 

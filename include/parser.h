@@ -1,0 +1,87 @@
+#pragma once
+
+#include "lexer.h"
+#include "utils.h"
+
+typedef struct __AbstractSyntaxTree AST;
+
+typedef struct
+{
+	Token name;
+	Token type;
+	AST *ast;
+} VarDef;
+
+typedef struct
+{
+	Token name;
+	Token type;
+	Token *modifiers;
+	usize modifier_count;
+	AST *template_types;
+	usize template_count;
+	AST *params;
+	usize param_count;
+	Token return_type;
+	AST *body;
+} FuncDef;
+
+/// also used for enums and unions
+typedef struct
+{
+	Token name;
+	Token type;
+	AST **members;
+	usize param_count;
+} StructDef;
+
+typedef struct
+{
+	Token op;
+	AST *left;
+	AST *right;
+} BinaryExpr;
+
+typedef struct
+{
+	Token literal;
+} Literal;
+
+/// wil also be used for messages
+typedef struct
+{
+	Token identefier;
+} Identefier;
+
+typedef struct
+{
+	AST **statements;
+	usize satement_count;
+} Block;
+
+
+
+
+typedef struct __AbstractSyntaxTree
+{
+	Token token;
+ 	AST *tree;
+	union
+	{
+		VarDef var_def;
+		FuncDef func_def;
+		StructDef stuct_def;
+		BinaryExpr binary_expr;
+		Literal literal;
+		Identefier identefier;
+		Block block;
+	} node;
+} AST;
+
+/// parses the Token array given by the lexer
+/// the TokenTree should be freed with free_token_tree
+[[gnu::warn_unused_result]]
+AST parse(const Token *tokens);
+
+/// will be implemented when the parser is done
+void free_token_tree(AST *token_tree);
