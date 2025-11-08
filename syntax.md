@@ -56,6 +56,12 @@ const:	compiler const, so constexpr in C
 
 ```
 
+extra notes over types
+```
+All types kan be a pointer `*` or a reference `&`, a reference will just like a pointer, but can never be NULL,
+a pointer can be converted to a reference and vice versa, but if converted to a reference there will be a NULL check each time
+Even though, I want this feature, this will be implemented later
+```
 
 basic types:
 ```
@@ -74,6 +80,8 @@ f32:		float
 f64:		double
 
 char:		char
+
+you can make tuples, these are going to be represented as a struct in C
 ```
 
 complexer types:
