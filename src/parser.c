@@ -1,6 +1,7 @@
+#include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "assert.h"
 #include "log.h"
 #include "parser.h"
 #include "tokens.h"
@@ -25,7 +26,7 @@ static AST* parse_fn(ParserState* parser_state);
 static const Token* peek(ParserState* parser_state);
 static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
-static bool is_modifier(const TokenType token_type); // NOLINT
+static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
 
@@ -45,23 +46,66 @@ static AST* parse_decl(ParserState* parser_state)
 	}
 }
 
-static AST* parse_fn(ParserState* parser_state)
+static AST* parse_fn(ParserState* parser_state) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 
 	node->type = AST_FUNC_DEF;
 
-	node->node.func_def.modifiers = get_modifiers(parser_state);
+	TokenArray mod_arr = get_modifiers(parser_state);
+	node->node.func_def.modifiers = mod_arr.tokens;
+	node->node.func_def.modifier_count = mod_arr.count;
 
 	assert(consume(parser_state)->token_type != token_type_fn);
 
-	Token token = *consume(parser_state);
+	{
+		const Token token = *consume(parser_state);
+		node->node.func_def.name = strdup(token.str_val);
+	}
 
+	assert(consume(parser_state)->token_type != token_type_fn);
+
+	// parse templates, //will do this later
+
+	assert(consume(parser_state)->token_type != token_type_lparen);
+
+	{
+		Token token;
+		while ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
+			   is_modifier(token.token_type))										// NOLINT
+		{
+			// parser_var(parser_state);
+		}
+	}
+
+	assert(consume(parser_state)->token_type != token_type_rparen);
+
+	if (peek(parser_state)->token_type != token_type_arrow)
+	{
+		return node;
+	}
+
+	assert(consume(parser_state)->token_type != token_type_arrow);
+
+	Token token;
+	if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
+		is_modifier(token.token_type))										 // NOLINT
+	{
+		// parse_var(parser_state)
+	}
+
+	assert(peek(parser_state)->token_type != token_type_lbrace);
 	return node;
 }
 
 AST parse(const Token* tokens)
 {
+	usize count = 0;
+	while (tokens[count++].token_type != token_type_eof) // NOLINT
+	{
+	}
+	ParserState parser_state = {
+		.tokens = tokens, .count = count, .pos = 1}; // pos = 1, to counteract the token_type_sof
 	switch (tokens->token_type)
 	{
 		default:
