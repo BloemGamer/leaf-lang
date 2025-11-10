@@ -8,3 +8,7 @@ slang-test
 build
 .cache
 valgrind
+
+.clang-format
+.clang-tidy
+.nvim.lua
