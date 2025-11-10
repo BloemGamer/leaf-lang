@@ -7,41 +7,41 @@ typedef struct AbstractSyntaxTree AST;
 
 typedef struct [[gnu::aligned(64)]]
 {
-	char *name;
-	char *type;
-	Token *modifiers;
+	char* name;
+	char* type;
+	Token* modifiers;
 	usize modifier_count;
-	AST *ast;
+	AST* ast;
 } VarDef;
 
 typedef struct [[gnu::aligned(128)]]
 {
-	char *name;
-	char *type;
-	Token *modifiers;
+	char* name;
+	char* type;
+	Token* modifiers;
 	usize modifier_count;
-	AST *template_types;
+	AST* template_types;
 	usize template_count;
-	AST *params;
+	AST* params;
 	usize param_count;
 	Token return_type;
-	AST *body;
+	AST* body;
 } FuncDef;
 
 /// also used for enums and unions
 typedef struct [[gnu::aligned(32)]]
 {
-	char *name;
-	char *type;
-	AST **members;
+	char* name;
+	char* type;
+	AST** members;
 	usize param_count;
 } StructDef;
 
 typedef struct [[gnu::aligned(64)]]
 {
 	Token op;
-	AST *left;
-	AST *right;
+	AST* left;
+	AST* right;
 } BinaryExpr;
 
 typedef struct [[gnu::aligned(32)]]
@@ -57,17 +57,14 @@ typedef struct [[gnu::aligned(32)]]
 
 typedef struct [[gnu::aligned(16)]]
 {
-	AST **statements;
+	AST** statements;
 	usize satement_count;
 } Block;
-
-
-
 
 typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 {
 	Token token;
- 	AST *tree;
+	AST* tree;
 	union
 	{
 		VarDef var_def;
@@ -83,7 +80,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 /// parses the Token array given by the lexer
 /// the TokenTree should be freed with free_token_tree
 [[gnu::warn_unused_result]]
-AST parse(const Token *tokens);
+AST parse(const Token* tokens);
 
 /// will be implemented when the parser is done
-void free_token_tree(AST *token_tree);
+void free_token_tree(AST* token_tree);
