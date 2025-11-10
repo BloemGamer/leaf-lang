@@ -33,7 +33,6 @@ AST parse(const Token* tokens)
 		default:
 			LOG_ERROR(tokens->pos, "Unexpected token: %s\n", token_to_string(tokens->token_type));
 			assert(false);
-			int abs = ({ 5; });
 	}
 }
 
