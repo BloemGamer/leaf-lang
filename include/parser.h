@@ -20,9 +20,9 @@ typedef struct [[gnu::aligned(128)]]
 	char* type;
 	Token* modifiers;
 	usize modifier_count;
-	AST* template_types;
+	AST** template_types;
 	usize template_count;
-	AST* params;
+	AST** params;
 	usize param_count;
 	Token return_type;
 	AST* body;

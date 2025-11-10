@@ -62,8 +62,23 @@ int main(int argc, char** argv)
 
 	AST parsed = *parse(lexed);
 
-	printf("name = %s\nmodifiers = %s\n", parsed.node.func_def.name,
-		   token_to_string(parsed.node.func_def.modifiers->token_type));
+	auto fn_def = parsed.node.func_def;
+
+	for (int i = 0; i < fn_def.modifier_count; i++)
+	{
+		printf("%s", token_to_string(fn_def.modifiers[i].token_type));
+	}
+	printf("fn %s( ", fn_def.name);
+	for (int i = 0; i < fn_def.param_count; i++)
+	{
+		printf("%s %s,", fn_def.params[i]->node.var_def.type, fn_def.params[i]->node.var_def.name);
+	}
+	printf("\b)");
+	if (fn_def.return_type.str_val != nullptr)
+	{
+		printf("-> %s", fn_def.return_type.str_val);
+	}
+	printf("\n");
 
 	lex_free(lexed);
 }

@@ -89,9 +89,18 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 			is_modifier(token.token_type))										 // NOLINT
 		{
+			AST** params = (AST**)malloc(1 * sizeof(AST*));
+			usize cap = 1;
+			usize len = 0;
 			while (true) // NOLINT
 			{
-				parse_var(parser_state);
+				AST* tmp = parse_var(parser_state);
+				if (len >= cap)
+				{
+					cap *= 2;
+					params = (AST**)realloc((void*)params, cap); // NOLINT
+				}
+				params[len++] = tmp;
 				if (peek(parser_state)->token_type == token_type_comma)
 				{
 					(void)consume(parser_state);
@@ -99,6 +108,8 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 				}
 				else if (peek(parser_state)->token_type == token_type_rparen) // NOLINT
 				{
+					node->node.func_def.params = params;
+					node->node.func_def.param_count = len;
 					break;
 				}
 				else
