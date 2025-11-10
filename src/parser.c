@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "log.h"
 #include "parser.h"
 #include "tokens.h"
 #include "utils.h"

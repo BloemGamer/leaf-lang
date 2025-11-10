@@ -10,13 +10,13 @@
 #include "tokens.h"
 #include "utils.h"
 
-typedef struct
+typedef struct [[gnu::aligned(64)]]
 {
 	Token token;
 	usize size;
 } TokenResult;
 
-typedef struct
+typedef struct [[gnu::aligned(16)]]
 {
 	usize size;
 	char char_val;
@@ -183,8 +183,8 @@ static TokenResult string_to_ignored_token(const char* input)
 
 	if (isspace(input[0]))
 	{
-		usize i = 1;
-		while (isspace(input[i]))
+		usize i = 1;			  // NOLINT
+		while (isspace(input[i])) // NOLINT
 		{
 			i++;
 		}
@@ -193,7 +193,7 @@ static TokenResult string_to_ignored_token(const char* input)
 		token_res.size = i;
 		return token_res;
 	}
-	else if (input[0] == '/' && input[1] == '/')
+	else if (input[0] == '/' && input[1] == '/') // NOLINT
 	{
 		char* endline = strchrnul(input, '\n');
 
@@ -224,7 +224,7 @@ static TokenResult string_to_simple_token(const char* input)
 {
 	TokenResult token_res = {0};
 
-	if (isalnum(input[0]) != false)
+	if (isalnum(input[0]) != false) // NOLINT
 	{
 		token_res.size = 0;
 		return token_res;
@@ -232,6 +232,7 @@ static TokenResult string_to_simple_token(const char* input)
 
 	constexpr usize amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
 
+#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		// the next part of the function only works if this returns true, otherwise it will skipt tokens
@@ -239,6 +240,7 @@ static TokenResult string_to_simple_token(const char* input)
 		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 2);
 	}
 
+#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
@@ -248,6 +250,7 @@ static TokenResult string_to_simple_token(const char* input)
 			return token_res;
 		}
 	}
+#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0])
@@ -266,7 +269,7 @@ static TokenResult string_to_keyword_token(const char* input)
 {
 	TokenResult token_res = {0};
 
-	if (isalpha(input[0]) == false)
+	if (isalpha(input[0]) == false) // NOLINT
 	{
 		token_res.size = 0;
 		return token_res;
@@ -278,10 +281,12 @@ static TokenResult string_to_keyword_token(const char* input)
 	char buffer[buffer_size] = {0};
 
 	buffer[0] = input[0];
-	usize len;
+	usize len = 0;
+
+#pragma unroll
 	for (len = 1; len < buffer_size; len++)
 	{
-		if (isalnum(input[len]) != false || input[len] == '_')
+		if (isalnum(input[len]) != false || input[len] == '_') // NOLINT
 		{
 			buffer[len] = input[len];
 		}
@@ -292,6 +297,7 @@ static TokenResult string_to_keyword_token(const char* input)
 	}
 	buffer[len] = '\0';
 
+#pragma unroll
 	for (usize i = 0; i < amount_tokens_keywords; i++)
 	{
 		if (strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
@@ -301,6 +307,8 @@ static TokenResult string_to_keyword_token(const char* input)
 			return token_res;
 		}
 	}
+
+#pragma unroll
 	for (usize i = 0; i < amount_tokens_modifier; i++)
 	{
 		if (strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
@@ -321,7 +329,7 @@ static TokenResult string_to_literals_token(const char* input)
 	if (input[0] == '"') // strings
 	{
 		const char* end_str = input;
-		while (true)
+		while (true) // NOLINT
 		{
 			end_str = strstr(end_str + 1, "\"");
 			if (end_str == NULL)
@@ -330,7 +338,7 @@ static TokenResult string_to_literals_token(const char* input)
 				token_res.token.token_type = token_type_invalid_string;
 				return token_res;
 			}
-			else if (end_str[-1] == '\\')
+			else if (end_str[-1] == '\\') // NOLINT
 			{
 				continue;
 			}
@@ -349,7 +357,7 @@ static TokenResult string_to_literals_token(const char* input)
 	if (input[0] == '\'')
 	{
 		const char* end_str = input;
-		while (true)
+		while (true) // NOLINT
 		{
 			end_str = strstr(end_str + 1, "\'");
 			if (end_str == NULL)
@@ -358,7 +366,7 @@ static TokenResult string_to_literals_token(const char* input)
 				token_res.token.token_type = token_type_invalid_string;
 				return token_res;
 			}
-			else if (end_str[-1] == '\\')
+			else if (end_str[-1] == '\\') // NOLINT
 			{
 				continue;
 			}
@@ -379,9 +387,10 @@ static TokenResult string_to_literals_token(const char* input)
 		const char* start_str = input;
 		usize start_str_offset = 0;
 		constexpr char num_starts[][3] = {"0b", "0x"};
+#pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(num_starts); i++)
 		{
-			if (strncmp(num_starts[i], input, 2))
+			if (strncmp(num_starts[i], input, 2) == 0)
 			{
 				start_str += 2;
 				start_str_offset += 2;
@@ -391,7 +400,7 @@ static TokenResult string_to_literals_token(const char* input)
 		usize num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
 		token_res.size = num_len;
 		token_res.token.token_type = token_type_number;
-		token_res.token.str_val = (char*)malloc((num_len) * sizeof(char) + 1);
+		token_res.token.str_val = (char*)malloc(num_len * (sizeof(char) + 1));
 		memcpy(token_res.token.str_val, input, num_len);
 		token_res.token.str_val[num_len] = '\0';
 		return token_res;
@@ -405,7 +414,7 @@ static TokenResult string_to_identefier_token(const char* input)
 {
 	TokenResult token_res = {0};
 
-	if (isalpha(input[0]) != false || input[0] == '_')
+	if (isalpha(input[0]) != false || input[0] == '_') // NOLINT
 	{
 		token_res.token.token_type = token_type_identifier;
 	}
@@ -424,13 +433,13 @@ static TokenResult string_to_identefier_token(const char* input)
 	char* buffer = (char*)malloc(buffer_max_size * sizeof(*buffer));
 
 	buffer[0] = input[0];
-	char c;
-	while (isalnum(c = input[buffer_size]) || input[buffer_size] == '_')
+	char c;																 // NOLINT
+	while (isalnum(c = input[buffer_size]) || input[buffer_size] == '_') // NOLINT
 	{
 		if (buffer_size >= buffer_max_size)
 		{
 			buffer_max_size *= 2;
-			buffer = (char*)realloc((void*)buffer, buffer_max_size * sizeof(*buffer));
+			buffer = (char*)realloc((void*)buffer, buffer_max_size * sizeof(*buffer)); // NOLINT
 		}
 		buffer[buffer_size] = input[buffer_size];
 		buffer_size++;
@@ -448,6 +457,7 @@ void lex_free(Token* tokens)
 	Token tok;
 	while ((tok = *tokens++).token_type != token_type_eof)
 	{
+#pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(TOKENS_LEX_FREE); i++)
 		{
 			if (tok.token_type == TOKENS_LEX_FREE[i])
