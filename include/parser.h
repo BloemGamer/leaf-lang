@@ -1,11 +1,11 @@
 #pragma once
 
-#include "lexer.h"
+#include "tokens.h"
 #include "utils.h"
 
-typedef struct __AbstractSyntaxTree AST;
+typedef struct AbstractSyntaxTree AST;
 
-typedef struct
+typedef struct [[gnu::aligned(64)]]
 {
 	char *name;
 	char *type;
@@ -14,7 +14,7 @@ typedef struct
 	AST *ast;
 } VarDef;
 
-typedef struct
+typedef struct [[gnu::aligned(128)]]
 {
 	char *name;
 	char *type;
@@ -29,7 +29,7 @@ typedef struct
 } FuncDef;
 
 /// also used for enums and unions
-typedef struct
+typedef struct [[gnu::aligned(32)]]
 {
 	char *name;
 	char *type;
@@ -37,25 +37,25 @@ typedef struct
 	usize param_count;
 } StructDef;
 
-typedef struct
+typedef struct [[gnu::aligned(64)]]
 {
 	Token op;
 	AST *left;
 	AST *right;
 } BinaryExpr;
 
-typedef struct
+typedef struct [[gnu::aligned(32)]]
 {
 	Token literal;
 } Literal;
 
 /// wil also be used for messages
-typedef struct
+typedef struct [[gnu::aligned(32)]]
 {
 	Token identefier;
 } Identefier;
 
-typedef struct
+typedef struct [[gnu::aligned(16)]]
 {
 	AST **statements;
 	usize satement_count;
@@ -64,7 +64,7 @@ typedef struct
 
 
 
-typedef struct __AbstractSyntaxTree
+typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 {
 	Token token;
  	AST *tree;

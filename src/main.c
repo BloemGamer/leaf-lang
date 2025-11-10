@@ -1,9 +1,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <log.h>
 #include <string.h>
 
+#include "log.h"
 #include "lexer.h"
 #include "parser.h"
 #include "tokens.h"
@@ -15,7 +15,7 @@ char *read_file_to_str(const char* filename);
 
 int main(int argc, char **argv)
 {
-	char *filename = NULL;
+	char *filename = nullptr;
 	if(argc < 2)
 	{
 		// fprintf(stderr, "Not enough arguments, call: %s <file>\n", argv[0]);
@@ -27,8 +27,8 @@ int main(int argc, char **argv)
 	const char *file = read_file_to_str(filename);
 	if(file == NULL)
 	{
-		fprintf(stderr, "Could not open file: %s\n", filename);
-		exit(EXIT_FAILURE);
+		(void)fprintf(stderr, "Could not open file: %s\n", filename);
+		return EXIT_FAILURE;
 	}
 	// printf("%s", file);
 	Token *lexed = lex(file);
@@ -67,24 +67,24 @@ int main(int argc, char **argv)
 
 char *read_file_to_str(const char* filename)
 {
-	FILE *file = fopen(filename, "rb");
-	if(file == NULL) { return NULL; }
+	FILE *file = fopen(filename, "rbe");
+	if(file == NULL) { return nullptr; }
 
-	fseek(file, 0, SEEK_END);
+	(void)fseek(file, 0, SEEK_END);
 	long length = ftell(file);
-	fseek(file, 0, SEEK_SET);
+	(void)fseek(file, 0, SEEK_SET);
 
 	char *buffer = malloc((length + 1) * sizeof(char));
 	if(buffer == NULL)
 	{
-		fclose(file);
-		return NULL;
+		(void)fclose(file);
+		return nullptr;
 	}
 
-	fread(buffer, 1, length, file);
+	(void)fread(buffer, 1, length, file);
 	buffer[length] = '\0';
 
-	fclose(file);
+	(void)fclose(file);
 
 	return buffer;
 }

@@ -1,14 +1,13 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "parser.h"
-#include "utils.h"
-#include "log.h"
 #include "assert.h"
+#include "log.h"
+#include "parser.h"
 #include "tokens.h"
+#include "utils.h"
 
-typedef struct
+typedef struct [[gnu::aligned(128)]]
 {
 	AST ast;
 	usize size;
@@ -44,20 +43,20 @@ static ASTSize parse_var(const Token *tokens)
 	const Token *const tokens_old = tokens; // I'm not a fan of this syntax, but it does what it should
 	debug_assert(tokens->token_type == token_type_identifier || is_modifier(tokens->token_type));
 
-	ASTSize ast = { .size = 0, .ast = { .tree = NULL, .node.var_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } } };
+	ASTSize ast = { .size = 0, .ast = { .tree = nullptr, .node.var_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } } };
 
 
 
 	{
 		usize modifier_count = 0;
 		usize modifier_cap = 0;
-		Token *buffer = NULL;
+		Token *buffer = nullptr;
 		Token t;
 		while(is_modifier((t = *(tokens)).token_type))
 		{
 			if(modifier_count >= modifier_cap)
 			{
-				modifier_cap <<= 1;
+				modifier_cap *= 2;
 				modifier_cap = MAX(modifier_cap, 1);
 				buffer = (Token*)realloc((void*)buffer, modifier_cap * sizeof(*buffer));
 			}
@@ -104,18 +103,18 @@ static ASTSize parse_func(const Token *tokens)
 	const Token *const tokens_old = tokens; // I'm not a fan of this syntax, but it does what it should
 	assert(tokens->token_type == token_type_fn);
 
-	ASTSize ast = { .size = 0, .ast = { .tree = NULL, .node.func_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } } };
+	ASTSize ast = { .size = 0, .ast = { .tree = nullptr, .node.func_def = { 0 }, .token = { .pos = tokens->pos, .token_type = token_type_fn } } };
 
 	{
 		usize modifier_count = 0;
 		usize modifier_cap = 0;
-		Token *buffer = NULL;
+		Token *buffer = nullptr;
 		Token t;
 		while(is_modifier((t = *(--tokens)).token_type))
 		{
 			if(modifier_count >= modifier_cap)
 			{
-				modifier_cap <<= 1;
+				modifier_cap *= 2;
 				modifier_cap = MAX(modifier_cap, 1);
 				buffer = (Token*)realloc((void*)buffer, modifier_cap * sizeof(*buffer));
 			}
@@ -149,7 +148,7 @@ static ASTSize parse_func(const Token *tokens)
 		usize argument_count = 0;
 		// assert(tokens->token_type == token_type_identifier || is_modifier(tokens->token_type));
 		usize argument_cap = 0;
-		AST *buffer = NULL;
+		AST *buffer = nullptr;
 		ASTSize t;
 		while((tokens)->token_type != token_type_rparen)
 		{
@@ -158,7 +157,7 @@ static ASTSize parse_func(const Token *tokens)
 			t = parse_var(tokens);
 			tokens += t.size;
 			if(tokens->token_type == token_type_comma)
-				tokens++;
+			{ tokens++; }
 			if(argument_count >= argument_cap)
 			{
 				argument_cap <<= 1;
@@ -203,6 +202,7 @@ static ASTSize parse_block(const Token *tokens){}
 
 static bool is_modifier(const TokenType token_type)
 {
+#pragma unroll
 	for(int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_MODIFIER); i++)
 	{
 		if(token_type == TOKENS_TYPES_MODIFIER[i])

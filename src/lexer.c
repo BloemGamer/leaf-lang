@@ -1,15 +1,14 @@
-#include <assert.h>
+#include <ctype.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
-#include <ctype.h>
 
-#include "utils.h"
-#include "log.h"
 #include "assert.h"
 #include "lexer.h"
+#include "log.h"
 #include "tokens.h"
+#include "utils.h"
 
 typedef struct
 {
@@ -48,7 +47,7 @@ char *strchrnul(const char *s, int c) [[gnu::nonnull(1)]]
 
 Token *lex(const char *input)
 {
-	Token *tokens = NULL;
+	Token *tokens = nullptr;
 	usize token_size = 0;
 	usize token_max_size = 0;
 	Pos pos = { .line = 1, .character = 1 };
@@ -58,6 +57,7 @@ Token *lex(const char *input)
 		token.token_type = token_type_sof;
 		add_token(token, &tokens, &token_size, &token_max_size);
 	}
+#pragma unroll
 	while(*input != '\0')
 	{
 		TokenResult next_token = string_to_token(input);
@@ -90,11 +90,11 @@ Token *lex(const char *input)
 
 	if(amount_errors != 0)
 	{
-		errprintf("Could not finish lexing because of amount errors: %zu\n", amount_errors);
+		(void)errprintf("Could not finish lexing because of amount errors: %zu\n", amount_errors);
 	}
 	if(amount_warnings != 0)
 	{
-		errprintf("Fount amount warnings: %zu\n", amount_errors);
+		(void)errprintf("Fount amount warnings: %zu\n", amount_errors);
 	}
 	if(amount_errors != 0)
 	{
@@ -106,6 +106,7 @@ Token *lex(const char *input)
 
 static Pos amount_enters(const char *input, usize size, Pos pos)
 {
+#pragma unroll 2
 	for(usize i = 0; i < size; i++)
 	{
 		if(input[i] == '\n')
