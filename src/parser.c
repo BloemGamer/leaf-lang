@@ -22,6 +22,7 @@ typedef struct // NOLINT
 
 static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
+static AST* parse_var(ParserState* parser_state);
 
 static const Token* peek(ParserState* parser_state);
 static const Token* consume(ParserState* parser_state);
@@ -29,6 +30,23 @@ static bool match(ParserState* parser_state, TokenType type);
 static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
+
+AST* parse(const Token* tokens)
+{
+	usize count = 0;
+	while (tokens[count++].token_type != token_type_eof) // NOLINT
+	{
+	}
+	ParserState parser_state = {
+		.tokens = tokens, .count = count, .pos = 1}; // pos = 1, to counteract the token_type_sof
+	return parse_fn(&parser_state);
+	// switch (tokens->token_type)
+	// {
+	// 	default:
+	// 		LOG_ERROR(tokens->pos, "Unexpected token: %s\n", token_to_string(tokens->token_type));
+	// 		assert(false);
+	// }
+}
 
 static AST* parse_decl(ParserState* parser_state)
 {
@@ -71,10 +89,25 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 
 	{
 		Token token;
-		while ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
-			   is_modifier(token.token_type))										// NOLINT
+		if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
+			is_modifier(token.token_type))										 // NOLINT
 		{
-			// parser_var(parser_state);
+			while (true) // NOLINT
+			{
+				parse_var(parser_state);
+				if (peek(parser_state)->token_type == token_type_comma)
+				{
+					continue;
+				}
+				else if (peek(parser_state)->token_type == token_type_rbrace) // NOLINT
+				{
+					break;
+				}
+				else
+				{
+					assert(false && "not an token that should happen");
+				}
+			}
 		}
 	}
 
@@ -91,27 +124,42 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 		is_modifier(token.token_type))										 // NOLINT
 	{
-		// parse_var(parser_state)
+		parse_var(parser_state);
 	}
 
 	assert(peek(parser_state)->token_type != token_type_lbrace);
 	return node;
 }
 
-AST parse(const Token* tokens)
+static AST* parse_var(ParserState* parser_state)
 {
-	usize count = 0;
-	while (tokens[count++].token_type != token_type_eof) // NOLINT
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_VAR_DEF;
+
+	TokenArray mod_arr = get_modifiers(parser_state);
+	node->node.func_def.modifiers = mod_arr.tokens;
+	node->node.func_def.modifier_count = mod_arr.count;
+
 	{
+		const Token token = *consume(parser_state);
+		assert(token.token_type != token_type_identifier);
+		node->node.func_def.type = strdup(token.str_val);
 	}
-	ParserState parser_state = {
-		.tokens = tokens, .count = count, .pos = 1}; // pos = 1, to counteract the token_type_sof
-	switch (tokens->token_type)
 	{
-		default:
-			LOG_ERROR(tokens->pos, "Unexpected token: %s\n", token_to_string(tokens->token_type));
-			assert(false);
+		const Token token = *consume(parser_state);
+		assert(token.token_type != token_type_identifier);
+		node->node.func_def.name = strdup(token.str_val);
 	}
+
+	if (peek(parser_state)->token_type == token_type_comma)
+	{
+		return node;
+	}
+
+	assert(consume(parser_state)->token_type != token_type_equal_equal);
+
+	return node;
 }
 
 static const Token* peek(ParserState* parser_state)

@@ -91,7 +91,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 /// parses the Token array given by the lexer
 /// the TokenTree should be freed with free_token_tree
 [[gnu::warn_unused_result]]
-AST parse(const Token* tokens);
+AST* parse(const Token* tokens);
 
 /// will be implemented when the parser is done
 void free_token_tree(AST* token_tree);
