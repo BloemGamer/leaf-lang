@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -32,6 +33,17 @@ static TokenResult string_to_keyword_token(const char *input);
 static TokenResult string_to_literals_token(const char *input);
 static TokenResult string_to_identefier_token(const char *input);
 
+#ifdef _WIN32
+char *strchrnul(const char *s, int c) [[gnu::nonnull(1)]]
+{
+	char *ret = strchr(s, c);
+	if(ret == NULL)
+	{
+		ret = (char*)s + strlen(s);
+	}
+	return ret;
+}
+#endif // _WIN32
 
 
 Token *lex(const char *input)
@@ -113,7 +125,7 @@ static void add_token(const Token next, Token **tokens, usize *token_size, usize
 	{
 		if(*token_max_size == 0) { *token_max_size += 1; }
 		*token_max_size *= 2;
-		*tokens = (Token*)reallocarray((void*)*tokens, *token_max_size, sizeof(Token));
+		*tokens = (Token*)realloc((void*)*tokens, *token_max_size * sizeof(Token));
 	}
 	(*tokens)[*token_size] = next;
 	*token_size += 1;

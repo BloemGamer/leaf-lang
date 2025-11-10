@@ -1,4 +1,4 @@
-#include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -59,7 +59,7 @@ static ASTSize parse_var(const Token *tokens)
 			{
 				modifier_cap <<= 1;
 				modifier_cap = MAX(modifier_cap, 1);
-				buffer = (Token*)reallocarray((void*)buffer, modifier_cap, sizeof(*buffer));
+				buffer = (Token*)realloc((void*)buffer, modifier_cap * sizeof(*buffer));
 			}
 			buffer[modifier_count] = t;
 			tokens++;
@@ -95,7 +95,7 @@ static ASTSize parse_var(const Token *tokens)
 			default: assert(false && "Fix your code");
 		}
 	}
-
+	ast.size = 2;
 	return ast;
 }
 
@@ -117,9 +117,9 @@ static ASTSize parse_func(const Token *tokens)
 			{
 				modifier_cap <<= 1;
 				modifier_cap = MAX(modifier_cap, 1);
-				buffer = (Token*)reallocarray((void*)buffer, modifier_cap, sizeof(*buffer));
+				buffer = (Token*)realloc((void*)buffer, modifier_cap * sizeof(*buffer));
 			}
-			buffer[modifier_count] = t;
+			buffer[modifier_count++] = t;
 		}
 		ast.ast.node.func_def.modifiers = buffer;
 		ast.ast.node.func_def.modifier_count = modifier_count;
@@ -141,46 +141,41 @@ static ASTSize parse_func(const Token *tokens)
 
 	assert(tokens->token_type == token_type_lparen);
 
+	tokens++;
+
+	if(tokens->token_type != token_type_lparen)
 	{
-		tokens++;
+		// tokens++;
 		usize argument_count = 0;
-		assert(tokens->token_type == token_type_identifier || is_modifier(tokens->token_type));
+		// assert(tokens->token_type == token_type_identifier || is_modifier(tokens->token_type));
 		usize argument_cap = 0;
 		AST *buffer = NULL;
 		ASTSize t;
-		while((++tokens)->token_type != token_type_rparen)
+		while((tokens)->token_type != token_type_rparen)
 		{
-			assert(tokens->token_type == token_type_identifier || ({
-				bool is_modifier = false;
-
-				for(int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_MODIFIER); i++)
-				{
-					if(tokens->token_type == TOKENS_TYPES_MODIFIER[i])
-					{
-						is_modifier = true;
-						break;
-					}
-				}
-				is_modifier;
-			}));
+			debug_assert(tokens->token_type == token_type_identifier || is_modifier(tokens->token_type));
 
 			t = parse_var(tokens);
+			tokens += t.size;
+			if(tokens->token_type == token_type_comma)
+				tokens++;
 			if(argument_count >= argument_cap)
 			{
 				argument_cap <<= 1;
 				argument_cap = MAX(argument_cap, 1);
-				buffer = (AST*)reallocarray((void*)buffer, argument_cap, sizeof(*buffer));
+				buffer = (AST*)realloc((void*)buffer, argument_cap * sizeof(*buffer));
 			}
-			buffer[argument_count] = t.ast;
+			buffer[argument_count++] = t.ast;
 		}
 		ast.ast.node.func_def.params = buffer;
 		ast.ast.node.func_def.param_count = argument_count;
 	}
 
-	tokens++;
+	// tokens++;
 
 	if(tokens->token_type != token_type_arrow)
 	{
+		tokens++;
 		assert(tokens->token_type == token_type_lbrace);
 		auto _ = parse_block(tokens);
 		assert(false && "Do this later");
@@ -217,3 +212,4 @@ static bool is_modifier(const TokenType token_type)
 	}
 	return false;
 }
+

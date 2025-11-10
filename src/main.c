@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <log.h>
+#include <string.h>
 
 #include "lexer.h"
 #include "parser.h"
@@ -59,7 +60,7 @@ int main(int argc, char **argv)
 
 	AST parsed = parse(lexed + 2);
 
-	printf("name = %s\nmodifiers = %s", parsed.node.func_def.name.str_val, token_to_string(parsed.node.func_def.modifiers->token_type));
+	printf("name = %s\nmodifiers = %s", parsed.node.func_def.name, token_to_string(parsed.node.func_def.modifiers->token_type));
 
 	lex_free(lexed);
 }
