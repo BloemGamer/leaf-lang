@@ -73,18 +73,16 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	node->node.func_def.modifiers = mod_arr.tokens;
 	node->node.func_def.modifier_count = mod_arr.count;
 
-	assert(consume(parser_state)->token_type != token_type_fn);
+	assert(consume(parser_state)->token_type == token_type_fn);
 
 	{
 		const Token token = *consume(parser_state);
 		node->node.func_def.name = strdup(token.str_val);
 	}
 
-	assert(consume(parser_state)->token_type != token_type_fn);
-
 	// parse templates, //will do this later
 
-	assert(consume(parser_state)->token_type != token_type_lparen);
+	assert(consume(parser_state)->token_type == token_type_lparen);
 
 	{
 		Token token;
@@ -96,9 +94,10 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 				parse_var(parser_state);
 				if (peek(parser_state)->token_type == token_type_comma)
 				{
+					(void)consume(parser_state);
 					continue;
 				}
-				else if (peek(parser_state)->token_type == token_type_rbrace) // NOLINT
+				else if (peek(parser_state)->token_type == token_type_rparen) // NOLINT
 				{
 					break;
 				}
@@ -110,14 +109,14 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		}
 	}
 
-	assert(consume(parser_state)->token_type != token_type_rparen);
+	assert(consume(parser_state)->token_type == token_type_rparen);
 
-	if (peek(parser_state)->token_type != token_type_arrow)
+	if (peek(parser_state)->token_type == token_type_lbrace)
 	{
 		return node;
 	}
 
-	assert(consume(parser_state)->token_type != token_type_arrow);
+	assert(consume(parser_state)->token_type == token_type_arrow);
 
 	Token token;
 	if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
@@ -126,7 +125,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		parse_var(parser_state);
 	}
 
-	assert(peek(parser_state)->token_type != token_type_lbrace);
+	assert(peek(parser_state)->token_type == token_type_lbrace);
 	return node;
 }
 
@@ -142,12 +141,12 @@ static AST* parse_var(ParserState* parser_state)
 
 	{
 		const Token token = *consume(parser_state);
-		assert(token.token_type != token_type_identifier);
+		assert(token.token_type == token_type_identifier);
 		node->node.func_def.type = strdup(token.str_val);
 	}
 	{
 		const Token token = *consume(parser_state);
-		assert(token.token_type != token_type_identifier);
+		assert(token.token_type == token_type_identifier);
 		node->node.func_def.name = strdup(token.str_val);
 	}
 
@@ -155,8 +154,12 @@ static AST* parse_var(ParserState* parser_state)
 	{
 		return node;
 	}
+	if (peek(parser_state)->token_type == token_type_rparen)
+	{
+		return node;
+	}
 
-	assert(consume(parser_state)->token_type != token_type_equal_equal);
+	assert(consume(parser_state)->token_type == token_type_equal_equal);
 
 	return node;
 }
@@ -245,7 +248,7 @@ static TokenArray get_modifiers(ParserState* parser_state)
 		{
 			if (len >= cap)
 			{
-				MAX(cap, 1);
+				cap = MAX(cap, 1);
 				cap *= 2;
 				modifiers = (Token*)realloc((void*)modifiers, cap * sizeof(Token)); // NOLINT
 				assert(modifiers != nullptr);

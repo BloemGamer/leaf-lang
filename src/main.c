@@ -60,9 +60,9 @@ int main(int argc, char** argv)
 	// lexed = lexed_old;
 	// puts(token_to_string(&l));
 
-	AST parsed = *parse(lexed + 2);
+	AST parsed = *parse(lexed);
 
-	printf("name = %s\nmodifiers = %s", parsed.node.func_def.name,
+	printf("name = %s\nmodifiers = %s\n", parsed.node.func_def.name,
 		   token_to_string(parsed.node.func_def.modifiers->token_type));
 
 	lex_free(lexed);
