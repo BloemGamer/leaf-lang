@@ -13,6 +13,12 @@ typedef struct // NOLINT
 	usize pos;
 } ParserState;
 
+typedef struct // NOLINT
+{
+	Token* tokens;
+	usize count;
+} TokenArray;
+
 static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
 
@@ -21,7 +27,7 @@ static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
 static bool is_modifier(const TokenType token_type); // NOLINT
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
-static Token* get_modifiers(ParserState* parser_state);
+static TokenArray get_modifiers(ParserState* parser_state);
 
 static AST* parse_decl(ParserState* parser_state)
 {
@@ -46,6 +52,10 @@ static AST* parse_fn(ParserState* parser_state)
 	node->type = AST_FUNC_DEF;
 
 	node->node.func_def.modifiers = get_modifiers(parser_state);
+
+	assert(consume(parser_state)->token_type != token_type_fn);
+
+	Token token = *consume(parser_state);
 
 	return node;
 }
@@ -127,7 +137,7 @@ static TokenType token_type_search_until(const ParserState* parser_state, const 
 	}
 }
 
-static Token* get_modifiers(ParserState* parser_state)
+static TokenArray get_modifiers(ParserState* parser_state)
 {
 	Token* modifiers = nullptr;
 	usize len = 0;
@@ -156,5 +166,5 @@ static Token* get_modifiers(ParserState* parser_state)
 			break;
 		}
 	}
-	return modifiers;
+	return (TokenArray){modifiers, len};
 }
