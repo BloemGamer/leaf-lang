@@ -21,6 +21,7 @@ static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
 static bool is_modifier(const TokenType token_type); // NOLINT
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
+static Token* get_modifiers(ParserState* parser_state);
 
 static AST* parse_decl(ParserState* parser_state)
 {
@@ -44,7 +45,7 @@ static AST* parse_fn(ParserState* parser_state)
 
 	node->type = AST_FUNC_DEF;
 
-	// geting modifers
+	node->node.func_def.modifiers = get_modifiers(parser_state);
 
 	return node;
 }
@@ -148,7 +149,11 @@ static Token* get_modifiers(ParserState* parser_state)
 				modifiers = (Token*)realloc((void*)modifiers, cap * sizeof(Token)); // NOLINT
 				assert(modifiers != nullptr);
 			}
-			modifiers[len++] = *token;
+			modifiers[len++] = *consume(parser_state);
+		}
+		else
+		{
+			break;
 		}
 	}
 	return modifiers;
