@@ -135,7 +135,7 @@ static Token* get_modifiers(ParserState* parser_state)
 	while (true)
 	{
 		const Token* token = peek(parser_state);
-		if (!token)
+		if (token == nullptr)
 		{
 			break;
 		}
@@ -143,13 +143,10 @@ static Token* get_modifiers(ParserState* parser_state)
 		{
 			if (len >= cap)
 			{
-				cap = MAX(cap, 1);
+				MAX(cap, 1);
 				cap *= 2;
-				modifiers = realloc((void*)modifiers, cap); // NOLINT
-				if (modifiers == nullptr)
-				{
-					return nullptr;
-				}
+				modifiers = (Token*)realloc((void*)modifiers, cap * sizeof(Token)); // NOLINT
+				assert(modifiers != nullptr);
 			}
 			modifiers[len++] = *token;
 		}
