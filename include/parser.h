@@ -63,8 +63,19 @@ typedef struct [[gnu::aligned(16)]]
 
 typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 {
-	Token token;
+	enum
+	{
+		AST_VAR_DEF,
+		AST_FUNC_DEF,
+		AST_STRUCT_DEF,
+		AST_BINARY_EXPR,
+		AST_LITERAL,
+		AST_IDENTEFIER,
+		AST_BLOCK
+	} type;
+
 	AST* tree;
+
 	union
 	{
 		VarDef var_def;
