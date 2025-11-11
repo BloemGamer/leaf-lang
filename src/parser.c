@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -232,8 +233,42 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 	return left;
 }
 
-static AST* parse_prefix(ParserState* parser_state) {}
-AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
+static AST* parse_prefix(ParserState* parser_state) // NOLINT
+{
+	const Token* t = consume(parser_state); // NOLINT
+	if (!t)
+	{
+		return nullptr;
+	}
+
+	switch (t->token_type)
+	{
+		case token_type_number:
+		case token_type_string:
+		case token_type_char:
+			return make_literal(t);
+
+		case token_type_identifier:
+			return make_identifier(t);
+
+		case token_type_lparen:
+		{
+			AST* expr = parse_expr(parser_state);
+			if (!match(parser_state, token_type_rparen))
+			{
+				assert(false);
+				return nullptr;
+			}
+			return expr;
+		}
+
+		default:
+			assert(false);
+			return nullptr;
+	}
+}
+
+static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 {
 	while (true)
 	{
@@ -283,7 +318,7 @@ AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 				const Token* id = peek(parser_state); // NOLINT
 				if (!id || id->token_type != token_type_identifier)
 				{
-					printf("Error: expected identifier after '.'\n");
+					assert(false);
 					return left;
 				}
 				consume(parser_state);
@@ -305,7 +340,7 @@ AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 				AST* index_expr = parse_expr(parser_state);
 				if (!match(parser_state, token_type_rsqbracket))
 				{
-					printf("Error: missing ']'\n");
+					assert(false);
 					return left;
 				}
 
