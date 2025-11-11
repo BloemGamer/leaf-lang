@@ -317,7 +317,7 @@ static TokenResult string_to_keyword_token(const char* input)
 	return token_res;
 }
 
-static TokenResult string_to_literals_token(const char* input)
+static TokenResult string_to_literals_token(const char* input) // NOLINT
 {
 	TokenResult token_res = {0};
 
