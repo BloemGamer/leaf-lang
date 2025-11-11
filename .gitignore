@@ -5,8 +5,8 @@
 
 *.sh
 
-slang-test
 build*
+slang-test
 .cache
 valgrind
 
