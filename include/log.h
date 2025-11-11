@@ -5,13 +5,9 @@
 extern size_t amount_errors;
 extern size_t amount_warnings;
 
-#define LOG_ERROR(pos, format, ...) \
-	amount_errors++;                \
-	LOG("\x1B[31m", "ERROR", pos, format, ##__VA_ARGS__);
+#define LOG_ERROR(pos, format, ...) LOG("\x1B[31m", "ERROR", pos, format, ##__VA_ARGS__);
 
-#define LOG_WARN(pos, format, ...) \
-	amount_warnings++;             \
-	LOG("\x1B[33m", "WARNING", pos, format, ##__VA_ARGS__);
+#define LOG_WARN(pos, format, ...) LOG("\x1B[33m", "WARNING", pos, format, ##__VA_ARGS__);
 
 #define LOG(colour_str, log_type_str, pos, format, ...)          \
 	(void)fprintf(stderr,                                        \

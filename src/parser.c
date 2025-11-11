@@ -47,6 +47,7 @@ static char* make_string(const Token* token);
 static usize unescape(const char* input, char* output, usize output_size, Pos pos); // NOLINT
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
+i64 make_number(const Token* token);
 
 AST* parse(const Token* tokens)
 {
@@ -203,7 +204,7 @@ static AST* parse_var(ParserState* parser_state)
 		return node;
 	}
 
-	assert(consume(parser_state)->token_type == token_type_equal_equal);
+	assert(consume(parser_state)->token_type == token_type_equal);
 
 	node->node.var_def.equals = parse_expr(parser_state);
 
@@ -212,7 +213,7 @@ static AST* parse_var(ParserState* parser_state)
 
 static AST* parse_expr(ParserState* parser_state) // NOLINT
 {
-	return parse_precedence(parser_state, 0);
+	return parse_precedence(parser_state, 1);
 }
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
@@ -503,7 +504,9 @@ AST* make_literal(const Token* token)
 			node->node.literal.literal.pos = token->pos;
 			break;
 		case token_type_number:
-
+			node->node.literal.literal.token_type = token_type_number;
+			node->node.literal.literal.num_val = make_number(token);
+			node->node.literal.literal.pos = token->pos;
 			break;
 		default:
 			assert(false);
@@ -571,7 +574,7 @@ AST* make_index(AST* left, AST* index) // NOLINT
 
 static char* make_string(const Token* token)
 {
-	usize len = strlen(token->str_val);
+	usize len = strlen(token->str_val) + 1;
 	char* str_ret = calloc(len, sizeof(char));
 
 	(void)unescape(token->str_val, str_ret, len, token->pos);
@@ -835,4 +838,29 @@ static signed char unescape_char(const char* input, Pos pos)
 	}
 
 	return result;
+}
+
+i64 make_number(const Token* token)
+{
+	switch (token->str_val[1])
+	{
+		case '\0':
+			return token->str_val[0] - '0';
+		case 'o':
+		case 'O':
+			return strtoll(token->str_val + 2, nullptr, 8);
+		case 'x':
+		case 'X':
+			return strtoll(token->str_val + 2, nullptr, 16);
+		case 'b':
+		case 'B':
+			return strtoll(token->str_val + 2, nullptr, 1);
+		default:
+			if (token->str_val[0] == '0')
+			{
+				LOG_WARN(token->pos,
+						 "Numbers starting with '0' are not an octal number here, use '0o' or remove the leading '0'");
+			}
+			return strtoll(token->str_val, nullptr, 10);
+	}
 }
