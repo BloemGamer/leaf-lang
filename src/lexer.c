@@ -32,18 +32,6 @@ static TokenResult string_to_keyword_token(const char* input);
 static TokenResult string_to_literals_token(const char* input);
 static TokenResult string_to_identefier_token(const char* input);
 
-#ifdef _WIN32
-char* strchrnul(const char* s, int c) [[gnu::nonnull(1)]]
-{
-	char* ret = strchr(s, c);
-	if (ret == NULL)
-	{
-		ret = (char*)s + strlen(s);
-	}
-	return ret;
-}
-#endif // _WIN32
-
 Token* lex(const char* input)
 {
 	Token* tokens = nullptr;
@@ -195,10 +183,17 @@ static TokenResult string_to_ignored_token(const char* input)
 	}
 	else if (input[0] == '/' && input[1] == '/') // NOLINT
 	{
-		char* endline = strchrnul(input, '\n');
+		char* endline = strchr(input, '\n');
+		if (endline == nullptr)
+		{
+			token_res.size = strlen(input);
+		}
+		else
+		{
+			token_res.size = endline - input;
+		}
 
 		token_res.token.token_type = token_type_comment;
-		token_res.size = endline - input;
 		return token_res;
 	}
 	else if (input[0] == '/' && input[1] == '*')

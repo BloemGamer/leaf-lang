@@ -23,6 +23,9 @@ static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
 static AST* parse_var(ParserState* parser_state);
 static AST* parse_expr(ParserState* parser_state);
+static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
+static AST* parse_prefix(ParserState* parser_state);
+static AST* parse_postfix(ParserState* parser_state, AST* left);
 
 static const Token* peek(ParserState* parser_state);
 static const Token* consume(ParserState* parser_state);
@@ -189,17 +192,47 @@ static AST* parse_var(ParserState* parser_state)
 
 	assert(consume(parser_state)->token_type == token_type_equal_equal);
 
-	// node->node.var_def.equals = parser_expr(parser_state);
+	node->node.var_def.equals = parse_expr(parser_state);
 
 	return node;
 }
 
-static AST* parse_expr(ParserState* parser_state)
+static AST* parse_expr(ParserState* parser_state) { return parse_precedence(parser_state, 0); }
+
+static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	AST* left = parse_prefix(parser_state);
 
-	return node;
+	left = parse_postfix(parser_state, left);
+
+	while (true) // NOLINT
+	{
+		const Token* op = peek(parser_state); // NOLINT
+		if (!op)
+		{
+			break;
+		}
+
+		int prec = precedence(op->token_type);
+		if (prec < min_prec)
+		{
+			break;
+		}
+
+		consume(parser_state);
+
+		AST* right = parse_precedence(parser_state, prec + 1);
+
+		// left = make_binary(op, left, right);
+
+		left = parse_postfix(parser_state, left);
+	}
+
+	return left;
 }
+
+static AST* parse_prefix(ParserState* parser_state) {}
+static AST* parse_postfix(ParserState* parser_state, AST* left) {}
 
 static const Token* peek(ParserState* parser_state)
 {
