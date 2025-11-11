@@ -30,7 +30,7 @@ static TokenResult string_to_ignored_token(const char* input);
 static TokenResult string_to_simple_token(const char* input);
 static TokenResult string_to_keyword_token(const char* input);
 static TokenResult string_to_literals_token(const char* input);
-static TokenResult string_to_identefier_token(const char* input);
+static TokenResult string_to_identifier_token(const char* input);
 
 Token* lex(const char* input)
 {
@@ -154,7 +154,7 @@ static TokenResult string_to_token(const char* input)
 		return token_res;
 	}
 
-	token_res = string_to_identefier_token(input);
+	token_res = string_to_identifier_token(input);
 	if (token_res.size != 0)
 	{
 		return token_res;
@@ -433,7 +433,7 @@ static TokenResult string_to_literals_token(const char* input) // NOLINT
 	return token_res;
 }
 
-static TokenResult string_to_identefier_token(const char* input)
+static TokenResult string_to_identifier_token(const char* input)
 {
 	TokenResult token_res = {0};
 
