@@ -98,7 +98,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 				if (len >= cap)
 				{
 					cap *= 2;
-					params = (AST**)realloc((void*)params, cap); // NOLINT
+					params = (AST**)realloc((void*)params, cap * sizeof(AST*)); // NOLINT
 				}
 				params[len++] = tmp;
 				if (peek(parser_state)->token_type == token_type_comma)
