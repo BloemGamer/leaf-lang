@@ -311,17 +311,12 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 					if (!match(parser_state, token_type_rparen))
 					{
 						(void)errprintf("Error: expected ')'\n");
+						assert(false);
 						return left;
 					}
 				}
 
-				AST* call = calloc(1, sizeof(AST));
-				call->type = AST_FUNC_CALL;
-				call->node.func_call.callee = left;
-				call->node.func_call.args = args;
-				call->node.func_call.arg_count = arg_count;
-
-				left = call;
+				left = make_call(left, args, arg_count);
 				break;
 			}
 
@@ -339,12 +334,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 
 				AST* ident = make_identifier(id);
 
-				AST* mem = calloc(1, sizeof(AST));
-				mem->type = AST_MEMBER_ACCESS;
-				mem->node.member_acces.left = left;
-				mem->node.member_acces.right = ident;
-
-				left = mem;
+				left = make_member_access(left, ident);
 				break;
 			}
 
@@ -358,12 +348,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 					return left;
 				}
 
-				AST* idx = calloc(1, sizeof(AST));
-				idx->type = AST_INDEX_EXPR;
-				idx->node.index_expr.left = left;
-				idx->node.index_expr.index = index_expr;
-
-				left = idx;
+				left = make_index(left, index_expr);
 				break;
 			}
 
@@ -529,6 +514,13 @@ AST* make_literal(const Token* token)
 
 AST* make_identifier(const Token* token)
 {
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_IDENTEFIER;
+	node->node.identifier.identefier = *token;
+	node->node.identifier.identefier.str_val = strdup(token->str_val);
+
+	return node;
 }
 
 AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
