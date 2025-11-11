@@ -117,6 +117,8 @@ typedef struct [[gnu::aligned(32)]]
 	union
 	{
 		char* str_val;
+		char char_val;
+		i64 num_val;
 	};
 	Pos pos;
 } Token;

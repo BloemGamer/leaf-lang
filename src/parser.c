@@ -45,6 +45,8 @@ static AST* make_index(AST* left, AST* index);
 
 static char* make_string(const Token* token);
 static usize unescape(const char* input, char* output, usize output_size, Pos pos); // NOLINT
+static char make_char(const Token* token);
+static signed char unescape_char(const char* input, Pos pos);
 
 AST* parse(const Token* tokens)
 {
@@ -208,7 +210,10 @@ static AST* parse_var(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_expr(ParserState* parser_state) { return parse_precedence(parser_state, 0); }
+static AST* parse_expr(ParserState* parser_state) // NOLINT
+{
+	return parse_precedence(parser_state, 0);
+}
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
@@ -234,7 +239,7 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 
 		AST* right = parse_precedence(parser_state, prec + 1);
 
-		// left = make_binary(op, left, right);
+		left = make_binary(op, left, right);
 
 		left = parse_postfix(parser_state, left);
 	}
@@ -508,6 +513,10 @@ AST* make_literal(const Token* token)
 			node->node.literal.literal.pos = token->pos;
 			break;
 		case token_type_char:
+			node->node.literal.literal.token_type = token_type_char;
+			node->node.literal.literal.char_val = make_char(token);
+			node->node.literal.literal.pos = token->pos;
+			break;
 		case token_type_number:
 
 			break;
@@ -518,7 +527,9 @@ AST* make_literal(const Token* token)
 	return node;
 }
 
-AST* make_identifier(const Token* token) {}
+AST* make_identifier(const Token* token)
+{
+}
 
 AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 {
@@ -544,9 +555,13 @@ AST* make_call(AST* callee, AST** args, usize arg_count)
 	return node;
 }
 
-AST* make_member_access(AST* left, AST* right) {}
+AST* make_member_access(AST* left, AST* right)
+{
+}
 
-AST* make_index(AST* left, AST* index) {}
+AST* make_index(AST* left, AST* index)
+{
+}
 
 static char* make_string(const Token* token)
 {
@@ -673,4 +688,145 @@ static usize unescape(const char* input, char* output, usize output_size, Pos po
 
 	output[j] = '\0';
 	return j;
+}
+
+static char make_char(const Token* token)
+{
+	char ch = unescape_char(token->str_val, token->pos); // NOLINT
+	if (ch == -1)
+	{
+		assert(false);
+	}
+	return ch;
+}
+
+/// Returns -1 if the escape sequence is invalid
+static signed char unescape_char(const char* input, Pos pos)
+{
+	if (*input != '\\')
+	{
+		// Not an escape sequence, return the character as-is
+		return *input;
+	}
+
+	input++; // Skip backslash
+
+	if (*input == '\0')
+	{
+		// Incomplete escape at end of string
+		LOG_WARN(pos, "incomplete escape sequence at end of input");
+		return -1;
+	}
+
+	signed char result = 0;
+	switch (*input)
+	{
+		case 'a':
+			result = '\a';
+			input++;
+			break; // 0x07 Alert
+		case 'b':
+			result = '\b';
+			input++;
+			break; // 0x08 Backspace
+		case 'f':
+			result = '\f';
+			input++;
+			break; // 0x0C Form feed
+		case 'n':
+			result = '\n';
+			input++;
+			break; // 0x0A Newline
+		case 'r':
+			result = '\r';
+			input++;
+			break; // 0x0D Carriage return
+		case 't':
+			result = '\t';
+			input++;
+			break; // 0x09 Tab
+		case 'v':
+			result = '\v';
+			input++;
+			break; // 0x0B Vertical tab
+		case '\\':
+			result = '\\';
+			input++;
+			break; // 0x5C Backslash
+		case '\'':
+			result = '\'';
+			input++;
+			break; // 0x27 Single quote
+		case '\"':
+			result = '\"';
+			input++;
+			break; // 0x22 Double quote
+		case '?':
+			result = '\?';
+			input++;
+			break; // 0x3F Question mark
+		case '0':
+			result = '\0';
+			input++;
+			break; // 0x00 Null (simple case)
+
+		// Octal: \nnn (up to 3 digits)
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		{
+			int val = *input - '0';
+			input++;
+			if (*input >= '0' && *input <= '7')
+			{
+				val = (val * 8) + (*input - '0');
+				input++;
+				if (*input >= '0' && *input <= '7')
+				{
+					val = (val * 8) + (*input - '0');
+					input++;
+				}
+			}
+			result = (signed char)(val);
+			break;
+		}
+
+		// Hex: \xnn
+		case 'x':
+		{
+			input++; // Skip 'x'
+			int val = 0;
+			while ((*input >= '0' && *input <= '9') || (*input >= 'a' && *input <= 'f') || // NOLINT
+				   (*input >= 'A' && *input <= 'F'))
+			{
+				if (*input >= '0' && *input <= '9')
+				{
+					val = (val * 16) + (*input - '0');
+				}
+				else if (*input >= 'a' && *input <= 'f')
+				{
+					val = (val * 16) + (*input - 'a' + 10);
+				}
+				else
+				{
+					val = (val * 16) + (*input - 'A' + 10);
+				}
+				input++;
+			}
+			result = (signed char)(val);
+			break;
+		}
+
+		default:
+			LOG_WARN(pos, "not a supported escape char: \\%x", *input);
+			result = *input;
+			input++;
+			break;
+	}
+
+	return result;
 }
