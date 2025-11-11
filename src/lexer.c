@@ -381,7 +381,7 @@ static TokenResult string_to_literals_token(const char* input)
 	{
 		const char* start_str = input;
 		usize start_str_offset = 0;
-		constexpr char num_starts[][3] = {"0b", "0x"};
+		constexpr char num_starts[][3] = {"0b", "0x", "0o"};
 #pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(num_starts); i++)
 		{
