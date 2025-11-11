@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,6 +35,16 @@ static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
 static i32 precedence(TokenType token_type);
+
+static AST* make_literal(const Token* token);
+static AST* make_identifier(const Token* token);
+static AST* make_binary(const Token* op, AST* left, AST* right); // NOLINT
+static AST* make_call(AST* callee, AST** args, usize arg_count);
+static AST* make_member_access(AST* left, AST* right);
+static AST* make_index(AST* left, AST* index);
+
+static char* make_string(const Token* token);
+static usize unescape(const char* input, char* output, usize output_size, Pos pos); // NOLINT
 
 AST* parse(const Token* tokens)
 {
@@ -483,4 +492,185 @@ static i32 precedence(TokenType token_type)
 		default:
 			return 0;
 	}
+}
+
+AST* make_literal(const Token* token)
+{
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_LITERAL;
+
+	switch (token->token_type)
+	{
+		case token_type_string:
+			node->node.literal.literal.token_type = token_type_string;
+			node->node.literal.literal.str_val = make_string(token);
+			node->node.literal.literal.pos = token->pos;
+			break;
+		case token_type_char:
+		case token_type_number:
+
+			break;
+		default:
+			assert(false);
+	}
+
+	return node;
+}
+
+AST* make_identifier(const Token* token) {}
+
+AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
+{
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_BINARY_EXPR;
+	node->node.binary_expr.op = *op;
+	node->node.binary_expr.left = left;
+	node->node.binary_expr.right = right;
+
+	return node;
+}
+
+AST* make_call(AST* callee, AST** args, usize arg_count)
+{
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_FUNC_CALL;
+	node->node.func_call.callee = callee;
+	node->node.func_call.args = args;
+	node->node.func_call.arg_count = arg_count;
+
+	return node;
+}
+
+AST* make_member_access(AST* left, AST* right) {}
+
+AST* make_index(AST* left, AST* index) {}
+
+static char* make_string(const Token* token)
+{
+	usize len = strlen(token->str_val);
+	char* str_ret = calloc(len, sizeof(char));
+
+	unescape(token->str_val, str_ret, len, token->pos);
+
+	return str_ret;
+}
+
+static usize unescape(const char* input, char* output, usize output_size, Pos pos) // NOLINT
+{
+	usize i = 0; // NOLINT
+	usize j = 0; // NOLINT
+
+	while (input[i] != '\0' && j < output_size - 1)
+	{
+		if (input[i] == '\\' && input[i + 1] != '\0')
+		{
+			i++; // Skip backslash
+
+			switch (input[i])
+			{
+				case 'a':
+					output[j++] = '\a';
+					break; // 0x07 Alert
+				case 'b':
+					output[j++] = '\b';
+					break; // 0x08 Backspace
+				case 'f':
+					output[j++] = '\f';
+					break; // 0x0C Form feed
+				case 'n':
+					output[j++] = '\n';
+					break; // 0x0A Newline
+				case 'r':
+					output[j++] = '\r';
+					break; // 0x0D Carriage return
+				case 't':
+					output[j++] = '\t';
+					break; // 0x09 Tab
+				case 'v':
+					output[j++] = '\v';
+					break; // 0x0B Vertical tab
+				case '\\':
+					output[j++] = '\\';
+					break; // 0x5C Backslash
+				case '\'':
+					output[j++] = '\'';
+					break; // 0x27 Single quote
+				case '\"':
+					output[j++] = '\"';
+					break; // 0x22 Double quote
+				case '?':
+					output[j++] = '\?';
+					break; // 0x3F Question mark
+				case '0':
+					output[j++] = '\0';
+					break; // 0x00 Null (simple case)
+
+				// Octal: \nnn (up to 3 digits)
+				case '1':
+				case '2':
+				case '3':
+				case '4':
+				case '5':
+				case '6':
+				case '7':
+				{
+					int val = input[i] - '0';
+					if (input[i + 1] >= '0' && input[i + 1] <= '7')
+					{
+						val = (val * 8) + (input[++i] - '0');
+						if (input[i + 1] >= '0' && input[i + 1] <= '7')
+						{
+							val = (val * 8) + (input[++i] - '0');
+						}
+					}
+					output[j++] = (char)val;
+					break;
+				}
+
+				// Hex: \xnn
+				case 'x':
+				{
+					i++; // Skip 'x'
+					int val = 0;
+					while ((input[i] >= '0' && input[i] <= '9') || (input[i] >= 'a' && input[i] <= 'f') || // NOLINT
+						   (input[i] >= 'A' && input[i] <= 'F'))
+					{
+						if (input[i] >= '0' && input[i] <= '9')
+						{
+							val = (val * 16) + (input[i] - '0');
+						}
+						else if (input[i] >= 'a' && input[i] <= 'f')
+						{
+							val = (val * 16) + (input[i] - 'a' + 10);
+						}
+						else
+						{
+							val = (val * 16) + (input[i] - 'A' + 10);
+						}
+						i++;
+					}
+					i--; // Back up one since loop will increment
+					output[j++] = (char)val;
+					break;
+				}
+
+				default:
+					LOG_WARN(pos, "not a supported escape char: \\%x", input[i]);
+					// Unknown escape, keep literal
+					output[j++] = input[i];
+					break;
+			}
+			i++;
+		}
+		else
+		{
+			output[j++] = input[i++];
+		}
+	}
+
+	output[j] = '\0';
+	return j;
 }
