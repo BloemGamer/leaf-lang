@@ -5,13 +5,20 @@
 
 typedef struct AbstractSyntaxTree AST;
 
+typedef struct [[gnu::aligned(32)]]
+{
+	char* name;
+	usize amount_pointer;
+	usize amount_array;
+} VarType;
+
 typedef struct [[gnu::aligned(64)]]
 {
 	char* name;
-	char* type;
+	VarType type;
 	Token* modifiers;
 	usize modifier_count;
-	AST* ast;
+	AST* equals;
 } VarDef;
 
 typedef struct [[gnu::aligned(128)]]

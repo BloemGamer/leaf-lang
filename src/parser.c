@@ -22,6 +22,7 @@ typedef struct // NOLINT
 static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
 static AST* parse_var(ParserState* parser_state);
+static AST* parse_expr(ParserState* parser_state);
 
 static const Token* peek(ParserState* parser_state);
 static const Token* consume(ParserState* parser_state);
@@ -29,6 +30,7 @@ static bool match(ParserState* parser_state, TokenType type);
 static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
+static i32 precedence(TokenType token_type);
 
 AST* parse(const Token* tokens)
 {
@@ -42,7 +44,7 @@ AST* parse(const Token* tokens)
 	{
 		consume(&parser_state);
 	}
-	return parse_fn(&parser_state);
+	return parse_decl(&parser_state);
 	// switch (tokens->token_type)
 	// {
 	// 	default:
@@ -151,18 +153,29 @@ static AST* parse_var(ParserState* parser_state)
 	node->type = AST_VAR_DEF;
 
 	TokenArray mod_arr = get_modifiers(parser_state);
-	node->node.func_def.modifiers = mod_arr.tokens;
-	node->node.func_def.modifier_count = mod_arr.count;
+	node->node.var_def.modifiers = mod_arr.tokens;
+	node->node.var_def.modifier_count = mod_arr.count;
 
 	{
+		node->node.var_def.type.amount_pointer = 0;
+		while (match(parser_state, token_type_star)) // NOLINT
+		{
+			node->node.var_def.type.amount_pointer += 1;
+		}
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
-		node->node.func_def.type = strdup(token.str_val);
+		node->node.var_def.type.name = strdup(token.str_val);
+
+		node->node.var_def.type.amount_array = 0;
+		// while (match(parser_state, token_type_lsqbracket)) // NOLINT
+		// {
+		// 	node->node.var_def.type.amount_array += 1;
+		// }
 	}
 	{
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
-		node->node.func_def.name = strdup(token.str_val);
+		node->node.var_def.name = strdup(token.str_val);
 	}
 
 	if (peek(parser_state)->token_type == token_type_comma)
@@ -175,6 +188,15 @@ static AST* parse_var(ParserState* parser_state)
 	}
 
 	assert(consume(parser_state)->token_type == token_type_equal_equal);
+
+	// node->node.var_def.equals = parser_expr(parser_state);
+
+	return node;
+}
+
+static AST* parse_expr(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
 
 	return node;
 }
@@ -251,8 +273,7 @@ static TokenArray get_modifiers(ParserState* parser_state)
 	Token* modifiers = nullptr;
 	usize len = 0;
 	usize cap = 0;
-#pragma unroll 2
-	while (true)
+	while (true) // NOLINT
 	{
 		const Token* token = peek(parser_state);
 		if (token == nullptr)
@@ -276,4 +297,32 @@ static TokenArray get_modifiers(ParserState* parser_state)
 		}
 	}
 	return (TokenArray){modifiers, len};
+}
+
+static i32 precedence(TokenType token_type)
+{
+	switch (token_type)
+	{
+		case token_type_or:
+			return 1;
+		case token_type_and:
+			return 2;
+		case token_type_equal_equal:
+		case token_type_bang_equal:
+			return 3;
+		case token_type_less:
+		case token_type_less_equal:
+		case token_type_greater:
+		case token_type_greater_equal:
+			return 4;
+		case token_type_plus:
+		case token_type_minus:
+			return 5;
+		case token_type_star:
+		case token_type_slash:
+			return 6;
+
+		default:
+			return 0;
+	}
 }
