@@ -555,12 +555,26 @@ AST* make_call(AST* callee, AST** args, usize arg_count)
 	return node;
 }
 
-AST* make_member_access(AST* left, AST* right)
+AST* make_member_access(AST* left, AST* right) // NOLINT
 {
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_MEMBER_ACCESS;
+	node->node.member_acces.left = left;
+	node->node.member_acces.right = right;
+
+	return node;
 }
 
-AST* make_index(AST* left, AST* index)
+AST* make_index(AST* left, AST* index) // NOLINT
 {
+	AST* node = calloc(1, sizeof(AST));
+
+	node->type = AST_INDEX_EXPR;
+	node->node.index_expr.left = left;
+	node->node.index_expr.index = index;
+
+	return node;
 }
 
 static char* make_string(const Token* token)
@@ -568,7 +582,7 @@ static char* make_string(const Token* token)
 	usize len = strlen(token->str_val);
 	char* str_ret = calloc(len, sizeof(char));
 
-	unescape(token->str_val, str_ret, len, token->pos);
+	(void)unescape(token->str_val, str_ret, len, token->pos);
 
 	return str_ret;
 }
