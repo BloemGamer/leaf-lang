@@ -103,8 +103,6 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_BLOCK,
 	} type;
 
-	AST* tree;
-
 	union
 	{
 		VarDef var_def;
