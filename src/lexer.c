@@ -326,25 +326,39 @@ static TokenResult string_to_literals_token(const char* input)
 		const char* end_str = input;
 		while (true) // NOLINT
 		{
-			end_str = strstr(end_str + 1, "\"");
-			if (end_str == NULL)
+			end_str = strchr(end_str + 1, '"');
+			if (end_str == nullptr)
 			{
-				token_res.size = 1;
+				token_res.size = 0;
 				token_res.token.token_type = token_type_invalid_string;
 				return token_res;
 			}
-			else if (end_str[-1] == '\\') // NOLINT
+			i64 place = 0;
+			i64 count = 0;
+			while (end_str[place] == '\\') // NOLINT
 			{
-				continue;
+				place--;
+				count++;
 			}
-			else
+			if ((count % 2) == 0)
 			{
-				token_res.size = end_str - input + 1;
-				usize str_size = token_res.size - 2;
+				usize total_len = (usize)(end_str - input + 1);
+				usize inner_len = total_len - 2;
+
+				token_res.token.str_val = (char*)malloc((inner_len + 1) * sizeof(char));
+				if (token_res.token.str_val == nullptr)
+				{
+					token_res.token.token_type = token_type_invalid;
+					token_res.size = 0;
+					return token_res;
+				}
+
+				token_res.size = total_len;
 				token_res.token.token_type = token_type_string;
-				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
-				memcpy(token_res.token.str_val, input + 1, str_size);
-				token_res.token.str_val[str_size] = '\0';
+
+				memcpy((void*)token_res.token.str_val, (void*)(input + 1), inner_len);
+				token_res.token.str_val[inner_len] = '\0';
+
 				return token_res;
 			}
 		}
@@ -354,25 +368,39 @@ static TokenResult string_to_literals_token(const char* input)
 		const char* end_str = input;
 		while (true) // NOLINT
 		{
-			end_str = strstr(end_str + 1, "\'");
-			if (end_str == NULL)
+			end_str = strchr(end_str + 1, '\'');
+			if (end_str == nullptr)
 			{
-				token_res.size = 1;
+				token_res.size = 0;
 				token_res.token.token_type = token_type_invalid_string;
 				return token_res;
 			}
-			else if (end_str[-1] == '\\') // NOLINT
+			i64 place = 0;
+			i64 count = 0;
+			while (end_str[place] == '\\') // NOLINT
 			{
-				continue;
+				place--;
+				count++;
 			}
-			else
+			if ((count % 2) == 0)
 			{
-				token_res.size = end_str - input + 1;
-				usize str_size = token_res.size - 2;
+				usize total_len = (usize)(end_str - input + 1);
+				usize inner_len = total_len - 2;
+
+				token_res.token.str_val = (char*)malloc((inner_len + 1) * sizeof(char));
+				if (token_res.token.str_val == nullptr)
+				{
+					token_res.token.token_type = token_type_invalid;
+					token_res.size = 0;
+					return token_res;
+				}
+
+				token_res.size = total_len;
 				token_res.token.token_type = token_type_char;
-				token_res.token.str_val = (char*)malloc((str_size + 1) * sizeof(char));
-				memcpy(token_res.token.str_val, input + 1, str_size);
-				token_res.token.str_val[str_size] = '\0';
+
+				memcpy((void*)token_res.token.str_val, (void*)(input + 1), inner_len);
+				token_res.token.str_val[inner_len] = '\0';
+
 				return token_res;
 			}
 		}
