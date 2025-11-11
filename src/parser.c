@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "log.h"
 #include "parser.h"
 #include "tokens.h"
 #include "utils.h"
@@ -232,7 +233,96 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 }
 
 static AST* parse_prefix(ParserState* parser_state) {}
-static AST* parse_postfix(ParserState* parser_state, AST* left) {}
+AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
+{
+	while (true)
+	{
+		const Token* t = peek(parser_state); // NOLINT
+		if (!t)
+		{
+			return left;
+		}
+
+		switch (t->token_type)
+		{
+			case token_type_lparen:
+			{
+				consume(parser_state); // '('
+				AST** args = nullptr;
+				usize arg_count = 0;
+
+				if (!match(parser_state, token_type_rparen))
+				{
+					do // NOLINT
+					{
+						args = (AST**)realloc((void*)args, sizeof(AST*) * (arg_count + 1)); // NOLINT
+						args[arg_count++] = parse_expr(parser_state);
+					} while (match(parser_state, token_type_comma));
+
+					if (!match(parser_state, token_type_rparen))
+					{
+						(void)errprintf("Error: expected ')'\n");
+						return left;
+					}
+				}
+
+				AST* call = calloc(1, sizeof(AST));
+				call->type = AST_FUNC_CALL;
+				call->node.func_call.callee = left;
+				call->node.func_call.args = args;
+				call->node.func_call.arg_count = arg_count;
+
+				left = call;
+				break;
+			}
+
+			case token_type_dot:
+			{
+				consume(parser_state); // '.'
+
+				const Token* id = peek(parser_state); // NOLINT
+				if (!id || id->token_type != token_type_identifier)
+				{
+					printf("Error: expected identifier after '.'\n");
+					return left;
+				}
+				consume(parser_state);
+
+				AST* ident = make_identifier(id);
+
+				AST* mem = calloc(1, sizeof(AST));
+				mem->type = AST_MEMBER_ACCESS;
+				mem->node.member_acces.left = left;
+				mem->node.member_acces.right = ident;
+
+				left = mem;
+				break;
+			}
+
+			case token_type_lsqbracket:
+			{
+				consume(parser_state); // '['
+				AST* index_expr = parse_expr(parser_state);
+				if (!match(parser_state, token_type_rsqbracket))
+				{
+					printf("Error: missing ']'\n");
+					return left;
+				}
+
+				AST* idx = calloc(1, sizeof(AST));
+				idx->type = AST_INDEX_EXPR;
+				idx->node.index_expr.left = left;
+				idx->node.index_expr.index = index_expr;
+
+				left = idx;
+				break;
+			}
+
+			default:
+				return left;
+		}
+	}
+}
 
 static const Token* peek(ParserState* parser_state)
 {

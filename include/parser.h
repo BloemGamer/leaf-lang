@@ -44,12 +44,31 @@ typedef struct [[gnu::aligned(32)]]
 	usize param_count;
 } StructDef;
 
+typedef struct [[gnu::aligned(32)]]
+{
+	AST* callee;
+	AST** args;
+	usize arg_count;
+} FuncCall;
+
+typedef struct [[gnu::aligned(16)]]
+{
+	AST* left;
+	AST* right;
+} MemberAccess;
+
 typedef struct [[gnu::aligned(64)]]
 {
 	Token op;
 	AST* left;
 	AST* right;
 } BinaryExpr;
+
+typedef struct [[gnu::aligned(16)]]
+{
+	AST* left;
+	AST* index;
+} IndexExpr;
 
 typedef struct [[gnu::aligned(32)]]
 {
@@ -60,7 +79,7 @@ typedef struct [[gnu::aligned(32)]]
 typedef struct [[gnu::aligned(32)]]
 {
 	Token identefier;
-} Identefier;
+} Identifier;
 
 typedef struct [[gnu::aligned(16)]]
 {
@@ -75,10 +94,13 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_VAR_DEF,
 		AST_FUNC_DEF,
 		AST_STRUCT_DEF,
+		AST_FUNC_CALL,
+		AST_MEMBER_ACCESS,
 		AST_BINARY_EXPR,
+		AST_INDEX_EXPR,
 		AST_LITERAL,
 		AST_IDENTEFIER,
-		AST_BLOCK
+		AST_BLOCK,
 	} type;
 
 	AST* tree;
@@ -88,9 +110,12 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		VarDef var_def;
 		FuncDef func_def;
 		StructDef stuct_def;
+		FuncCall func_call;
+		MemberAccess member_acces;
 		BinaryExpr binary_expr;
+		IndexExpr index_expr;
 		Literal literal;
-		Identefier identefier;
+		Identifier identifier;
 		Block block;
 	} node;
 } AST;
