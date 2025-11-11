@@ -85,7 +85,11 @@ int main(int argc, char** argv)
 
 char* read_file_to_str(const char* filename)
 {
+#ifdef _WIN32
+	FILE* file = fopen(filename, "rb");
+#else // LINUX
 	FILE* file = fopen(filename, "rbe");
+#endif
 	if (file == NULL)
 	{
 		return nullptr;
