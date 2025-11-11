@@ -37,7 +37,11 @@ AST* parse(const Token* tokens)
 	{
 	}
 	ParserState parser_state = {
-		.tokens = tokens, .count = count, .pos = 1}; // pos = 1, to counteract the token_type_sof
+		.tokens = tokens, .count = count, .pos = 0};		  // pos = 1, to counteract the token_type_sof
+	while (peek(&parser_state)->token_type == token_type_sof) // NOLINT
+	{
+		consume(&parser_state);
+	}
 	return parse_fn(&parser_state);
 	// switch (tokens->token_type)
 	// {
@@ -54,8 +58,8 @@ static AST* parse_decl(ParserState* parser_state)
 	{
 		case token_type_fn:
 			return parse_fn(parser_state);
-			// case token_type_equal:
-			// 	parse_var(parser_state);
+		case token_type_equal:
+			return parse_var(parser_state);
 			// case token_type_semiclolon:
 
 		default:
