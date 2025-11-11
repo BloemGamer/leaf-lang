@@ -9,6 +9,7 @@ build*
 slang-test
 .cache
 valgrind
+.idea
 
 .clang-format
 .clang-tidy
