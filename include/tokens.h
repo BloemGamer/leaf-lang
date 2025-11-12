@@ -17,6 +17,7 @@
 	Y(star, '*')				/* * */ \
 	Y(slash, '/')				/* / */ \
 	Y(semicolon, ';')			/* ; */ \
+	Y(colon, ':')				/* : */ \
 	Y(bang, '!')				/* ! */ \
 	Y(equal, '=')				/* = */ \
 	Y(greater, '>')				/* > */ \
@@ -54,6 +55,7 @@
 	X(fn)						/* fn */ \
 	X(macro)					/* macro */ \
 	X(struct)					/* struct */ \
+	X(union)					/* union */ \
 	X(enum)						/* enum */ \
 	X(return)					/* return */ \
 

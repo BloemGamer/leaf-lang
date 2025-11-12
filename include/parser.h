@@ -35,14 +35,27 @@ typedef struct [[gnu::aligned(128)]]
 	AST* body;
 } FuncDef;
 
-/// also used for enums and unions
+typedef struct [[gnu::aligned(32)]]
+{
+	char* name;
+	AST** members;
+	usize member_count;
+} StructDef;
+
+typedef struct [[gnu::aligned(32)]]
+{
+	char* name;
+	AST** members;
+	usize member_count;
+} UnionDef;
+
 typedef struct [[gnu::aligned(32)]]
 {
 	char* name;
 	char* type;
 	AST** members;
-	usize param_count;
-} StructDef;
+	usize member_count;
+} EnumDef;
 
 typedef struct [[gnu::aligned(32)]]
 {
@@ -78,13 +91,13 @@ typedef struct [[gnu::aligned(32)]]
 /// wil also be used for messages
 typedef struct [[gnu::aligned(32)]]
 {
-	Token identefier;
+	Token identifier;
 } Identifier;
 
 typedef struct [[gnu::aligned(16)]]
 {
 	AST** statements;
-	usize satement_count;
+	usize statement_count;
 } Block;
 
 typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
@@ -94,12 +107,14 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_VAR_DEF,
 		AST_FUNC_DEF,
 		AST_STRUCT_DEF,
+		AST_UNION_DEF,
+		AST_ENUM_DEF,
 		AST_FUNC_CALL,
 		AST_MEMBER_ACCESS,
 		AST_BINARY_EXPR,
 		AST_INDEX_EXPR,
 		AST_LITERAL,
-		AST_IDENTEFIER,
+		AST_IDENTIFIER,
 		AST_BLOCK,
 	} type;
 
@@ -107,9 +122,10 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 	{
 		VarDef var_def;
 		FuncDef func_def;
-		StructDef stuct_def;
+		StructDef struct_def;
+		EnumDef enum_def;
 		FuncCall func_call;
-		MemberAccess member_acces;
+		MemberAccess member_access;
 		BinaryExpr binary_expr;
 		IndexExpr index_expr;
 		Literal literal;

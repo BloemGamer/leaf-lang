@@ -23,6 +23,7 @@ typedef struct // NOLINT
 static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
 static AST* parse_var(ParserState* parser_state);
+static AST* parse_struct(ParserState* parser_state); // also used for enum
 static AST* parse_expr(ParserState* parser_state);
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -203,12 +204,87 @@ static AST* parse_var(ParserState* parser_state)
 	{
 		return node;
 	}
+	if (peek(parser_state)->token_type == token_type_rbrace)
+	{
+		return node;
+	}
 
 	assert(consume(parser_state)->token_type == token_type_equal);
 
 	node->node.var_def.equals = parse_expr(parser_state);
 
 	return node;
+}
+
+static AST* parse_struct(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	switch (consume(parser_state)->token_type)
+	{
+		case token_type_struct:
+			node->type = AST_STRUCT_DEF;
+		case token_type_union:
+			node->type = AST_UNION_DEF;
+		case token_type_enum:
+			node->type = AST_ENUM_DEF;
+		default:
+			assert(false);
+	}
+#define PARSE(_type)                                                                   \
+	do                                                                                 \
+	{                                                                                  \
+		{                                                                              \
+			Token token = *consume(parser_state);                                      \
+			assert(token.token_type == token_type_identifier);                         \
+		}                                                                              \
+		if (node->type == AST_UNION_DEF)                                               \
+		{                                                                              \
+			if (peek(parser_state)->token_type == token_type_colon)                    \
+			{                                                                          \
+				consume(parser_state);                                                 \
+				{                                                                      \
+					Token token = *consume(parser_state);                              \
+					assert(token.token_type == token_type_identifier);                 \
+					node->node.enum_def.type = strdup(consume(parser_state)->str_val); \
+				}                                                                      \
+			}                                                                          \
+		}                                                                              \
+		assert(consume(parser_state)->token_type == token_type_lbrace);                \
+		if (peek(parser_state)->token_type == token_type_rbrace)                       \
+		{                                                                              \
+			break;                                                                     \
+		}                                                                              \
+		while (true) /*NOLINT*/                                                        \
+		{                                                                              \
+			assert(peek(parser_state)->token_type == token_type_identifier);           \
+			/* parse var */                                                            \
+			{                                                                          \
+				Token token = *consume(parser_state);                                  \
+				if (token.token_type == token_type_rbrace)                             \
+				{                                                                      \
+					break;                                                             \
+				}                                                                      \
+				assert(token.token_type == token_type_comma);                          \
+			}                                                                          \
+		}                                                                              \
+	} while (0)
+
+	switch (node->type)
+	{
+		case AST_UNION_DEF:
+			PARSE(union);
+			break;
+		case AST_ENUM_DEF:
+			PARSE(enum);
+			break;
+		case AST_STRUCT_DEF:
+			PARSE(struct);
+			break;
+		default:
+			assert(false);
+	}
+
+#undef PARSE
 }
 
 static AST* parse_expr(ParserState* parser_state) // NOLINT
@@ -461,24 +537,28 @@ static i32 precedence(TokenType token_type)
 {
 	switch (token_type)
 	{
-		case token_type_or:
+		case token_type_ampersand:
+		case token_type_pipe:
+		case token_type_caret:
 			return 1;
-		case token_type_and:
+		case token_type_or:
 			return 2;
+		case token_type_and:
+			return 3;
 		case token_type_equal_equal:
 		case token_type_bang_equal:
-			return 3;
+			return 4;
 		case token_type_less:
 		case token_type_less_equal:
 		case token_type_greater:
 		case token_type_greater_equal:
-			return 4;
+			return 5;
 		case token_type_plus:
 		case token_type_minus:
-			return 5;
+			return 6;
 		case token_type_star:
 		case token_type_slash:
-			return 6;
+			return 7;
 
 		default:
 			return 0;
@@ -519,9 +599,9 @@ AST* make_identifier(const Token* token)
 {
 	AST* node = calloc(1, sizeof(AST));
 
-	node->type = AST_IDENTEFIER;
-	node->node.identifier.identefier = *token;
-	node->node.identifier.identefier.str_val = strdup(token->str_val);
+	node->type = AST_IDENTIFIER;
+	node->node.identifier.identifier = *token;
+	node->node.identifier.identifier.str_val = strdup(token->str_val);
 
 	return node;
 }
@@ -555,8 +635,8 @@ AST* make_member_access(AST* left, AST* right) // NOLINT
 	AST* node = calloc(1, sizeof(AST));
 
 	node->type = AST_MEMBER_ACCESS;
-	node->node.member_acces.left = left;
-	node->node.member_acces.right = right;
+	node->node.member_access.left = left;
+	node->node.member_access.right = right;
 
 	return node;
 }
