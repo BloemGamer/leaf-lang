@@ -47,7 +47,7 @@ static char* make_string(const Token* token);
 static usize unescape(const char* input, char* output, usize output_size, Pos pos); // NOLINT
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
-i64 make_number(const Token* token);
+static i64 make_number(const Token* token);
 
 AST* parse(const Token* tokens)
 {
@@ -702,14 +702,9 @@ static usize unescape(const char* input, char* output, usize output_size, Pos po
 static char make_char(const Token* token)
 {
 	char ch = unescape_char(token->str_val, token->pos); // NOLINT
-	if (ch == -1)
-	{
-		assert(false);
-	}
 	return ch;
 }
 
-/// Returns -1 if the escape sequence is invalid
 static signed char unescape_char(const char* input, Pos pos)
 {
 	if (*input != '\\')
@@ -724,7 +719,7 @@ static signed char unescape_char(const char* input, Pos pos)
 	{
 		// Incomplete escape at end of string
 		LOG_WARN(pos, "incomplete escape sequence at end of input");
-		return -1;
+		debug_assert(false); // this should just not happen
 	}
 
 	signed char result = 0;
@@ -840,7 +835,7 @@ static signed char unescape_char(const char* input, Pos pos)
 	return result;
 }
 
-i64 make_number(const Token* token)
+static i64 make_number(const Token* token)
 {
 	switch (token->str_val[1])
 	{
