@@ -11,6 +11,7 @@ slang-test
 valgrind
 .idea
 
+.clangd
 .clang-format
 .clang-tidy
 .nvim.lua
