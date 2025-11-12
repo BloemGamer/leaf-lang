@@ -56,16 +56,16 @@ Token* lex(const char* input)
 		}
 		if (next_token.token.token_type == token_type_invalid)
 		{
-			LOG_ERROR(pos, "An invallid token, found: '%c'\n", input[-1]);
+			LOG_ERROR(pos, "An invalid token, found: '%c'\n", input[-1]);
 		}
 		if (next_token.token.token_type == token_type_invalid_comment)
 		{
-			LOG_ERROR(pos, "An invallid unclosed /*\n");
+			LOG_ERROR(pos, "An invalid unclosed /*\n");
 			break;
 		}
 		if (next_token.token.token_type == token_type_invalid_string)
 		{
-			LOG_ERROR(pos, "An invallid unclosed /*\n");
+			LOG_ERROR(pos, "An invalid unclosed /*\n");
 			break;
 		}
 		next_token.token.pos = pos;
