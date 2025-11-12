@@ -106,7 +106,18 @@ char* read_file_to_str(const char* filename)
 		return nullptr;
 	}
 
-	(void)fread(buffer, 1, length, file);
+	usize read = fread(buffer, 1, length, file);
+	if (read != length)
+	{
+		if (ferror(file))
+		{
+			perror("Error reading file");
+		}
+		else if (feof(file))
+		{
+			(void)fprintf(stderr, "Unexpected end of file\n");
+		}
+	}
 	buffer[length] = '\0';
 
 	(void)fclose(file);
