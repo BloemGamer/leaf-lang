@@ -76,7 +76,7 @@
 	X(const)					/* constexpr */ \
 	X(pub)						/* public for functions */
 
-#define __TOKENS_IDENTEFIER 	\
+#define __TOKENS_IDENTIFIER 	\
 	X(identifier)				/* id */ \
 	X(message)					/* msg to comiler, starts with @ */ \
 	X(type)						/* type */ \
@@ -96,7 +96,7 @@
 	__TOKENS_MODIFIER \
 	__TOKENS_IGNORED  \
 	__TOKENS_LITERAL  \
-	__TOKENS_IDENTEFIER
+	__TOKENS_IDENTIFIER
 
 #define X(x) token_type_##x,
 #define Y(x, ...) X(x)
@@ -132,7 +132,7 @@ constexpr TokenType TOKENS_TYPES_KEYWORD[] = {__TOKENS_KEYWORD};
 constexpr TokenType TOKENS_TYPES_MODIFIER[] = {__TOKENS_MODIFIER};
 constexpr TokenType TOKENS_TYPES_INGORED[] = {__TOKENS_IGNORED};
 constexpr TokenType TOKENS_TYPES_LETERAL[] = {__TOKENS_LITERAL};
-constexpr TokenType TOKENS_TYPES_IDENTEFIER[] = {__TOKENS_IDENTEFIER};
+constexpr TokenType TOKENS_TYPES_IDENTIFIER[] = {__TOKENS_IDENTIFIER};
 constexpr TokenType TOKENS_TYPES[] = {__TOKENS};
 #undef X
 #undef Y
@@ -151,7 +151,7 @@ constexpr char TOKENS_STR_PR_KEYWORD[][__TOKENS_STR_LEN] = {__TOKENS_KEYWORD};
 constexpr char TOKENS_STR_PR_MODIFIER[][__TOKENS_STR_LEN] = {__TOKENS_MODIFIER};
 constexpr char TOKENS_STR_PR_INGORED[][__TOKENS_STR_LEN] = {__TOKENS_IGNORED};
 constexpr char TOKENS_STR_PR_LITERAL[][__TOKENS_STR_LEN] = {__TOKENS_LITERAL};
-constexpr char TOKENS_STR_PR_IDENTEFIER[][__TOKENS_STR_LEN] = {__TOKENS_IDENTEFIER};
+constexpr char TOKENS_STR_PR_IDENTIFIER[][__TOKENS_STR_LEN] = {__TOKENS_IDENTIFIER};
 constexpr char TOKENS_STR_PR[][__TOKENS_STR_LEN] = {__TOKENS};
 #undef X
 #undef Y
@@ -163,7 +163,7 @@ constexpr char TOKENS_STR_IDENT_KEYWORD[][__TOKENS_STR_LEN] = {__TOKENS_KEYWORD}
 constexpr char TOKENS_STR_IDENT_MODIFIER[][__TOKENS_STR_LEN] = {__TOKENS_MODIFIER};
 constexpr char TOKENS_STR_IDENT_INGORED[][__TOKENS_STR_LEN] = {__TOKENS_IGNORED};
 constexpr char TOKENS_STR_IDENT_LITERAL[][__TOKENS_STR_LEN] = {__TOKENS_LITERAL};
-constexpr char TOKENS_STR_IDENT_IDENTEFIER[][__TOKENS_STR_LEN] = {__TOKENS_IDENTEFIER};
+constexpr char TOKENS_STR_IDENT_IDENTIFIER[][__TOKENS_STR_LEN] = {__TOKENS_IDENTIFIER};
 constexpr char TOKENS_STR_IDENT[][__TOKENS_STR_LEN] = {__TOKENS};
 #undef X
 #undef Y
@@ -175,7 +175,7 @@ constexpr char TOKENS_STOP[] = {' ', '\t', '\r', '\n', __TOKENS_SIMPLE '\0'};
 #undef Y
 
 #define X(x) token_type_##x,
-constexpr TokenType TOKENS_LEX_FREE[] = {__TOKENS_IDENTEFIER __TOKENS_LITERAL};
+constexpr TokenType TOKENS_LEX_FREE[] = {__TOKENS_IDENTIFIER __TOKENS_LITERAL};
 #undef X
 
 #undef __TOKENS_SIMPLE
@@ -185,7 +185,7 @@ constexpr TokenType TOKENS_LEX_FREE[] = {__TOKENS_IDENTEFIER __TOKENS_LITERAL};
 #undef __TOKENS_MODIFIER
 #undef __TOKENS_IGNORED
 #undef __TOKENS_LITERAL
-#undef __TOKENS_IDENTEFIER
+#undef __TOKENS_IDENTIFIER
 #undef __TOKENS_MISC
 
 #undef __TOKENS

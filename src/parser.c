@@ -306,7 +306,7 @@ static AST* parse_enum(ParserState* parser_state)
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_ENUM_DEF;
 
-	assert(consume(parser_state)->token_type == token_type_union);
+	assert(consume(parser_state)->token_type == token_type_enum);
 
 	{
 		const Token token = *consume(parser_state);
@@ -357,6 +357,7 @@ static AST* parse_enum(ParserState* parser_state)
 						.str_val = token.str_val, .token_type = token_type_number, .pos = parser_state->pos});
 				}
 			}
+			len++;
 			if (peek(parser_state)->token_type == token_type_comma)
 			{
 				(void)consume(parser_state);
@@ -556,12 +557,12 @@ static bool is_modifier(const TokenType token_type)
 	return false;
 }
 
-static bool is_identefier(const TokenType token_type)
+static bool is_identifier(const TokenType token_type)
 {
 #pragma unroll
-	for (int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_IDENTEFIER); i++)
+	for (int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_IDENTIFIER); i++)
 	{
-		if (token_type == TOKENS_TYPES_IDENTEFIER[i])
+		if (token_type == TOKENS_TYPES_IDENTIFIER[i])
 		{
 			return true;
 		}
@@ -1016,7 +1017,7 @@ static i64 make_number(const Token* token)
 			return strtoll(token->str_val + 2, nullptr, 16);
 		case 'b':
 		case 'B':
-			return strtoll(token->str_val + 2, nullptr, 1);
+			return strtoll(token->str_val + 2, nullptr, 2);
 		default:
 			if (token->str_val[0] == '0')
 			{
