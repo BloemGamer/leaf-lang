@@ -23,7 +23,8 @@ typedef struct // NOLINT
 static AST* parse_decl(ParserState* parser_state);
 static AST* parse_fn(ParserState* parser_state);
 static AST* parse_var(ParserState* parser_state);
-static AST* parse_struct(ParserState* parser_state); // also used for enum
+static AST* parse_struct(ParserState* parser_state); // also used for union
+static AST* parse_enum(ParserState* parser_state);
 static AST* parse_expr(ParserState* parser_state);
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -287,10 +288,10 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 	{
 		case AST_UNION_DEF:
 			PARSE(union);
-			break;
+			return node;
 		case AST_STRUCT_DEF:
 			PARSE(struct);
-			break;
+			return node;
 		default:
 			assert(false);
 	}
