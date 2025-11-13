@@ -35,30 +35,8 @@ int main(int argc, char** argv)
 	// printf("%s", file);
 	Token* lexed = lex(file);
 	free((void*)file);
-	// Token* lexed_old = lexed;
-	// Token l;
-	// while ((l = *lexed++).token_type != token_type_eof)
-	// {
-	// 	puts(token_to_string(l.token_type));
-	// 	if (l.token_type == token_type_string)
-	// 	{
-	// 		printf("\t\"%s\"\n", l.str_val);
-	// 	}
-	// 	if (l.token_type == token_type_char)
-	// 	{
-	// 		printf("\t'%s'\n", l.str_val);
-	// 	}
-	// 	if (l.token_type == token_type_number)
-	// 	{
-	// 		printf("\t%s\n", l.str_val);
-	// 	}
-	// 	if (l.token_type == token_type_identifier || l.token_type == token_type_message)
-	// 	{
-	// 		printf("\t%s\n", l.str_val);
-	// 	}
-	// }
-	// lexed = lexed_old;
-	// puts(token_to_string(l.token_type));
+
+	// lex_print(lexed);
 
 	AST parsed = *parse(lexed);
 

@@ -491,3 +491,29 @@ void lex_free(Token* tokens)
 	}
 	free((void*)tokens_old);
 }
+
+void lex_print(Token* tokens)
+{
+	Token lex;
+	while ((lex = *tokens++).token_type != token_type_eof) // NOLINT
+	{
+		puts(token_to_string(lex.token_type));
+		if (lex.token_type == token_type_string)
+		{
+			printf("\t\"%s\"\n", lex.str_val);
+		}
+		if (lex.token_type == token_type_char)
+		{
+			printf("\t'%s'\n", lex.str_val);
+		}
+		if (lex.token_type == token_type_number)
+		{
+			printf("\t%s\n", lex.str_val);
+		}
+		if (lex.token_type == token_type_identifier || lex.token_type == token_type_message)
+		{
+			printf("\t%s\n", lex.str_val);
+		}
+	}
+	puts(token_to_string(lex.token_type));
+}
