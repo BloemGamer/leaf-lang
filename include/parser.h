@@ -12,6 +12,13 @@ typedef struct [[gnu::aligned(32)]]
 	usize amount_array;
 } VarType;
 
+typedef struct [[gnu::aligned(32)]]
+{
+	char* name;
+	bool has_value;
+	i64 value;
+} EnumType;
+
 typedef struct [[gnu::aligned(64)]]
 {
 	char* name;
@@ -53,7 +60,7 @@ typedef struct [[gnu::aligned(32)]]
 {
 	char* name;
 	char* type;
-	AST** members;
+	EnumType* members;
 	usize member_count;
 } EnumDef;
 

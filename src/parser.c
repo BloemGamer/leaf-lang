@@ -86,6 +86,8 @@ static AST* parse_decl(ParserState* parser_state)
 		case token_type_struct:
 		case token_type_union:
 			return parse_struct(parser_state);
+		case token_type_enum:
+			return parse_enum(parser_state);
 
 		default:
 			assert(false && "not implemented (yet)");
@@ -247,10 +249,9 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 		{                                                                                  \
 			break;                                                                         \
 		}                                                                                  \
-		AST** members = (AST**)malloc(1 * sizeof(AST*));                                   \
-		usize cap = 1;                                                                     \
+		AST** members = nullptr;                                                           \
+		usize cap = 0;                                                                     \
 		usize len = 0;                                                                     \
-		assert(peek(parser_state)->token_type == token_type_identifier);                   \
 		while (true) /* NOLINT */                                                          \
 		{                                                                                  \
 			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/           \
@@ -259,6 +260,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 				node->node._type##_def.member_count = len;                                 \
 				break;                                                                     \
 			}                                                                              \
+			assert(peek(parser_state)->token_type == token_type_identifier);               \
 			AST* tmp = parse_var(parser_state);                                            \
 			if (len >= cap)                                                                \
 			{                                                                              \
@@ -297,6 +299,79 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 	}
 
 #undef PARSE
+}
+
+static AST* parse_enum(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_ENUM_DEF;
+
+	assert(consume(parser_state)->token_type == token_type_union);
+
+	{
+		const Token token = *consume(parser_state);
+		assert(token.token_type == token_type_identifier);
+		node->node.enum_def.name = strdup(token.str_val);
+	}
+	if (match(parser_state, token_type_colon))
+	{
+		{
+			const Token token = *consume(parser_state);
+			assert(token.token_type == token_type_identifier);
+			node->node.enum_def.type = strdup(token.str_val);
+		}
+	}
+
+	assert(consume(parser_state)->token_type == token_type_lbrace);
+
+	{
+		EnumType* members = nullptr;
+		usize cap = 0;
+		usize len = 0;
+
+		while (true) // NOLINT
+		{
+			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
+			{
+				node->node.enum_def.members = members;
+				node->node.enum_def.member_count = len;
+				break;
+			}
+			if (len >= cap)
+			{
+				cap *= 2;
+				members = (EnumType*)realloc((void*)members, cap * sizeof(EnumType)); /* NOLINT */
+				assert(members != nullptr);
+			}
+			{
+				const Token token = *consume(parser_state);
+				assert(token.token_type == token_type_identifier);
+				members[len].name = strdup(token.str_val);
+			}
+			if (match(parser_state, token_type_equal))
+			{
+				{
+					const Token token = *consume(parser_state);
+					assert(token.token_type == token_type_identifier);
+					members[len].value = make_number(&(const Token){
+						.str_val = token.str_val, .token_type = token_type_number, .pos = parser_state->pos});
+				}
+			}
+			if (peek(parser_state)->token_type == token_type_comma)
+			{
+				(void)consume(parser_state);
+				continue;
+			}
+			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
+			{
+				node->node.enum_def.members = members;
+				node->node.enum_def.member_count = len;
+				break;
+			}
+		}
+	}
+
+	return node;
 }
 
 static AST* parse_expr(ParserState* parser_state) // NOLINT
