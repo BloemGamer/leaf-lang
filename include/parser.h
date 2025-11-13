@@ -120,17 +120,18 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 
 	union
 	{
-		VarDef var_def;
-		FuncDef func_def;
-		StructDef struct_def;
-		EnumDef enum_def;
-		FuncCall func_call;
-		MemberAccess member_access;
-		BinaryExpr binary_expr;
-		IndexExpr index_expr;
-		Literal literal;
-		Identifier identifier;
-		Block block;
+		VarDef var_def;				// done
+		FuncDef func_def;			// done
+		StructDef struct_def;		// done
+		UnionDef union_def;			// done
+		EnumDef enum_def;			//
+		FuncCall func_call;			// binary_expr
+		MemberAccess member_access; // binary_expr
+		BinaryExpr binary_expr;		// done
+		IndexExpr index_expr;		// binary_expr
+		Literal literal;			//
+		Identifier identifier;		//
+		Block block;				//
 	} node;
 } AST;
 
