@@ -106,8 +106,11 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 			return parse_struct(parser_state);
 		case token_type_enum:
 			return parse_enum(parser_state);
+		case token_type_semicolon:
+			return parse_expr(parser_state);
+			assert(consume(parser_state)->token_type == token_type_semicolon);
 		case token_type_eof:
-			assert(false && "fount eof");
+			assert(false && "found eof");
 
 		default:
 			assert(false && "not implemented (yet)");
@@ -194,7 +197,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_var(ParserState* parser_state)
+static AST* parse_var(ParserState* parser_state) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 
@@ -234,15 +237,8 @@ static AST* parse_var(ParserState* parser_state)
 		node->node.var_def.type.array_sizes = array_sizes;
 		node->node.var_def.type.array_count = len;
 	}
-	if (peek(parser_state)->token_type == token_type_comma)
-	{
-		return node;
-	}
-	if (peek(parser_state)->token_type == token_type_rparen)
-	{
-		return node;
-	}
-	if (peek(parser_state)->token_type == token_type_rbrace)
+	if (peek(parser_state)->token_type == token_type_comma || peek(parser_state)->token_type == token_type_rparen ||
+		peek(parser_state)->token_type == token_type_rbrace)
 	{
 		return node;
 	}
@@ -461,6 +457,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 				node->node.block.statements = statements;
 				node->node.block.statement_count = len;
 				node->node.block.trailing_expr = tmp_statement;
+				break;
 			}
 			statements[len++] = tmp_statement;
 		}
@@ -1548,5 +1545,15 @@ static void print_block(const Block* block, const usize depth) // NOLINT
 	for (usize i = 0; i < block->statement_count; i++) // NOLINT
 	{
 		parse_print_impl(block->statements[i], depth + 1);
+	}
+	print_indent(depth);
+	if (block->trailing_expr != nullptr)
+	{
+		printf("Trailing expression:\n");
+		parse_print_impl(block->trailing_expr, depth + 1);
+	}
+	else
+	{
+		printf("Trailing expression: <None>\n");
 	}
 }
