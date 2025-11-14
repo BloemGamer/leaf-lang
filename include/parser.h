@@ -5,11 +5,20 @@
 
 typedef struct AbstractSyntaxTree AST;
 
-typedef struct [[gnu::aligned(32)]]
+typedef enum
+{
+	pointer_type_none = 0,
+	pointer_type_const,
+	pointer_type_mut,
+} PointerType;
+
+typedef struct [[gnu::aligned(64)]]
 {
 	char* name;
-	usize amount_pointer;
-	usize amount_array;
+	PointerType* pointer_types;
+	usize pointer_count;
+	AST** array_sizes;
+	usize array_count;
 } VarType;
 
 typedef struct [[gnu::aligned(32)]]
@@ -19,7 +28,7 @@ typedef struct [[gnu::aligned(32)]]
 	i64 value;
 } EnumType;
 
-typedef struct [[gnu::aligned(64)]]
+typedef struct [[gnu::aligned(128)]]
 {
 	char* name;
 	VarType type;

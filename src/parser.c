@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,7 +71,7 @@ AST* parse(const Token* tokens)
 	return parse_block(&parser_state);
 }
 
-static AST* parse_decl(ParserState* parser_state)
+static AST* parse_decl(ParserState* parser_state) // NOLINT
 {
 	const TokenType stop[] = {token_type_fn,	 token_type_equal, token_type_enum,
 							  token_type_struct, token_type_union, token_type_semicolon};
@@ -184,20 +185,34 @@ static AST* parse_var(ParserState* parser_state)
 	node->node.var_def.modifier_count = mod_arr.count;
 
 	{
-		node->node.var_def.type.amount_pointer = 0;
-		while (match(parser_state, token_type_star)) // NOLINT
-		{
-			node->node.var_def.type.amount_pointer += 1;
-		}
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
 		node->node.var_def.type.name = strdup(token.str_val);
+	}
+	node->node.var_def.type.array_count = 0;
+	node->node.var_def.type.pointer_count = 0;
+	node->node.var_def.type.pointer_types = nullptr;
 
-		node->node.var_def.type.amount_array = 0;
-		// while (match(parser_state, token_type_lsqbracket)) // NOLINT
-		// {
-		// 	node->node.var_def.type.amount_array += 1;
-		// }
+	{
+		PointerType* pointer_types = nullptr;
+		usize cap = 0;
+		usize len = 0;
+
+#pragma unroll 2
+		while (peek(parser_state)->token_type == token_type_ampersand ||
+			   peek(parser_state)->token_type == token_type_star)
+		{
+			if (cap >= len)
+			{
+				cap = MAX(cap, 1);
+				cap *= 2;
+				pointer_types = (PointerType*)realloc((void*)pointer_types, cap * sizeof(PointerType)); // NOLINT
+			}
+			const Token token = *consume(parser_state);
+			pointer_types[len++] = (token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
+		}
+		node->node.var_def.type.pointer_types = pointer_types;
+		node->node.var_def.type.pointer_count = len;
 	}
 	{
 		const Token token = *consume(parser_state);
@@ -205,6 +220,29 @@ static AST* parse_var(ParserState* parser_state)
 		node->node.var_def.name = strdup(token.str_val);
 	}
 
+	{
+		AST** array_sizes = nullptr;
+		usize cap = 0;
+		usize len = 0;
+		while (match(parser_state, token_type_lsqbracket)) // NOLINT
+		{
+			if (len >= cap)
+			{
+				cap *= 2;
+				array_sizes = (AST**)realloc((void*)array_sizes, cap * sizeof(AST*)); // NOLINT
+			}
+
+			if (peek(parser_state)->token_type == token_type_rsqbracket)
+			{
+				array_sizes[len++] = nullptr;
+			}
+			else
+			{
+				array_sizes[len++] = parse_expr(parser_state);
+			}
+			assert(consume(parser_state)->token_type == token_type_rsqbracket);
+		}
+	}
 	if (peek(parser_state)->token_type == token_type_comma)
 	{
 		return node;
@@ -410,7 +448,6 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 	{
 		if (match(parser_state, end_token))
 		{
-			(void)consume(parser_state);
 			node->node.block.statements = statements;
 			node->node.block.statement_count = len;
 			break;
@@ -1108,13 +1145,27 @@ static void print_ast(const AST* ast, int indent) // NOLINT
 			printf("VarDef: %s\n", ast->node.var_def.name);
 			INDENT;
 			printf("  Type: %s", ast->node.var_def.type.name);
-			for (usize i = 0; i < ast->node.var_def.type.amount_pointer; i++) // NOLINT
+			for (usize i = 0; i < ast->node.var_def.type.pointer_count; i++) // NOLINT
 			{
-				printf("*");
+				if (ast->node.var_def.type.pointer_types[i] == pointer_type_const)
+				{
+					printf("&");
+				}
+				else
+				{
+					printf("*");
+				}
 			}
-			for (usize i = 0; i < ast->node.var_def.type.amount_array; i++) // NOLINT
+			for (usize i = 0; i < ast->node.var_def.type.array_count; i++) // NOLINT
 			{
-				printf("[]");
+				if (ast->node.var_def.type.array_sizes[i] == nullptr)
+				{
+					printf("[]");
+				}
+				else
+				{
+					print_ast(ast, indent + 1);
+				}
 			}
 			printf("\n");
 			if (ast->node.var_def.equals)
