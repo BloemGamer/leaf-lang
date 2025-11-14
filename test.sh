@@ -1,4 +1,4 @@
-cmake --build build
+./debug.sh
 
 rm -rf valgrind
 mkdir valgrind
