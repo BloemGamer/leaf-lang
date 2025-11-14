@@ -110,10 +110,11 @@ typedef struct [[gnu::aligned(32)]]
 } Identifier;
 
 /// At least for now also used for the global scope
-typedef struct [[gnu::aligned(16)]]
+typedef struct [[gnu::aligned(32)]]
 {
 	AST** statements;
 	usize statement_count;
+	AST* trailing_expr;
 } Block;
 
 typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree

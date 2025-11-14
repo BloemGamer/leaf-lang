@@ -441,6 +441,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		{
 			node->node.block.statements = statements;
 			node->node.block.statement_count = len;
+			node->node.block.trailing_expr = nullptr;
 			break;
 		}
 		if (len >= cap)
@@ -451,7 +452,16 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 			assert(statements != nullptr);
 		}
 		{
-			statements[len++] = parse_statement(parser_state);
+			usize saved_pos = parser_state->pos;
+			AST* tmp_statement = parse_statement(parser_state);
+			if (!global_block && peek(parser_state)->token_type == end_token)
+			{
+				(void)consume(parser_state);
+				node->node.block.statements = statements;
+				node->node.block.statement_count = len;
+				node->node.block.trailing_expr = tmp_statement;
+			}
+			statements[len++] = tmp_statement;
 		}
 	}
 
