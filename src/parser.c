@@ -51,11 +51,28 @@ static AST* make_member_access(AST* left, AST* right);
 static AST* make_index(AST* left, AST* index);
 
 static char* make_string(const Token* token);
-static usize unescape(const char* input, char* output, usize output_size, Pos pos); // NOLINT
+static usize unescape(const char* input, char* output, usize output_size, Pos pos);
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
 static i64 make_number(const Token* token);
-static void print_ast(const AST* ast, int indent);
+
+static void parse_print_impl(const AST* ast, usize depth);
+static void print_indent(usize depth);
+static void print_pointer_types(const PointerType* pointer_types, usize count);
+static void print_var_type(const VarType* var_types, usize depth);
+static void print_modifiers(const Token* modifiers, usize count, usize depth);
+static void print_var_def(const VarDef* var_def, usize depth);
+static void print_func_def(const FuncDef* func_def, usize depth);
+static void print_struct_def(const StructDef* struct_def, usize depth);
+static void print_union_def(const UnionDef* union_def, usize depth);
+static void print_enum_def(const EnumDef* enum_def, usize depth);
+static void print_func_call(const FuncCall* func_call, usize depth);
+static void print_member_access(const MemberAccess* member_access, usize depth);
+static void print_binary_expr(const BinaryExpr* binary_expr, usize depth);
+static void print_index_expr(const IndexExpr* index_expr, usize depth);
+static void print_literal(const Literal* lit, usize depth);
+static void print_identifier(const Identifier* identifier, usize depth);
+static void print_block(const Block* block, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -1139,186 +1156,333 @@ static i64 make_number(const Token* token)
 
 void parse_print(const AST* ast)
 {
-	print_ast(ast, 0);
+	parse_print_impl(ast, 0);
 }
 
-static void print_ast(const AST* ast, int indent) // NOLINT
+static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 {
 	if (!ast)
 	{
-		printf("%*sNULL\n", indent * 2, "");
+		print_indent(depth);
+		printf("<null>\n");
 		return;
 	}
-#define INDENT printf("%*s", indent * 2, "")
+
 	switch (ast->type)
 	{
 		case AST_VAR_DEF:
-			INDENT;
-			printf("VarDef: %s\n", ast->node.var_def.name);
-			INDENT;
-			printf("  Type: %s", ast->node.var_def.type.name);
-			for (usize i = 0; i < ast->node.var_def.type.pointer_count; i++) // NOLINT
-			{
-				if (ast->node.var_def.type.pointer_types[i] == pointer_type_const)
-				{
-					printf("&");
-				}
-				else
-				{
-					printf("*");
-				}
-			}
-			for (usize i = 0; i < ast->node.var_def.type.array_count; i++) // NOLINT
-			{
-				if (ast->node.var_def.type.array_sizes[i] == nullptr)
-				{
-					printf("[]");
-				}
-				else
-				{
-					print_ast(ast, indent + 1);
-				}
-			}
-			printf("\n");
-			if (ast->node.var_def.equals)
-			{
-				INDENT;
-				printf("  Value:\n");
-				print_ast(ast->node.var_def.equals, indent + 2);
-			}
+			print_var_def(&ast->node.var_def, depth);
 			break;
 		case AST_FUNC_DEF:
-			INDENT;
-			printf("FuncDef: %s\n", ast->node.func_def.name);
-			INDENT;
-			printf("  Params (%zu):\n", ast->node.func_def.param_count);
-			for (usize i = 0; i < ast->node.func_def.param_count; i++) // NOLINT
-			{
-				print_ast(ast->node.func_def.params[i], indent + 2);
-			}
-			INDENT;
-			printf("  Body:\n");
-			print_ast(ast->node.func_def.body, indent + 2);
-			break;
-		case AST_BINARY_EXPR:
-			INDENT;
-			printf("BinaryExpr: %s\n", token_to_string(ast->node.binary_expr.op.token_type));
-			INDENT;
-			printf("  Left:\n");
-			print_ast(ast->node.binary_expr.left, indent + 2);
-			INDENT;
-			printf("  Right:\n");
-			print_ast(ast->node.binary_expr.right, indent + 2);
-			break;
-		case AST_FUNC_CALL:
-			INDENT;
-			printf("FuncCall:\n");
-			INDENT;
-			printf("  Callee:\n");
-			print_ast(ast->node.func_call.callee, indent + 2);
-			INDENT;
-			printf("  Args (%zu):\n", ast->node.func_call.arg_count);
-			for (usize i = 0; i < ast->node.func_call.arg_count; i++) // NOLINT
-			{
-				print_ast(ast->node.func_call.args[i], indent + 2);
-			}
-			break;
-		case AST_LITERAL:
-			INDENT;
-			printf("Literal: ");
-			switch (ast->node.literal.literal.token_type)
-			{
-				case token_type_string:
-					printf("\"%s\"", ast->node.literal.literal.str_val);
-					break;
-				case token_type_number:
-					printf("%ld", ast->node.literal.literal.num_val);
-					break;
-				case token_type_char:
-					printf("'%c'", ast->node.literal.literal.char_val);
-					break;
-				case token_type_true:
-					printf("true");
-					break;
-				case token_type_false:
-					printf("false");
-					break;
-				default:
-					printf("(%s)", token_to_string(ast->node.literal.literal.token_type));
-			}
-			printf("\n");
-			break;
-		case AST_IDENTIFIER:
-			INDENT;
-			printf("Identifier: %s\n", ast->node.identifier.identifier.str_val);
-			break;
-		case AST_BLOCK:
-			INDENT;
-			printf("Block (%zu statements):\n", ast->node.block.statement_count);
-			for (usize i = 0; i < ast->node.block.statement_count; i++) // NOLINT
-			{
-				print_ast(ast->node.block.statements[i], indent + 1);
-			}
+			print_func_def(&ast->node.func_def, depth);
 			break;
 		case AST_STRUCT_DEF:
-			INDENT;
-			printf("StructDef: %s\n", ast->node.struct_def.name);
-			INDENT;
-			printf("  Members (%zu):\n", ast->node.struct_def.member_count);
-			for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
-			{
-				print_ast(ast->node.struct_def.members[i], indent + 2);
-			}
+			print_struct_def(&ast->node.struct_def, depth);
 			break;
 		case AST_UNION_DEF:
-			INDENT;
-			printf("UnionDef: %s\n", ast->node.union_def.name);
-			INDENT;
-			printf("  Members (%zu):\n", ast->node.union_def.member_count);
-			for (usize i = 0; i < ast->node.union_def.member_count; i++) // NOLINT
-			{
-				print_ast(ast->node.union_def.members[i], indent + 2);
-			}
+			print_union_def(&ast->node.union_def, depth);
 			break;
 		case AST_ENUM_DEF:
-			INDENT;
-			printf("EnumDef: %s (type: %s)\n", ast->node.enum_def.name, ast->node.enum_def.type);
-			INDENT;
-			printf("  Members (%zu):\n", ast->node.enum_def.member_count);
-			for (usize i = 0; i < ast->node.enum_def.member_count; i++) // NOLINT
-			{
-				INDENT;
-				printf("    %s", ast->node.enum_def.members[i].name);
-				if (ast->node.enum_def.members[i].has_value)
-				{
-					printf(" = %ld", ast->node.enum_def.members[i].value);
-				}
-				printf("\n");
-			}
+			print_enum_def(&ast->node.enum_def, depth);
+			break;
+		case AST_FUNC_CALL:
+			print_func_call(&ast->node.func_call, depth);
 			break;
 		case AST_MEMBER_ACCESS:
-			INDENT;
-			printf("MemberAccess:\n");
-			INDENT;
-			printf("  Object:\n");
-			print_ast(ast->node.member_access.left, indent + 2);
-			INDENT;
-			printf("  Member:\n");
-			print_ast(ast->node.member_access.right, indent + 2);
+			print_member_access(&ast->node.member_access, depth);
+			break;
+		case AST_BINARY_EXPR:
+			print_binary_expr(&ast->node.binary_expr, depth);
 			break;
 		case AST_INDEX_EXPR:
-			INDENT;
-			printf("IndexExpr:\n");
-			INDENT;
-			printf("  Array:\n");
-			print_ast(ast->node.index_expr.left, indent + 2);
-			INDENT;
-			printf("  Index:\n");
-			print_ast(ast->node.index_expr.index, indent + 2);
+			print_index_expr(&ast->node.index_expr, depth);
 			break;
-		default:
-			INDENT;
-			printf("Unknown AST node type: %d\n", ast->type);
+		case AST_LITERAL:
+			print_literal(&ast->node.literal, depth);
+			break;
+		case AST_IDENTIFIER:
+			print_identifier(&ast->node.identifier, depth);
+			break;
+		case AST_BLOCK:
+			print_block(&ast->node.block, depth);
+			break;
+		case AST_IF_EXR:
+			print_indent(depth);
+			printf("IfExpr: <not yet implemented>\n");
+			break;
+		case AST_WHILE_EXPR:
+			print_indent(depth);
+			printf("WhileExpr: <not yet implemented>\n");
+			break;
+		case AST_FOR_EXR:
+			print_indent(depth);
+			printf("ForExpr: <not yet implemented>\n");
+			break;
+		case AST_RETURN_STMT:
+			print_indent(depth);
+			printf("ReturnStmt: <not yet implemented>\n");
+			break;
+		case AST_BREAK_STMT:
+			print_indent(depth);
+			printf("BreakStmt\n");
+			break;
+		case AST_CONTINUE_STMT:
+			print_indent(depth);
+			printf("ContinueStmt\n");
+			break;
 	}
-#undef INDENT
+}
+
+static void print_indent(const usize depth)
+{
+	for (usize i = 0; i < depth; i++) // NOLINT
+	{
+		printf("  ");
+	}
+}
+
+static void print_pointer_types(const PointerType* pointer_types, const usize count)
+{
+	for (usize i = 0; i < count; i++) // NOLINT
+	{
+		switch (pointer_types[i])
+		{
+			case pointer_type_const:
+				printf("&");
+				break;
+			case pointer_type_mut:
+				printf("*");
+				break;
+			case pointer_type_none:
+				break;
+		}
+	}
+}
+
+static void print_var_type(const VarType* var_types, const usize depth)
+{
+	print_indent(depth);
+	printf("Type: %s", var_types->name ? var_types->name : "<anonymous>");
+
+	if (var_types->pointer_count > 0)
+	{
+		printf(" ");
+		print_pointer_types(var_types->pointer_types, var_types->pointer_count);
+	}
+
+	if (var_types->array_count > 0)
+	{
+		printf(" [arrays: %zu]", var_types->array_count);
+	}
+	printf("\n");
+}
+
+static void print_modifiers(const Token* modifiers, const usize count, const usize depth) // NOLINT
+{
+	if (count == 0)
+	{
+		return;
+	}
+
+	print_indent(depth);
+	printf("Modifiers: ");
+	for (usize i = 0; i < count; i++) // NOLINT
+	{
+		printf("%s", token_to_string(modifiers[i].token_type));
+		if (i < count - 1)
+		{
+			printf(", ");
+		}
+	}
+	printf("\n");
+}
+
+static void print_var_def(const VarDef* var_def, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("VarDef: %s\n", var_def->name ? var_def->name : "<anonymous>");
+
+	print_modifiers(var_def->modifiers, var_def->modifier_count, depth + 1);
+	print_var_type(&var_def->type, depth + 1);
+
+	if (var_def->equals)
+	{
+		print_indent(depth + 1);
+		printf("Initializer:\n");
+		parse_print_impl(var_def->equals, depth + 2);
+	}
+}
+
+static void print_func_def(const FuncDef* func_def, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("FuncDef: %s\n", func_def->name ? func_def->name : "<anonymous>");
+
+	print_modifiers(func_def->modifiers, func_def->modifier_count, depth + 1);
+
+	if (func_def->template_count > 0)
+	{
+		print_indent(depth + 1);
+		printf("Templates: %zu\n", func_def->template_count);
+		for (usize i = 0; i < func_def->template_count; i++) // NOLINT
+		{
+			parse_print_impl(func_def->template_types[i], depth + 2);
+		}
+	}
+
+	if (func_def->param_count > 0)
+	{
+		print_indent(depth + 1);
+		printf("Parameters: %zu\n", func_def->param_count);
+		for (usize i = 0; i < func_def->param_count; i++) // NOLINT
+		{
+			parse_print_impl(func_def->params[i], depth + 2);
+		}
+	}
+
+	print_indent(depth + 1);
+	printf("Return Type:\n");
+	print_var_def(&func_def->return_type, depth + 2);
+
+	if (func_def->body)
+	{
+		print_indent(depth + 1);
+		printf("Body:\n");
+		parse_print_impl(func_def->body, depth + 2);
+	}
+}
+
+static void print_struct_def(const StructDef* struct_def, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("StructDef: %s\n", struct_def->name ? struct_def->name : "<anonymous>");
+
+	print_indent(depth + 1);
+	printf("Members: %zu\n", struct_def->member_count);
+	for (usize i = 0; i < struct_def->member_count; i++) // NOLINT
+	{
+		parse_print_impl(struct_def->members[i], depth + 2);
+	}
+}
+
+static void print_union_def(const UnionDef* union_def, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("UnionDef: %s\n", union_def->name ? union_def->name : "<anonymous>");
+
+	print_indent(depth + 1);
+	printf("Members: %zu\n", union_def->member_count);
+	for (usize i = 0; i < union_def->member_count; i++) // NOLINT
+	{
+		parse_print_impl(union_def->members[i], depth + 2);
+	}
+}
+
+static void print_enum_def(const EnumDef* enum_def, const usize depth)
+{
+	print_indent(depth);
+	printf("EnumDef: %s", enum_def->name ? enum_def->name : "<anonymous>");
+	if (enum_def->type)
+	{
+		printf(" : %s", enum_def->type);
+	}
+	printf("\n");
+
+	print_indent(depth + 1);
+	printf("Members: %zu\n", enum_def->member_count);
+	for (usize i = 0; i < enum_def->member_count; i++) // NOLINT
+	{
+		print_indent(depth + 2);
+		printf("%s", enum_def->members[i].name);
+		if (enum_def->members[i].has_value)
+		{
+			printf(" = %" PRId64, enum_def->members[i].value);
+		}
+		printf("\n");
+	}
+}
+
+static void print_func_call(const FuncCall* func_call, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("FuncCall:\n");
+
+	print_indent(depth + 1);
+	printf("Callee:\n");
+	parse_print_impl(func_call->callee, depth + 2);
+
+	if (func_call->arg_count > 0)
+	{
+		print_indent(depth + 1);
+		printf("Arguments: %zu\n", func_call->arg_count);
+		for (usize i = 0; i < func_call->arg_count; i++) // NOLINT
+		{
+			parse_print_impl(func_call->args[i], depth + 2);
+		}
+	}
+}
+
+static void print_member_access(const MemberAccess* member_access, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("MemberAccess:\n");
+
+	print_indent(depth + 1);
+	printf("Left:\n");
+	parse_print_impl(member_access->left, depth + 2);
+
+	print_indent(depth + 1);
+	printf("Right:\n");
+	parse_print_impl(member_access->right, depth + 2);
+}
+
+static void print_binary_expr(const BinaryExpr* binary_expr, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("BinaryExpr: %s\n", token_to_string(binary_expr->op.token_type));
+
+	print_indent(depth + 1);
+	printf("Left:\n");
+	parse_print_impl(binary_expr->left, depth + 2);
+
+	print_indent(depth + 1);
+	printf("Right:\n");
+	parse_print_impl(binary_expr->right, depth + 2);
+}
+
+static void print_index_expr(const IndexExpr* index_expr, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("IndexExpr:\n");
+
+	print_indent(depth + 1);
+	printf("Array:\n");
+	parse_print_impl(index_expr->left, depth + 2);
+
+	print_indent(depth + 1);
+	printf("Index:\n");
+	parse_print_impl(index_expr->index, depth + 2);
+}
+
+static void print_literal(const Literal* lit, const usize depth)
+{
+	print_indent(depth);
+	printf("Literal: %s\n", token_to_string(lit->literal.token_type));
+}
+
+static void print_identifier(const Identifier* identifier, const usize depth)
+{
+	print_indent(depth);
+	printf("Identifier: %s\n", token_to_string(identifier->identifier.token_type));
+}
+
+static void print_block(const Block* block, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("Block: %zu statements\n", block->statement_count);
+
+	for (usize i = 0; i < block->statement_count; i++) // NOLINT
+	{
+		parse_print_impl(block->statements[i], depth + 1);
+	}
 }

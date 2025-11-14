@@ -40,14 +40,13 @@ typedef struct [[gnu::aligned(128)]]
 typedef struct [[gnu::aligned(128)]]
 {
 	char* name;
-	char* type;
 	Token* modifiers;
 	usize modifier_count;
 	AST** template_types;
 	usize template_count;
 	AST** params;
 	usize param_count;
-	Token return_type;
+	VarDef return_type;
 	AST* body;
 } FuncDef;
 
@@ -133,6 +132,13 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_LITERAL,
 		AST_IDENTIFIER,
 		AST_BLOCK,
+
+		AST_IF_EXR,
+		AST_WHILE_EXPR,
+		AST_FOR_EXR,
+		AST_RETURN_STMT,
+		AST_BREAK_STMT,
+		AST_CONTINUE_STMT,
 	} type;
 
 	union
