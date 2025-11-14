@@ -41,6 +41,7 @@ static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
 static i32 precedence(TokenType token_type);
+static VarDef parse_var_def(ParserState* parser_state);
 
 static AST* make_literal(const Token* token);
 static AST* make_identifier(const Token* token);
@@ -166,7 +167,8 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 		is_modifier(token.token_type))										 // NOLINT
 	{
-		parse_var(parser_state);
+		VarDef var_def = parse_var_def(parser_state);
+		node->node.func_def.return_type = var_def;
 	}
 
 	assert(peek(parser_state)->token_type == token_type_lbrace);
@@ -180,40 +182,8 @@ static AST* parse_var(ParserState* parser_state)
 
 	node->type = AST_VAR_DEF;
 
-	TokenArray mod_arr = get_modifiers(parser_state);
-	node->node.var_def.modifiers = mod_arr.tokens;
-	node->node.var_def.modifier_count = mod_arr.count;
+	node->node.var_def = parse_var_def(parser_state);
 
-	{
-		const Token token = *consume(parser_state);
-		assert(token.token_type == token_type_identifier);
-		node->node.var_def.type.name = strdup(token.str_val);
-	}
-	node->node.var_def.type.array_count = 0;
-	node->node.var_def.type.pointer_count = 0;
-	node->node.var_def.type.pointer_types = nullptr;
-
-	{
-		PointerType* pointer_types = nullptr;
-		usize cap = 0;
-		usize len = 0;
-
-#pragma unroll 2
-		while (peek(parser_state)->token_type == token_type_ampersand ||
-			   peek(parser_state)->token_type == token_type_star)
-		{
-			if (cap >= len)
-			{
-				cap = MAX(cap, 1);
-				cap *= 2;
-				pointer_types = (PointerType*)realloc((void*)pointer_types, cap * sizeof(PointerType)); // NOLINT
-			}
-			const Token token = *consume(parser_state);
-			pointer_types[len++] = (token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
-		}
-		node->node.var_def.type.pointer_types = pointer_types;
-		node->node.var_def.type.pointer_count = len;
-	}
 	{
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
@@ -749,6 +719,47 @@ static i32 precedence(TokenType token_type)
 		default:
 			return 0;
 	}
+}
+
+static VarDef parse_var_def(ParserState* parser_state)
+{
+	VarDef var_def = {.name = nullptr, .equals = nullptr, .type = nullptr, .modifier_count = 0, .modifiers = nullptr};
+	TokenArray mod_arr = get_modifiers(parser_state);
+	var_def.modifiers = mod_arr.tokens;
+	var_def.modifier_count = mod_arr.count;
+
+	{
+		const Token token = *consume(parser_state);
+		assert(token.token_type == token_type_identifier);
+		var_def.type.name = strdup(token.str_val);
+	}
+
+	var_def.type.array_count = 0;
+	var_def.type.pointer_count = 0;
+	var_def.type.pointer_types = nullptr;
+
+	{
+		PointerType* pointer_types = nullptr;
+		usize cap = 0;
+		usize len = 0;
+
+#pragma unroll 2
+		while (peek(parser_state)->token_type == token_type_ampersand ||
+			   peek(parser_state)->token_type == token_type_star)
+		{
+			if (cap >= len)
+			{
+				cap = MAX(cap, 1);
+				cap *= 2;
+				pointer_types = (PointerType*)realloc((void*)pointer_types, cap * sizeof(PointerType)); // NOLINT
+			}
+			const Token token = *consume(parser_state);
+			pointer_types[len++] = (token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
+		}
+		var_def.type.pointer_types = pointer_types;
+		var_def.type.pointer_count = len;
+	}
+	return var_def;
 }
 
 AST* make_literal(const Token* token)
