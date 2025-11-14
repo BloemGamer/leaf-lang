@@ -642,6 +642,11 @@ static bool match(ParserState* parser_state, TokenType type)
 	return false;
 }
 
+static void step_back(ParserState* parser_state)
+{
+	parser_state->pos--;
+}
+
 static bool is_modifier(const TokenType token_type)
 {
 #pragma unroll
