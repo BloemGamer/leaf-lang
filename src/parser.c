@@ -53,6 +53,7 @@ static usize unescape(const char* input, char* output, usize output_size, Pos po
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
 static i64 make_number(const Token* token);
+static void print_ast(const AST* ast, int indent);
 
 AST* parse(const Token* tokens)
 {
@@ -1087,7 +1088,6 @@ static i64 make_number(const Token* token)
 	}
 }
 
-static void print_ast(const AST* ast, int indent);
 void parse_print(const AST* ast)
 {
 	print_ast(ast, 0);
