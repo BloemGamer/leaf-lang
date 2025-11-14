@@ -23,3 +23,4 @@ Future plans
 - [ ] add (automated) tests
 - [ ] write proper documentation
 - [ ] some example files, and hopefully a simple project to test and show a lot of features
+- [ ] write a very simple macro based variable length array type and use that instead of doing it every time by hand
