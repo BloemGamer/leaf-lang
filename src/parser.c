@@ -37,6 +37,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left);
 static const Token* peek(ParserState* parser_state);
 static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
+static void step_back(ParserState* parser_state);
 static bool is_modifier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
@@ -106,7 +107,7 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 		case token_type_enum:
 			return parse_enum(parser_state);
 		case token_type_eof:
-			return nullptr;
+			assert(false && "fount eof");
 
 		default:
 			assert(false && "not implemented (yet)");
@@ -512,21 +513,21 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 
 static AST* parse_prefix(ParserState* parser_state) // NOLINT
 {
-	const Token* t = consume(parser_state); // NOLINT
-	if (!t)
+	const Token* token = consume(parser_state); // NOLINT
+	if (!token)
 	{
 		return nullptr;
 	}
 
-	switch (t->token_type)
+	switch (token->token_type)
 	{
 		case token_type_number:
 		case token_type_string:
 		case token_type_char:
-			return make_literal(t);
+			return make_literal(token);
 
 		case token_type_identifier:
-			return make_identifier(t);
+			return make_identifier(token);
 
 		case token_type_lparen:
 		{
@@ -538,6 +539,9 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 			}
 			return expr;
 		}
+		case token_type_lbrace:
+			step_back(parser_state);
+			return parse_block(parser_state);
 
 		default:
 			assert(false);
