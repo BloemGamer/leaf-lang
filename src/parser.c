@@ -285,6 +285,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 		{                                                                                  \
 			Token token = *consume(parser_state);                                          \
 			assert(token.token_type == token_type_identifier);                             \
+			node->node._type##_def.name = strdup(token.str_val);                           \
 		}                                                                                  \
 		assert(consume(parser_state)->token_type == token_type_lbrace);                    \
 		if (peek(parser_state)->token_type == token_type_rbrace)                           \
