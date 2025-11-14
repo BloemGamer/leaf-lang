@@ -85,6 +85,8 @@ static AST* parse_decl(ParserState* parser_state)
 			return parse_struct(parser_state);
 		case token_type_enum:
 			return parse_enum(parser_state);
+		case token_type_eof:
+			return nullptr;
 
 		default:
 			assert(false && "not implemented (yet)");
@@ -1083,4 +1085,177 @@ static i64 make_number(const Token* token)
 			}
 			return strtoll(token->str_val, nullptr, 10);
 	}
+}
+
+static void print_ast(const AST* ast, int indent);
+void parse_print(const AST* ast)
+{
+	print_ast(ast, 0);
+}
+
+static void print_ast(const AST* ast, int indent) // NOLINT
+{
+	if (!ast)
+	{
+		printf("%*sNULL\n", indent * 2, "");
+		return;
+	}
+#define INDENT printf("%*s", indent * 2, "")
+	switch (ast->type)
+	{
+		case AST_VAR_DEF:
+			INDENT;
+			printf("VarDef: %s\n", ast->node.var_def.name);
+			INDENT;
+			printf("  Type: %s", ast->node.var_def.type.name);
+			for (usize i = 0; i < ast->node.var_def.type.amount_pointer; i++) // NOLINT
+			{
+				printf("*");
+			}
+			for (usize i = 0; i < ast->node.var_def.type.amount_array; i++) // NOLINT
+			{
+				printf("[]");
+			}
+			printf("\n");
+			if (ast->node.var_def.equals)
+			{
+				INDENT;
+				printf("  Value:\n");
+				print_ast(ast->node.var_def.equals, indent + 2);
+			}
+			break;
+		case AST_FUNC_DEF:
+			INDENT;
+			printf("FuncDef: %s\n", ast->node.func_def.name);
+			INDENT;
+			printf("  Params (%zu):\n", ast->node.func_def.param_count);
+			for (usize i = 0; i < ast->node.func_def.param_count; i++) // NOLINT
+			{
+				print_ast(ast->node.func_def.params[i], indent + 2);
+			}
+			INDENT;
+			printf("  Body:\n");
+			print_ast(ast->node.func_def.body, indent + 2);
+			break;
+		case AST_BINARY_EXPR:
+			INDENT;
+			printf("BinaryExpr: %s\n", token_to_string(ast->node.binary_expr.op.token_type));
+			INDENT;
+			printf("  Left:\n");
+			print_ast(ast->node.binary_expr.left, indent + 2);
+			INDENT;
+			printf("  Right:\n");
+			print_ast(ast->node.binary_expr.right, indent + 2);
+			break;
+		case AST_FUNC_CALL:
+			INDENT;
+			printf("FuncCall:\n");
+			INDENT;
+			printf("  Callee:\n");
+			print_ast(ast->node.func_call.callee, indent + 2);
+			INDENT;
+			printf("  Args (%zu):\n", ast->node.func_call.arg_count);
+			for (usize i = 0; i < ast->node.func_call.arg_count; i++) // NOLINT
+			{
+				print_ast(ast->node.func_call.args[i], indent + 2);
+			}
+			break;
+		case AST_LITERAL:
+			INDENT;
+			printf("Literal: ");
+			switch (ast->node.literal.literal.token_type)
+			{
+				case token_type_string:
+					printf("\"%s\"", ast->node.literal.literal.str_val);
+					break;
+				case token_type_number:
+					printf("%ld", ast->node.literal.literal.num_val);
+					break;
+				case token_type_char:
+					printf("'%c'", ast->node.literal.literal.char_val);
+					break;
+				case token_type_true:
+					printf("true");
+					break;
+				case token_type_false:
+					printf("false");
+					break;
+				default:
+					printf("(%s)", token_to_string(ast->node.literal.literal.token_type));
+			}
+			printf("\n");
+			break;
+		case AST_IDENTIFIER:
+			INDENT;
+			printf("Identifier: %s\n", ast->node.identifier.identifier.str_val);
+			break;
+		case AST_BLOCK:
+			INDENT;
+			printf("Block (%zu statements):\n", ast->node.block.statement_count);
+			for (usize i = 0; i < ast->node.block.statement_count; i++) // NOLINT
+			{
+				print_ast(ast->node.block.statements[i], indent + 1);
+			}
+			break;
+		case AST_STRUCT_DEF:
+			INDENT;
+			printf("StructDef: %s\n", ast->node.struct_def.name);
+			INDENT;
+			printf("  Members (%zu):\n", ast->node.struct_def.member_count);
+			for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
+			{
+				print_ast(ast->node.struct_def.members[i], indent + 2);
+			}
+			break;
+		case AST_UNION_DEF:
+			INDENT;
+			printf("UnionDef: %s\n", ast->node.union_def.name);
+			INDENT;
+			printf("  Members (%zu):\n", ast->node.union_def.member_count);
+			for (usize i = 0; i < ast->node.union_def.member_count; i++) // NOLINT
+			{
+				print_ast(ast->node.union_def.members[i], indent + 2);
+			}
+			break;
+		case AST_ENUM_DEF:
+			INDENT;
+			printf("EnumDef: %s (type: %s)\n", ast->node.enum_def.name, ast->node.enum_def.type);
+			INDENT;
+			printf("  Members (%zu):\n", ast->node.enum_def.member_count);
+			for (usize i = 0; i < ast->node.enum_def.member_count; i++) // NOLINT
+			{
+				INDENT;
+				printf("    %s", ast->node.enum_def.members[i].name);
+				if (ast->node.enum_def.members[i].has_value)
+				{
+					printf(" = %ld", ast->node.enum_def.members[i].value);
+				}
+				printf("\n");
+			}
+			break;
+		case AST_MEMBER_ACCESS:
+			INDENT;
+			printf("MemberAccess:\n");
+			INDENT;
+			printf("  Object:\n");
+			print_ast(ast->node.member_access.left, indent + 2);
+			INDENT;
+			printf("  Member:\n");
+			print_ast(ast->node.member_access.right, indent + 2);
+			break;
+		case AST_INDEX_EXPR:
+			INDENT;
+			printf("IndexExpr:\n");
+			INDENT;
+			printf("  Array:\n");
+			print_ast(ast->node.index_expr.left, indent + 2);
+			INDENT;
+			printf("  Index:\n");
+			print_ast(ast->node.index_expr.index, indent + 2);
+			break;
+		default:
+			INDENT;
+			printf("Unknown AST node type: %d\n", ast->type);
+	}
+#undef INDENT
 }

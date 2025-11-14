@@ -101,6 +101,7 @@ typedef struct [[gnu::aligned(32)]]
 	Token identifier;
 } Identifier;
 
+/// At least for now also used for the global scope
 typedef struct [[gnu::aligned(16)]]
 {
 	AST** statements;
@@ -131,14 +132,14 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		FuncDef func_def;			// done
 		StructDef struct_def;		// done
 		UnionDef union_def;			// done
-		EnumDef enum_def;			//
+		EnumDef enum_def;			// done
 		FuncCall func_call;			// binary_expr
 		MemberAccess member_access; // binary_expr
 		BinaryExpr binary_expr;		// done
 		IndexExpr index_expr;		// binary_expr
-		Literal literal;			//
-		Identifier identifier;		//
-		Block block;				//
+		Literal literal;			// binary_expr
+		Identifier identifier;		// binary_expr
+		Block block;				// done
 	} node;
 } AST;
 
@@ -149,3 +150,5 @@ AST* parse(const Token* tokens);
 
 /// will be implemented when the parser is done
 void free_token_tree(AST* token_tree);
+
+void parse_print(const AST* ast);
