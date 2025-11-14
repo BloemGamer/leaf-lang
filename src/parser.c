@@ -230,6 +230,8 @@ static AST* parse_var(ParserState* parser_state)
 			}
 			assert(consume(parser_state)->token_type == token_type_rsqbracket);
 		}
+		node->node.var_def.type.array_sizes = array_sizes;
+		node->node.var_def.type.array_count = len;
 	}
 	if (peek(parser_state)->token_type == token_type_comma)
 	{
@@ -1260,7 +1262,7 @@ static void print_pointer_types(const PointerType* pointer_types, const usize co
 	}
 }
 
-static void print_var_type(const VarType* var_types, const usize depth)
+static void print_var_type(const VarType* var_types, const usize depth) // NOLINT
 {
 	print_indent(depth);
 	printf("Type: %s", var_types->name ? var_types->name : "<anonymous>");
@@ -1273,7 +1275,27 @@ static void print_var_type(const VarType* var_types, const usize depth)
 
 	if (var_types->array_count > 0)
 	{
-		printf(" [arrays: %zu]", var_types->array_count);
+		for (usize i = 0; i < var_types->array_count; i++) // NOLINT
+		{
+			if (var_types->array_sizes != nullptr)
+			{
+				printf("[");
+				if (var_types->array_sizes[i]->node.binary_expr.op.token_type == token_type_number)
+				{
+					printf("%" PRId64, var_types->array_sizes[i]->node.binary_expr.op.num_val);
+				}
+				else
+				{
+					print_binary_expr(&var_types->array_sizes[i]->node.binary_expr, depth);
+					print_indent(depth);
+				}
+				printf("]");
+			}
+			else
+			{
+				printf("[]");
+			}
+		}
 	}
 	printf("\n");
 }
@@ -1440,6 +1462,28 @@ static void print_member_access(const MemberAccess* member_access, const usize d
 static void print_binary_expr(const BinaryExpr* binary_expr, const usize depth) // NOLINT
 {
 	print_indent(depth);
+#pragma unroll
+	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_LITERAL); i++)
+	{
+		if (binary_expr->op.token_type == TOKENS_TYPES_LITERAL[i])
+		{
+			printf("BinaryExpr: %s: ", token_to_string(binary_expr->op.token_type));
+			switch (binary_expr->op.token_type)
+			{
+				case token_type_number:
+					printf("%" PRId64 "\n", binary_expr->op.num_val);
+					return;
+				case token_type_char:
+					printf("%c\n", binary_expr->op.char_val);
+					return;
+				case token_type_string:
+					printf("%s\n", binary_expr->op.str_val);
+					return;
+				default:
+					assert(false);
+			}
+		}
+	}
 	printf("BinaryExpr: %s\n", token_to_string(binary_expr->op.token_type));
 
 	print_indent(depth + 1);
