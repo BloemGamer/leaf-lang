@@ -26,6 +26,9 @@ static AST* parse_var(ParserState* parser_state);
 static AST* parse_struct(ParserState* parser_state); // also used for union
 static AST* parse_enum(ParserState* parser_state);
 static AST* parse_expr(ParserState* parser_state);
+static AST* parse_block(ParserState* parser_state);
+static AST* parse_statement(ParserState* parser_state);
+
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
 static AST* parse_postfix(ParserState* parser_state, AST* left);
@@ -63,13 +66,7 @@ AST* parse(const Token* tokens)
 	{
 		consume(&parser_state);
 	}
-	return parse_decl(&parser_state);
-	// switch (tokens->token_type)
-	// {
-	// 	default:
-	// 		LOG_ERROR(tokens->pos, "Unexpected token: %s\n", token_to_string(tokens->token_type));
-	// 		assert(false);
-	// }
+	return parse_block(&parser_state);
 }
 
 static AST* parse_decl(ParserState* parser_state)
@@ -155,6 +152,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 
 	if (peek(parser_state)->token_type == token_type_lbrace)
 	{
+		node->node.func_def.body = parse_block(parser_state);
 		return node;
 	}
 
@@ -168,6 +166,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	}
 
 	assert(peek(parser_state)->token_type == token_type_lbrace);
+	node->node.func_def.body = parse_block(parser_state);
 	return node;
 }
 
@@ -220,6 +219,8 @@ static AST* parse_var(ParserState* parser_state)
 
 	node->node.var_def.equals = parse_expr(parser_state);
 
+	assert(consume(parser_state)->token_type == token_type_semicolon);
+
 	return node;
 }
 
@@ -256,6 +257,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 		{                                                                                  \
 			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/           \
 			{                                                                              \
+				(void)consume(parser_state);                                               \
 				node->node._type##_def.members = members;                                  \
 				node->node._type##_def.member_count = len;                                 \
 				break;                                                                     \
@@ -264,6 +266,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			AST* tmp = parse_var(parser_state);                                            \
 			if (len >= cap)                                                                \
 			{                                                                              \
+				cap = MAX(cap, 1);                                                         \
 				cap *= 2;                                                                  \
 				members = (AST**)realloc((void*)members, cap * sizeof(AST*)); /* NOLINT */ \
 			}                                                                              \
@@ -275,6 +278,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			}                                                                              \
 			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/      \
 			{                                                                              \
+				(void)consume(parser_state);                                               \
 				node->node._type##_def.members = members;                                  \
 				node->node._type##_def.member_count = len;                                 \
 				break;                                                                     \
@@ -378,6 +382,59 @@ static AST* parse_enum(ParserState* parser_state)
 static AST* parse_expr(ParserState* parser_state) // NOLINT
 {
 	return parse_precedence(parser_state, 1);
+}
+
+static AST* parse_block(ParserState* parser_state) // NOLINT
+{
+	bool global_block = true;
+	TokenType end_token = token_type_eof;
+	if (match(parser_state,
+			  token_type_lbrace)) // add token_type_sof later, but for how the tokens is started, this is for now not
+								  // possible
+	{
+		global_block = false;
+		end_token = token_type_rbrace;
+	}
+
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_BLOCK;
+
+	AST** statements = nullptr;
+	usize cap = 0;
+	usize len = 0;
+
+	while (true) // NOLINT
+	{
+		if (match(parser_state, end_token))
+		{
+			(void)consume(parser_state);
+			node->node.block.statements = statements;
+			node->node.block.statement_count = len;
+			break;
+		}
+		if (len >= cap)
+		{
+			cap = MAX(cap, 1);
+			cap *= 2;
+			statements = (AST**)realloc((void*)statements, cap * sizeof(AST*)); /* NOLINT */
+			assert(statements != nullptr);
+		}
+		{
+			statements[len++] = parse_statement(parser_state);
+		}
+	}
+
+	return node;
+}
+static AST* parse_statement(ParserState* parser_state) // NOLINT
+{
+	switch (peek(parser_state)->token_type)
+	{
+		case token_type_lbrace:
+			return parse_block(parser_state);
+		default:
+			return parse_decl(parser_state);
+	}
 }
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
