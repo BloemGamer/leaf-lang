@@ -215,6 +215,7 @@ static AST* parse_var(ParserState* parser_state)
 		{
 			if (len >= cap)
 			{
+				cap = MAX(cap, 1);
 				cap *= 2;
 				array_sizes = (AST**)realloc((void*)array_sizes, cap * sizeof(AST*)); // NOLINT
 			}
