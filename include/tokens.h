@@ -131,7 +131,7 @@ constexpr TokenType TOKENS_TYPES_SIMPLE[] = {__TOKENS_SIMPLE};
 constexpr TokenType TOKENS_TYPES_KEYWORD[] = {__TOKENS_KEYWORD};
 constexpr TokenType TOKENS_TYPES_MODIFIER[] = {__TOKENS_MODIFIER};
 constexpr TokenType TOKENS_TYPES_INGORED[] = {__TOKENS_IGNORED};
-constexpr TokenType TOKENS_TYPES_LETERAL[] = {__TOKENS_LITERAL};
+constexpr TokenType TOKENS_TYPES_LITERAL[] = {__TOKENS_LITERAL};
 constexpr TokenType TOKENS_TYPES_IDENTIFIER[] = {__TOKENS_IDENTIFIER};
 constexpr TokenType TOKENS_TYPES[] = {__TOKENS};
 #undef X
