@@ -11,6 +11,7 @@ echo "finished with ctest, you can find the logfiles in the test_output dir"
 
 echo "running valgrind memcheck"
 valgrind --tool=memcheck -s --leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=test_output/valgrind_memcheck.log ./s-lang &> /dev/null
+valgrind --tool=memcheck -s --leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=test_output/valgrind_memcheck_hash.log ./hash_test &> /dev/null
 echo "finished with valgrind, you can find the logfiles in the test_output dir"
 
 # TODO
