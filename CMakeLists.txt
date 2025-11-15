@@ -6,17 +6,30 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/..)
+
 
 # add_compile_options(-std=gnu2y)
 
 # add_compile_options(-fsanitize=address)
 # add_link_options(-fsanitize=address)
 
+enable_testing()
 
+# -------------------------------------------------------
+# Create hash library
+# -------------------------------------------------------
+add_library(hash STATIC
+	src/utils/hash.c
+)
 
+target_include_directories(hash PUBLIC
+	${CMAKE_SOURCE_DIR}/include
+)
+
+# -------------------------------------------------------
+# Main executable
+# -------------------------------------------------------
 add_executable(s-lang
 	src/main.c
 	src/lexer.c
@@ -24,13 +37,17 @@ add_executable(s-lang
 	src/tokens.c
 )
 
-target_include_directories(s-lang
-	PRIVATE
-		include
-)
+# Link to the hash library target
+target_link_libraries(s-lang PRIVATE hash)
 
-# needed of my setup, but probably not for the one of other people
+target_include_directories(s-lang PRIVATE include)
+
 add_custom_command(
 	TARGET s-lang POST_BUILD
 	COMMAND sed -i "s#/run/host##g" ${CMAKE_BINARY_DIR}/compile_commands.json
 )
+
+# -------------------------------------------------------
+# Tests directory
+# -------------------------------------------------------
+add_subdirectory(tests)
