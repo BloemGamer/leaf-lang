@@ -8,7 +8,8 @@
 build*
 slang-test
 .cache
-valgrind
+test_output
+Testing
 .idea
 
 .clangd
