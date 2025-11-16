@@ -19,6 +19,11 @@
 
 #define BASIC_NEW_TYPES Y(String)
 
+#define BASIC_SUPPORTED_CTYPES \
+	Y(char)                    \
+	Y(int)                     \
+	Y(void)
+
 // typedefing the basic C types
 #define X(c, new) typedef c new;
 BASIC_CTYPES
@@ -34,10 +39,11 @@ BASIC_NEW_TYPES
 
 #define X(_, x) #x,
 #define Y(x) #x,
-constexpr char BASIC_TYPES[][BASIC_TYPES_STR_LEN] = {BASIC_CTYPES BASIC_NEW_TYPES};
+constexpr char BASIC_TYPES[][BASIC_TYPES_STR_LEN] = {BASIC_CTYPES BASIC_NEW_TYPES BASIC_SUPPORTED_CTYPES};
 #undef Y
 #undef X
 
 #undef BASIC_CTYPES
 #undef BASIC_NEW_TYPES
 #undef BASIC_TYPES_STR_LEN
+#undef BASIC_SUPPORTED_CTYPES
