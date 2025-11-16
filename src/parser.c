@@ -104,7 +104,6 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 			return parse_fn(parser_state);
 		case token_type_equal:
 			return parse_var(parser_state);
-			// case token_type_semiclolon:
 		case token_type_struct:
 		case token_type_union:
 			return parse_struct(parser_state);
@@ -277,6 +276,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			Token token = *consume(parser_state);                                          \
 			assert(token.token_type == token_type_identifier);                             \
 			node->node._type##_def.name = strdup(token.str_val);                           \
+			hash_str_push(&parser_state->known_types, token.str_val);                      \
 		}                                                                                  \
 		assert(consume(parser_state)->token_type == token_type_lbrace);                    \
 		if (peek(parser_state)->token_type == token_type_rbrace)                           \
@@ -349,6 +349,7 @@ static AST* parse_enum(ParserState* parser_state)
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
 		node->node.enum_def.name = strdup(token.str_val);
+		hash_str_push(&parser_state->known_types, token.str_val);
 	}
 	if (match(parser_state, token_type_colon))
 	{
