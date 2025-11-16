@@ -8,22 +8,13 @@
 #include "utils/hash.h"
 
 // ------------------------------------------------------------
-// Helper: simple constructor
-// ------------------------------------------------------------
-static Hash hash_new(usize cap)
-{
-	Hash h = {.cap = cap, .size = 0, .node = calloc(cap, sizeof(HashStrNode))};
-	return h;
-}
-
-// ------------------------------------------------------------
 // Test: push + contains
 // ------------------------------------------------------------
 static void test_push_contains()
 {
 	printf("TEST: push + contains...\n");
 
-	Hash h = hash_new(8);
+	HashStr h = hash_str_new(8);
 
 	assert(hash_str_contains(&h, "apple") == false);
 
@@ -53,7 +44,7 @@ static void test_remove()
 {
 	printf("TEST: remove...\n");
 
-	Hash h = hash_new(8);
+	HashStr h = hash_str_new(8);
 
 	hash_str_push(&h, "a");
 	hash_str_push(&h, "b");
@@ -89,13 +80,13 @@ static void test_clone()
 {
 	printf("TEST: clone...\n");
 
-	Hash h = hash_new(8);
+	HashStr h = hash_str_new(8);
 
 	hash_str_push(&h, "car");
 	hash_str_push(&h, "train");
 	hash_str_push(&h, "plane");
 
-	Hash c = hash_str_clone(&h);
+	HashStr c = hash_str_clone(&h);
 
 	// Same values
 	assert(c.cap == h.cap);
@@ -118,45 +109,13 @@ static void test_clone()
 }
 
 // ------------------------------------------------------------
-// Test: resize
-// ------------------------------------------------------------
-// static void test_resize()
-// {
-// 	printf("TEST: resize...\n");
-//
-// 	Hash h = hash_new(4);
-//
-// 	hash_str_push(&h, "one");
-// 	hash_str_push(&h, "two");
-// 	hash_str_push(&h, "three");
-// 	hash_str_push(&h, "four");
-//
-// 	assert(h.size == 4);
-//
-// 	hash_str_resize(&h, 64);
-//
-// 	// Everything must still exist
-// 	assert(hash_str_contains(&h, "one"));
-// 	assert(hash_str_contains(&h, "two"));
-// 	assert(hash_str_contains(&h, "three"));
-// 	assert(hash_str_contains(&h, "four"));
-//
-// 	assert(h.size == 4);
-// 	assert(h.cap == 64);
-//
-// 	hash_str_free(&h);
-//
-// 	printf("OK\n");
-// }
-
-// ------------------------------------------------------------
 // Test: free
 // ------------------------------------------------------------
 static void test_free()
 {
 	printf("TEST: free...\n");
 
-	Hash h = hash_new(8);
+	HashStr h = hash_str_new(8);
 
 	hash_str_push(&h, "x");
 	hash_str_push(&h, "y");
