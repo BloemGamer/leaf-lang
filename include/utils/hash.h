@@ -13,12 +13,13 @@ typedef struct // NOLINT
 	HashStrNode* node;
 	usize size;
 	usize cap;
-} Hash;
+} HashStr;
 
-bool hash_str_contains(const Hash* hash, const char* str);
+bool hash_str_contains(const HashStr* hash, const char* str);
 
 /// returns true if the string was already in the hash, returns fals otherwise
-bool hash_str_push(Hash* hash, const char* str);
-bool hash_str_remove(Hash* hash, const char* str);
-Hash hash_str_clone(const Hash* hash);
-void hash_str_free(Hash* hash);
+bool hash_str_push(HashStr* hash, const char* str);
+bool hash_str_remove(HashStr* hash, const char* str);
+HashStr hash_str_clone(const HashStr* hash);
+void hash_str_free(HashStr* hash);
+HashStr hash_str_new(usize cap);

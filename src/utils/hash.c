@@ -1,14 +1,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "assert.h"
 #include "utils.h"
 #include "utils/hash.h"
 
 static usize hash_str_hash(const char* str);
 static void hash_str_free_node(HashStrNode* node);
-static void hash_str_resize(Hash* hash, usize new_cap);
+static void hash_str_resize(HashStr* hash, usize new_cap);
 
-bool hash_str_contains(const Hash* hash, const char* str)
+bool hash_str_contains(const HashStr* hash, const char* str)
 {
 	usize bucket = hash_str_hash(str) % hash->cap;
 
@@ -29,11 +30,16 @@ bool hash_str_contains(const Hash* hash, const char* str)
 	return false;
 }
 
-bool hash_str_push(Hash* hash, const char* str)
+bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 {
 	usize bucket = hash_str_hash(str) % hash->cap;
 
 	HashStrNode* node = &hash->node[bucket];
+
+	if (hash->size * 2 >= hash->cap)
+	{
+		hash_str_resize(hash, hash->cap * 2);
+	}
 
 	if (node->str == nullptr)
 	{
@@ -64,7 +70,7 @@ bool hash_str_push(Hash* hash, const char* str)
 	return true;
 }
 
-bool hash_str_remove(Hash* hash, const char* str)
+bool hash_str_remove(HashStr* hash, const char* str)
 {
 	usize bucket = hash_str_hash(str) % hash->cap;
 
@@ -117,9 +123,9 @@ bool hash_str_remove(Hash* hash, const char* str)
 	return false;
 }
 
-Hash hash_str_clone(const Hash* hash)
+HashStr hash_str_clone(const HashStr* hash)
 {
-	Hash new_hash = {.cap = hash->cap, .size = hash->size, .node = calloc(hash->cap, sizeof(HashStrNode))};
+	HashStr new_hash = {.cap = hash->cap, .size = hash->size, .node = calloc(hash->cap, sizeof(HashStrNode))};
 
 	for (usize i = 0; i < hash->cap; i++)
 	{
@@ -175,7 +181,7 @@ static void hash_str_free_node(HashStrNode* node)
 	node->next = nullptr;
 }
 
-void hash_str_free(Hash* hash)
+void hash_str_free(HashStr* hash)
 {
 	if (!hash || !hash->node)
 	{
@@ -193,9 +199,9 @@ void hash_str_free(Hash* hash)
 	hash->cap = 0;
 }
 
-static void hash_str_resize(Hash* hash, usize new_cap)
+static void hash_str_resize(HashStr* hash, usize new_cap)
 {
-	Hash new_hash = {.cap = new_cap, .size = 0, .node = calloc(new_cap, sizeof(HashStrNode))};
+	HashStr new_hash = {.cap = new_cap, .size = 0, .node = calloc(new_cap, sizeof(HashStrNode))};
 
 	// re-insert all keys
 	for (usize i = 0; i < hash->cap; i++)
@@ -231,5 +237,12 @@ static usize hash_str_hash(const char* str)
 	while (c = (usize)(unsigned char)*str++) // NOLINT
 		hash = ((hash << 5U) + hash) + c;	 /* hash * 33 + c */
 
+	return hash;
+}
+
+HashStr hash_str_new(const usize cap)
+{
+	debug_assert(cap > 0);
+	HashStr hash = {.cap = cap, .size = 0, .node = calloc(cap, sizeof(HashStrNode))};
 	return hash;
 }
