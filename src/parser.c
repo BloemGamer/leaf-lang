@@ -3,16 +3,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "basic_types.h"
 #include "log.h"
 #include "parser.h"
 #include "tokens.h"
 #include "utils.h"
+#include "utils/hash.h"
 
 typedef struct // NOLINT
 {
 	const Token* tokens;
 	usize count;
 	usize pos;
+	HashStr known_types;
 } ParserState;
 
 typedef struct // NOLINT
@@ -56,6 +59,7 @@ static usize unescape(const char* input, char* output, usize output_size, Pos po
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
 static i64 make_number(const Token* token);
+static void add_basic_types(ParserState* parser_state);
 
 static void parse_print_impl(const AST* ast, usize depth);
 static void print_indent(usize depth);
@@ -81,8 +85,8 @@ AST* parse(const Token* tokens)
 	while (tokens[count++].token_type != token_type_eof) // NOLINT
 	{
 	}
-	ParserState parser_state = {
-		.tokens = tokens, .count = count, .pos = 0};		  // pos = 1, to counteract the token_type_sof
+	ParserState parser_state = {.tokens = tokens, .count = count, .pos = 0, .known_types = hash_str_new(10)};
+	add_basic_types(&parser_state);
 	while (peek(&parser_state)->token_type == token_type_sof) // NOLINT
 	{
 		consume(&parser_state);
@@ -1170,6 +1174,15 @@ static i64 make_number(const Token* token)
 						 "Numbers starting with '0' are not an octal number here, use '0o' or remove the leading '0'");
 			}
 			return strtoll(token->str_val, nullptr, 10);
+	}
+}
+
+static void add_basic_types(ParserState* parser_state)
+{
+#pragma unroll
+	for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
+	{
+		hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
 	}
 }
 
