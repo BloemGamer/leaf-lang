@@ -443,6 +443,9 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 
 	while (true) // NOLINT
 	{
+		while (match(parser_state, token_type_semicolon))
+		{
+		}
 		if (match(parser_state, end_token))
 		{
 			node->node.block.statements = statements;
@@ -499,6 +502,9 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 			return parse_enum(parser_state);
 		case token_type_message:
 			return parse_message(parser_state);
+		case token_type_semicolon:
+			(void)consume(parser_state);
+			return parse_statement(parser_state);
 	}
 	if (is_modifier(token.token_type))
 	{
@@ -826,6 +832,8 @@ static i32 precedence(TokenType token_type)
 		case token_type_star:
 		case token_type_slash:
 			return 7;
+		case token_type_equal:
+			return 8;
 
 		default:
 			return 0;
