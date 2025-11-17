@@ -52,8 +52,8 @@ return: same as in C
 ## Modifiers:
 ```yaml
 mut:	allows variables to be changed, otherwise all variables are const
-static:	the same as in C // should only be used on local types
-const:	compiler const, so constexpr in C // maybe later this will also work on functions
+static:	the same as in C # should only be used on local types
+const:	compiler const, so constexpr in C # maybe later this will also work on functions
 pub:	export this to be used in other files
 
 ```
@@ -63,7 +63,7 @@ All types kan be a pointer `*` or a reference `&`, a reference is a const pointe
 
 ## Basic types:
 ```yaml
-isize:		ssize_t // this one does not always exsist, so I will ad this later, but it will be an signed int of the size of the OS, so for most it will be the same as i64
+isize:		ssize_t # this one does not always exsist, so I will ad this later, but it will be an signed int of the size of the OS, so for most it will be the same as i64
 usize:		size_t
 i64:		int64_t
 i32:		int32_t
@@ -86,5 +86,5 @@ You can make tuples, these are going to be represented as a struct in C
 String:		typedef-ed String struct
 Vec<T>:		typedef-ed Vec struct
 Option<T>:	typedef-ed Option struct
-// later there will be more defined, and will not be needed for syntax
+# later there will be more defined, and will not be needed for syntax
 ```
