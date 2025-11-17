@@ -9,6 +9,24 @@ S-lang is a language compiling to C, aiming to offer more complex features than 
 > [!WARNING]
 > It is still under construction and cannot be used yet
 
+```rs
+@embed "stdio.h" 							// #include <stdio.h> in C
+
+fn main(i64 argc, char&& argc) -> int
+{
+	i64 a = 10;
+	i64& b = i64&::give_clean_array(10);	// now you can use references, next to pointers
+	mut i64 c = 0;
+	c = { a + b[0] };
+	print("{}\n", c);						// print got a new format version
+}
+
+pub fn i64&::give_clean_array(usize size) -> i64&
+{
+	return (i64&)calloc(size, sizeof(i64));	// you can still use every C function you want
+}
+```
+
 
 ## Roadmap
 ### Short-term
