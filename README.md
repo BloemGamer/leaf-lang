@@ -31,7 +31,7 @@ A language I made that compiles to C.
 ## Installation
 Currently, S-lang is under development, but you can build it from source:
 The build is tested for Linux and Windows. macOS is not currently supported.
-[![Linux][Linux-shield]] [![Linux_mint][Linux-Mint-shield]] [![Windows][Windows-shield]]
+![Linux][Linux-shield] ![Linux_mint][Linux-Mint-shield] ![Windows][Windows-shield]
 
 ```sh
 git clone https://github.com/BloemGamer/S-lang.git
