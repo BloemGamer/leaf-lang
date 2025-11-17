@@ -476,13 +476,35 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 }
 static AST* parse_statement(ParserState* parser_state) // NOLINT
 {
-	switch (peek(parser_state)->token_type)
+	Token token = *peek(parser_state);
+	switch (token.token_type)
 	{
 		case token_type_lbrace:
 			return parse_block(parser_state);
-		default:
-			return parse_decl(parser_state);
+		case token_type_identifier:
+			if (hash_str_contains(&parser_state->known_types, token.str_val))
+			{
+				return parse_var(parser_state);
+			}
+			else
+			{
+				return parse_expr(parser_state);
+			}
+		case token_type_fn:
+			return parse_fn(parser_state);
+		case token_type_struct:
+		case token_type_union:
+			return parse_struct(parser_state);
+		case token_type_enum:
+			return parse_enum(parser_state);
+		case token_type_message:
+			return parse_message(parser_state);
 	}
+	if (is_modifier(token.token_type))
+	{
+		return parse_decl(parser_state);
+	}
+	assert(false && "not an expected type");
 }
 static AST* parse_message(ParserState* parser_state)
 {
