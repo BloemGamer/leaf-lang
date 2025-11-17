@@ -15,6 +15,7 @@ A C-based language with modern features and a platform to learn compiler design.
 * **Extra features:** More features to make development easier
 
 
+## Code previeuw
 ```rs
 @embed "stdio.h" 							// #include <stdio.h> in C
 
@@ -31,7 +32,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 {
 	return (i64&)calloc(size, sizeof(i64));	// you can still use every C function you want
 }
-
+```
 
 
 ## Roadmap
