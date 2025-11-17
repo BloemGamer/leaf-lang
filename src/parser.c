@@ -1198,12 +1198,7 @@ static void add_basic_types(ParserState* parser_state)
 #pragma unroll
 	for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
 	{
-		bool existed = hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
-		printf("Inserting '%s': %s\n", BASIC_TYPES[i], existed ? "already existed" : "newly inserted");
-
-		// Verify it's actually there
-		bool found = hash_str_contains(&parser_state->known_types, BASIC_TYPES[i]);
-		printf("  Verification: %s\n", found ? "FOUND" : "NOT FOUND !!!");
+		(void)hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
 	}
 }
 
