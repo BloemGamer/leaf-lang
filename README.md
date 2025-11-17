@@ -4,31 +4,38 @@
 [![Project_license][license-shield]][license-url]
 
 # S-lang
-A language I made that compiles to C.
+S-lang is a language compiling to C, aiming to offer more complex features than C while serving as a platform for learning compiler design.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet
 
 
 ## Roadmap
-- [ ] finish the first version of the compiler
-- [ ] add (automated) tests
-- [ ] write proper documentation
-- [ ] some example files, and hopefully a simple project to test and show a lot of features
-- [x] write a very simple macro based variable length array type and use that instead of doing it every time by hand
-- [ ] adding a C parser, for parsing at least the types, so you don't have to define it yourself
-- [ ] make the code thread safe, aka rewrite the tokeniser with the error things
+### Short-term
+- [ ] Finish first compiler version
+- [ ] Add tests
+- [ ] Write documentation
+
+### Long-term
+- [ ] Code optimisations
+- [ ] Preprocessor
+- [ ] C parser integration
 
 ## Progress of the stages of the compiler
-- [ ] preprocessor (this will be done the last I think)
-- [x] lexing -> lex
-- [ ] parsing -> parse
-- [ ] semantic analyzer
-- [ ] optimalisations (maybe, so later)
-- [ ] code generator
-- [ ] calling C compiler
+- [ ] Preprocessor (this will be done the last I think)
+- [x] Lexing -> lex
+- [ ] Parsing -> parse
+- [ ] Semantic analyser
+- [ ] Optimisations (maybe, so later)
+- [ ] Code generator
+- [ ] Calling C compiler
 
 ## Installation
+
+### Prerequisites
+- CMake >= 3.10
+- Any C compiler that has C23 fully implemented (Fully tested with GCC 14.2.0)
+
 Currently, S-lang is under development, but you can build it from source:
 The build is tested for Linux and Windows. macOS is not currently supported.
 ![Linux][Linux-shield] ![Linux_mint][Linux-Mint-shield] ![Windows][Windows-shield]
