@@ -25,3 +25,4 @@ Future plans
 - [ ] some example files, and hopefully a simple project to test and show a lot of features
 - [x] write a very simple macro based variable length array type and use that instead of doing it every time by hand
 - [ ] adding a C parser, for parsing at least the types, so you don't have to define it yourself
+- [ ] make the code thread safe, aka rewrite the tokeniser with the error things
