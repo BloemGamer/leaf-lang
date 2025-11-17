@@ -512,6 +512,20 @@ static AST* parse_message(ParserState* parser_state)
 
 		return node;
 	}
+	if (strcmp(token_g.str_val, "@c_type") == 0)
+	{
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_MESSAGE;
+		node->node.message.msg = msg_c_type;
+		const Token token = *consume(parser_state);
+
+		assert(token.token_type == token_type_identifier);
+		node->node.message.c_type.type = strdup(token.str_val);
+
+		hash_str_push(&parser_state->known_types, token.str_val);
+
+		return node;
+	}
 	assert(false && "not (yet) a compiler message");
 }
 
@@ -1632,5 +1646,10 @@ static void print_message(const Message* message, const usize depth)
 	{
 		print_indent(depth + 1);
 		printf("@embed \"%s\"\n", message->import.import);
+	}
+	if (message->msg == msg_c_type)
+	{
+		print_indent(depth + 1);
+		printf("@c_type %s\n", message->c_type.type);
 	}
 }

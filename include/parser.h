@@ -126,6 +126,7 @@ typedef struct // NOLINT
 		msg_import,
 		msg_include,
 		msg_include_str,
+		msg_c_type,
 	} msg;
 
 	struct // NOLINT
@@ -137,6 +138,11 @@ typedef struct // NOLINT
 		} type;
 		char* import;
 	} import;
+
+	struct
+	{
+		char* type;
+	} c_type;
 
 } Message;
 
