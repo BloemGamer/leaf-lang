@@ -14,7 +14,7 @@ bool hash_str_contains(const HashStr* hash, const char* str)
 	usize bucket = hash_str_hash(str) % hash->cap;
 
 	HashStrNode* node = &hash->node[bucket];
-	if (node->str == NULL)
+	if (node->str == nullptr)
 	{
 		return false;
 	}
@@ -32,14 +32,16 @@ bool hash_str_contains(const HashStr* hash, const char* str)
 
 bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 {
-	usize bucket = hash_str_hash(str) % hash->cap;
-
-	HashStrNode* node = &hash->node[bucket];
-
+	// CRITICAL FIX: Check and resize BEFORE calculating bucket
+	// Otherwise bucket will be invalid after resize
 	if (hash->size * 2 >= hash->cap)
 	{
 		hash_str_resize(hash, hash->cap * 2);
 	}
+
+	// Now calculate bucket with the correct (possibly resized) capacity
+	usize bucket = hash_str_hash(str) % hash->cap;
+	HashStrNode* node = &hash->node[bucket];
 
 	if (node->str == nullptr)
 	{
@@ -55,7 +57,7 @@ bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 		{
 			return true;
 		}
-		if (node->next == NULL)
+		if (node->next == nullptr)
 		{
 			HashStrNode* new_node = malloc(sizeof(HashStrNode));
 			new_node->str = strdup(str);
@@ -132,7 +134,7 @@ HashStr hash_str_clone(const HashStr* hash)
 		HashStrNode* old = &hash->node[i];
 		HashStrNode* new = &new_hash.node[i];
 
-		if (old->str == NULL)
+		if (old->str == nullptr)
 		{
 			continue;
 		}
@@ -144,7 +146,7 @@ HashStr hash_str_clone(const HashStr* hash)
 		// Clone chain
 		HashStrNode* tail = new;
 
-		while (old->next != NULL) // NOLINT
+		while (old->next != nullptr) // NOLINT
 		{
 			old = old->next;
 
@@ -201,34 +203,77 @@ void hash_str_free(HashStr* hash)
 
 static void hash_str_resize(HashStr* hash, usize new_cap)
 {
-	HashStr new_hash = {.cap = new_cap, .size = 0, .node = calloc(new_cap, sizeof(HashStrNode))};
+	// FIX: Avoid calling hash_str_push to prevent recursion issues
+	// Create new table and manually rehash all entries
+	HashStrNode* new_nodes = calloc(new_cap, sizeof(HashStrNode));
 
-	// re-insert all keys
+	// Re-insert all keys directly into new table
 	for (usize i = 0; i < hash->cap; i++)
 	{
 		HashStrNode* node = &hash->node[i];
 
-		if (node->str == NULL)
+		if (node->str == nullptr)
 		{
 			continue;
 		}
 
 		while (node) // NOLINT
 		{
-			// put into new table
-			hash_str_push(&new_hash, node->str);
+			// Calculate new bucket for this key
+			usize new_bucket = hash_str_hash(node->str) % new_cap;
+			HashStrNode* new_node = &new_nodes[new_bucket];
+
+			// Insert into new table
+			if (new_node->str == nullptr)
+			{
+				// Empty bucket, use head node
+				new_node->str = strdup(node->str);
+				new_node->next = nullptr;
+			}
+			else
+			{
+				// Collision, append to chain
+				while (new_node->next != nullptr)
+				{
+					new_node = new_node->next;
+				}
+
+				HashStrNode* chain_node = malloc(sizeof(HashStrNode));
+				chain_node->str = strdup(node->str);
+				chain_node->next = nullptr;
+				new_node->next = chain_node;
+			}
+
 			node = node->next;
 		}
 	}
 
-	// free old table
+	// Free old table
 	hash_str_free(hash);
 
-	// move fields
-	*hash = new_hash;
+	// Update hash structure
+	hash->cap = new_cap;
+	hash->node = new_nodes;
+
+	// Recalculate size
+	hash->size = 0;
+	for (usize i = 0; i < new_cap; i++)
+	{
+		HashStrNode* node = &new_nodes[i];
+		if (node->str != nullptr)
+		{
+			hash->size++;
+			node = node->next;
+			while (node != nullptr)
+			{
+				hash->size++;
+				node = node->next;
+			}
+		}
+	}
 }
 
-/// just a copy of the djb2 algoritm, probably will try to improve this one, but works for now
+/// djb2 algorithm
 static usize hash_str_hash(const char* str)
 {
 	unsigned long hash = 5381;
