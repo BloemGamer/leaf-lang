@@ -117,6 +117,29 @@ typedef struct [[gnu::aligned(32)]]
 	AST* trailing_expr;
 } Block;
 
+typedef struct // NOLINT
+{
+	enum
+	{
+		msg_invallid = 0,
+		msg_c_import,
+		msg_import,
+		msg_include,
+		msg_include_str,
+	} msg;
+
+	struct // NOLINT
+	{
+		enum
+		{
+			import_type_system,
+			import_type_user,
+		} type;
+		char* import;
+	} import;
+
+} Message;
+
 typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 {
 	enum
@@ -140,6 +163,8 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_RETURN_STMT,
 		AST_BREAK_STMT,
 		AST_CONTINUE_STMT,
+
+		AST_MESSAGE,
 	} type;
 
 	union
@@ -156,6 +181,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		Literal literal;			// binary_expr
 		Identifier identifier;		// binary_expr
 		Block block;				// done
+		Message message;
 	} node;
 } AST;
 

@@ -32,6 +32,7 @@ static AST* parse_enum(ParserState* parser_state);
 static AST* parse_expr(ParserState* parser_state);
 static AST* parse_block(ParserState* parser_state);
 static AST* parse_statement(ParserState* parser_state);
+static AST* parse_message(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -78,6 +79,7 @@ static void print_index_expr(const IndexExpr* index_expr, usize depth);
 static void print_literal(const Literal* lit, usize depth);
 static void print_identifier(const Identifier* identifier, usize depth);
 static void print_block(const Block* block, usize depth);
+static void print_message(const Message* message, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -96,8 +98,8 @@ AST* parse(const Token* tokens)
 
 static AST* parse_decl(ParserState* parser_state) // NOLINT
 {
-	const TokenType stop[] = {token_type_fn,	 token_type_equal, token_type_enum,
-							  token_type_struct, token_type_union, token_type_semicolon};
+	const TokenType stop[] = {token_type_fn,	token_type_equal,	  token_type_enum,	 token_type_struct,
+							  token_type_union, token_type_semicolon, token_type_message};
 	switch (token_type_search_until(parser_state, stop, ARRAY_SIZE(stop)))
 	{
 		case token_type_fn:
@@ -112,6 +114,8 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 		case token_type_semicolon:
 			return parse_expr(parser_state);
 			assert(consume(parser_state)->token_type == token_type_semicolon);
+		case token_type_message:
+			return parse_message(parser_state);
 		case token_type_eof:
 			assert(false && "found eof");
 
@@ -479,6 +483,36 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 		default:
 			return parse_decl(parser_state);
 	}
+}
+static AST* parse_message(ParserState* parser_state)
+{
+	const Token token_g = *consume(parser_state);
+	if (strcmp(token_g.str_val, "@c_import") == 0)
+	{
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_MESSAGE;
+		node->node.message.msg = msg_c_import;
+		const Token token = *consume(parser_state);
+		if (token.token_type == token_type_less)
+		{
+			{
+				const Token token_l = *consume(parser_state);
+				assert(token_l.token_type == token_type_identifier);
+
+				node->node.message.import.import = strdup(token_l.str_val);
+				node->node.message.import.type = import_type_user;
+			}
+			const Token token_l = *consume(parser_state);
+			assert(token_l.token_type == token_type_greater);
+		}
+		if (token.token_type == token_type_string)
+		{
+			node->node.message.import.import = strdup(token.str_val);
+		}
+
+		return node;
+	}
+	assert(false && "not (yet) a compiler message");
 }
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
@@ -1278,6 +1312,8 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			print_indent(depth);
 			printf("ContinueStmt\n");
 			break;
+		case AST_MESSAGE:
+			print_message(&ast->node.message, depth);
 	}
 }
 
@@ -1584,5 +1620,16 @@ static void print_block(const Block* block, const usize depth) // NOLINT
 	else
 	{
 		printf("Trailing expression: <None>\n");
+	}
+}
+
+static void print_message(const Message* message, const usize depth)
+{
+	print_indent(depth);
+	printf("Message:\n");
+	if (message->msg == msg_c_import)
+	{
+		print_indent(depth + 1);
+		printf("c_import \"%s\"\n", message->import.import);
 	}
 }
