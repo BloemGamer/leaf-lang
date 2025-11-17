@@ -5,8 +5,11 @@
 > [!NOTE]
 > There sometimes wil be name mangeling, for if you want to call things with C code, this will be defined later, but in this document is a prototype for this already
 
+> [!NOTE]
+> Not everything will be there in the fist version, the first version will be a proof of concept, and that there will be improvements
+
 declarations:
-```
+```yaml
 function:			functionmodifier(optional) fn name<template(optional)>(arguments) -> type_modifier(optional) return_type(optional) {}
 variable:			type_modifier(optional) type var_name = value;
 macro's:			because of that this is preprocessor this wil be later defined, but probably something like functions, even though what is in it will be a little different
@@ -33,7 +36,7 @@ otherwise C syntax should be used
 ```
 
 Keywords:
-```
+```yaml
 if:		same as in C
 else:	same as in C
 true:	same as in C
@@ -53,19 +56,18 @@ Modifiers:
 mut:	allows variables to be changed, otherwise all variables are const
 static:	the same as in C
 const:	compiler const, so constexpr in C
+pub:	export this to be used in other files
 
 ```
 
 extra notes over types
 ```
-All types kan be a pointer `*` or a reference `&`, a reference will just like a pointer, but can never be NULL,
-a pointer can be converted to a reference and vice versa, but if converted to a reference there will be a NULL check each time
-Even though, I want this feature, this will be implemented later
+All types kan be a pointer `*` or a reference `&`, a reference is a const pointer, in the future maybe I will add that the first one never can be nullprt
 ```
 
 basic types:
-```
-isize:		ssize_t
+```yaml
+isize:		ssize_t // this one does not always exsist, so I will ad this later, and better
 usize:		size_t
 i64:		int64_t
 i32:		int32_t
@@ -85,7 +87,7 @@ you can make tuples, these are going to be represented as a struct in C
 ```
 
 complexer types:
-```
+```yaml
 String:		typedef-ed String struct
 Vec<T>:		typedef-ed Vec struct
 Option<T>:	typedef-ed Option struct
