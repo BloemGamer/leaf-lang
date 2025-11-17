@@ -42,10 +42,11 @@ target_link_libraries(s-lang PRIVATE hash)
 
 target_include_directories(s-lang PRIVATE include)
 
-add_custom_command(
-	TARGET s-lang POST_BUILD
-	COMMAND sed -i "s#/run/host##g" ${CMAKE_BINARY_DIR}/compile_commands.json
-)
+# This was needed because of a weird build setup that I had, not needed anymore
+# add_custom_command(
+# 	TARGET s-lang POST_BUILD
+# 	COMMAND sed -i "s#/run/host##g" ${CMAKE_BINARY_DIR}/compile_commands.json
+# )
 
 # -------------------------------------------------------
 # Tests directory
