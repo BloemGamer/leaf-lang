@@ -15,6 +15,9 @@
 	X(uint16_t, u16) \
 	X(uint8_t, u8)   \
                      \
+	X(double, f64)   \
+	X(float, f32)    \
+                     \
 	X(size_t, usize)
 
 #define BASIC_NEW_TYPES Y(String)
@@ -28,6 +31,21 @@
 #define X(c, new) typedef c new;
 BASIC_CTYPES
 #undef X
+
+// clang-format off
+static_assert(sizeof(i64) == 64 / 8);
+static_assert(sizeof(i32) == 32 / 8);
+static_assert(sizeof(i16) == 16 / 8);
+static_assert(sizeof(i8)  ==  8 / 8); // NOLINT
+
+static_assert(sizeof(u64) == 64 / 8);
+static_assert(sizeof(u32) == 32 / 8);
+static_assert(sizeof(u16) == 16 / 8);
+static_assert(sizeof(u8)  ==  8 / 8); // NOLINT
+
+static_assert(sizeof(i64) == 64 / 8);
+static_assert(sizeof(f32) == 32 / 8);
+// clang-format on
 
 #define BASIC_TYPES_STR_LEN 9
 #define X(x, _) static_assert(BASIC_TYPES_STR_LEN >= sizeof(#x), "BASIC_TYPES_STR_LEN too small");
