@@ -122,7 +122,7 @@ typedef struct // NOLINT
 	enum
 	{
 		msg_invallid = 0,
-		msg_c_import,
+		msg_embed,
 		msg_import,
 		msg_include,
 		msg_include_str,

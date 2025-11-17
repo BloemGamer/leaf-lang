@@ -487,11 +487,11 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 static AST* parse_message(ParserState* parser_state)
 {
 	const Token token_g = *consume(parser_state);
-	if (strcmp(token_g.str_val, "@c_import") == 0)
+	if (strcmp(token_g.str_val, "@embed") == 0)
 	{
 		AST* node = calloc(1, sizeof(AST));
 		node->type = AST_MESSAGE;
-		node->node.message.msg = msg_c_import;
+		node->node.message.msg = msg_embed;
 		const Token token = *consume(parser_state);
 		if (token.token_type == token_type_less)
 		{
@@ -807,6 +807,7 @@ static VarDef parse_var_def(ParserState* parser_state)
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
 		assert(hash_str_contains(&parser_state->known_types, token.str_val) == true);
+		var_def.type.name = strdup(token.str_val);
 	}
 
 	var_def.type.array_count = 0;
@@ -1627,9 +1628,9 @@ static void print_message(const Message* message, const usize depth)
 {
 	print_indent(depth);
 	printf("Message:\n");
-	if (message->msg == msg_c_import)
+	if (message->msg == msg_embed)
 	{
 		print_indent(depth + 1);
-		printf("c_import \"%s\"\n", message->import.import);
+		printf("@embed \"%s\"\n", message->import.import);
 	}
 }
