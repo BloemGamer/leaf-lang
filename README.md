@@ -4,10 +4,16 @@
 [![Project_license][license-shield]][license-url]
 
 # S-lang
-S-lang is a language compiling to C, aiming to offer more complex features than C while serving as a platform for learning compiler design.
+A C-based language with modern features and a platform to learn compiler design.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet
+
+## Why S-lang?
+* **Compatibility:** The language is designed to be very compatible with C code.
+* **Clearer syntax:** The language tries to change some of the syntax to make the language more readable.
+* **Extra features:** More features to make development easier
+
 
 ```rs
 @embed "stdio.h" 							// #include <stdio.h> in C
@@ -25,7 +31,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 {
 	return (i64&)calloc(size, sizeof(i64));	// you can still use every C function you want
 }
-```
+
 
 
 ## Roadmap
