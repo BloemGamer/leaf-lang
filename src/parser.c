@@ -10,6 +10,23 @@
 #include "utils.h"
 #include "utils/hash.h"
 
+// macro's for having variable array length
+#define varray_make(type, name) \
+	type name = nullptr;        \
+	usize name##_len = 0;       \
+	usize name##_cap = 0
+
+#define varray_push(name, push)                                                    \
+	{                                                                              \
+		if (name##_len >= name##_cap)                                              \
+		{                                                                          \
+			name##_cap = MAX(name##_cap, 1);                                       \
+			name##_cap *= 2;                                                       \
+			name = (typeof(name))realloc((void*)name, name##_cap * sizeof(*name)); \
+		}                                                                          \
+		name[name##_len++] = push;                                                 \
+	}
+
 typedef struct // NOLINT
 {
 	const Token* tokens;
@@ -150,18 +167,11 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 			is_modifier(token.token_type))										 // NOLINT
 		{
-			AST** params = (AST**)malloc(1 * sizeof(AST*));
-			usize cap = 1;
-			usize len = 0;
+			varray_make(AST**, params);
 			while (true) // NOLINT
 			{
 				AST* tmp = parse_var(parser_state);
-				if (len >= cap)
-				{
-					cap *= 2;
-					params = (AST**)realloc((void*)params, cap * sizeof(AST*)); // NOLINT
-				}
-				params[len++] = tmp;
+				varray_push(params, tmp); // NOLINT
 				if (peek(parser_state)->token_type == token_type_comma)
 				{
 					(void)consume(parser_state);
@@ -170,7 +180,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 				else if (peek(parser_state)->token_type == token_type_rparen) // NOLINT
 				{
 					node->node.func_def.params = params;
-					node->node.func_def.param_count = len;
+					node->node.func_def.param_count = params_len;
 					break;
 				}
 				else
@@ -219,30 +229,22 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	}
 
 	{
-		AST** array_sizes = nullptr;
-		usize cap = 0;
-		usize len = 0;
+		varray_make(AST**, array_sizes);
 		while (match(parser_state, token_type_lsqbracket)) // NOLINT
 		{
-			if (len >= cap)
-			{
-				cap = MAX(cap, 1);
-				cap *= 2;
-				array_sizes = (AST**)realloc((void*)array_sizes, cap * sizeof(AST*)); // NOLINT
-			}
 
 			if (peek(parser_state)->token_type == token_type_rsqbracket)
 			{
-				array_sizes[len++] = nullptr;
+				varray_push(array_sizes, nullptr); // NOLINT
 			}
 			else
 			{
-				array_sizes[len++] = parse_expr(parser_state);
+				varray_push(array_sizes, parse_expr(parser_state)); // NOLINT
 			}
 			assert(consume(parser_state)->token_type == token_type_rsqbracket);
 		}
 		node->node.var_def.type.array_sizes = array_sizes;
-		node->node.var_def.type.array_count = len;
+		node->node.var_def.type.array_count = array_sizes_len;
 	}
 	if (peek(parser_state)->token_type == token_type_comma || peek(parser_state)->token_type == token_type_rparen ||
 		peek(parser_state)->token_type == token_type_rbrace)
@@ -273,58 +275,50 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 		default:
 			assert(false);
 	}
-#define PARSE(_type)                                                                       \
-	do                                                                                     \
-	{                                                                                      \
-		{                                                                                  \
-			Token token = *consume(parser_state);                                          \
-			assert(token.token_type == token_type_identifier);                             \
-			node->node._type##_def.name = strdup(token.str_val);                           \
-			hash_str_push(&parser_state->known_types, token.str_val);                      \
-		}                                                                                  \
-		assert(consume(parser_state)->token_type == token_type_lbrace);                    \
-		if (peek(parser_state)->token_type == token_type_rbrace)                           \
-		{                                                                                  \
-			break;                                                                         \
-		}                                                                                  \
-		AST** members = nullptr;                                                           \
-		usize cap = 0;                                                                     \
-		usize len = 0;                                                                     \
-		while (true) /* NOLINT */                                                          \
-		{                                                                                  \
-			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/           \
-			{                                                                              \
-				(void)consume(parser_state);                                               \
-				node->node._type##_def.members = members;                                  \
-				node->node._type##_def.member_count = len;                                 \
-				break;                                                                     \
-			}                                                                              \
-			assert(peek(parser_state)->token_type == token_type_identifier);               \
-			AST* tmp = parse_var(parser_state);                                            \
-			if (len >= cap)                                                                \
-			{                                                                              \
-				cap = MAX(cap, 1);                                                         \
-				cap *= 2;                                                                  \
-				members = (AST**)realloc((void*)members, cap * sizeof(AST*)); /* NOLINT */ \
-			}                                                                              \
-			members[len++] = tmp;                                                          \
-			if (peek(parser_state)->token_type == token_type_comma)                        \
-			{                                                                              \
-				(void)consume(parser_state);                                               \
-				continue;                                                                  \
-			}                                                                              \
-			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/      \
-			{                                                                              \
-				(void)consume(parser_state);                                               \
-				node->node._type##_def.members = members;                                  \
-				node->node._type##_def.member_count = len;                                 \
-				break;                                                                     \
-			}                                                                              \
-			else                                                                           \
-			{                                                                              \
-				assert(false && "not an token that should happen"); /*NOLINT*/             \
-			}                                                                              \
-		}                                                                                  \
+#define PARSE(_type)                                                                  \
+	do                                                                                \
+	{                                                                                 \
+		{                                                                             \
+			Token token = *consume(parser_state);                                     \
+			assert(token.token_type == token_type_identifier);                        \
+			node->node._type##_def.name = strdup(token.str_val);                      \
+			hash_str_push(&parser_state->known_types, token.str_val);                 \
+		}                                                                             \
+		assert(consume(parser_state)->token_type == token_type_lbrace);               \
+		if (peek(parser_state)->token_type == token_type_rbrace)                      \
+		{                                                                             \
+			break;                                                                    \
+		}                                                                             \
+		varray_make(AST**, members);                                                  \
+		while (true) /* NOLINT */                                                     \
+		{                                                                             \
+			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/      \
+			{                                                                         \
+				(void)consume(parser_state);                                          \
+				node->node._type##_def.members = members;                             \
+				node->node._type##_def.member_count = members_len;                    \
+				break;                                                                \
+			}                                                                         \
+			assert(peek(parser_state)->token_type == token_type_identifier);          \
+			AST* tmp = parse_var(parser_state);                                       \
+			varray_push(members, tmp); /* NOLINT */                                   \
+			if (peek(parser_state)->token_type == token_type_comma)                   \
+			{                                                                         \
+				(void)consume(parser_state);                                          \
+				continue;                                                             \
+			}                                                                         \
+			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/ \
+			{                                                                         \
+				(void)consume(parser_state);                                          \
+				node->node._type##_def.members = members;                             \
+				node->node._type##_def.member_count = members_len;                    \
+				break;                                                                \
+			}                                                                         \
+			else                                                                      \
+			{                                                                         \
+				assert(false && "not an token that should happen"); /*NOLINT*/        \
+			}                                                                         \
+		}                                                                             \
 	} while (0)
 
 	switch (node->type)
@@ -367,39 +361,32 @@ static AST* parse_enum(ParserState* parser_state)
 	assert(consume(parser_state)->token_type == token_type_lbrace);
 
 	{
-		EnumType* members = nullptr;
-		usize cap = 0;
-		usize len = 0;
+		varray_make(EnumType*, members);
 
 		while (true) // NOLINT
 		{
 			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
 			{
 				node->node.enum_def.members = members;
-				node->node.enum_def.member_count = len;
+				node->node.enum_def.member_count = members_len;
 				break;
 			}
-			if (len >= cap)
-			{
-				cap *= 2;
-				members = (EnumType*)realloc((void*)members, cap * sizeof(EnumType)); /* NOLINT */
-				assert(members != nullptr);
-			}
+			EnumType tmp = {nullptr};
 			{
 				const Token token = *consume(parser_state);
 				assert(token.token_type == token_type_identifier);
-				members[len].name = strdup(token.str_val);
+				tmp.name = strdup(token.str_val);
 			}
 			if (match(parser_state, token_type_equal))
 			{
 				{
 					const Token token = *consume(parser_state);
 					assert(token.token_type == token_type_identifier);
-					members[len].value = make_number(&(const Token){
+					tmp.value = make_number(&(const Token){
 						.str_val = token.str_val, .token_type = token_type_number, .pos = parser_state->pos});
 				}
 			}
-			len++;
+			varray_push(members, tmp); // NOLINT
 			if (peek(parser_state)->token_type == token_type_comma)
 			{
 				(void)consume(parser_state);
@@ -408,7 +395,7 @@ static AST* parse_enum(ParserState* parser_state)
 			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
 			{
 				node->node.enum_def.members = members;
-				node->node.enum_def.member_count = len;
+				node->node.enum_def.member_count = members_len;
 				break;
 			}
 		}
@@ -437,9 +424,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_BLOCK;
 
-	AST** statements = nullptr;
-	usize cap = 0;
-	usize len = 0;
+	varray_make(AST**, statements);
 
 	while (true) // NOLINT
 	{
@@ -449,29 +434,22 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		if (match(parser_state, end_token))
 		{
 			node->node.block.statements = statements;
-			node->node.block.statement_count = len;
+			node->node.block.statement_count = statements_len;
 			node->node.block.trailing_expr = nullptr;
 			break;
 		}
-		if (len >= cap)
-		{
-			cap = MAX(cap, 1);
-			cap *= 2;
-			statements = (AST**)realloc((void*)statements, cap * sizeof(AST*)); // NOLINT
-			assert(statements != nullptr);
-		}
 		{
 			usize saved_pos = parser_state->pos;
-			AST* tmp_statement = parse_statement(parser_state);
+			AST* tmp = parse_statement(parser_state);
 			if (!global_block && peek(parser_state)->token_type == end_token)
 			{
 				(void)consume(parser_state);
 				node->node.block.statements = statements;
-				node->node.block.statement_count = len;
-				node->node.block.trailing_expr = tmp_statement;
+				node->node.block.statement_count = statements_len;
+				node->node.block.trailing_expr = tmp;
 				break;
 			}
-			statements[len++] = tmp_statement;
+			varray_push(statements, tmp); // NOLINT
 		}
 	}
 
@@ -779,9 +757,7 @@ static TokenType token_type_search_until(const ParserState* parser_state, const 
 
 static TokenArray get_modifiers(ParserState* parser_state)
 {
-	Token* modifiers = nullptr;
-	usize len = 0;
-	usize cap = 0;
+	varray_make(Token*, modifiers);
 	while (true) // NOLINT
 	{
 		const Token* token = peek(parser_state);
@@ -791,21 +767,14 @@ static TokenArray get_modifiers(ParserState* parser_state)
 		}
 		if (is_modifier(token->token_type))
 		{
-			if (len >= cap)
-			{
-				cap = MAX(cap, 1);
-				cap *= 2;
-				modifiers = (Token*)realloc((void*)modifiers, cap * sizeof(Token)); // NOLINT
-				assert(modifiers != nullptr);
-			}
-			modifiers[len++] = *consume(parser_state);
+			varray_push(modifiers, *consume(parser_state)); // NOLINT
 		}
 		else
 		{
 			break;
 		}
 	}
-	return (TokenArray){modifiers, len};
+	return (TokenArray){modifiers, modifiers_len};
 }
 
 static i32 precedence(TokenType token_type)
@@ -842,7 +811,7 @@ static i32 precedence(TokenType token_type)
 	}
 }
 
-static VarDef parse_var_def(ParserState* parser_state)
+static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 {
 	VarDef var_def = {.name = nullptr, .equals = nullptr, .type = nullptr, .modifier_count = 0, .modifiers = nullptr};
 	TokenArray mod_arr = get_modifiers(parser_state);
@@ -861,9 +830,7 @@ static VarDef parse_var_def(ParserState* parser_state)
 	var_def.type.pointer_types = nullptr;
 
 	{
-		PointerType* pointer_types = nullptr;
-		usize cap = 0;
-		usize len = 0;
+		varray_make(PointerType*, pointer_types);
 
 #pragma unroll 2
 		while (peek(parser_state)->token_type == token_type_ampersand ||
@@ -874,27 +841,21 @@ static VarDef parse_var_def(ParserState* parser_state)
 			{
 				extra_len = 1;
 			}
-			while (len + extra_len >= cap) // NOLINT
-			{
-				cap = MAX(cap, 1);
-				cap *= 2;
-				pointer_types = (PointerType*)realloc((void*)pointer_types, cap * sizeof(PointerType)); // NOLINT
-			}
 			const Token token = *consume(parser_state);
 
 			if (token.token_type == token_type_and)
 			{
-				pointer_types[len++] = pointer_type_const;
-				pointer_types[len++] = pointer_type_const;
+				varray_push(pointer_types, pointer_type_const); // NOLINT
+				varray_push(pointer_types, pointer_type_const); // NOLINT
 			}
 			else
 			{
-				pointer_types[len++] =
-					(token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
+				varray_push(pointer_types, // NOLINT
+							(token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut);
 			}
 		}
 		var_def.type.pointer_types = pointer_types;
-		var_def.type.pointer_count = len;
+		var_def.type.pointer_count = pointer_types_len;
 	}
 	return var_def;
 }
