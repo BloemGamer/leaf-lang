@@ -37,7 +37,7 @@ A language I made that compiles to C.
 [issues-shield]: https://img.shields.io/github/issues/BloemGamer/S-lang.svg?style=for-the-badge
 [issues-url]: https://github.com/BloemGamer/S-lang/issues
 [license-shield]: https://img.shields.io/github/license/BloemGamer/S-lang.svg?style=for-the-badge
-[license-url]: https://github.com/BloemGamer/S-lang/blob/master/LICENSE.txt
+[license-url]: https://github.com/BloemGamer/S-lang/blob/master/LICENSE
 
 [Linux Mint]: https://img.shields.io/badge/Linux%20Mint-87CF3E?logo=linuxmint&logoColor=fff
 [Linux]: https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black
