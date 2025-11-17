@@ -210,10 +210,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 
 	{
 		const Token token = *consume(parser_state);
-		if (!(token.token_type == token_type_identifier))
-		{
-			assert(token.token_type == token_type_identifier);
-		}
+		assert(token.token_type == token_type_identifier);
 		node->node.var_def.name = strdup(token.str_val);
 	}
 
@@ -775,16 +772,6 @@ static VarDef parse_var_def(ParserState* parser_state)
 	{
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
-		var_def.type.name = strdup(token.str_val);
-		printf("Looking for type: '%s' (len=%zu)\n", token.str_val, strlen(token.str_val));
-		printf("Known types:\n");
-		for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
-		{
-			printf("  [%zu]: '%s' (len=%zu)\n", i, BASIC_TYPES[i], strlen(BASIC_TYPES[i]));
-		}
-		bool found = hash_str_contains(&parser_state->known_types, token.str_val);
-		printf("hash_str_contains returned: %d\n", found);
-
 		assert(hash_str_contains(&parser_state->known_types, token.str_val) == true);
 	}
 
