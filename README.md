@@ -36,7 +36,7 @@ S-lang is a language compiling to C, aiming to offer more complex features than 
 - CMake >= 3.10
 - Any C compiler that has C23 fully implemented (Fully tested with GCC 14.2.0)
 
-Currently, S-lang is under development, but you can build it from source:
+Currently, S-lang is under development, but you can build it from source.
 The build is tested for Linux and Windows. macOS is not currently supported.
 
 ![Linux][Linux-shield] ![Linux_mint][Linux-Mint-shield] ![Windows][Windows-shield]
