@@ -210,7 +210,10 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 
 	{
 		const Token token = *consume(parser_state);
-		assert(token.token_type == token_type_identifier);
+		if (!(token.token_type == token_type_identifier))
+		{
+			assert(token.token_type == token_type_identifier);
+		}
 		node->node.var_def.name = strdup(token.str_val);
 	}
 
@@ -773,6 +776,16 @@ static VarDef parse_var_def(ParserState* parser_state)
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
 		var_def.type.name = strdup(token.str_val);
+		printf("Looking for type: '%s' (len=%zu)\n", token.str_val, strlen(token.str_val));
+		printf("Known types:\n");
+		for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
+		{
+			printf("  [%zu]: '%s' (len=%zu)\n", i, BASIC_TYPES[i], strlen(BASIC_TYPES[i]));
+		}
+		bool found = hash_str_contains(&parser_state->known_types, token.str_val);
+		printf("hash_str_contains returned: %d\n", found);
+
+		assert(hash_str_contains(&parser_state->known_types, token.str_val) == true);
 	}
 
 	var_def.type.array_count = 0;
@@ -786,16 +799,31 @@ static VarDef parse_var_def(ParserState* parser_state)
 
 #pragma unroll 2
 		while (peek(parser_state)->token_type == token_type_ampersand ||
-			   peek(parser_state)->token_type == token_type_star)
+			   peek(parser_state)->token_type == token_type_star || peek(parser_state)->token_type == token_type_and)
 		{
-			if (cap >= len)
+			usize extra_len = 0;
+			if (peek(parser_state)->token_type == token_type_and)
+			{
+				extra_len = 1;
+			}
+			while (len + extra_len >= cap) // NOLINT
 			{
 				cap = MAX(cap, 1);
 				cap *= 2;
 				pointer_types = (PointerType*)realloc((void*)pointer_types, cap * sizeof(PointerType)); // NOLINT
 			}
 			const Token token = *consume(parser_state);
-			pointer_types[len++] = (token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
+
+			if (token.token_type == token_type_and)
+			{
+				pointer_types[len++] = pointer_type_const;
+				pointer_types[len++] = pointer_type_const;
+			}
+			else
+			{
+				pointer_types[len++] =
+					(token.token_type == token_type_ampersand) ? pointer_type_const : pointer_type_mut;
+			}
 		}
 		var_def.type.pointer_types = pointer_types;
 		var_def.type.pointer_count = len;
@@ -1183,7 +1211,12 @@ static void add_basic_types(ParserState* parser_state)
 #pragma unroll
 	for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
 	{
-		hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
+		bool existed = hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
+		printf("Inserting '%s': %s\n", BASIC_TYPES[i], existed ? "already existed" : "newly inserted");
+
+		// Verify it's actually there
+		bool found = hash_str_contains(&parser_state->known_types, BASIC_TYPES[i]);
+		printf("  Verification: %s\n", found ? "FOUND" : "NOT FOUND !!!");
 	}
 }
 
