@@ -443,7 +443,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 
 	while (true) // NOLINT
 	{
-		while (match(parser_state, token_type_semicolon))
+		while (match(parser_state, token_type_semicolon)) // NOLINT
 		{
 		}
 		if (match(parser_state, end_token))
@@ -457,7 +457,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		{
 			cap = MAX(cap, 1);
 			cap *= 2;
-			statements = (AST**)realloc((void*)statements, cap * sizeof(AST*)); /* NOLINT */
+			statements = (AST**)realloc((void*)statements, cap * sizeof(AST*)); // NOLINT
 			assert(statements != nullptr);
 		}
 		{
@@ -505,6 +505,8 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 		case token_type_semicolon:
 			(void)consume(parser_state);
 			return parse_statement(parser_state);
+		default:
+			break;
 	}
 	if (is_modifier(token.token_type))
 	{
@@ -1391,7 +1393,7 @@ static void print_pointer_types(const PointerType* pointer_types, const usize co
 static void print_var_type(const VarType* var_types, const usize depth) // NOLINT
 {
 	print_indent(depth);
-	printf("Type: %s", var_types->name ? var_types->name : "<anonymous>");
+	printf("Type: %s", var_types->name ? var_types->name : "<None>");
 
 	if (var_types->pointer_count > 0)
 	{
@@ -1449,7 +1451,7 @@ static void print_modifiers(const Token* modifiers, const usize count, const usi
 static void print_var_def(const VarDef* var_def, const usize depth) // NOLINT
 {
 	print_indent(depth);
-	printf("VarDef: %s\n", var_def->name ? var_def->name : "<anonymous>");
+	printf("VarDef: %s\n", var_def->name ? var_def->name : "<None>");
 
 	print_modifiers(var_def->modifiers, var_def->modifier_count, depth + 1);
 	print_var_type(&var_def->type, depth + 1);
@@ -1638,13 +1640,27 @@ static void print_index_expr(const IndexExpr* index_expr, const usize depth) // 
 static void print_literal(const Literal* lit, const usize depth)
 {
 	print_indent(depth);
-	printf("Literal: %s\n", token_to_string(lit->literal.token_type));
+	switch (lit->literal.token_type)
+	{
+		case token_type_number:
+			printf("Literal: %" PRId64 "\n", lit->literal.num_val);
+			break;
+		case token_type_char:
+			printf("Literal: %c\n", lit->literal.char_val);
+			break;
+		case token_type_string:
+			printf("Literal: %s\n", lit->literal.str_val);
+			break;
+		default:
+			printf("Literal: %s\n", token_to_string(lit->literal.token_type));
+			assert(false);
+	}
 }
 
 static void print_identifier(const Identifier* identifier, const usize depth)
 {
 	print_indent(depth);
-	printf("Identifier: %s\n", token_to_string(identifier->identifier.token_type));
+	printf("Identifier: %s\n", identifier->identifier.str_val);
 }
 
 static void print_block(const Block* block, const usize depth) // NOLINT
