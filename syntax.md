@@ -1,6 +1,6 @@
 # Syntax
-> [!NOTE]
-> This document is now mostly for notes for myself, and will be split up, and written better in the future
+> [!WARNING]
+> This document is now mostly for notes for myself, and will be split up, and written better in the future, and there will become a real syntax guilde at instead of this file
 
 > [!NOTE]
 > There sometimes wil be name mangeling, for if you want to call things with C code, this will be defined later, but in this document is a prototype for this already
