@@ -171,7 +171,7 @@ typedef struct // NOLINT
 {
 	enum
 	{
-		msg_invallid = 0,
+		msg_invalid = 0,
 		msg_embed,
 		msg_import,
 		msg_include,
@@ -255,6 +255,6 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 AST* parse(const Token* tokens);
 
 /// will be implemented when the parser is done
-void free_token_tree(AST* token_tree);
+void free_token_tree(AST* ast);
 
 void parse_print(const AST* ast);
