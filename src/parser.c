@@ -52,6 +52,7 @@ static AST* parse_statement(ParserState* parser_state);
 static AST* parse_message(ParserState* parser_state);
 static AST* parse_if_expr(ParserState* parser_state);
 static AST* parse_while_expr(ParserState* parser_state);
+static AST* parse_for_expr(ParserState* parser_state);
 static AST* parse_return_expr(ParserState* parser_state);
 static AST* parse_break_expr(ParserState* parser_state);
 static AST* parse_continue_expr(ParserState* parser_state);
@@ -503,6 +504,8 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 			return parse_continue_expr(parser_state);
 		case token_type_break:
 			return parse_break_expr(parser_state);
+		case token_type_for:
+			return parse_for_expr(parser_state);
 		default:
 			break;
 	}
@@ -558,7 +561,7 @@ static AST* parse_message(ParserState* parser_state)
 	assert(false && "not (yet) a compiler message");
 }
 
-static AST* parse_if_expr(ParserState* parser_state) // NOLINT
+static AST* parse_if_expr(ParserState* parser_state)
 {
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_IF_EXPR;
@@ -604,6 +607,104 @@ static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 
 	assert(peek(parser_state)->token_type == token_type_lbrace);
 	node->node.while_expr.then_block = parse_block(parser_state);
+
+	return node;
+}
+
+static AST* parse_for_expr(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_FOR_EXPR;
+
+	assert(consume(parser_state)->token_type == token_type_for);
+
+	// Check if it's C-style (starts with '(') or Rust-style
+	if (peek(parser_state)->token_type == token_type_lparen)
+	{
+		// ====================================================================
+		// C-style: for (Type var = init; cond; incr) { }
+		// ====================================================================
+		node->node.for_expr.style = FOR_STYLE_C;
+
+		consume(parser_state); // '('
+
+		// Init statement - must be variable declaration or expression
+		if (peek(parser_state)->token_type == token_type_semicolon)
+		{
+			// Empty init: for (; cond; incr)
+			node->node.for_expr.c_style.init = nullptr;
+		}
+		else
+		{
+			Token token = *peek(parser_state);
+
+			// Check if it's a type name (variable declaration)
+			if (hash_str_contains(&parser_state->known_types, token.str_val) || is_modifier(token.token_type)) // NOLINT
+			{
+				// Variable declaration: i32 i = 0
+				node->node.for_expr.c_style.init = parse_var(parser_state);
+				// Always takes the semicolon with it
+			}
+			else
+			{
+				// Expression statement: i = 0
+				node->node.for_expr.c_style.init = parse_expr(parser_state);
+				assert(peek(parser_state)->token_type == token_type_semicolon);
+			}
+		}
+
+		// Condition
+		if (peek(parser_state)->token_type == token_type_semicolon)
+		{
+			// Empty condition: for (;;) - infinite loop
+			node->node.for_expr.c_style.condition = nullptr;
+		}
+		else
+		{
+			node->node.for_expr.c_style.condition = parse_expr(parser_state);
+		}
+
+		assert(consume(parser_state)->token_type == token_type_semicolon);
+
+		// Increment
+		if (peek(parser_state)->token_type == token_type_rparen)
+		{
+			// Empty increment
+			node->node.for_expr.c_style.increment = nullptr;
+		}
+		else
+		{
+			node->node.for_expr.c_style.increment = parse_expr(parser_state);
+		}
+
+		assert(consume(parser_state)->token_type == token_type_rparen);
+	}
+	else
+	{
+		// ====================================================================
+		// Rust-style: for Type varname in iterable { }
+		// ====================================================================
+		node->node.for_expr.style = FOR_STYLE_RUST;
+
+		// Parse full variable definition (type + name)
+		node->node.for_expr.rust_style.var_def = parse_var_def(parser_state);
+
+		// Now get the variable name
+		{
+			const Token token = *consume(parser_state);
+			assert(token.token_type == token_type_identifier);
+			node->node.for_expr.rust_style.var_def.name = strdup(token.str_val);
+		}
+
+		assert(consume(parser_state)->token_type == token_type_in);
+
+		// Iterable expression
+		node->node.for_expr.rust_style.iterable = parse_expr(parser_state);
+	}
+
+	// Body (shared by both styles)
+	assert(peek(parser_state)->token_type == token_type_lbrace);
+	node->node.for_expr.body = parse_block(parser_state);
 
 	return node;
 }

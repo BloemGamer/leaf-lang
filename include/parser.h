@@ -132,6 +132,32 @@ typedef struct // NOLINT
 
 typedef struct // NOLINT
 {
+	enum
+	{
+		FOR_STYLE_RUST,
+		FOR_STYLE_C
+	} style;
+
+	// Rust-style: for x in iterable
+	struct
+	{
+		VarDef var_def; // Full variable definition with type
+		AST* iterable;	// Expression to iterate over
+	} rust_style;
+
+	// C-style: for (init; cond; incr)
+	struct
+	{
+		AST* init;		// Initialization (can be var decl or assignment)
+		AST* condition; // Loop condition
+		AST* increment; // Increment expression
+	} c_style;
+
+	AST* body; // Loop body (shared by both styles)
+} ForExpr;
+
+typedef struct // NOLINT
+{
 	AST* return_stmt;
 } ReturnStmt;
 
@@ -208,6 +234,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 
 		IfExpr if_expr;			// done
 		WhileExpr while_expr;	// done
+		ForExpr for_expr;		//
 		ReturnStmt return_stmt; // done
 
 		Message message;
