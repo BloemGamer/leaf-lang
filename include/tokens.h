@@ -52,6 +52,7 @@
 	X(do)						/* do {} while */ \
 	X(while)					/* while */ \
 	X(for)						/* for */ \
+	X(in)						/* in */ \
 	X(fn)						/* fn */ \
 	X(macro)					/* macro */ \
 	X(struct)					/* struct */ \
