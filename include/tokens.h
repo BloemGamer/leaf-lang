@@ -34,6 +34,7 @@
 	Y(rshift, '>','>')			/* >> */ \
 	Y(and, '&','&')				/* && */ \
 	Y(or, '|','|')				/* || */ \
+	Y(colon_colon, ':',':')		/* :: */ \
 	/* compound tokens: */ \
 	Y(bang_equal, '!','=')		/* != */ \
 	Y(equal_equal, '=','=')		/* == */ \
@@ -52,14 +53,14 @@
 	Y(ampersand_equal, '&','=')	/* &= */ \
 	Y(caret_equal, '^','=')		/* ^= */ \
 
-#define __TOKENS_SIMPLE_TRIPPLE \
+#define __TOKENS_SIMPLE_TRIPLE \
 	Y(lshift_equal, '<','<','=')/* <<= */ \
 	Y(rshift_equal, '>','>','=')/* >>= */ \
 
 #define __TOKENS_SIMPLE \
 	__TOKENS_SIMPLE_SINGLE \
 	__TOKENS_SIMPLE_DOUBLE\
-	__TOKENS_SIMPLE_TRIPPLE
+	__TOKENS_SIMPLE_TRIPLE
 
 
 #define __TOKENS_KEYWORD \
@@ -202,6 +203,7 @@ constexpr TokenType TOKENS_LEX_FREE[] = {__TOKENS_IDENTIFIER __TOKENS_LITERAL};
 #undef __TOKENS_SIMPLE
 #undef __TOKENS_SIMPLE_SIMPLE
 #undef __TOKENS_SIMPLE_DOUBLE
+#undef __TOKENS_SIMPLE_TRIPLE
 #undef __TOKENS_KEYWORD
 #undef __TOKENS_MODIFIER
 #undef __TOKENS_IGNORED
