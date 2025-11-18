@@ -7,12 +7,12 @@
 A C-based language with modern features and a platform to learn compiler design.
 
 > [!WARNING]
-> It is still under construction and cannot be used yet
+> It is still under construction and cannot be used yet.
 
 ## Why S-lang?
-* **Compatibility:** The language is designed to be very compatible with C code.
+* **Compatibility:** The language is designed to be compatible with C.
 * **Clearer syntax:** The language tries to change some of the syntax to make the language more readable.
-* **Extra features:** More features to make development easier
+* **Extra features:** More features to make development easier.
 
 
 ## Code previeuw
@@ -47,11 +47,11 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 - [ ] C parser integration
 
 ## Progress of the stages of the compiler
-- [ ] Preprocessor (this will be done the last I think)
+- [ ] Preprocessor (Low priority)
 - [x] Lexing -> lex
 - [ ] Parsing -> parse
 - [ ] Semantic analyser
-- [ ] Optimisations (maybe, so later)
+- [ ] Optimisations (Low priority)
 - [ ] Code generator
 - [ ] Calling C compiler
 
@@ -81,7 +81,7 @@ cmake --build cmake-build-release	# Release
 S-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contact
-Feel free to reach out via issues or my GitHub profile.
+Feel free to reach out via [Issues](GitHub Isues) or my GitHub profile.
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
