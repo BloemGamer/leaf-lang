@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -232,9 +233,20 @@ static TokenResult string_to_simple_token(const char* input)
 	{
 		// the next part of the function only works if this returns true, otherwise it will skipt tokens
 		// I wanted this to run at compiletime, but I could not make it work sadly
-		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 2);
+		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 3);
 	}
 
+#pragma unroll
+	for (usize i = 0; i < amount_tokens; i++)
+	{
+		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1] &&
+			input[2] == TOKENS_STR_IDENT_SIMPLE[i][2])
+		{
+			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
+			token_res.size = 2;
+			return token_res;
+		}
+	}
 #pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{

@@ -39,11 +39,25 @@
 	Y(greater_equal, '>','=')	/* >= */ \
 	Y(less_equal, '<','=')		/* <= */ \
 	\
-	Y(dot_dot, '.','.')			/* .. */
+	Y(dot_dot, '.','.')			/* .. */ \
+	/* assignment opperators with = */ \
+	Y(plus_equal, '+','=')		/* += */ \
+	Y(minus_equal, '-','=')		/* -= */ \
+	Y(star_equal, '*','=')		/* *= */ \
+	Y(slash_equal, '/','=')		/* /= */ \
+	Y(pipe_equal, '|','=')		/* |= */ \
+	Y(tilda_equal, '~','=')		/* ~= */ \
+	Y(ampersand_equal, '&','=')	/* &= */ \
+	Y(caret_equal, '^','=')		/* ^= */ \
+
+#define __TOKENS_SIMPLE_TRIPPLE \
+	Y(lshift_equal, '<','<','=')/* <<= */ \
+	Y(rshift_equal, '>','>','=')/* >>= */ \
 
 #define __TOKENS_SIMPLE \
 	__TOKENS_SIMPLE_SINGLE \
-	__TOKENS_SIMPLE_DOUBLE
+	__TOKENS_SIMPLE_DOUBLE\
+	__TOKENS_SIMPLE_TRIPPLE
 
 
 #define __TOKENS_KEYWORD \
