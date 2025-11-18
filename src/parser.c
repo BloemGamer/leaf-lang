@@ -51,6 +51,7 @@ static AST* parse_block(ParserState* parser_state);
 static AST* parse_statement(ParserState* parser_state);
 static AST* parse_message(ParserState* parser_state);
 static AST* parse_if_expr(ParserState* parser_state);
+static AST* parse_while_expr(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -99,6 +100,7 @@ static void print_identifier(const Identifier* identifier, usize depth);
 static void print_block(const Block* block, usize depth);
 static void print_message(const Message* message, usize depth);
 static void print_if_expr(const IfExpr* if_expr, usize depth);
+static void print_while_expr(const WhileExpr* if_expr, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -487,6 +489,8 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 			return parse_statement(parser_state);
 		case token_type_if:
 			return parse_if_expr(parser_state);
+		case token_type_while:
+			return parse_while_expr(parser_state);
 		default:
 			break;
 	}
@@ -549,25 +553,19 @@ static AST* parse_if_expr(ParserState* parser_state) // NOLINT
 
 	assert(consume(parser_state)->token_type == token_type_if);
 
-	// Parse condition - no parentheses required (Rust style)
 	node->node.if_expr.condition = parse_expr(parser_state);
 
-	// Then block - must be a block expression
 	assert(peek(parser_state)->token_type == token_type_lbrace);
 	node->node.if_expr.then_block = parse_block(parser_state);
 
-	// Optional else/elif
 	if (match(parser_state, token_type_else))
 	{
-		// Check if it's "else if" or just "else"
 		if (peek(parser_state)->token_type == token_type_if)
 		{
-			// Recursive parse for "else if"
 			node->node.if_expr.else_block = parse_if_expr(parser_state);
 		}
 		else if (peek(parser_state)->token_type == token_type_lbrace)
 		{
-			// Regular else block
 			node->node.if_expr.else_block = parse_block(parser_state);
 		}
 		else
@@ -579,6 +577,21 @@ static AST* parse_if_expr(ParserState* parser_state) // NOLINT
 	{
 		node->node.if_expr.else_block = nullptr;
 	}
+
+	return node;
+}
+
+static AST* parse_while_expr(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_WHILE_EXPR;
+
+	assert(consume(parser_state)->token_type == token_type_while);
+
+	node->node.while_expr.condition = parse_expr(parser_state);
+
+	assert(peek(parser_state)->token_type == token_type_lbrace);
+	node->node.while_expr.then_block = parse_block(parser_state);
 
 	return node;
 }
@@ -1346,8 +1359,7 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			print_if_expr(&ast->node.if_expr, depth);
 			break;
 		case AST_WHILE_EXPR:
-			print_indent(depth);
-			printf("WhileExpr: <not yet implemented>\n");
+			print_while_expr(&ast->node.while_expr, depth);
 			break;
 		case AST_FOR_EXPR:
 			print_indent(depth);
@@ -1728,4 +1740,12 @@ static void print_if_expr(const IfExpr* if_expr, const usize depth) // NOLINT
 		// print_indent(depth);
 		print_if_expr(&if_expr->else_block->node.if_expr, depth);
 	}
+}
+
+static void print_while_expr(const WhileExpr* if_expr, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("While:\n");
+	print_binary_expr(&if_expr->condition->node.binary_expr, depth + 1);
+	print_block(&if_expr->then_block->node.block, depth + 1);
 }

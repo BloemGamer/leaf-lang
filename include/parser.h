@@ -126,6 +126,12 @@ typedef struct // NOLINT
 
 typedef struct // NOLINT
 {
+	AST* condition;
+	AST* then_block;
+} WhileExpr;
+
+typedef struct // NOLINT
+{
 	enum
 	{
 		msg_invallid = 0,
@@ -194,9 +200,11 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		Literal literal;			// binary_expr
 		Identifier identifier;		// binary_expr
 		Block block;				// done
-		Message message;
 
-		IfExpr if_expr;
+		IfExpr if_expr; // done
+		WhileExpr while_expr;
+
+		Message message;
 	} node;
 } AST;
 
