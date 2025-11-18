@@ -16,6 +16,7 @@
 	Y(minus, '-')				/* - */ \
 	Y(star, '*')				/* * */ \
 	Y(slash, '/')				/* / */ \
+	Y(mod, '%')					/* % */ \
 	Y(semicolon, ';')			/* ; */ \
 	Y(colon, ':')				/* : */ \
 	Y(bang, '!')				/* ! */ \
@@ -45,6 +46,7 @@
 	Y(minus_equal, '-','=')		/* -= */ \
 	Y(star_equal, '*','=')		/* *= */ \
 	Y(slash_equal, '/','=')		/* /= */ \
+	Y(mod_equal, '%','=')		/* %= */ \
 	Y(pipe_equal, '|','=')		/* |= */ \
 	Y(tilda_equal, '~','=')		/* ~= */ \
 	Y(ampersand_equal, '&','=')	/* &= */ \
