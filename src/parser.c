@@ -962,32 +962,49 @@ static i32 precedence(TokenType token_type)
 {
 	switch (token_type)
 	{
-		case token_type_ampersand:
-		case token_type_pipe:
-		case token_type_caret:
+		case token_type_equal:			 // =
+		case token_type_plus_equal:		 // +=
+		case token_type_minus_equal:	 // -=
+		case token_type_star_equal:		 // *=
+		case token_type_slash_equal:	 // /=
+		case token_type_mod_equal:		 // %=
+		case token_type_pipe_equal:		 // |=
+		case token_type_tilda_equal:	 // ~=
+		case token_type_ampersand_equal: // &=
+		case token_type_caret_equal:	 // ^=
+		case token_type_lshift_equal:	 // <<=
+		case token_type_rshift_equal:	 // >>=
 			return 1;
-		case token_type_or:
+		case token_type_or: // ||
 			return 2;
-		case token_type_and:
+		case token_type_and: // &&
 			return 3;
-		case token_type_equal_equal:
-		case token_type_bang_equal:
+		case token_type_pipe: // |
 			return 4;
-		case token_type_less:
-		case token_type_less_equal:
-		case token_type_greater:
-		case token_type_greater_equal:
-		case token_type_dot_dot:
+		case token_type_caret: // ^
 			return 5;
-		case token_type_plus:
-		case token_type_minus:
+		case token_type_ampersand: // &
 			return 6;
-		case token_type_star:
-		case token_type_slash:
+		case token_type_equal_equal: // ==
+		case token_type_bang_equal:	 // !=
 			return 7;
-		case token_type_equal:
+		case token_type_less:		   // <
+		case token_type_less_equal:	   // <=
+		case token_type_greater:	   // >
+		case token_type_greater_equal: // >=
 			return 8;
-
+		case token_type_lshift: // <<
+		case token_type_rshift: // >>
+			return 9;
+		case token_type_dot_dot: // ..
+			return 10;
+		case token_type_plus:  // +
+		case token_type_minus: // -
+			return 11;
+		case token_type_star:  // *
+		case token_type_slash: // /
+		case token_type_mod:   // %
+			return 12;
 		default:
 			return 0;
 	}
