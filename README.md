@@ -81,7 +81,7 @@ cmake --build cmake-build-release	# Release
 S-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contact
-Feel free to reach out via [issues-url](GitHub Isues) or my GitHub profile.
+Feel free to reach out via [GitHub Isues](issues-url) or my GitHub profile.
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
