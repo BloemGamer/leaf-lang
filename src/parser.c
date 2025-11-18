@@ -1722,9 +1722,7 @@ static void print_if_expr(const IfExpr* if_expr, const usize depth) // NOLINT
 {
 	print_indent(depth);
 	printf("If:\n");
-	// print_indent(depth);
 	print_binary_expr(&if_expr->condition->node.binary_expr, depth + 1);
-	// print_indent(depth);
 	print_block(&if_expr->then_block->node.block, depth + 1);
 	if (if_expr->else_block == nullptr)
 	{
@@ -1732,12 +1730,10 @@ static void print_if_expr(const IfExpr* if_expr, const usize depth) // NOLINT
 	}
 	else if (if_expr->else_block->type == AST_BLOCK) // NOLINT
 	{
-		// print_indent(depth);
 		print_block(&if_expr->then_block->node.block, depth + 1);
 	}
 	else if (if_expr->else_block->type == AST_IF_EXPR) // NOLINT
 	{
-		// print_indent(depth);
 		print_if_expr(&if_expr->else_block->node.if_expr, depth);
 	}
 }
