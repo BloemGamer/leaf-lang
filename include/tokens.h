@@ -58,6 +58,8 @@
 	X(union)					/* union */ \
 	X(enum)						/* enum */ \
 	X(return)					/* return */ \
+	X(break)					/* break */ \
+	X(continue)					/* continue */ \
 
 #define __TOKENS_IGNORED \
 	X(whitespace)				/* \t, \n, \r or <space> */ \

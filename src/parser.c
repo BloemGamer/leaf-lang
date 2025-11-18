@@ -52,6 +52,9 @@ static AST* parse_statement(ParserState* parser_state);
 static AST* parse_message(ParserState* parser_state);
 static AST* parse_if_expr(ParserState* parser_state);
 static AST* parse_while_expr(ParserState* parser_state);
+static AST* parse_return_expr(ParserState* parser_state);
+static AST* parse_break_expr(ParserState* parser_state);
+static AST* parse_continue_expr(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -100,7 +103,10 @@ static void print_identifier(const Identifier* identifier, usize depth);
 static void print_block(const Block* block, usize depth);
 static void print_message(const Message* message, usize depth);
 static void print_if_expr(const IfExpr* if_expr, usize depth);
-static void print_while_expr(const WhileExpr* if_expr, usize depth);
+static void print_while_expr(const WhileExpr* while_expr, usize depth);
+static void print_return_expr(const ReturnStmt* return_stmt, usize depth);
+static void print_break_expr(usize depth);
+static void print_continue_expr(usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -491,6 +497,12 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 			return parse_if_expr(parser_state);
 		case token_type_while:
 			return parse_while_expr(parser_state);
+		case token_type_return:
+			return parse_return_expr(parser_state);
+		case token_type_continue:
+			return parse_continue_expr(parser_state);
+		case token_type_break:
+			return parse_break_expr(parser_state);
 		default:
 			break;
 	}
@@ -581,7 +593,7 @@ static AST* parse_if_expr(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_while_expr(ParserState* parser_state)
+static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_WHILE_EXPR;
@@ -593,6 +605,33 @@ static AST* parse_while_expr(ParserState* parser_state)
 	assert(peek(parser_state)->token_type == token_type_lbrace);
 	node->node.while_expr.then_block = parse_block(parser_state);
 
+	return node;
+}
+
+static AST* parse_return_expr(ParserState* parser_state) // NOLINT
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_RETURN_STMT;
+
+	assert(consume(parser_state)->token_type == token_type_return);
+
+	node->node.return_stmt.return_stmt = parse_expr(parser_state);
+	return node;
+}
+
+static AST* parse_break_expr(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_BREAK_STMT;
+	assert(consume(parser_state)->token_type == token_type_break);
+	return node;
+}
+
+static AST* parse_continue_expr(ParserState* parser_state)
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_CONTINUE_STMT;
+	assert(consume(parser_state)->token_type == token_type_continue);
 	return node;
 }
 
@@ -1366,16 +1405,13 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			printf("ForExpr: <not yet implemented>\n");
 			break;
 		case AST_RETURN_STMT:
-			print_indent(depth);
-			printf("ReturnStmt: <not yet implemented>\n");
+			print_return_expr(&ast->node.return_stmt, depth);
 			break;
 		case AST_BREAK_STMT:
-			print_indent(depth);
-			printf("BreakStmt\n");
+			print_break_expr(depth);
 			break;
 		case AST_CONTINUE_STMT:
-			print_indent(depth);
-			printf("ContinueStmt\n");
+			print_continue_expr(depth);
 			break;
 		case AST_MESSAGE:
 			print_message(&ast->node.message, depth);
@@ -1738,10 +1774,29 @@ static void print_if_expr(const IfExpr* if_expr, const usize depth) // NOLINT
 	}
 }
 
-static void print_while_expr(const WhileExpr* if_expr, const usize depth) // NOLINT
+static void print_while_expr(const WhileExpr* while_expr, const usize depth) // NOLINT
 {
 	print_indent(depth);
 	printf("While:\n");
-	print_binary_expr(&if_expr->condition->node.binary_expr, depth + 1);
-	print_block(&if_expr->then_block->node.block, depth + 1);
+	print_binary_expr(&while_expr->condition->node.binary_expr, depth + 1);
+	print_block(&while_expr->then_block->node.block, depth + 1);
+}
+
+static void print_return_expr(const ReturnStmt* return_stmt, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("Return:\n");
+	print_binary_expr(&return_stmt->return_stmt->node.binary_expr, depth + 1);
+}
+
+static void print_break_expr(const usize depth)
+{
+	print_indent(depth);
+	printf("Break:\n");
+}
+
+static void print_continue_expr(const usize depth)
+{
+	print_indent(depth);
+	printf("Continue:\n");
 }
