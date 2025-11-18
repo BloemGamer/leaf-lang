@@ -50,6 +50,7 @@ static AST* parse_expr(ParserState* parser_state);
 static AST* parse_block(ParserState* parser_state);
 static AST* parse_statement(ParserState* parser_state);
 static AST* parse_message(ParserState* parser_state);
+static AST* parse_if_expr(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -97,6 +98,7 @@ static void print_literal(const Literal* lit, usize depth);
 static void print_identifier(const Identifier* identifier, usize depth);
 static void print_block(const Block* block, usize depth);
 static void print_message(const Message* message, usize depth);
+static void print_if_expr(const IfExpr* if_expr, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -483,6 +485,8 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 		case token_type_semicolon:
 			(void)consume(parser_state);
 			return parse_statement(parser_state);
+		case token_type_if:
+			return parse_if_expr(parser_state);
 		default:
 			break;
 	}
@@ -492,6 +496,7 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 	}
 	assert(false && "not an expected type");
 }
+
 static AST* parse_message(ParserState* parser_state)
 {
 	const Token token_g = *consume(parser_state);
@@ -535,6 +540,47 @@ static AST* parse_message(ParserState* parser_state)
 		return node;
 	}
 	assert(false && "not (yet) a compiler message");
+}
+
+static AST* parse_if_expr(ParserState* parser_state) // NOLINT
+{
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_IF_EXPR;
+
+	assert(consume(parser_state)->token_type == token_type_if);
+
+	// Parse condition - no parentheses required (Rust style)
+	node->node.if_expr.condition = parse_expr(parser_state);
+
+	// Then block - must be a block expression
+	assert(peek(parser_state)->token_type == token_type_lbrace);
+	node->node.if_expr.then_block = parse_block(parser_state);
+
+	// Optional else/elif
+	if (match(parser_state, token_type_else))
+	{
+		// Check if it's "else if" or just "else"
+		if (peek(parser_state)->token_type == token_type_if)
+		{
+			// Recursive parse for "else if"
+			node->node.if_expr.else_block = parse_if_expr(parser_state);
+		}
+		else if (peek(parser_state)->token_type == token_type_lbrace)
+		{
+			// Regular else block
+			node->node.if_expr.else_block = parse_block(parser_state);
+		}
+		else
+		{
+			assert(false && "else must be followed by block or if");
+		}
+	}
+	else
+	{
+		node->node.if_expr.else_block = nullptr;
+	}
+
+	return node;
 }
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
@@ -1296,15 +1342,14 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 		case AST_BLOCK:
 			print_block(&ast->node.block, depth);
 			break;
-		case AST_IF_EXR:
-			print_indent(depth);
-			printf("IfExpr: <not yet implemented>\n");
+		case AST_IF_EXPR:
+			print_if_expr(&ast->node.if_expr, depth);
 			break;
 		case AST_WHILE_EXPR:
 			print_indent(depth);
 			printf("WhileExpr: <not yet implemented>\n");
 			break;
-		case AST_FOR_EXR:
+		case AST_FOR_EXPR:
 			print_indent(depth);
 			printf("ForExpr: <not yet implemented>\n");
 			break;
@@ -1658,5 +1703,29 @@ static void print_message(const Message* message, const usize depth)
 	{
 		print_indent(depth + 1);
 		printf("@c_type %s\n", message->c_type.type);
+	}
+}
+
+static void print_if_expr(const IfExpr* if_expr, const usize depth) // NOLINT
+{
+	print_indent(depth);
+	printf("If:\n");
+	// print_indent(depth);
+	print_binary_expr(&if_expr->condition->node.binary_expr, depth + 1);
+	// print_indent(depth);
+	print_block(&if_expr->then_block->node.block, depth + 1);
+	if (if_expr->else_block == nullptr)
+	{
+		return;
+	}
+	else if (if_expr->else_block->type == AST_BLOCK) // NOLINT
+	{
+		// print_indent(depth);
+		print_block(&if_expr->then_block->node.block, depth + 1);
+	}
+	else if (if_expr->else_block->type == AST_IF_EXPR) // NOLINT
+	{
+		// print_indent(depth);
+		print_if_expr(&if_expr->else_block->node.if_expr, depth);
 	}
 }

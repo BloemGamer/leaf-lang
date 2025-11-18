@@ -119,6 +119,13 @@ typedef struct [[gnu::aligned(32)]]
 
 typedef struct // NOLINT
 {
+	AST* condition;
+	AST* then_block;
+	AST* else_block; // Can be NULL, another IF_EXPR, or a BLOCK
+} IfExpr;
+
+typedef struct // NOLINT
+{
 	enum
 	{
 		msg_invallid = 0,
@@ -163,9 +170,9 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_IDENTIFIER,
 		AST_BLOCK,
 
-		AST_IF_EXR,
+		AST_IF_EXPR,
 		AST_WHILE_EXPR,
-		AST_FOR_EXR,
+		AST_FOR_EXPR,
 		AST_RETURN_STMT,
 		AST_BREAK_STMT,
 		AST_CONTINUE_STMT,
@@ -188,6 +195,8 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		Identifier identifier;		// binary_expr
 		Block block;				// done
 		Message message;
+
+		IfExpr if_expr;
 	} node;
 } AST;
 
