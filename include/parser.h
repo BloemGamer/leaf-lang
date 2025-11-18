@@ -121,7 +121,7 @@ typedef struct // NOLINT
 {
 	AST* condition;
 	AST* then_block;
-	AST* else_block; // Can be NULL, another IF_EXPR, or a BLOCK
+	AST* else_block;
 } IfExpr;
 
 typedef struct // NOLINT
@@ -148,13 +148,19 @@ typedef struct // NOLINT
 	// C-style: for (init; cond; incr)
 	struct
 	{
-		AST* init;		// Initialization (can be var decl or assignment)
-		AST* condition; // Loop condition
-		AST* increment; // Increment expression
+		AST* init;
+		AST* condition;
+		AST* increment;
 	} c_style;
 
-	AST* body; // Loop body (shared by both styles)
+	AST* body;
 } ForExpr;
+
+typedef struct
+{
+	AST* start;
+	AST* end;
+} RangeExpr;
 
 typedef struct // NOLINT
 {
@@ -213,6 +219,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_RETURN_STMT,
 		AST_BREAK_STMT,
 		AST_CONTINUE_STMT,
+		AST_RANGE_EXPR,
 
 		AST_MESSAGE,
 	} type;
@@ -236,6 +243,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		WhileExpr while_expr;	// done
 		ForExpr for_expr;		//
 		ReturnStmt return_stmt; // done
+		RangeExpr range_expr;
 
 		Message message;
 	} node;

@@ -105,9 +105,11 @@ static void print_block(const Block* block, usize depth);
 static void print_message(const Message* message, usize depth);
 static void print_if_expr(const IfExpr* if_expr, usize depth);
 static void print_while_expr(const WhileExpr* while_expr, usize depth);
+static void print_for_expr(const ForExpr* for_expr, usize depth);
 static void print_return_expr(const ReturnStmt* return_stmt, usize depth);
 static void print_break_expr(usize depth);
 static void print_continue_expr(usize depth);
+static void print_range_expr(const RangeExpr* range_expr, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -975,6 +977,7 @@ static i32 precedence(TokenType token_type)
 		case token_type_less_equal:
 		case token_type_greater:
 		case token_type_greater_equal:
+		case token_type_dot_dot:
 			return 5;
 		case token_type_plus:
 		case token_type_minus:
@@ -1083,12 +1086,19 @@ AST* make_identifier(const Token* token)
 AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
-
-	node->type = AST_BINARY_EXPR;
-	node->node.binary_expr.op = *op;
-	node->node.binary_expr.left = left;
-	node->node.binary_expr.right = right;
-
+	if (op->token_type == token_type_dot_dot)
+	{
+		node->type = AST_RANGE_EXPR;
+		node->node.range_expr.start = left;
+		node->node.range_expr.end = right;
+	}
+	else
+	{
+		node->type = AST_BINARY_EXPR;
+		node->node.binary_expr.op = *op;
+		node->node.binary_expr.left = left;
+		node->node.binary_expr.right = right;
+	}
 	return node;
 }
 
@@ -1482,8 +1492,7 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			print_while_expr(&ast->node.while_expr, depth);
 			break;
 		case AST_FOR_EXPR:
-			print_indent(depth);
-			printf("ForExpr: <not yet implemented>\n");
+			print_for_expr(&ast->node.for_expr, depth);
 			break;
 		case AST_RETURN_STMT:
 			print_return_expr(&ast->node.return_stmt, depth);
@@ -1496,6 +1505,10 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			break;
 		case AST_MESSAGE:
 			print_message(&ast->node.message, depth);
+			break;
+		case AST_RANGE_EXPR:
+			print_range_expr(&ast->node.range_expr, depth);
+			break;
 	}
 }
 
@@ -1863,7 +1876,68 @@ static void print_while_expr(const WhileExpr* while_expr, const usize depth) // 
 	print_block(&while_expr->then_block->node.block, depth + 1);
 }
 
-static void print_return_expr(const ReturnStmt* return_stmt, const usize depth) // NOLINT
+static void print_for_expr(const ForExpr* for_expr, usize depth)
+{
+	print_indent(depth);
+
+	if (for_expr->style == FOR_STYLE_RUST)
+	{
+		printf("ForExpr (Rust-style):\n");
+		print_indent(depth + 1);
+		printf("Iterator Variable:\n");
+		print_var_def(&for_expr->rust_style.var_def, depth + 2);
+
+		print_indent(depth + 1);
+		printf("Iterable:\n");
+		parse_print_impl(for_expr->rust_style.iterable, depth + 2);
+	}
+	else // FOR_STYLE_C
+	{
+		printf("ForExpr (C-style):\n");
+
+		print_indent(depth + 1);
+		printf("Init:\n");
+		if (for_expr->c_style.init)
+		{
+			parse_print_impl(for_expr->c_style.init, depth + 2);
+		}
+		else
+		{
+			print_indent(depth + 2);
+			printf("<empty>\n");
+		}
+
+		print_indent(depth + 1);
+		printf("Condition:\n");
+		if (for_expr->c_style.condition)
+		{
+			parse_print_impl(for_expr->c_style.condition, depth + 2);
+		}
+		else
+		{
+			print_indent(depth + 2);
+			printf("<empty>\n");
+		}
+
+		print_indent(depth + 1);
+		printf("Increment:\n");
+		if (for_expr->c_style.increment)
+		{
+			parse_print_impl(for_expr->c_style.increment, depth + 2);
+		}
+		else
+		{
+			print_indent(depth + 2);
+			printf("<empty>\n");
+		}
+	}
+
+	print_indent(depth + 1);
+	printf("Body:\n");
+	parse_print_impl(for_expr->body, depth + 2);
+}
+
+static void print_return_expr(const ReturnStmt* return_stmt, const usize depth)
 {
 	print_indent(depth);
 	printf("Return:\n");
@@ -1880,4 +1954,34 @@ static void print_continue_expr(const usize depth)
 {
 	print_indent(depth);
 	printf("Continue:\n");
+}
+
+static void print_range_expr(const RangeExpr* range_expr, const usize depth)
+{
+	print_indent(depth);
+	printf("RangeExpr: ..\n");
+
+	print_indent(depth + 1);
+	printf("Start:\n");
+	if (range_expr->start)
+	{
+		parse_print_impl(range_expr->start, depth + 2);
+	}
+	else
+	{
+		print_indent(depth + 2);
+		printf("<unbounded>\n");
+	}
+
+	print_indent(depth + 1);
+	printf("End:\n");
+	if (range_expr->end)
+	{
+		parse_print_impl(range_expr->end, depth + 2);
+	}
+	else
+	{
+		print_indent(depth + 2);
+		printf("<unbounded>\n");
+	}
 }

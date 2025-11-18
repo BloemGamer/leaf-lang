@@ -37,7 +37,9 @@
 	Y(bang_equal, '!','=')		/* != */ \
 	Y(equal_equal, '=','=')		/* == */ \
 	Y(greater_equal, '>','=')	/* >= */ \
-	Y(less_equal, '<','=')		/* <= */
+	Y(less_equal, '<','=')		/* <= */ \
+	\
+	Y(dot_dot, '.','.')			/* .. */
 
 #define __TOKENS_SIMPLE \
 	__TOKENS_SIMPLE_SINGLE \
