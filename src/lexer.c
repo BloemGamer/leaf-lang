@@ -243,7 +243,7 @@ static TokenResult string_to_simple_token(const char* input)
 			input[2] == TOKENS_STR_IDENT_SIMPLE[i][2])
 		{
 			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
-			token_res.size = 2;
+			token_res.size = 3;
 			return token_res;
 		}
 	}
