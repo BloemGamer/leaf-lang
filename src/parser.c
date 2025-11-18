@@ -85,6 +85,11 @@ static signed char unescape_char(const char* input, Pos pos);
 static i64 make_number(const Token* token);
 static void add_basic_types(ParserState* parser_state);
 
+static void free_var_type(VarType* type);
+static void free_enum_type(EnumType* enum_type);
+static void free_var_def(VarDef* def);
+static void free_func_def(FuncDef* func);
+
 static void parse_print_impl(const AST* ast, usize depth);
 static void print_indent(usize depth);
 static void print_pointer_types(const PointerType* pointer_types, usize count);
@@ -123,7 +128,9 @@ AST* parse(const Token* tokens)
 	{
 		consume(&parser_state);
 	}
-	return parse_block(&parser_state);
+	AST* ret = parse_block(&parser_state);
+	hash_str_free(&parser_state.known_types);
+	return ret;
 }
 
 static AST* parse_decl(ParserState* parser_state) // NOLINT
@@ -1448,6 +1455,244 @@ static void add_basic_types(ParserState* parser_state)
 	{
 		(void)hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
 	}
+}
+
+// Helper to free FuncDef
+
+void free_token_tree(AST* ast)
+{
+	if (!ast)
+	{
+		return;
+	}
+
+	switch (ast->type)
+	{
+		case AST_VAR_DEF:
+			free_var_def(&ast->node.var_def);
+			break;
+
+		case AST_FUNC_DEF:
+			free_func_def(&ast->node.func_def);
+			break;
+
+		case AST_STRUCT_DEF:
+			free((void*)ast->node.struct_def.name);
+			if (ast->node.struct_def.members)
+			{
+				for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
+				{
+					free_token_tree(ast->node.struct_def.members[i]);
+				}
+				free((void*)ast->node.struct_def.members);
+			}
+			break;
+
+		case AST_UNION_DEF:
+			free((void*)ast->node.union_def.name);
+			if (ast->node.union_def.members)
+			{
+				for (usize i = 0; i < ast->node.union_def.member_count; i++) // NOLINT
+				{
+					free_token_tree(ast->node.union_def.members[i]);
+				}
+				free((void*)ast->node.union_def.members);
+			}
+			break;
+
+		case AST_ENUM_DEF:
+			free((void*)ast->node.enum_def.name);
+			if (ast->node.enum_def.members)
+			{
+				for (usize i = 0; i < ast->node.enum_def.member_count; i++) // NOLINT
+				{
+					free_enum_type(&ast->node.enum_def.members[i]);
+				}
+				free((void*)ast->node.enum_def.members);
+			}
+			free((void*)ast->node.enum_def.type);
+			break;
+
+		case AST_FUNC_CALL:
+			free_token_tree(ast->node.func_call.callee);
+			if (ast->node.func_call.args)
+			{
+				for (usize i = 0; i < ast->node.func_call.arg_count; i++) // NOLINT
+				{
+					free_token_tree(ast->node.func_call.args[i]);
+				}
+				free((void*)ast->node.func_call.args);
+			}
+			break;
+
+		case AST_MEMBER_ACCESS:
+			free_token_tree(ast->node.member_access.left);
+			free_token_tree(ast->node.member_access.right);
+			break;
+
+		case AST_BINARY_EXPR:
+			free_token_tree(ast->node.binary_expr.left);
+			free_token_tree(ast->node.binary_expr.right);
+			break;
+
+		case AST_INDEX_EXPR:
+			free_token_tree(ast->node.index_expr.left);
+			free_token_tree(ast->node.index_expr.index);
+			break;
+
+		case AST_LITERAL:
+			if (ast->node.literal.literal.token_type == token_type_string)
+			{
+				free((void*)ast->node.literal.literal.str_val);
+			}
+			break;
+
+		case AST_IDENTIFIER:
+			free((void*)ast->node.identifier.identifier.str_val);
+			break;
+
+		case AST_BLOCK:
+			if (ast->node.block.statements)
+			{
+				for (usize i = 0; i < ast->node.block.statement_count; i++) // NOLINT
+				{
+					free_token_tree(ast->node.block.statements[i]);
+				}
+				free((void*)ast->node.block.statements);
+			}
+			free_token_tree(ast->node.block.trailing_expr);
+			break;
+
+		case AST_IF_EXPR:
+			free_token_tree(ast->node.if_expr.condition);
+			free_token_tree(ast->node.if_expr.then_block);
+			free_token_tree(ast->node.if_expr.else_block);
+			break;
+
+		case AST_WHILE_EXPR:
+			free_token_tree(ast->node.while_expr.condition);
+			free_token_tree(ast->node.while_expr.then_block);
+			break;
+
+		case AST_FOR_EXPR:
+			if (ast->node.for_expr.style == FOR_STYLE_C)
+			{
+				free_token_tree(ast->node.for_expr.c_style.init);
+				free_token_tree(ast->node.for_expr.c_style.condition);
+				free_token_tree(ast->node.for_expr.c_style.increment);
+			}
+			else if (ast->node.for_expr.style == FOR_STYLE_RUST)
+			{
+				free_var_def(&ast->node.for_expr.rust_style.var_def);
+				free_token_tree(ast->node.for_expr.rust_style.iterable);
+			}
+			free_token_tree(ast->node.for_expr.body);
+			break;
+
+		case AST_RETURN_STMT:
+			free_token_tree(ast->node.return_stmt.return_stmt);
+			break;
+
+		case AST_BREAK_STMT:
+		case AST_CONTINUE_STMT:
+			break;
+
+		case AST_MESSAGE:
+			switch (ast->node.message.msg)
+			{
+				case msg_embed:
+				case msg_import:
+				case msg_include:
+				case msg_include_str:
+					free((void*)ast->node.message.import.import);
+					break;
+				case msg_c_type:
+					free((void*)ast->node.message.c_type.type);
+					break;
+				case msg_invalid:
+				default:
+					assert(false);
+			}
+			break;
+
+		case AST_RANGE_EXPR:
+			free_token_tree(ast->node.range_expr.start);
+			free_token_tree(ast->node.range_expr.end);
+			break;
+	}
+
+	free((void*)ast);
+}
+
+static void free_var_type(VarType* type)
+{
+	if (!type)
+	{
+		return;
+	}
+	free(type->name);
+	free(type->pointer_types);
+
+	if (type->array_sizes)
+	{
+		for (usize i = 0; i < type->array_count; i++) // NOLINT
+		{
+			free_token_tree(type->array_sizes[i]);
+		}
+		free((void*)type->array_sizes);
+	}
+}
+
+static void free_enum_type(EnumType* enum_type)
+{
+	if (!enum_type)
+	{
+		return;
+	}
+	free((void*)enum_type->name);
+}
+
+static void free_var_def(VarDef* def)
+{
+	if (!def)
+	{
+		return;
+	}
+	free((void*)def->name);
+	free((void*)def->modifiers);
+	free_var_type(&def->type);
+	free_token_tree(def->equals);
+}
+
+static void free_func_def(FuncDef* func)
+{
+	if (!func)
+	{
+		return;
+	}
+
+	free((void*)func->name);
+	free((void*)func->modifiers);
+
+	if (func->template_types)
+	{
+		for (usize i = 0; i < func->template_count; i++) // NOLINT
+		{
+			free_token_tree(func->template_types[i]);
+		}
+		free((void*)func->template_types);
+	}
+
+	if (func->params)
+	{
+		for (usize i = 0; i < func->param_count; i++) // NOLINT
+		{
+			free_token_tree(func->params[i]);
+		}
+		free((void*)func->params);
+	}
+	free_var_def(&func->return_type);
+	free_token_tree(func->body);
 }
 
 void parse_print(const AST* ast)

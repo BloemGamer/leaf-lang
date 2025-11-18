@@ -38,11 +38,13 @@ int main(int argc, char** argv)
 
 	// lex_print(lexed);
 
-	AST parsed = *parse(lexed);
+	AST* parsed = parse(lexed);
 
-	parse_print(&parsed);
+	parse_print(parsed);
 
 	lex_free(lexed);
+
+	free_token_tree(parsed);
 }
 
 char* read_file_to_str(const char* filename)
