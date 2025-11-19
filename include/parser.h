@@ -162,6 +162,12 @@ typedef struct
 	AST* end;
 } RangeExpr;
 
+typedef struct
+{
+	Token const* op;
+	AST* rhs;
+} UnaryExpr;
+
 typedef struct // NOLINT
 {
 	AST* return_stmt;
@@ -220,6 +226,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_BREAK_STMT,
 		AST_CONTINUE_STMT,
 		AST_RANGE_EXPR,
+		AST_UNARY,
 
 		AST_MESSAGE,
 	} type;
@@ -241,9 +248,10 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 
 		IfExpr if_expr;			// done
 		WhileExpr while_expr;	// done
-		ForExpr for_expr;		//
+		ForExpr for_expr;		// done
 		ReturnStmt return_stmt; // done
-		RangeExpr range_expr;
+		RangeExpr range_expr;	// done
+		UnaryExpr unary_expr;
 
 		Message message;
 	} node;

@@ -103,6 +103,7 @@ static void print_enum_def(const EnumDef* enum_def, usize depth);
 static void print_func_call(const FuncCall* func_call, usize depth);
 static void print_member_access(const MemberAccess* member_access, usize depth);
 static void print_binary_expr(const BinaryExpr* binary_expr, usize depth);
+static void print_unary_expr(const UnaryExpr* unary_expr, usize depth);
 static void print_index_expr(const IndexExpr* index_expr, usize depth);
 static void print_literal(const Literal* lit, usize depth);
 static void print_identifier(const Identifier* identifier, usize depth);
@@ -757,6 +758,15 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 	return left;
 }
 
+AST* make_unary(const Token* op, AST* rhs) // NOLINT
+{
+	AST* node = (AST*)calloc(1, sizeof(AST));
+	node->type = AST_UNARY;
+	node->node.unary_expr.op = op;
+	node->node.unary_expr.rhs = rhs;
+	return node;
+}
+
 static AST* parse_prefix(ParserState* parser_state) // NOLINT
 {
 	const Token* token = consume(parser_state); // NOLINT
@@ -767,6 +777,13 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 
 	switch (token->token_type)
 	{
+
+		case token_type_star:	   // *expr
+		case token_type_ampersand: // &expr
+		{
+			AST* rhs = parse_prefix(parser_state);
+			return make_unary(token, rhs);
+		}
 		case token_type_number:
 		case token_type_string:
 		case token_type_char:
@@ -1771,6 +1788,9 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 		case AST_RANGE_EXPR:
 			print_range_expr(&ast->node.range_expr, depth);
 			break;
+		case AST_UNARY:
+			print_unary_expr(&ast->node.unary_expr, depth);
+			break;
 	}
 }
 
@@ -2031,6 +2051,15 @@ static void print_binary_expr(const BinaryExpr* binary_expr, const usize depth) 
 	print_indent(depth + 1);
 	printf("Right:\n");
 	parse_print_impl(binary_expr->right, depth + 2);
+}
+
+static void print_unary_expr(const UnaryExpr* unary_expr, const usize depth)
+{
+	print_indent(depth);
+	printf("Unary:\n");
+	print_indent(depth + 1);
+	printf("Op: %s\n", token_to_string(unary_expr->op->token_type));
+	parse_print_impl(unary_expr->rhs, depth + 1);
 }
 
 static void print_index_expr(const IndexExpr* index_expr, const usize depth) // NOLINT
