@@ -63,6 +63,7 @@ static AST* parse_prefix(ParserState* parser_state);
 static AST* parse_postfix(ParserState* parser_state, AST* left);
 
 static const Token* peek(ParserState* parser_state);
+static const Token* peek_amount(ParserState* parser_state, i64 amount);
 static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
 static void step_back(ParserState* parser_state);
@@ -939,6 +940,11 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 static const Token* peek(ParserState* parser_state)
 {
 	return parser_state->pos < parser_state->count ? &parser_state->tokens[parser_state->pos] : nullptr;
+}
+
+static const Token* peek_count(ParserState* parser_state, const i64 count)
+{
+	return parser_state->pos < parser_state->count ? &parser_state->tokens[parser_state->pos + count] : nullptr;
 }
 
 static const Token* consume(ParserState* parser_state)
