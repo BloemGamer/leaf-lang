@@ -1636,6 +1636,9 @@ void free_token_tree(AST* ast)
 			free_token_tree(ast->node.range_expr.start);
 			free_token_tree(ast->node.range_expr.end);
 			break;
+		case AST_UNARY:
+			free_token_tree(ast->node.unary_expr.rhs);
+			break;
 	}
 
 	free((void*)ast);
