@@ -842,13 +842,29 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 
 		case token_type_lparen:
 		{
-			AST* expr = parse_expr(parser_state);
-			if (!match(parser_state, token_type_rparen))
+			Token next_token = *peek(parser_state);
+			if (next_token.token_type == token_type_identifier)
 			{
-				assert(false);
-				return nullptr;
+				if (hash_str_contains(&parser_state->known_types, next_token.str_val))
+				{
+					// typecast / struct init
+				}
+				else
+				{
+					goto no_type_cast;
+				}
 			}
-			return expr;
+			else
+			{
+			no_type_cast:
+				AST* expr = parse_expr(parser_state);
+				if (!match(parser_state, token_type_rparen))
+				{
+					assert(false);
+					return nullptr;
+				}
+				return expr;
+			}
 		}
 		case token_type_lbrace:
 			step_back(parser_state);

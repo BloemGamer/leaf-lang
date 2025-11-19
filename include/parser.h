@@ -182,6 +182,19 @@ typedef struct
 	bool is_sized;
 } ArrayInit;
 
+typedef struct
+{
+	char* field_name;
+	AST* value;
+} StructFieldInit;
+
+typedef struct
+{
+	char* struct_name;
+	StructFieldInit* fields;
+	usize field_count;
+} StructInit;
+
 typedef struct // NOLINT
 {
 	enum
@@ -238,6 +251,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_UNARY,
 
 		AST_ARRAY_INIT,
+		AST_STRUCT_INIT,
 
 		AST_MESSAGE,
 	} type;
@@ -265,6 +279,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		UnaryExpr unary_expr;	// done
 
 		ArrayInit array_init;
+		StructInit struct_init;
 
 		Message message;
 	} node;
