@@ -75,7 +75,7 @@ static AST* make_literal(const Token* token);
 static AST* make_identifier(const Token* token);
 static AST* make_binary(const Token* op, AST* left, AST* right); // NOLINT
 static AST* make_call(AST* callee, AST** args, usize arg_count);
-static AST* make_member_access(AST* left, AST* right);
+static AST* make_member_access(AST* left, AST* right, bool direct);
 static AST* make_index(AST* left, AST* index);
 
 static char* make_string(const Token* token);
@@ -815,13 +815,13 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 {
 	while (true)
 	{
-		const Token* t = peek(parser_state); // NOLINT
-		if (!t)
+		const Token* token = peek(parser_state); // NOLINT
+		if (!token)
 		{
 			return left;
 		}
 
-		switch (t->token_type)
+		switch (token->token_type)
 		{
 			case token_type_lparen:
 			{
@@ -850,8 +850,9 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 			}
 
 			case token_type_dot:
+			case token_type_arrow:
 			{
-				consume(parser_state); // '.'
+				(void)consume(parser_state); // '.' / '->'
 
 				const Token* id = peek(parser_state); // NOLINT
 				if (!id || id->token_type != token_type_identifier)
@@ -859,11 +860,11 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 					assert(false);
 					return left;
 				}
-				consume(parser_state);
+				(void)consume(parser_state);
 
 				AST* ident = make_identifier(id);
 
-				left = make_member_access(left, ident);
+				left = make_member_access(left, ident, (token->token_type == token_type_dot));
 				break;
 			}
 
@@ -1082,7 +1083,7 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 	return var_def;
 }
 
-AST* make_literal(const Token* token)
+static AST* make_literal(const Token* token)
 {
 	AST* node = calloc(1, sizeof(AST));
 
@@ -1117,7 +1118,7 @@ AST* make_literal(const Token* token)
 	return node;
 }
 
-AST* make_identifier(const Token* token)
+static AST* make_identifier(const Token* token)
 {
 	AST* node = calloc(1, sizeof(AST));
 
@@ -1128,7 +1129,7 @@ AST* make_identifier(const Token* token)
 	return node;
 }
 
-AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
+static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 	if (op->token_type == token_type_dot_dot)
@@ -1147,7 +1148,7 @@ AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 	return node;
 }
 
-AST* make_call(AST* callee, AST** args, usize arg_count)
+static AST* make_call(AST* callee, AST** args, usize arg_count)
 {
 	AST* node = calloc(1, sizeof(AST));
 
@@ -1159,18 +1160,19 @@ AST* make_call(AST* callee, AST** args, usize arg_count)
 	return node;
 }
 
-AST* make_member_access(AST* left, AST* right) // NOLINT
+static AST* make_member_access(AST* left, AST* right, bool direct) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 
 	node->type = AST_MEMBER_ACCESS;
 	node->node.member_access.left = left;
 	node->node.member_access.right = right;
+	node->node.member_access.direct = direct;
 
 	return node;
 }
 
-AST* make_index(AST* left, AST* index) // NOLINT
+static AST* make_index(AST* left, AST* index) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 
@@ -2022,6 +2024,9 @@ static void print_member_access(const MemberAccess* member_access, const usize d
 	print_indent(depth + 1);
 	printf("Right:\n");
 	parse_print_impl(member_access->right, depth + 2);
+
+	print_indent(depth + 1);
+	printf("Direct: %s\n", member_access->direct ? "true" : "false"); // NOLINT
 }
 
 static void print_binary_expr(const BinaryExpr* binary_expr, const usize depth) // NOLINT

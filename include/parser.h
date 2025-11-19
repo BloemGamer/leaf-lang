@@ -83,6 +83,7 @@ typedef struct [[gnu::aligned(16)]]
 {
 	AST* left;
 	AST* right;
+	bool direct; // true means with a . false with a ->
 } MemberAccess;
 
 typedef struct [[gnu::aligned(64)]]
