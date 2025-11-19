@@ -784,6 +784,8 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 		case token_type_number:
 		case token_type_string:
 		case token_type_char:
+		case token_type_true:
+		case token_type_false:
 			return make_literal(token);
 
 		case token_type_identifier:
@@ -1101,6 +1103,11 @@ AST* make_literal(const Token* token)
 		case token_type_number:
 			node->node.literal.literal.token_type = token_type_number;
 			node->node.literal.literal.num_val = make_number(token);
+			node->node.literal.literal.pos = token->pos;
+			break;
+		case token_type_true:
+		case token_type_false:
+			node->node.literal.literal.token_type = token->token_type;
 			node->node.literal.literal.pos = token->pos;
 			break;
 		default:
