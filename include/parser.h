@@ -251,7 +251,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		ForExpr for_expr;		// done
 		ReturnStmt return_stmt; // done
 		RangeExpr range_expr;	// done
-		UnaryExpr unary_expr;
+		UnaryExpr unary_expr;	// done
 
 		Message message;
 	} node;
