@@ -6,6 +6,7 @@
 *.sh
 
 build*
+cmake-build*
 slang-test
 .cache
 test_output
