@@ -38,10 +38,12 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 ## Roadmap
 ### Short-term
 - [ ] Finish first compiler version
+- [ ] Adding the namespace like syntax
 - [ ] Add tests
 - [ ] Write documentation
 
 ### Long-term
+- [ ] Adding templates
 - [ ] Code optimisations
 - [ ] Preprocessor
 - [ ] C parser integration
