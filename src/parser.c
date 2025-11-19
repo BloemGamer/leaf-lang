@@ -149,9 +149,6 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 			return parse_struct(parser_state);
 		case token_type_enum:
 			return parse_enum(parser_state);
-		case token_type_semicolon:
-			return parse_expr(parser_state);
-			assert(consume(parser_state)->token_type == token_type_semicolon);
 		case token_type_message:
 			return parse_message(parser_state);
 		case token_type_eof:
