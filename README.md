@@ -83,7 +83,7 @@ cmake --build cmake-build-release	# Release
 S-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contact
-Feel free to reach out via [GitHub Isues](https://github.com/BloemGamer/S-lang/issues).
+Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/S-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/S-lang/issues).
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
