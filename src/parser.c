@@ -56,6 +56,7 @@ static AST* parse_for_expr(ParserState* parser_state);
 static AST* parse_return_expr(ParserState* parser_state);
 static AST* parse_break_expr(ParserState* parser_state);
 static AST* parse_continue_expr(ParserState* parser_state);
+static AST* parse_array_init(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -723,6 +724,48 @@ static AST* parse_continue_expr(ParserState* parser_state)
 	return node;
 }
 
+static AST* parse_array_init(ParserState* parser_state)
+{
+	consume(parser_state); // '['
+
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_ARRAY_INIT;
+
+	if (match(parser_state, token_type_rsqbracket))
+	{
+		node->node.array_init.elements = nullptr;
+		node->node.array_init.element_count = 0;
+		node->node.array_init.is_sized = false;
+		return node;
+	}
+
+	varray_make(AST**, elements);
+
+	AST* first = parse_expr(parser_state);
+	varray_push(elements, first); // NOLINT
+
+	if (match(parser_state, token_type_semicolon))
+	{
+		node->node.array_init.is_sized = true;
+		node->node.array_init.size_expr = parse_expr(parser_state);
+		node->node.array_init.elements = elements;
+		node->node.array_init.element_count = elements_len;
+		assert(consume(parser_state)->token_type == token_type_rsqbracket);
+		return node;
+	}
+
+	node->node.array_init.is_sized = false;
+	while (match(parser_state, token_type_comma)) // NOLINT
+	{
+		varray_push(elements, parse_expr(parser_state)); // NOLINT
+	}
+
+	node->node.array_init.elements = elements;
+	node->node.array_init.element_count = elements_len;
+	assert(consume(parser_state)->token_type == token_type_rsqbracket);
+	return node;
+}
+
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
 	AST* left = parse_prefix(parser_state);
@@ -755,7 +798,7 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 	return left;
 }
 
-AST* make_unary(const Token* op, AST* rhs) // NOLINT
+static AST* make_unary(const Token* op, AST* rhs) // NOLINT
 {
 	AST* node = (AST*)calloc(1, sizeof(AST));
 	node->type = AST_UNARY;
@@ -790,6 +833,10 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 
 		case token_type_identifier:
 			return make_identifier(token);
+
+		case token_type_lsqbracket:
+			step_back(parser_state);
+			return parse_array_init(parser_state);
 
 		case token_type_lparen:
 		{
@@ -1479,8 +1526,6 @@ static void add_basic_types(ParserState* parser_state)
 		(void)hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
 	}
 }
-
-// Helper to free FuncDef
 
 void free_token_tree(AST* ast)
 {

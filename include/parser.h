@@ -174,6 +174,14 @@ typedef struct // NOLINT
 	AST* return_stmt;
 } ReturnStmt;
 
+typedef struct
+{
+	AST** elements;
+	usize element_count;
+	AST* size_expr; // For [type; size] syntax
+	bool is_sized;
+} ArrayInit;
+
 typedef struct // NOLINT
 {
 	enum
@@ -229,6 +237,8 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		AST_RANGE_EXPR,
 		AST_UNARY,
 
+		AST_ARRAY_INIT,
+
 		AST_MESSAGE,
 	} type;
 
@@ -253,6 +263,8 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 		ReturnStmt return_stmt; // done
 		RangeExpr range_expr;	// done
 		UnaryExpr unary_expr;	// done
+
+		ArrayInit array_init;
 
 		Message message;
 	} node;
