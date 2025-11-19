@@ -1690,6 +1690,13 @@ void free_token_tree(AST* ast)
 		case AST_UNARY:
 			free_token_tree(ast->node.unary_expr.rhs);
 			break;
+		case AST_ARRAY_INIT:
+			free_token_tree(ast->node.array_init.size_expr);
+			for (usize i = 0; i < ast->node.array_init.element_count; i++) // NOLINT
+			{
+				free_token_tree(ast->node.array_init.elements[i]);
+			}
+			free((void*)ast->node.array_init.elements);
 	}
 
 	free((void*)ast);
