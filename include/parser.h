@@ -142,8 +142,8 @@ typedef struct // NOLINT
 	// Rust-style: for x in iterable
 	struct
 	{
-		VarDef var_def; // Full variable definition with type
-		AST* iterable;	// Expression to iterate over
+		VarDef var_def;
+		AST* iterable;
 	} rust_style;
 
 	// C-style: for (init; cond; incr)

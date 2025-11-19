@@ -117,6 +117,7 @@ static void print_return_expr(const ReturnStmt* return_stmt, usize depth);
 static void print_break_expr(usize depth);
 static void print_continue_expr(usize depth);
 static void print_range_expr(const RangeExpr* range_expr, usize depth);
+static void print_array_init(const ArrayInit* array_init, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -1852,6 +1853,9 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 		case AST_UNARY:
 			print_unary_expr(&ast->node.unary_expr, depth);
 			break;
+		case AST_ARRAY_INIT:
+			print_array_init(&ast->node.array_init, depth);
+			break;
 	}
 }
 
@@ -2339,4 +2343,24 @@ static void print_range_expr(const RangeExpr* range_expr, const usize depth)
 		print_indent(depth + 2);
 		printf("<unbounded>\n");
 	}
+}
+
+static void print_array_init(const ArrayInit* array_init, const usize depth)
+{
+	print_indent(depth);
+	printf("Array Init:\n");
+	print_indent(depth + 1);
+	printf("[\n");
+	for (usize i = 0; i < array_init->element_count; i++) // NOLINT
+	{
+		parse_print_impl(array_init->elements[i], depth + 2);
+	}
+	if (array_init->is_sized)
+	{
+		print_indent(depth + 2);
+		printf(";\n");
+		parse_print_impl(array_init->size_expr, depth + 2);
+	}
+	print_indent(depth + 1);
+	printf("]\n");
 }
