@@ -32,14 +32,11 @@ bool hash_str_contains(const HashStr* hash, const char* str)
 
 bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 {
-	// CRITICAL FIX: Check and resize BEFORE calculating bucket
-	// Otherwise bucket will be invalid after resize
 	if (hash->size * 2 >= hash->cap)
 	{
 		hash_str_resize(hash, hash->cap * 2);
 	}
 
-	// Now calculate bucket with the correct (possibly resized) capacity
 	usize bucket = hash_str_hash(str) % hash->cap;
 	HashStrNode* node = &hash->node[bucket];
 
@@ -139,11 +136,9 @@ HashStr hash_str_clone(const HashStr* hash)
 			continue;
 		}
 
-		// Clone head
 		new->str = strdup(old->str);
 		new->next = nullptr;
 
-		// Clone chain
 		HashStrNode* tail = new;
 
 		while (old->next != nullptr) // NOLINT
@@ -203,11 +198,8 @@ void hash_str_free(HashStr* hash)
 
 static void hash_str_resize(HashStr* hash, usize new_cap)
 {
-	// FIX: Avoid calling hash_str_push to prevent recursion issues
-	// Create new table and manually rehash all entries
 	HashStrNode* new_nodes = calloc(new_cap, sizeof(HashStrNode));
 
-	// Re-insert all keys directly into new table
 	for (usize i = 0; i < hash->cap; i++)
 	{
 		HashStrNode* node = &hash->node[i];
@@ -219,21 +211,17 @@ static void hash_str_resize(HashStr* hash, usize new_cap)
 
 		while (node) // NOLINT
 		{
-			// Calculate new bucket for this key
 			usize new_bucket = hash_str_hash(node->str) % new_cap;
 			HashStrNode* new_node = &new_nodes[new_bucket];
 
-			// Insert into new table
 			if (new_node->str == nullptr)
 			{
-				// Empty bucket, use head node
 				new_node->str = strdup(node->str);
 				new_node->next = nullptr;
 			}
 			else
 			{
-				// Collision, append to chain
-				while (new_node->next != nullptr)
+				while (new_node->next != nullptr) // NOLINT
 				{
 					new_node = new_node->next;
 				}
@@ -248,14 +236,11 @@ static void hash_str_resize(HashStr* hash, usize new_cap)
 		}
 	}
 
-	// Free old table
 	hash_str_free(hash);
 
-	// Update hash structure
 	hash->cap = new_cap;
 	hash->node = new_nodes;
 
-	// Recalculate size
 	hash->size = 0;
 	for (usize i = 0; i < new_cap; i++)
 	{
@@ -264,7 +249,7 @@ static void hash_str_resize(HashStr* hash, usize new_cap)
 		{
 			hash->size++;
 			node = node->next;
-			while (node != nullptr)
+			while (node != nullptr) // NOLINT
 			{
 				hash->size++;
 				node = node->next;
