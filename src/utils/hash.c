@@ -11,6 +11,10 @@ static void hash_str_resize(HashStr* hash, usize new_cap);
 
 bool hash_str_contains(const HashStr* hash, const char* str)
 {
+	if (str == nullptr)
+	{
+		return false;
+	}
 	usize bucket = hash_str_hash(str) % hash->cap;
 
 	HashStrNode* node = &hash->node[bucket];
