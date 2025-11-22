@@ -57,6 +57,8 @@ static AST* parse_return_expr(ParserState* parser_state);
 static AST* parse_break_expr(ParserState* parser_state);
 static AST* parse_continue_expr(ParserState* parser_state);
 static AST* parse_array_init(ParserState* parser_state);
+static AST* parse_compound_literal(ParserState* parser_state);
+static AST* parse_cast_or_compound(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
@@ -119,6 +121,8 @@ static void print_break_expr(usize depth);
 static void print_continue_expr(usize depth);
 static void print_range_expr(const RangeExpr* range_expr, usize depth);
 static void print_array_init(const ArrayInit* array_init, usize depth);
+static void print_struct_init(const StructInit* struct_init, usize depth);
+static void print_cast_expr(const CastExpr* cast_expr, usize depth);
 
 AST* parse(const Token* tokens)
 {
@@ -768,6 +772,105 @@ static AST* parse_array_init(ParserState* parser_state)
 	return node;
 }
 
+static AST* parse_compound_literal(ParserState* parser_state)
+{
+	assert(consume(parser_state)->token_type == token_type_lparen);
+	VarDef type_def = parse_var_def(parser_state);
+	assert(consume(parser_state)->token_type == token_type_rparen);
+
+	if (peek(parser_state)->token_type != token_type_lbrace)
+	{
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_CAST_EXPR;
+		node->node.cast_expr.target_type = type_def;
+		node->node.cast_expr.expr = parse_prefix(parser_state);
+		return node;
+	}
+
+	assert(consume(parser_state)->token_type == token_type_lbrace);
+
+	if (match(parser_state, token_type_rbrace))
+	{
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_STRUCT_INIT;
+		node->node.struct_init.struct_name = type_def.type.name;
+		node->node.struct_init.type = type_def.type;
+		node->node.struct_init.fields = nullptr;
+		node->node.struct_init.field_count = 0;
+		return node;
+	}
+
+	if (peek(parser_state)->token_type == token_type_dot)
+	{
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_STRUCT_INIT;
+		node->node.struct_init.struct_name = type_def.type.name;
+		node->node.struct_init.type = type_def.type;
+		varray_make(StructFieldInit*, fields);
+		while (true) // NOLINT
+		{
+			StructFieldInit field = {.field_name = nullptr, .value = nullptr};
+			assert(consume(parser_state)->token_type == token_type_dot);
+
+			const Token* field_token = consume(parser_state);
+			assert(field_token->token_type == token_type_identifier);
+
+			field.field_name = strdup(field_token->str_val);
+			assert(consume(parser_state)->token_type == token_type_equal);
+
+			field.value = parse_expr(parser_state);
+			varray_push(fields, field); // NOLINT
+
+			if (match(parser_state, token_type_comma))
+			{
+				if (peek(parser_state)->token_type == token_type_rbrace)
+				{
+					consume(parser_state);
+					break;
+				}
+				continue;
+			}
+			else if (match(parser_state, token_type_rbrace)) // NOLINT
+			{
+				break;
+			}
+			else
+			{
+				assert(false && "expected ',' or '}'");
+			}
+		}
+		node->node.struct_init.fields = fields;
+		node->node.struct_init.field_count = fields_len;
+		return node;
+	}
+	else // NOLINT
+	{
+		step_back(parser_state);
+
+		AST* node = calloc(1, sizeof(AST));
+		node->type = AST_CAST_EXPR;
+		node->node.cast_expr.target_type = type_def;
+		node->node.cast_expr.expr = parse_block(parser_state);
+		return node;
+	}
+}
+
+static AST* parse_cast_or_compound(ParserState* parser_state)
+{
+	assert(consume(parser_state)->token_type == token_type_lparen);
+
+	AST* node = calloc(1, sizeof(AST));
+	node->type = AST_CAST_EXPR;
+
+	node->node.cast_expr.target_type = parse_var_def(parser_state);
+
+	assert(consume(parser_state)->token_type == token_type_rparen);
+
+	node->node.cast_expr.expr = parse_prefix(parser_state);
+
+	return node;
+}
+
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
 	AST* left = parse_prefix(parser_state);
@@ -809,9 +912,9 @@ static AST* make_unary(const Token* op, AST* rhs) // NOLINT
 	return node;
 }
 
-static AST* parse_prefix(ParserState* parser_state) // NOLINT
+static AST* parse_prefix(ParserState* parser_state)
 {
-	const Token* token = consume(parser_state); // NOLINT
+	const Token* token = consume(parser_state);
 	if (!token)
 	{
 		return nullptr;
@@ -819,13 +922,13 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 
 	switch (token->token_type)
 	{
-
-		case token_type_star:	   // *expr
-		case token_type_ampersand: // &expr
+		case token_type_star:
+		case token_type_ampersand:
 		{
 			AST* rhs = parse_prefix(parser_state);
 			return make_unary(token, rhs);
 		}
+
 		case token_type_number:
 		case token_type_string:
 		case token_type_char:
@@ -834,7 +937,9 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 			return make_literal(token);
 
 		case token_type_identifier:
+		{
 			return make_identifier(token);
+		}
 
 		case token_type_lsqbracket:
 			step_back(parser_state);
@@ -842,36 +947,83 @@ static AST* parse_prefix(ParserState* parser_state) // NOLINT
 
 		case token_type_lparen:
 		{
-			Token next_token = *peek(parser_state);
-			if (next_token.token_type == token_type_identifier)
+			const Token* next_token = peek(parser_state);
+
+			bool could_be_type = false;
+			if ((next_token->token_type == token_type_identifier &&
+				 hash_str_contains(&parser_state->known_types, next_token->str_val)) || // NOLINT
+				(is_modifier(next_token->token_type)))									// NOLINT
 			{
-				if (hash_str_contains(&parser_state->known_types, next_token.str_val))
-				{
-					// typecast / struct init
-				}
-				else
-				{
-					goto no_type_cast;
-				}
+				could_be_type = true;
 			}
-			else
+
+			if (could_be_type)
 			{
-			no_type_cast:
-				AST* expr = parse_expr(parser_state);
-				if (!match(parser_state, token_type_rparen))
+				step_back(parser_state);
+				usize saved_pos = parser_state->pos;
+				consume(parser_state);
+
+				while (is_modifier(peek(parser_state)->token_type)) // NOLINT
 				{
-					assert(false);
-					return nullptr;
+					consume(parser_state);
 				}
-				return expr;
+
+				if (peek(parser_state)->token_type == token_type_identifier &&
+					hash_str_contains(&parser_state->known_types, peek(parser_state)->str_val)) // NOLINT
+				{
+					consume(parser_state);
+
+					while (peek(parser_state)->token_type == token_type_star || // NOLINT
+						   peek(parser_state)->token_type == token_type_ampersand ||
+						   peek(parser_state)->token_type == token_type_and)
+					{
+						consume(parser_state);
+					}
+
+					while (peek(parser_state)->token_type == token_type_lsqbracket)
+					{
+						(void)consume(parser_state);
+						int bracket_depth = 1;
+						while (bracket_depth > 0 && peek(parser_state)->token_type != token_type_eof) // NOLINT
+						{
+							if (peek(parser_state)->token_type == token_type_lsqbracket)
+							{
+								bracket_depth++;
+							}
+							if (peek(parser_state)->token_type == token_type_rsqbracket)
+							{
+								bracket_depth--;
+							}
+							consume(parser_state);
+						}
+					}
+
+					if (peek(parser_state)->token_type == token_type_rparen)
+					{
+						parser_state->pos = saved_pos;
+
+						return parse_compound_literal(parser_state);
+					}
+				}
+
+				parser_state->pos = saved_pos;
 			}
+
+			AST* expr = parse_expr(parser_state);
+			if (!match(parser_state, token_type_rparen))
+			{
+				assert(false && "expected ')'");
+				return nullptr;
+			}
+			return expr;
 		}
+
 		case token_type_lbrace:
 			step_back(parser_state);
 			return parse_block(parser_state);
 
 		default:
-			assert(false);
+			assert(false && "unexpected token in parse_prefix");
 			return nullptr;
 	}
 }
@@ -1720,6 +1872,22 @@ void free_token_tree(AST* ast)
 				free_token_tree(ast->node.array_init.elements[i]);
 			}
 			free((void*)ast->node.array_init.elements);
+			break;
+		case AST_STRUCT_INIT:
+			free((void*)ast->node.struct_init.struct_name);
+			if (ast->node.struct_init.fields != nullptr)
+			{
+				for (usize i = 0; i < ast->node.struct_init.field_count; i++) // NOLINT
+				{
+					free_token_tree(ast->node.struct_init.fields[i].value);
+				}
+				free((void*)ast->node.struct_init.fields);
+			}
+			break;
+		case AST_CAST_EXPR:
+			free_var_def(&ast->node.cast_expr.target_type);
+			free_token_tree(ast->node.cast_expr.expr);
+			break;
 	}
 
 	free((void*)ast);
@@ -1877,6 +2045,12 @@ static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
 			break;
 		case AST_ARRAY_INIT:
 			print_array_init(&ast->node.array_init, depth);
+			break;
+		case AST_STRUCT_INIT:
+			print_struct_init(&ast->node.struct_init, depth);
+			break;
+		case AST_CAST_EXPR:
+			print_cast_expr(&ast->node.cast_expr, depth);
 			break;
 	}
 }
@@ -2385,4 +2559,33 @@ static void print_array_init(const ArrayInit* array_init, const usize depth)
 	}
 	print_indent(depth + 1);
 	printf("]\n");
+}
+
+static void print_struct_init(const StructInit* struct_init, usize depth)
+{
+	print_indent(depth);
+	printf("StructInit: %s\n", struct_init->struct_name ? struct_init->struct_name : "<anonymous>");
+
+	print_indent(depth + 1);
+	printf("Fields: %zu\n", struct_init->field_count);
+	for (usize i = 0; i < struct_init->field_count; i++) // NOLINT
+	{
+		print_indent(depth + 2);
+		printf(".%s =\n", struct_init->fields[i].field_name);
+		parse_print_impl(struct_init->fields[i].value, depth + 3);
+	}
+}
+
+static void print_cast_expr(const CastExpr* cast_expr, usize depth)
+{
+	print_indent(depth);
+	printf("CastExpr:\n");
+
+	print_indent(depth + 1);
+	printf("Target Type:\n");
+	print_var_def(&cast_expr->target_type, depth + 2);
+
+	print_indent(depth + 1);
+	printf("Expression:\n");
+	parse_print_impl(cast_expr->expr, depth + 2);
 }

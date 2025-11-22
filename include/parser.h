@@ -191,9 +191,16 @@ typedef struct
 typedef struct
 {
 	char* struct_name;
+	VarType type;
 	StructFieldInit* fields;
 	usize field_count;
 } StructInit;
+
+typedef struct
+{
+	VarDef target_type;
+	AST* expr;
+} CastExpr;
 
 typedef struct // NOLINT
 {
@@ -252,6 +259,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 
 		AST_ARRAY_INIT,
 		AST_STRUCT_INIT,
+		AST_CAST_EXPR,
 
 		AST_MESSAGE,
 	} type;
@@ -280,6 +288,7 @@ typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
 
 		ArrayInit array_init;
 		StructInit struct_init;
+		CastExpr cast_expr;
 
 		Message message;
 	} node;
