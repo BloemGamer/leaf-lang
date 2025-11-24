@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils.h"
+#include "basic_types.h"
 
 typedef struct HashStrNode HashStrNode;
 

@@ -2,7 +2,7 @@
 #include <string.h>
 
 #include "assert.h"
-#include "utils.h"
+#include "basic_types.h"
 #include "utils/hash.h"
 
 static usize hash_str_hash(const char* str);

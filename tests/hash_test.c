@@ -1,8 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
-#include <string.h>
 
-#include "utils.h"
 #include "utils/hash.h"
 
 void test_basic_operations()

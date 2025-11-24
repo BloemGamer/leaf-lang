@@ -87,6 +87,7 @@ static usize unescape(const char* input, char* output, usize output_size, Pos po
 static char make_char(const Token* token);
 static signed char unescape_char(const char* input, Pos pos);
 static i64 make_number(const Token* token);
+static f64 make_float(const Token* token);
 static void add_basic_types(ParserState* parser_state);
 
 static void free_var_type(VarType* type);
@@ -930,6 +931,7 @@ static AST* parse_prefix(ParserState* parser_state)
 		}
 
 		case token_type_number:
+		case token_type_float:
 		case token_type_string:
 		case token_type_char:
 		case token_type_true:
@@ -1328,6 +1330,11 @@ static AST* make_literal(const Token* token)
 			node->node.literal.literal.num_val = make_number(token);
 			node->node.literal.literal.pos = token->pos;
 			break;
+		case token_type_float:
+			node->node.literal.literal.token_type = token_type_float;
+			node->node.literal.literal.num_val = make_float(token);
+			node->node.literal.literal.pos = token->pos;
+			break;
 		case token_type_true:
 		case token_type_false:
 			node->node.literal.literal.token_type = token->token_type;
@@ -1691,6 +1698,10 @@ static i64 make_number(const Token* token)
 			}
 			return strtoll(token->str_val, nullptr, 10);
 	}
+}
+static f64 make_float(const Token* token)
+{
+	return strtod(token->str_val, nullptr);
 }
 
 static void add_basic_types(ParserState* parser_state)
@@ -2347,6 +2358,9 @@ static void print_literal(const Literal* lit, const usize depth)
 	{
 		case token_type_number:
 			printf("Literal: %" PRId64 "\n", lit->literal.num_val);
+			break;
+		case token_type_float:
+			printf("Literal: %.3lf\n", lit->literal.float_val);
 			break;
 		case token_type_char:
 			printf("Literal: %c\n", lit->literal.char_val);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tokens.h"
-#include "utils.h"
+#include "basic_types.h"
 
 typedef struct AbstractSyntaxTree AST;
 

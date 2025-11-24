@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils.h"
+#include "basic_types.h"
 
 // clang-format off
 #define __TOKENS_SIMPLE_SINGLE \
@@ -89,7 +89,8 @@
 #define __TOKENS_LITERAL \
 	X(string)					/* string literal "..." */ \
 	X(invalid_string)			/* invalid string literal "... EOF */ \
-	X(number)					/* any number like: 5 or 5.23 */ \
+	X(number)					/* any integer number like: 5 */ \
+	X(float)					/* any float number like 5.23 */ \
 	X(char)						/* any char like : 'E' */ \
 
 #define __TOKENS_MODIFIER \
@@ -143,6 +144,7 @@ typedef struct [[gnu::aligned(32)]]
 		char* str_val;
 		char char_val;
 		i64 num_val;
+		f64 float_val;
 	};
 	Pos pos;
 } Token;

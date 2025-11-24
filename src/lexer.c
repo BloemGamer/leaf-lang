@@ -421,6 +421,8 @@ static TokenResult string_to_literals_token(const char* input) // NOLINT
 	{
 		const char* start_str = input;
 		usize start_str_offset = 0;
+		bool is_int = false;
+
 		constexpr char num_starts[][3] = {"0b", "0x", "0o"};
 #pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(num_starts); i++)
@@ -429,12 +431,30 @@ static TokenResult string_to_literals_token(const char* input) // NOLINT
 			{
 				start_str += 2;
 				start_str_offset += 2;
+				is_int = true;
 				break;
 			}
 		}
 		usize num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
+		if (start_str[num_len] == '.' && isdigit(start_str[num_len + 1]))
+		{
+			num_len++;
+			num_len += strcspn(start_str + num_len, TOKENS_STOP);
+		}
+		else
+		{
+			is_int = true;
+		}
+
 		token_res.size = num_len;
-		token_res.token.token_type = token_type_number;
+		if (is_int)
+		{
+			token_res.token.token_type = token_type_number;
+		}
+		else
+		{
+			token_res.token.token_type = token_type_float;
+		}
 		token_res.token.str_val = (char*)malloc(num_len * (sizeof(char) + 1));
 		memcpy(token_res.token.str_val, input, num_len);
 		token_res.token.str_val[num_len] = '\0';
