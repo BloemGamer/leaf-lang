@@ -449,6 +449,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_BLOCK;
+	node->node.block.global = global_block;
 
 	varray_make(AST**, statements);
 
@@ -1701,9 +1702,7 @@ static i64 make_number(const Token* token)
 }
 static f64 make_float(const Token* token)
 {
-	puts(token->str_val);
 	f64 f = strtod(token->str_val, nullptr);
-	printf("%lf\n", f);
 	return f;
 }
 

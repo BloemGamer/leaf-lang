@@ -1,7 +1,7 @@
 #pragma once
 
-#include "tokens.h"
 #include "basic_types.h"
+#include "tokens.h"
 
 typedef struct AbstractSyntaxTree AST;
 
@@ -116,6 +116,7 @@ typedef struct [[gnu::aligned(32)]]
 	AST** statements;
 	usize statement_count;
 	AST* trailing_expr;
+	bool global;
 } Block;
 
 typedef struct // NOLINT
