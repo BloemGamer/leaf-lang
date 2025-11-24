@@ -1332,7 +1332,7 @@ static AST* make_literal(const Token* token)
 			break;
 		case token_type_float:
 			node->node.literal.literal.token_type = token_type_float;
-			node->node.literal.literal.num_val = make_float(token);
+			node->node.literal.literal.float_val = make_float(token);
 			node->node.literal.literal.pos = token->pos;
 			break;
 		case token_type_true:
@@ -1701,7 +1701,10 @@ static i64 make_number(const Token* token)
 }
 static f64 make_float(const Token* token)
 {
-	return strtod(token->str_val, nullptr);
+	puts(token->str_val);
+	f64 f = strtod(token->str_val, nullptr);
+	printf("%lf\n", f);
+	return f;
 }
 
 static void add_basic_types(ParserState* parser_state)
