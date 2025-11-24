@@ -32,9 +32,10 @@ target_include_directories(hash PUBLIC
 # -------------------------------------------------------
 add_executable(s-lang
 	src/main.c
+	src/tokens.c
 	src/lexer.c
 	src/parser.c
-	src/tokens.c
+	src/code_gen.c
 )
 
 # Link to the hash library target
