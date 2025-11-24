@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "code_gen.h"
 #include "lexer.h"
 #include "log.h"
 #include "parser.h"
@@ -12,6 +13,7 @@ size_t amount_errors = 0;
 size_t amount_warnings = 0;
 
 char* read_file_to_str(const char* filename);
+void write_file(char* filename, char* input);
 
 int main(int argc, char** argv)
 {
@@ -40,9 +42,16 @@ int main(int argc, char** argv)
 
 	AST* parsed = parse(lexed);
 
-	parse_print(parsed);
+	// parse_print(parsed);
 
 	lex_free(lexed);
+
+	char* code = generate_code(parsed);
+	puts(code);
+
+	write_file("slang-test/output.c", code);
+	system("clang-format -i slang-test/output.c"); // NOLINT
+	free((void*)code);
 
 	free_token_tree(parsed);
 }
@@ -87,4 +96,15 @@ char* read_file_to_str(const char* filename)
 	(void)fclose(file);
 
 	return buffer;
+}
+
+void write_file(char* filename, char* input) // NOLINT
+{
+#ifdef _WIN32
+	FILE* file = fopen(filename, "w");
+#else // linux
+	FILE* file = fopen(filename, "we");
+#endif
+	(void)fputs(input, file);
+	(void)fclose(file);
 }
