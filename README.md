@@ -36,11 +36,17 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 
 
 ## Roadmap
+### Now busy with
+- [x] Parser
+
 ### Short-term
 - [ ] Finish first compiler version
 - [ ] Adding the namespace like syntax
 - [ ] Add tests
 - [ ] Write documentation
+- [ ] Make the lexer threadsafe
+- [ ] Add error handeling in the lexer
+- [ ] Add error handeling in the parser
 
 ### Long-term
 - [ ] Adding templates
@@ -51,7 +57,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 ## Progress of the stages of the compiler
 - [ ] Preprocessor (Low priority)
 - [x] Lexing -> lex
-- [ ] Parsing -> parse
+- [x] Parsing -> parse
 - [ ] Semantic analyser
 - [ ] Optimisations (Low priority)
 - [ ] Code generator
