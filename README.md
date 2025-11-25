@@ -47,6 +47,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 - [ ] Make the lexer threadsafe
 - [ ] Add error handeling in the lexer
 - [ ] Add error handeling in the parser
+- [ ] Add a switch or match statement
 
 ### Long-term
 - [ ] Adding templates
