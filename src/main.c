@@ -46,12 +46,17 @@ int main(int argc, char** argv)
 
 	lex_free(lexed);
 
-	char* code = generate_code(parsed);
-	puts(code);
+	CodeGen code = generate_code(parsed);
+	NewFiles files = code_gen_to_files(&code, "main");
+	puts(".h file");
+	puts(files.h_file);
+	puts(".c file");
+	puts(files.c_file);
 
-	write_file("slang-test/output.c", code);
-	system("clang-format -i slang-test/output.c"); // NOLINT
-	free((void*)code);
+	write_file("slang-test/main.c", files.h_file);
+	write_file("slang-test/main.c", files.c_file);
+	system("clang-format -i slang-test/main.h"); // NOLINT
+	system("clang-format -i slang-test/main.c"); // NOLINT
 
 	free_token_tree(parsed);
 }
