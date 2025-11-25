@@ -15,14 +15,13 @@
 	X(uint16_t, u16) \
 	X(uint8_t, u8)   \
                      \
-	X(long double, f128) \
 	X(double, f64)   \
 	X(float, f32)    \
                      \
 	X(size_t, usize)
 
 #define BASIC_NEW_TYPES \
-	Y(String) \
+	Y(String)           \
 	Y(str)
 
 #define BASIC_SUPPORTED_CTYPES \
@@ -46,7 +45,6 @@ static_assert(sizeof(u32)  ==  32 / 8);
 static_assert(sizeof(u16)  ==  16 / 8);
 static_assert(sizeof(u8)   ==   8 / 8); // NOLINT
 
-static_assert(sizeof(f128) == 128 / 8);
 static_assert(sizeof(f64)  ==  64 / 8);
 static_assert(sizeof(f32)  ==  32 / 8);
 // clang-format on
