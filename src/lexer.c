@@ -11,13 +11,13 @@
 #include "tokens.h"
 #include "utils.h"
 
-typedef struct [[gnu::aligned(64)]]
+typedef struct
 {
 	Token token;
 	usize size;
 } TokenResult;
 
-typedef struct [[gnu::aligned(16)]]
+typedef struct
 {
 	usize size;
 	char char_val;

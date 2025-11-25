@@ -12,7 +12,7 @@ typedef enum
 	pointer_type_mut,
 } PointerType;
 
-typedef struct [[gnu::aligned(64)]]
+typedef struct
 {
 	char* name;
 	PointerType* pointer_types;
@@ -21,14 +21,14 @@ typedef struct [[gnu::aligned(64)]]
 	usize array_count;
 } VarType;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	char* name;
 	bool has_value;
 	i64 value;
 } EnumType;
 
-typedef struct [[gnu::aligned(128)]]
+typedef struct
 {
 	char* name;
 	VarType type;
@@ -37,7 +37,7 @@ typedef struct [[gnu::aligned(128)]]
 	AST* equals;
 } VarDef;
 
-typedef struct [[gnu::aligned(128)]]
+typedef struct
 {
 	char* name;
 	Token* modifiers;
@@ -50,21 +50,21 @@ typedef struct [[gnu::aligned(128)]]
 	AST* body;
 } FuncDef;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	char* name;
 	AST** members;
 	usize member_count;
 } StructDef;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	char* name;
 	AST** members;
 	usize member_count;
 } UnionDef;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	char* name;
 	char* type;
@@ -72,46 +72,46 @@ typedef struct [[gnu::aligned(32)]]
 	usize member_count;
 } EnumDef;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	AST* callee;
 	AST** args;
 	usize arg_count;
 } FuncCall;
 
-typedef struct [[gnu::aligned(16)]]
+typedef struct
 {
 	AST* left;
 	AST* right;
 	bool direct; // true means with a . false with a ->
 } MemberAccess;
 
-typedef struct [[gnu::aligned(64)]]
+typedef struct
 {
 	Token op;
 	AST* left;
 	AST* right;
 } BinaryExpr;
 
-typedef struct [[gnu::aligned(16)]]
+typedef struct
 {
 	AST* left;
 	AST* index;
 } IndexExpr;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	Token literal;
 } Literal;
 
 /// wil also be used for messages
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	Token identifier;
 } Identifier;
 
 /// At least for now also used for the global scope
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	AST** statements;
 	usize statement_count;
@@ -232,7 +232,7 @@ typedef struct // NOLINT
 
 } Message;
 
-typedef struct [[gnu::aligned(128)]] AbstractSyntaxTree
+typedef struct AbstractSyntaxTree
 {
 	enum
 	{

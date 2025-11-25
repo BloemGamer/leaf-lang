@@ -180,7 +180,7 @@ static void str_cat(CodeGen* code_gen, const char* str)
 	usize str_len = strlen(str);
 	if (code_gen->len + str_len + 1 >= code_gen->cap)
 	{
-		while (code_gen->len + str_len + 1 >= code_gen->cap)
+		while (code_gen->len + str_len + 1 >= code_gen->cap) // NOLINT
 		{
 			code_gen->cap = MAX(code_gen->cap, 1);
 			code_gen->cap *= 2;

@@ -130,13 +130,13 @@ typedef enum
 #undef X
 #undef Y
 
-typedef struct [[gnu::aligned(16)]]
+typedef struct
 {
 	usize line;
 	usize character;
 } Pos;
 
-typedef struct [[gnu::aligned(32)]]
+typedef struct
 {
 	TokenType token_type;
 	union
