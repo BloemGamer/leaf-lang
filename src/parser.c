@@ -304,6 +304,9 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 #define PARSE(_type)                                                                  \
 	do                                                                                \
 	{                                                                                 \
+		TokenArray mod_arr = get_modifiers(parser_state);                             \
+		node->node._type##_def.modifiers = mod_arr.tokens;                            \
+		node->node._type##_def.modifier_count = mod_arr.count;                        \
 		{                                                                             \
 			Token token = *consume(parser_state);                                     \
 			assert(token.token_type == token_type_identifier);                        \
@@ -366,6 +369,10 @@ static AST* parse_enum(ParserState* parser_state)
 {
 	AST* node = calloc(1, sizeof(AST));
 	node->type = AST_ENUM_DEF;
+
+	TokenArray mod_arr = get_modifiers(parser_state);
+	node->node.enum_def.modifiers = mod_arr.tokens;
+	node->node.enum_def.modifier_count = mod_arr.count;
 
 	assert(consume(parser_state)->token_type == token_type_enum);
 
@@ -1734,6 +1741,11 @@ void free_token_tree(AST* ast)
 
 		case AST_STRUCT_DEF:
 			free((void*)ast->node.struct_def.name);
+
+			if (ast->node.struct_def.modifiers != nullptr)
+			{
+				free((void*)ast->node.struct_def.modifiers);
+			}
 			if (ast->node.struct_def.members)
 			{
 				for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
@@ -1745,6 +1757,10 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_UNION_DEF:
+			if (ast->node.union_def.modifiers != nullptr)
+			{
+				free((void*)ast->node.union_def.modifiers);
+			}
 			free((void*)ast->node.union_def.name);
 			if (ast->node.union_def.members)
 			{
@@ -1757,6 +1773,10 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_ENUM_DEF:
+			if (ast->node.enum_def.modifiers != nullptr)
+			{
+				free((void*)ast->node.enum_def.modifiers);
+			}
 			free((void*)ast->node.enum_def.name);
 			if (ast->node.enum_def.members)
 			{
@@ -1940,6 +1960,11 @@ static void free_var_def(VarDef* def)
 	{
 		return;
 	}
+
+	if (def->modifiers != nullptr)
+	{
+		free((void*)def->modifiers);
+	}
 	free((void*)def->name);
 	free((void*)def->modifiers);
 	free_var_type(&def->type);
@@ -1955,6 +1980,11 @@ static void free_func_def(FuncDef* func)
 
 	free((void*)func->name);
 	free((void*)func->modifiers);
+
+	if (func->modifiers != nullptr)
+	{
+		free((void*)func->modifiers);
+	}
 
 	if (func->template_types)
 	{
@@ -2212,6 +2242,8 @@ static void print_struct_def(const StructDef* struct_def, const usize depth) // 
 	print_indent(depth);
 	printf("StructDef: %s\n", struct_def->name ? struct_def->name : "<anonymous>");
 
+	print_modifiers(struct_def->modifiers, struct_def->modifier_count, depth + 1);
+
 	print_indent(depth + 1);
 	printf("Members: %zu\n", struct_def->member_count);
 	for (usize i = 0; i < struct_def->member_count; i++) // NOLINT
@@ -2224,6 +2256,8 @@ static void print_union_def(const UnionDef* union_def, const usize depth) // NOL
 {
 	print_indent(depth);
 	printf("UnionDef: %s\n", union_def->name ? union_def->name : "<anonymous>");
+
+	print_modifiers(union_def->modifiers, union_def->modifier_count, depth + 1);
 
 	print_indent(depth + 1);
 	printf("Members: %zu\n", union_def->member_count);
@@ -2242,6 +2276,8 @@ static void print_enum_def(const EnumDef* enum_def, const usize depth)
 		printf(" : %s", enum_def->type);
 	}
 	printf("\n");
+
+	print_modifiers(enum_def->modifiers, enum_def->modifier_count, depth + 1);
 
 	print_indent(depth + 1);
 	printf("Members: %zu\n", enum_def->member_count);

@@ -53,6 +53,8 @@ typedef struct
 typedef struct
 {
 	char* name;
+	Token* modifiers;
+	usize modifier_count;
 	AST** members;
 	usize member_count;
 } StructDef;
@@ -60,6 +62,8 @@ typedef struct
 typedef struct
 {
 	char* name;
+	Token* modifiers;
+	usize modifier_count;
 	AST** members;
 	usize member_count;
 } UnionDef;
@@ -68,6 +72,8 @@ typedef struct
 {
 	char* name;
 	char* type;
+	Token* modifiers;
+	usize modifier_count;
 	EnumType* members;
 	usize member_count;
 } EnumDef;
