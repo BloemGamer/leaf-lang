@@ -139,6 +139,44 @@ static void gen_code(AST* ast, CodeGen* code_gen)
 			str_cat(code_gen, "}");
 			str_cat(code_gen, node.struct_def.name);
 			str_cat(code_gen, ";");
+		case AST_UNION_DEF:
+			str_cat(code_gen, "typedef union ");
+			str_cat(code_gen, node.union_def.name);
+			str_cat(code_gen, "{");
+
+			for (usize i = 0; i < node.union_def.member_count; i++) // NOLINT
+			{
+				assert(node.union_def.members[i]->type == AST_VAR_DEF);
+				gen_code(node.union_def.members[i], code_gen);
+				str_cat(code_gen, ";");
+			}
+
+			str_cat(code_gen, "}");
+			str_cat(code_gen, node.union_def.name);
+			str_cat(code_gen, ";");
+		case AST_ENUM_DEF:
+			str_cat(code_gen, "typedef enum ");
+			if (node.enum_def.type != nullptr)
+			{
+				str_cat(code_gen, ":");
+				str_cat(code_gen, node.enum_def.type);
+			}
+			str_cat(code_gen, "{");
+			for (usize i = 0; i < node.enum_def.member_count; i++) // NOLINT
+			{
+				str_cat(code_gen, node.enum_def.members[i].name);
+				if (node.enum_def.members[i].has_value)
+				{
+					str_cat(code_gen, "=");
+					char buffer[64] = {0};
+					(void)snprintf(buffer, 63, "%" PRId64, node.enum_def.members[i].value);
+					str_cat(code_gen, buffer);
+				}
+				str_cat(code_gen, ",");
+			}
+			str_cat(code_gen, "}");
+			str_cat(code_gen, node.enum_def.name);
+			str_cat(code_gen, ";");
 	}
 	// assert(false && "code gen: not yet implemented");
 }
