@@ -79,15 +79,12 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 				}
 			}
 
-			// Generate function declaration in functions block
 			gen_func_signature(code_gen, node.func_def);
-			str_cat(code_block, ";"); // Add semicolon for declaration
+			str_cat(code_block, ";");
 
-			// Generate function implementation in code block
 			code_gen->current_block = CODE_BLOCK_CODE;
 			gen_func_signature(code_gen, node.func_def);
 
-			// Generate the function body
 			gen_code(code_gen, node.func_def.body);
 
 			code_gen->current_block = CODE_BLOCK_NONE;
@@ -109,8 +106,8 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			}
 			else
 			{
-				code_block = get_code_block(code_gen); // FIX: Get current block instead of always using code
-				if (code_block == nullptr)			   // FIX: Fallback for struct members
+				code_block = get_code_block(code_gen);
+				if (code_block == nullptr)
 				{
 					code_block = &code_gen->code;
 					code_gen->current_block = CODE_BLOCK_CODE;
@@ -120,14 +117,14 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 
 			if (node.var_def.equals == nullptr)
 			{
-				str_cat(code_block, ";"); // FIX: Add semicolon for declarations without initialization
+				str_cat(code_block, ";");
 				code_gen->current_block = CODE_BLOCK_NONE;
 				return;
 			}
-			str_cat(code_block, "="); // FIX: Use code_block instead of always code_gen->code
+			str_cat(code_block, "=");
 			gen_code(code_gen, node.var_def.equals);
 
-			str_cat(code_block, ";"); // FIX: Use code_block instead of always code_gen->code
+			str_cat(code_block, ";");
 			code_gen->current_block = CODE_BLOCK_NONE;
 			return;
 		case AST_LITERAL:
