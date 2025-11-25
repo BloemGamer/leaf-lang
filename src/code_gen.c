@@ -79,8 +79,19 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 				}
 			}
 
-			gen_func_signature(code_gen, node.func_def);
-			str_cat(code_block, ";");
+			if (strcmp(node.func_def.name, "main") != 0)
+			{
+				if (code_gen->current_block == CODE_BLOCK_PRIV_FUNCTIONS)
+				{
+					str_cat(code_block, "static");
+				}
+				gen_func_signature(code_gen, node.func_def);
+				str_cat(code_block, ";");
+				if (code_gen->current_block == CODE_BLOCK_PRIV_FUNCTIONS)
+				{
+					str_cat(&code_gen->code, "static");
+				}
+			}
 
 			code_gen->current_block = CODE_BLOCK_CODE;
 			gen_func_signature(code_gen, node.func_def);
