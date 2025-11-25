@@ -27,6 +27,9 @@ char* generate_code(AST* ast)
 {
 	CodeGen code_gen = {.code = nullptr};
 
+	str_cat(&code_gen, "/* Code generated with S-lang */\n\n");
+	str_cat(&code_gen, "#include <assert.h>\n");
+	str_cat(&code_gen, "#include <basic_types.h>\n");
 	gen_code(ast, &code_gen);
 
 	return code_gen.code;

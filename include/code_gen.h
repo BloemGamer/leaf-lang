@@ -2,4 +2,4 @@
 
 #include "parser.h"
 
-char* generate_code(AST* ast);
+extern char* generate_code(AST* ast);
