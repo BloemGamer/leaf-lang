@@ -33,7 +33,10 @@ typedef struct
 	CodeBlock pub_vars;
 	CodeBlock code;
 	CodeBlockType current_block;
+	u32 tmp_num;
 	bool global_block;
+	bool skip_brace;
+	bool no_semicolon;
 } CodeGen;
 
 typedef struct

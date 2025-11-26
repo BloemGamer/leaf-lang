@@ -31,6 +31,7 @@ static void gen_ast_index_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_array_init(CodeGen* code_gen, AST* ast);
 static void gen_ast_if_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_while_expr(CodeGen* code_gen, AST* ast);
+static void gen_ast_for_expr(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -57,6 +58,10 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	if (ast == nullptr)
 	{
 		return;
+	}
+	if (code_gen == nullptr)
+	{
+		assert(code_gen != nullptr);
 	}
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -125,6 +130,9 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 		case AST_WHILE_EXPR:
 			gen_ast_while_expr(code_gen, ast);
 			return;
+		case AST_FOR_EXPR:
+			gen_ast_for_expr(code_gen, ast);
+			return;
 	}
 	// assert(false && "code gen: not yet implemented");
 }
@@ -132,19 +140,19 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 static void gen_ast_block(CodeGen* code_gen, AST* ast)
 {
 	typeof(ast->node) node = ast->node;
-	CodeBlock* code_block = nullptr;
+	CodeBlock* code_block = get_code_block(code_gen);
 
-	if (!node.block.global)
+	if (!node.block.global && !code_gen->skip_brace)
 	{
+		bool prev_global_block = code_gen->global_block;
 		code_block = get_code_block(code_gen);
-		if (code_block == nullptr)
-		{
-			code_block = &code_gen->code;
-		}
+
 		str_cat(code_block, "{");
 	}
 	bool prev_global_block = code_gen->global_block;
 	code_gen->global_block = node.block.global;
+	bool prev_skip_brace = code_gen->skip_brace;
+	code_gen->skip_brace = false;
 	for (usize i = 0; i < node.block.statement_count; i++) // NOLINT
 	{
 		code_block = get_code_block(code_gen);
@@ -182,10 +190,11 @@ static void gen_ast_block(CodeGen* code_gen, AST* ast)
 	}
 	code_gen->global_block = prev_global_block;
 
-	if (!node.block.global)
+	if (!node.block.global && !prev_skip_brace)
 	{
 		str_cat(code_block, "}");
 	}
+	code_gen->skip_brace = prev_skip_brace;
 }
 
 static void gen_ast_func_def(CodeGen* code_gen, AST* ast)
@@ -279,7 +288,10 @@ static void gen_ast_var_def(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, "=");
 	gen_code(code_gen, node.var_def.equals);
 
-	str_cat(code_block, ";");
+	if (!code_gen->no_semicolon)
+	{
+		str_cat(code_block, ";");
+	}
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
@@ -369,7 +381,10 @@ static void gen_ast_struct_def(CodeGen* code_gen, AST* ast)
 
 	str_cat(code_block, "}");
 	str_cat(code_block, node.struct_def.name);
-	str_cat(code_block, ";");
+	if (!code_gen->no_semicolon)
+	{
+		str_cat(code_block, ";");
+	}
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
@@ -402,7 +417,10 @@ static void gen_ast_union_def(CodeGen* code_gen, AST* ast)
 
 	str_cat(code_block, "}");
 	str_cat(code_block, node.union_def.name);
-	str_cat(code_block, ";");
+	if (!code_gen->no_semicolon)
+	{
+		str_cat(code_block, ";");
+	}
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
@@ -443,7 +461,10 @@ static void gen_ast_enum_def(CodeGen* code_gen, AST* ast)
 	}
 	str_cat(code_block, "}");
 	str_cat(code_block, node.enum_def.name);
-	str_cat(code_block, ";");
+	if (!code_gen->no_semicolon)
+	{
+		str_cat(code_block, ";");
+	}
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
@@ -501,7 +522,7 @@ static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast)
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	str_cat(code_block, "(");
-	str_cat(code_block, TOKENS_STR_IDENT[node.unary_expr.op->token_type]);
+	str_cat(code_block, TOKENS_STR_IDENT[node.unary_expr.op.token_type]);
 	gen_code(code_gen, node.unary_expr.rhs);
 	str_cat(code_block, ")");
 }
@@ -577,10 +598,114 @@ static void gen_ast_while_expr(CodeGen* code_gen, AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
+
 	str_cat(code_block, "while(");
 	gen_code(code_gen, node.while_expr.condition);
 	str_cat(code_block, ")");
 	gen_code(code_gen, node.while_expr.then_block);
+}
+
+static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+
+	if (node.for_expr.style == FOR_STYLE_C)
+	{
+		str_cat(code_block, "for(");
+		code_gen->no_semicolon = true;
+		gen_code(code_gen, node.for_expr.c_style.init);
+		str_cat(code_block, ";");
+		gen_code(code_gen, node.for_expr.c_style.condition);
+		str_cat(code_block, ";");
+		gen_code(code_gen, node.for_expr.c_style.increment);
+		code_gen->no_semicolon = false;
+		str_cat(code_block, ")");
+
+		gen_code(code_gen, node.for_expr.body);
+	}
+	else // Rust-style
+	{
+		char tmp_end[64] = {};
+		char tmp_start[64] = {};
+		char tmp_dir[64] = {};
+		char tmp_iter[64] = {};
+		(void)snprintf(tmp_end, 63, "sl_tmp_end_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_start, 63, "sl_tmp_start_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_dir, 63, "sl_tmp_dir_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_iter, 63, "sl_tmp_iter_%" PRIu32, code_gen->tmp_num);
+		code_gen->tmp_num++;
+
+		gen_type(code_block, node.for_expr.rust_style.var_def.type);
+		str_cat(code_block, " ");
+		str_cat(code_block, tmp_end);
+		str_cat(code_block, "=");
+		gen_code(code_gen, node.for_expr.rust_style.iterable->node.range_expr.end);
+		str_cat(code_block, ";");
+
+		gen_type(code_block, node.for_expr.rust_style.var_def.type);
+		str_cat(code_block, " ");
+		str_cat(code_block, tmp_start);
+		str_cat(code_block, "=");
+		gen_code(code_gen, node.for_expr.rust_style.iterable->node.range_expr.start);
+		str_cat(code_block, ";");
+
+		str_cat(code_block, "bool ");
+		str_cat(code_block, tmp_dir);
+		str_cat(code_block, "=");
+		str_cat(code_block, tmp_start);
+		str_cat(code_block, "<");
+		str_cat(code_block, tmp_end);
+		str_cat(code_block, ";");
+
+		str_cat(code_block, "for(");
+
+		// for (x; _; _)
+		gen_type(code_block, node.for_expr.rust_style.var_def.type);
+		str_cat(code_block, " ");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, "=");
+		str_cat(code_block, tmp_start);
+
+		str_cat(code_block, ";");
+
+		// for (_; x; _)
+		str_cat(code_block, "(");
+		str_cat(code_block, tmp_dir);
+		str_cat(code_block, "?");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, "<");
+		str_cat(code_block, tmp_end);
+		str_cat(code_block, ":");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, ">");
+		str_cat(code_block, tmp_end);
+		str_cat(code_block, ")");
+
+		str_cat(code_block, ";");
+
+		// for (_; _; x)
+		str_cat(code_block, "(");
+		str_cat(code_block, tmp_dir);
+		str_cat(code_block, "?");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, "++");
+		str_cat(code_block, ":");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, "--)");
+
+		str_cat(code_block, ")");
+
+		str_cat(code_block, "{");
+		gen_var_def(code_gen, node.for_expr.rust_style.var_def);
+		str_cat(code_block, "=");
+		str_cat(code_block, tmp_iter);
+		str_cat(code_block, ";");
+		code_gen->skip_brace = true;
+		gen_code(code_gen, node.for_expr.body);
+		code_gen->skip_brace = false;
+		str_cat(code_block, "}");
+	}
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
