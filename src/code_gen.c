@@ -9,6 +9,9 @@
 #include "tokens.h"
 #include "utils.h"
 
+#define TMP_VAR_PREFIX "sl_tmp_"
+static constexpr i64 MAX_BUFFER_SIZE = 64;
+
 static void gen_code(CodeGen* code_gen, AST* ast);
 
 static void gen_ast_block(CodeGen* code_gen, AST* ast, const char* tmp_var);
@@ -69,7 +72,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 	CodeBlockType saved_block = CODE_BLOCK_NONE;
-	char buffer[64] = {0};
+	char buffer[MAX_BUFFER_SIZE] = {0};
 
 	switch (ast->type)
 	{
@@ -355,11 +358,11 @@ static void gen_ast_var_def(CodeGen* code_gen, AST* ast)
 			code_gen->current_block = CODE_BLOCK_CODE;
 		}
 	}
-	char tmp_var[64] = {};
+	char tmp_var[MAX_BUFFER_SIZE] = {};
 	if (node.var_def.equals != nullptr &&
 		(node.var_def.equals->type == AST_BLOCK || node.var_def.equals->type == AST_IF_EXPR))
 	{
-		(void)snprintf(tmp_var, 63, "sl_tmp_ret_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
 		gen_type(code_block, node.var_def.type);
@@ -419,7 +422,7 @@ static void gen_ast_literal(CodeGen* code_gen, AST* ast)
 	{
 		code_block = &code_gen->code;
 	}
-	char buffer[64] = {0};
+	char buffer[MAX_BUFFER_SIZE] = {0};
 	switch (token.token_type)
 	{
 		case token_type_string:
@@ -428,15 +431,15 @@ static void gen_ast_literal(CodeGen* code_gen, AST* ast)
 			str_cat(code_block, "\"");
 			break;
 		case token_type_number:
-			(void)snprintf(buffer, 63, "%" PRId64, token.num_val);
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "%" PRId64, token.num_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_char:
-			(void)snprintf(buffer, 63, "'%c'", token.char_val);
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "'%c'", token.char_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_float:
-			(void)snprintf(buffer, 63, "%lf", token.float_val);
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "%lf", token.float_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_true:
@@ -570,8 +573,8 @@ static void gen_ast_enum_def(CodeGen* code_gen, AST* ast)
 		if (node.enum_def.members[i].has_value)
 		{
 			str_cat(code_block, "=");
-			char buffer[64] = {0};
-			(void)snprintf(buffer, 63, "%" PRId64, node.enum_def.members[i].value);
+			char buffer[MAX_BUFFER_SIZE] = {0};
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "%" PRId64, node.enum_def.members[i].value);
 			str_cat(code_block, buffer);
 		}
 		str_cat(code_block, ",");
@@ -765,14 +768,14 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 	}
 	else // Rust-style
 	{
-		char tmp_end[64] = {};
-		char tmp_start[64] = {};
-		char tmp_dir[64] = {};
-		char tmp_iter[64] = {};
-		(void)snprintf(tmp_end, 63, "sl_tmp_end_%" PRIu32, code_gen->tmp_num);
-		(void)snprintf(tmp_start, 63, "sl_tmp_start_%" PRIu32, code_gen->tmp_num);
-		(void)snprintf(tmp_dir, 63, "sl_tmp_dir_%" PRIu32, code_gen->tmp_num);
-		(void)snprintf(tmp_iter, 63, "sl_tmp_iter_%" PRIu32, code_gen->tmp_num);
+		char tmp_end[MAX_BUFFER_SIZE] = {};
+		char tmp_start[MAX_BUFFER_SIZE] = {};
+		char tmp_dir[MAX_BUFFER_SIZE] = {};
+		char tmp_iter[MAX_BUFFER_SIZE] = {};
+		(void)snprintf(tmp_end, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "end_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_start, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "start_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_dir, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "dir_%" PRIu32, code_gen->tmp_num);
+		(void)snprintf(tmp_iter, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "iter_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
 		gen_type(code_block, node.for_expr.rust_style.var_def.type);
