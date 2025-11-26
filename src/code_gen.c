@@ -674,11 +674,25 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 		str_cat(code_block, tmp_dir);
 		str_cat(code_block, "?");
 		str_cat(code_block, tmp_iter);
-		str_cat(code_block, "<");
+		if (node.range_expr.inclusive)
+		{
+			str_cat(code_block, "<=");
+		}
+		else
+		{
+			str_cat(code_block, "<");
+		}
 		str_cat(code_block, tmp_end);
 		str_cat(code_block, ":");
 		str_cat(code_block, tmp_iter);
-		str_cat(code_block, ">");
+		if (node.range_expr.inclusive)
+		{
+			str_cat(code_block, ">=");
+		}
+		else
+		{
+			str_cat(code_block, ">");
+		}
 		str_cat(code_block, tmp_end);
 		str_cat(code_block, ")");
 

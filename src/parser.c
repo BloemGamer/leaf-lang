@@ -1252,7 +1252,8 @@ static i32 precedence(TokenType token_type)
 		case token_type_lshift: // <<
 		case token_type_rshift: // >>
 			return 9;
-		case token_type_dot_dot: // ..
+		case token_type_dot_dot:	   // ..
+		case token_type_dot_dot_equal: // ..
 			return 10;
 		case token_type_plus:  // +
 		case token_type_minus: // -
@@ -1369,11 +1370,16 @@ static AST* make_identifier(const Token* token)
 static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
-	if (op->token_type == token_type_dot_dot)
+	if (op->token_type == token_type_dot_dot || op->token_type == token_type_dot_dot_equal)
 	{
 		node->type = AST_RANGE_EXPR;
 		node->node.range_expr.start = left;
 		node->node.range_expr.end = right;
+		node->node.range_expr.inclusive = false;
+		if (op->token_type == token_type_dot_dot_equal)
+		{
+			node->node.range_expr.inclusive = true;
+		}
 	}
 	else
 	{

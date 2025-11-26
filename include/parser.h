@@ -168,6 +168,7 @@ typedef struct
 {
 	AST* start;
 	AST* end;
+	bool inclusive;
 } RangeExpr;
 
 typedef struct

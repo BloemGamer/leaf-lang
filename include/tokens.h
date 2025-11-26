@@ -4,58 +4,59 @@
 
 // clang-format off
 #define __TOKENS_SIMPLE_SINGLE \
-	Y(lparen, '(')				/* ( */ \
-	Y(rparen, ')')				/* ) */ \
-	Y(lbrace, '{')				/* { */ \
-	Y(rbrace, '}')				/* } */ \
-	Y(lsqbracket, '[')			/* [ */ \
-	Y(rsqbracket, ']')			/* ] */ \
-	Y(dot, '.')					/* . */ \
-	Y(comma, ',')				/* , */ \
-	Y(plus, '+')				/* + */ \
-	Y(minus, '-')				/* - */ \
-	Y(star, '*')				/* * */ \
-	Y(slash, '/')				/* / */ \
-	Y(mod, '%')					/* % */ \
-	Y(semicolon, ';')			/* ; */ \
-	Y(colon, ':')				/* : */ \
-	Y(bang, '!')				/* ! */ \
-	Y(equal, '=')				/* = */ \
-	Y(greater, '>')				/* > */ \
-	Y(less, '<')				/* < */ \
-	Y(ampersand, '&')			/* & */ \
-	Y(caret, '^')				/* ^ */ \
-	Y(pipe, '|')				/* | */ \
-	Y(tilda, '~')				/* ~ */
+	Y(lparen, '(')					/* ( */ \
+	Y(rparen, ')')					/* ) */ \
+	Y(lbrace, '{')					/* { */ \
+	Y(rbrace, '}')					/* } */ \
+	Y(lsqbracket, '[')				/* [ */ \
+	Y(rsqbracket, ']')				/* ] */ \
+	Y(dot, '.')						/* . */ \
+	Y(comma, ',')					/* , */ \
+	Y(plus, '+')					/* + */ \
+	Y(minus, '-')					/* - */ \
+	Y(star, '*')					/* * */ \
+	Y(slash, '/')					/* / */ \
+	Y(mod, '%')						/* % */ \
+	Y(semicolon, ';')				/* ; */ \
+	Y(colon, ':')					/* : */ \
+	Y(bang, '!')					/* ! */ \
+	Y(equal, '=')					/* = */ \
+	Y(greater, '>')					/* > */ \
+	Y(less, '<')					/* < */ \
+	Y(ampersand, '&')				/* & */ \
+	Y(caret, '^')					/* ^ */ \
+	Y(pipe, '|')					/* | */ \
+	Y(tilda, '~')					/* ~ */
 
 #define __TOKENS_SIMPLE_DOUBLE \
-	Y(arrow, '-','>')			/* -> */ \
-	Y(lshift, '<','<')			/* << */ \
-	Y(rshift, '>','>')			/* >> */ \
-	Y(and, '&','&')				/* && */ \
-	Y(or, '|','|')				/* || */ \
-	Y(colon_colon, ':',':')		/* :: */ \
+	Y(arrow, '-','>')				/* -> */ \
+	Y(lshift, '<','<')				/* << */ \
+	Y(rshift, '>','>')				/* >> */ \
+	Y(and, '&','&')					/* && */ \
+	Y(or, '|','|')					/* || */ \
+	Y(colon_colon, ':',':')			/* :: */ \
 	/* compound tokens: */ \
-	Y(bang_equal, '!','=')		/* != */ \
-	Y(equal_equal, '=','=')		/* == */ \
-	Y(greater_equal, '>','=')	/* >= */ \
-	Y(less_equal, '<','=')		/* <= */ \
+	Y(bang_equal, '!','=')			/* != */ \
+	Y(equal_equal, '=','=')			/* == */ \
+	Y(greater_equal, '>','=')		/* >= */ \
+	Y(less_equal, '<','=')			/* <= */ \
 	\
-	Y(dot_dot, '.','.')			/* .. */ \
-	/* assignment opperators with = */ \
-	Y(plus_equal, '+','=')		/* += */ \
-	Y(minus_equal, '-','=')		/* -= */ \
-	Y(star_equal, '*','=')		/* *= */ \
-	Y(slash_equal, '/','=')		/* /= */ \
-	Y(mod_equal, '%','=')		/* %= */ \
-	Y(pipe_equal, '|','=')		/* |= */ \
-	Y(tilda_equal, '~','=')		/* ~= */ \
-	Y(ampersand_equal, '&','=')	/* &= */ \
-	Y(caret_equal, '^','=')		/* ^= */ \
+	Y(dot_dot, '.','.')				/* .. */ \
+	/* assignment opperators wit	h = */ \
+	Y(plus_equal, '+','=')			/* += */ \
+	Y(minus_equal, '-','=')			/* -= */ \
+	Y(star_equal, '*','=')			/* *= */ \
+	Y(slash_equal, '/','=')			/* /= */ \
+	Y(mod_equal, '%','=')			/* %= */ \
+	Y(pipe_equal, '|','=')			/* |= */ \
+	Y(tilda_equal, '~','=')			/* ~= */ \
+	Y(ampersand_equal, '&','=')		/* &= */ \
+	Y(caret_equal, '^','=')			/* ^= */ \
 
 #define __TOKENS_SIMPLE_TRIPLE \
-	Y(lshift_equal, '<','<','=')/* <<= */ \
-	Y(rshift_equal, '>','>','=')/* >>= */ \
+	Y(lshift_equal, '<','<','=')	/* <<= */ \
+	Y(rshift_equal, '>','>','=')	/* >>= */ \
+	Y(dot_dot_equal, '.','.','=')	/* ..= */ \
 
 #define __TOKENS_SIMPLE \
 	__TOKENS_SIMPLE_SINGLE \
