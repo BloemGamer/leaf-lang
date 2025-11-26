@@ -1047,6 +1047,10 @@ static AST* parse_prefix(ParserState* parser_state)
 			step_back(parser_state);
 			return parse_block(parser_state);
 
+		case token_type_if:
+			step_back(parser_state);
+			return parse_if_expr(parser_state);
+
 		default:
 			assert(false && "unexpected token in parse_prefix");
 			return nullptr;

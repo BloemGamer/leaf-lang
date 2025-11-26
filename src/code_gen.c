@@ -722,6 +722,8 @@ static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_v
 	}
 	else
 	{
+		assert(node.if_expr.then_block != nullptr);
+		assert(node.if_expr.else_block != nullptr);
 		assert(node.if_expr.then_block->type == AST_BLOCK);
 		assert(node.if_expr.else_block->type == AST_BLOCK || node.if_expr.else_block->type == AST_IF_EXPR);
 		gen_ast_block(code_gen, node.if_expr.then_block, tmp_var);
