@@ -302,7 +302,15 @@ static void gen_var_def(CodeGen* code_gen, VarDef var_def)
 static void gen_func_signature(CodeGen* code_gen, FuncDef func_def)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
-	gen_type(code_block, func_def.return_type.type);
+	if (func_def.return_type.type.name != nullptr)
+	{
+		gen_type(code_block, func_def.return_type.type);
+	}
+	else
+	{
+		str_cat(code_block, "void");
+	}
+
 	str_cat(code_block, " ");
 	str_cat(code_block, func_def.name);
 	str_cat(code_block, "(");
