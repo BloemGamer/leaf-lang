@@ -14,29 +14,29 @@ static constexpr i64 MAX_BUFFER_SIZE = 64;
 
 static void gen_code(CodeGen* code_gen, AST* ast);
 
-static void gen_ast_block(CodeGen* code_gen, AST* ast, const char* tmp_var);
-static void gen_ast_func_def(CodeGen* code_gen, AST* ast);
-static void gen_ast_var_def(CodeGen* code_gen, AST* ast);
-static void gen_ast_literal(CodeGen* code_gen, AST* ast);
-static void gen_ast_break_stmt(CodeGen* code_gen, AST* ast);
-static void gen_ast_continue_stmt(CodeGen* code_gen, AST* ast);
-static void gen_ast_return_stmt(CodeGen* code_gen, AST* ast);
-static void gen_ast_struct_def(CodeGen* code_gen, AST* ast);
-static void gen_ast_union_def(CodeGen* code_gen, AST* ast);
-static void gen_ast_enum_def(CodeGen* code_gen, AST* ast);
-static void gen_ast_member_access(CodeGen* code_gen, AST* ast);
-static void gen_ast_func_call(CodeGen* code_gen, AST* ast);
-static void gen_ast_identifier(CodeGen* code_gen, AST* ast);
-static void gen_ast_binary_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_index_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_array_init(CodeGen* code_gen, AST* ast);
-static void gen_ast_if_expr(CodeGen* code_gen, AST* ast, const char* tmp_var);
-static void gen_ast_while_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_for_expr(CodeGen* code_gen, AST* ast);
-static void gen_ast_struct_init(CodeGen* code_gen, AST* ast);
-static void gen_ast_message(CodeGen* code_gen, AST* ast);
+static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var);
+static void gen_ast_func_def(CodeGen* code_gen, const AST* ast);
+static void gen_ast_var_def(CodeGen* code_gen, const AST* ast);
+static void gen_ast_literal(CodeGen* code_gen, const AST* ast);
+static void gen_ast_break_stmt(CodeGen* code_gen, const AST* ast);
+static void gen_ast_continue_stmt(CodeGen* code_gen, const AST* ast);
+static void gen_ast_return_stmt(CodeGen* code_gen, const AST* ast);
+static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast);
+static void gen_ast_union_def(CodeGen* code_gen, const AST* ast);
+static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast);
+static void gen_ast_member_access(CodeGen* code_gen, const AST* ast);
+static void gen_ast_func_call(CodeGen* code_gen, const AST* ast);
+static void gen_ast_identifier(CodeGen* code_gen, const AST* ast);
+static void gen_ast_binary_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_cast_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_index_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_array_init(CodeGen* code_gen, const AST* ast);
+static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_var);
+static void gen_ast_while_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast);
+static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast);
+static void gen_ast_message(CodeGen* code_gen, const AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -152,7 +152,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	assert(false && "code gen: not yet implemented");
 }
 
-static void gen_ast_block(CodeGen* code_gen, AST* ast, const char* tmp_var)
+static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -287,7 +287,7 @@ static void gen_ast_block(CodeGen* code_gen, AST* ast, const char* tmp_var)
 	code_gen->skip_brace = prev_skip_brace;
 }
 
-static void gen_ast_func_def(CodeGen* code_gen, AST* ast)
+static void gen_ast_func_def(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -330,7 +330,7 @@ static void gen_ast_func_def(CodeGen* code_gen, AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_var_def(CodeGen* code_gen, AST* ast)
+static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -413,7 +413,7 @@ static void gen_ast_var_def(CodeGen* code_gen, AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_literal(CodeGen* code_gen, AST* ast)
+static void gen_ast_literal(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	Token token = node.literal.literal;
@@ -453,26 +453,26 @@ static void gen_ast_literal(CodeGen* code_gen, AST* ast)
 	}
 }
 
-static void gen_ast_break_stmt(CodeGen* code_gen, AST* ast)
+static void gen_ast_break_stmt(CodeGen* code_gen, const AST* ast)
 {
 	(void)ast; // will use the ast prob later
 	str_cat(&code_gen->code, "break");
 }
 
-static void gen_ast_continue_stmt(CodeGen* code_gen, AST* ast)
+static void gen_ast_continue_stmt(CodeGen* code_gen, const AST* ast)
 {
 	(void)ast; // will use the ast prob later
 	str_cat(&code_gen->code, "continue");
 }
 
-static void gen_ast_return_stmt(CodeGen* code_gen, AST* ast)
+static void gen_ast_return_stmt(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	str_cat(&code_gen->code, "return ");
 	gen_code(code_gen, node.return_stmt.return_stmt);
 }
 
-static void gen_ast_struct_def(CodeGen* code_gen, AST* ast)
+static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -508,7 +508,7 @@ static void gen_ast_struct_def(CodeGen* code_gen, AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_union_def(CodeGen* code_gen, AST* ast)
+static void gen_ast_union_def(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -544,7 +544,7 @@ static void gen_ast_union_def(CodeGen* code_gen, AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_enum_def(CodeGen* code_gen, AST* ast)
+static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
@@ -588,7 +588,7 @@ static void gen_ast_enum_def(CodeGen* code_gen, AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_member_access(CodeGen* code_gen, AST* ast)
+static void gen_ast_member_access(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -604,7 +604,7 @@ static void gen_ast_member_access(CodeGen* code_gen, AST* ast)
 	gen_code(code_gen, node.member_access.right);
 }
 
-static void gen_ast_func_call(CodeGen* code_gen, AST* ast)
+static void gen_ast_func_call(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -622,14 +622,14 @@ static void gen_ast_func_call(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_identifier(CodeGen* code_gen, AST* ast)
+static void gen_ast_identifier(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, node.identifier.identifier.str_val);
 }
 
-static void gen_ast_binary_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_binary_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -641,7 +641,7 @@ static void gen_ast_binary_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -652,7 +652,7 @@ static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_cast_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -664,7 +664,7 @@ static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_index_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_index_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -675,7 +675,7 @@ static void gen_ast_index_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, "])");
 }
 
-static void gen_ast_array_init(CodeGen* code_gen, AST* ast)
+static void gen_ast_array_init(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -706,7 +706,7 @@ static void gen_ast_array_init(CodeGen* code_gen, AST* ast)
 	}
 }
 
-static void gen_ast_if_expr(CodeGen* code_gen, AST* ast, const char* tmp_var)
+static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_var)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -736,7 +736,7 @@ static void gen_ast_if_expr(CodeGen* code_gen, AST* ast, const char* tmp_var)
 	}
 }
 
-static void gen_ast_while_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_while_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -747,7 +747,7 @@ static void gen_ast_while_expr(CodeGen* code_gen, AST* ast)
 	gen_code(code_gen, node.while_expr.then_block);
 }
 
-static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
+static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -864,7 +864,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 	}
 }
 
-static void gen_ast_struct_init(CodeGen* code_gen, AST* ast)
+static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -881,7 +881,7 @@ static void gen_ast_struct_init(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, "}");
 }
 
-static void gen_ast_message(CodeGen* code_gen, AST* ast)
+static void gen_ast_message(CodeGen* code_gen, const AST* ast)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
