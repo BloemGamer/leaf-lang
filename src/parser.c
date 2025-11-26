@@ -1709,8 +1709,7 @@ static i64 make_number(const Token* token)
 }
 static f64 make_float(const Token* token)
 {
-	f64 f = strtod(token->str_val, nullptr);
-	return f;
+	return strtod(token->str_val, nullptr);
 }
 
 static void add_basic_types(ParserState* parser_state)
@@ -1741,11 +1740,7 @@ void free_token_tree(AST* ast)
 
 		case AST_STRUCT_DEF:
 			free((void*)ast->node.struct_def.name);
-
-			if (ast->node.struct_def.modifiers != nullptr)
-			{
-				free((void*)ast->node.struct_def.modifiers);
-			}
+			free((void*)ast->node.struct_def.modifiers);
 			if (ast->node.struct_def.members)
 			{
 				for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
@@ -1757,10 +1752,7 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_UNION_DEF:
-			if (ast->node.union_def.modifiers != nullptr)
-			{
-				free((void*)ast->node.union_def.modifiers);
-			}
+			free((void*)ast->node.union_def.modifiers);
 			free((void*)ast->node.union_def.name);
 			if (ast->node.union_def.members)
 			{
@@ -1773,10 +1765,7 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_ENUM_DEF:
-			if (ast->node.enum_def.modifiers != nullptr)
-			{
-				free((void*)ast->node.enum_def.modifiers);
-			}
+			free((void*)ast->node.enum_def.modifiers);
 			free((void*)ast->node.enum_def.name);
 			if (ast->node.enum_def.members)
 			{
@@ -1961,10 +1950,6 @@ static void free_var_def(VarDef* def)
 		return;
 	}
 
-	if (def->modifiers != nullptr)
-	{
-		free((void*)def->modifiers);
-	}
 	free((void*)def->name);
 	free((void*)def->modifiers);
 	free_var_type(&def->type);
@@ -1980,11 +1965,6 @@ static void free_func_def(FuncDef* func)
 
 	free((void*)func->name);
 	free((void*)func->modifiers);
-
-	if (func->modifiers != nullptr)
-	{
-		free((void*)func->modifiers);
-	}
 
 	if (func->template_types)
 	{
