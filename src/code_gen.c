@@ -13,6 +13,7 @@ static void gen_code(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
+static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const_var);
 static void gen_func_signature(CodeGen* code_gen, FuncDef func_def);
 
 static CodeBlock* get_code_block(CodeGen* code_gen);
@@ -239,7 +240,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			for (usize i = 0; i < node.struct_def.member_count; i++) // NOLINT
 			{
 				assert(node.struct_def.members[i]->type == AST_VAR_DEF);
-				gen_var_def(code_gen, node.struct_def.members[i]->node.var_def);
+				gen_var_def_with_const(code_gen, node.struct_def.members[i]->node.var_def, false);
 				str_cat(code_block, ";");
 			}
 
@@ -267,7 +268,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			for (usize i = 0; i < node.union_def.member_count; i++) // NOLINT
 			{
 				assert(node.union_def.members[i]->type == AST_VAR_DEF);
-				gen_var_def(code_gen, node.union_def.members[i]->node.var_def);
+				gen_var_def_with_const(code_gen, node.union_def.members[i]->node.var_def, false);
 				str_cat(code_block, ";");
 			}
 
@@ -354,9 +355,27 @@ static void gen_type(CodeBlock* code_block, VarType var_type)
 
 static void gen_var_def(CodeGen* code_gen, VarDef var_def)
 {
+	gen_var_def_with_const(code_gen, var_def, true);
+}
+
+static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const_var)
+{
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	debug_assert(code_block != nullptr);
+	{
+		for (usize i = 0; i < var_def.modifier_count; i++) // NOLINT
+		{
+			if (var_def.modifiers[i].token_type == token_type_mut)
+			{
+				const_var = false;
+			}
+		}
+		if (const_var)
+		{
+			str_cat(code_block, "const ");
+		}
+	}
 	gen_type(code_block, var_def.type);
 	str_cat(code_block, " ");
 	str_cat(code_block, var_def.name);
