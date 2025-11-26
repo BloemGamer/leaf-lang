@@ -295,8 +295,8 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 		case token_type_struct:
 			node->type = AST_STRUCT_DEF;
 			break;
-		case token_type_enum:
-			node->type = AST_ENUM_DEF;
+		case token_type_union:
+			node->type = AST_UNION_DEF;
 			break;
 		default:
 			assert(false);
@@ -415,8 +415,8 @@ static AST* parse_enum(ParserState* parser_state)
 				{
 					const Token token = *consume(parser_state);
 					assert(token.token_type == token_type_identifier);
-					tmp.value = make_number(&(const Token){
-						.str_val = token.str_val, .token_type = token_type_number, .pos = parser_state->pos});
+					tmp.value = make_number(
+						&(const Token){.str_val = token.str_val, .token_type = token_type_number, .pos = token.pos});
 				}
 			}
 			varray_push(members, tmp); // NOLINT

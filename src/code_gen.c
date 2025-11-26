@@ -41,8 +41,9 @@ static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const
 static void gen_func_signature(CodeGen* code_gen, FuncDef func_def);
 
 static CodeBlock* get_code_block(CodeGen* code_gen);
-
 static void str_cat(CodeBlock* code_block, const char* str);
+
+static void free_code_block(CodeBlock code_block);
 
 CodeGen generate_code(AST* ast)
 {
@@ -692,7 +693,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 		str_cat(code_block, tmp_dir);
 		str_cat(code_block, "?");
 		str_cat(code_block, tmp_iter);
-		if (node.range_expr.inclusive)
+		if (node.for_expr.rust_style.iterable->node.range_expr.inclusive)
 		{
 			str_cat(code_block, "<=");
 		}
@@ -703,7 +704,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 		str_cat(code_block, tmp_end);
 		str_cat(code_block, ":");
 		str_cat(code_block, tmp_iter);
-		if (node.range_expr.inclusive)
+		if (node.for_expr.rust_style.iterable->node.range_expr.inclusive)
 		{
 			str_cat(code_block, ">=");
 		}
@@ -1016,4 +1017,30 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	files.h_file[h_offset] = '\0';
 
 	return files;
+}
+
+void code_gen_free_code_gen(CodeGen code_gen)
+{
+	free_code_block(code_gen.includes);
+	free_code_block(code_gen.priv_types);
+	free_code_block(code_gen.priv_functions);
+	free_code_block(code_gen.priv_vars);
+	free_code_block(code_gen.pub_functions);
+	free_code_block(code_gen.pub_types);
+	free_code_block(code_gen.pub_vars);
+	free_code_block(code_gen.code);
+}
+
+void code_gen_free_new_files(NewFiles new_files)
+{
+	free((void*)new_files.h_file);
+	free((void*)new_files.c_file);
+}
+
+static void free_code_block(CodeBlock code_block)
+{
+	if (code_block.code != nullptr)
+	{
+		free((void*)code_block.code);
+	}
 }

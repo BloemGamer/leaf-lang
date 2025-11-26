@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,31 +35,27 @@ int main(int argc, char** argv)
 		(void)fprintf(stderr, "Could not open file: %s\n", filename);
 		return EXIT_FAILURE;
 	}
-	// printf("%s", file);
 	Token* lexed = lex(file);
 	free((void*)file);
 
-	// lex_print(lexed);
-
 	AST* parsed = parse(lexed);
-
-	// parse_print(parsed);
 
 	lex_free(lexed);
 
 	CodeGen code = generate_code(parsed);
+
+	free_token_tree(parsed);
+
 	NewFiles files = code_gen_to_files(&code, "main");
-	puts(".h file");
-	puts(files.h_file);
-	puts(".c file");
-	puts(files.c_file);
+
+	code_gen_free_code_gen(code);
 
 	write_file("slang-test/main.h", files.h_file);
 	write_file("slang-test/main.c", files.c_file);
-	system("clang-format -i slang-test/main.h"); // NOLINT
-	system("clang-format -i slang-test/main.c"); // NOLINT
 
-	free_token_tree(parsed);
+	code_gen_free_new_files(files);
+	assert(system("clang-format -i slang-test/main.h") != -1); // NOLINT
+	assert(system("clang-format -i slang-test/main.c") != -1); // NOLINT
 }
 
 char* read_file_to_str(const char* filename)

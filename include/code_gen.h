@@ -48,3 +48,5 @@ typedef struct
 extern CodeGen generate_code(AST* ast);
 
 extern NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name);
+void code_gen_free_code_gen(CodeGen code_gen);
+void code_gen_free_new_files(NewFiles new_files);
