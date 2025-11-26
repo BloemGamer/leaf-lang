@@ -42,8 +42,6 @@ int main(int argc, char** argv)
 
 	lex_free(lexed);
 
-	parse_print(parsed);
-
 	CodeGen code = generate_code(parsed);
 
 	free_token_tree(parsed);
