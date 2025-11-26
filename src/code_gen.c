@@ -33,6 +33,7 @@ static void gen_ast_if_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_while_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_for_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_struct_init(CodeGen* code_gen, AST* ast);
+static void gen_ast_message(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -140,8 +141,11 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 		case AST_STRUCT_INIT:
 			gen_ast_struct_init(code_gen, ast);
 			return;
+		case AST_MESSAGE:
+			gen_ast_message(code_gen, ast);
+			return;
 	}
-	// assert(false && "code gen: not yet implemented");
+	assert(false && "code gen: not yet implemented");
 }
 
 static void gen_ast_block(CodeGen* code_gen, AST* ast)
@@ -315,14 +319,16 @@ static void gen_ast_literal(CodeGen* code_gen, AST* ast)
 	switch (token.token_type)
 	{
 		case token_type_string:
+			str_cat(code_block, "\"");
 			str_cat(code_block, token.str_val);
+			str_cat(code_block, "\"");
 			break;
 		case token_type_number:
 			(void)snprintf(buffer, 63, "%" PRId64, token.num_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_char:
-			(void)snprintf(buffer, 63, "%c", token.char_val);
+			(void)snprintf(buffer, 63, "'%c'", token.char_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_float:
@@ -497,8 +503,13 @@ static void gen_ast_func_call(CodeGen* code_gen, AST* ast)
 	CodeBlock* code_block = get_code_block(code_gen);
 	gen_code(code_gen, node.func_call.callee);
 	str_cat(code_block, "(");
-	for (usize i = 0; i < node.func_call.arg_count; i++) // NOLINT
+	if (node.func_call.arg_count > 0)
 	{
+		gen_code(code_gen, node.func_call.args[0]);
+	}
+	for (usize i = 1; i < node.func_call.arg_count; i++) // NOLINT
+	{
+		str_cat(code_block, ",");
 		gen_code(code_gen, node.func_call.args[i]);
 	}
 	str_cat(code_block, ")");
@@ -744,6 +755,33 @@ static void gen_ast_struct_init(CodeGen* code_gen, AST* ast)
 		str_cat(code_block, ",");
 	}
 	str_cat(code_block, "}");
+}
+
+static void gen_ast_message(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+
+	switch (node.message.msg)
+	{
+		case msg_invalid:
+			assert(false && "invalid message");
+		case msg_embed:
+			str_cat(&code_gen->includes, "#include \"");
+			str_cat(&code_gen->includes, node.message.import.import);
+			str_cat(&code_gen->includes, "\"\n");
+			break;
+		case msg_c_type:
+			break;
+		case msg_include:
+			str_cat(code_block, "#include \"");
+			str_cat(code_block, node.message.import.import);
+			str_cat(code_block, "\"\n");
+			break;
+		case msg_import:
+		case msg_include_str:
+			assert(false && "code_gen: not yet implemented");
+	}
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
