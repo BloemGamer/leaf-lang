@@ -27,6 +27,7 @@ static void gen_ast_identifier(CodeGen* code_gen, AST* ast);
 static void gen_ast_binary_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast);
+static void gen_ast_index_expr(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -108,6 +109,9 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_CAST_EXPR:
 			gen_ast_cast_expr(code_gen, ast);
+			return;
+		case AST_INDEX_EXPR:
+			gen_ast_index_expr(code_gen, ast);
 			return;
 	}
 	// assert(false && "code gen: not yet implemented");
@@ -494,6 +498,17 @@ static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, ")");
 	gen_code(code_gen, node.cast_expr.expr);
 	str_cat(code_block, ")");
+}
+
+static void gen_ast_index_expr(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+	str_cat(code_block, "(");
+	gen_code(code_gen, node.index_expr.left);
+	str_cat(code_block, "[");
+	gen_code(code_gen, node.index_expr.index);
+	str_cat(code_block, "])");
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
