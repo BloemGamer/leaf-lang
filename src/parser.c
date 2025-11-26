@@ -529,6 +529,13 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 			return parse_break_expr(parser_state);
 		case token_type_for:
 			return parse_for_expr(parser_state);
+		case token_type_number:
+		case token_type_string:
+		case token_type_char:
+		case token_type_float:
+		case token_type_true:
+		case token_type_false:
+			return parse_expr(parser_state);
 		default:
 			break;
 	}
