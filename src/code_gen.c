@@ -32,6 +32,7 @@ static void gen_ast_array_init(CodeGen* code_gen, AST* ast);
 static void gen_ast_if_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_while_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_for_expr(CodeGen* code_gen, AST* ast);
+static void gen_ast_struct_init(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -132,6 +133,12 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_FOR_EXPR:
 			gen_ast_for_expr(code_gen, ast);
+			return;
+		case AST_RANGE_EXPR:
+			assert(false && "code gen: range expression should not be used outside of for statement");
+			return;
+		case AST_STRUCT_INIT:
+			gen_ast_struct_init(code_gen, ast);
 			return;
 	}
 	// assert(false && "code gen: not yet implemented");
@@ -720,6 +727,23 @@ static void gen_ast_for_expr(CodeGen* code_gen, AST* ast)
 		code_gen->skip_brace = false;
 		str_cat(code_block, "}");
 	}
+}
+
+static void gen_ast_struct_init(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+	str_cat(code_block, "{");
+	for (usize i = 0; i < node.struct_init.field_count; i++) // NOLINT
+	{
+		str_cat(code_block, ".");
+		const StructFieldInit field = node.struct_init.fields[i];
+		str_cat(code_block, field.field_name);
+		str_cat(code_block, "=");
+		gen_code(code_gen, field.value);
+		str_cat(code_block, ",");
+	}
+	str_cat(code_block, "}");
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
