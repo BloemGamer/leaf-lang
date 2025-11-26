@@ -29,6 +29,8 @@ static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_index_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_array_init(CodeGen* code_gen, AST* ast);
+static void gen_ast_if_expr(CodeGen* code_gen, AST* ast);
+static void gen_ast_while_expr(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -116,6 +118,12 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_ARRAY_INIT:
 			gen_ast_array_init(code_gen, ast);
+			return;
+		case AST_IF_EXPR:
+			gen_ast_if_expr(code_gen, ast);
+			return;
+		case AST_WHILE_EXPR:
+			gen_ast_while_expr(code_gen, ast);
 			return;
 	}
 	// assert(false && "code gen: not yet implemented");
@@ -301,6 +309,12 @@ static void gen_ast_literal(CodeGen* code_gen, AST* ast)
 		case token_type_float:
 			(void)snprintf(buffer, 63, "%lf", token.float_val);
 			str_cat(code_block, buffer);
+			break;
+		case token_type_true:
+			str_cat(code_block, "true");
+			break;
+		case token_type_false:
+			str_cat(code_block, "false");
 			break;
 		default:
 			assert(false && "code gen: not an literal");
@@ -544,6 +558,29 @@ static void gen_ast_array_init(CodeGen* code_gen, AST* ast)
 		}
 		str_cat(code_block, "}");
 	}
+}
+
+static void gen_ast_if_expr(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+
+	str_cat(code_block, "if(");
+	gen_code(code_gen, node.if_expr.condition);
+	str_cat(code_block, ")");
+	gen_code(code_gen, node.if_expr.then_block);
+	str_cat(code_block, "else ");
+	gen_code(code_gen, node.if_expr.else_block);
+}
+
+static void gen_ast_while_expr(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+	str_cat(code_block, "while(");
+	gen_code(code_gen, node.while_expr.condition);
+	str_cat(code_block, ")");
+	gen_code(code_gen, node.while_expr.then_block);
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
