@@ -28,6 +28,7 @@ static void gen_ast_binary_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_unary_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_cast_expr(CodeGen* code_gen, AST* ast);
 static void gen_ast_index_expr(CodeGen* code_gen, AST* ast);
+static void gen_ast_array_init(CodeGen* code_gen, AST* ast);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -112,6 +113,9 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_INDEX_EXPR:
 			gen_ast_index_expr(code_gen, ast);
+			return;
+		case AST_ARRAY_INIT:
+			gen_ast_array_init(code_gen, ast);
 			return;
 	}
 	// assert(false && "code gen: not yet implemented");
@@ -509,6 +513,37 @@ static void gen_ast_index_expr(CodeGen* code_gen, AST* ast)
 	str_cat(code_block, "[");
 	gen_code(code_gen, node.index_expr.index);
 	str_cat(code_block, "])");
+}
+
+static void gen_ast_array_init(CodeGen* code_gen, AST* ast)
+{
+	typeof(ast->node) node = ast->node;
+	CodeBlock* code_block = get_code_block(code_gen);
+	if (node.array_init.is_sized)
+	{
+		str_cat(code_block, "{");
+		assert(node.array_init.size_expr->type == AST_LITERAL);
+		assert(node.array_init.size_expr->node.literal.literal.token_type == token_type_number);
+		for (usize i = 0; i < node.array_init.size_expr->node.literal.literal.num_val; i++) // NOLINT
+		{
+			for (usize j = 0; j < node.array_init.element_count; j++) // NOLINT
+			{
+				gen_code(code_gen, node.array_init.elements[j]);
+				str_cat(code_block, ",");
+			}
+		}
+		str_cat(code_block, "}");
+	}
+	else
+	{
+		str_cat(code_block, "{");
+		for (usize i = 0; i < node.array_init.element_count; i++) // NOLINT
+		{
+			gen_code(code_gen, node.array_init.elements[i]);
+			str_cat(code_block, ",");
+		}
+		str_cat(code_block, "}");
+	}
 }
 
 static void gen_type(CodeBlock* code_block, VarType var_type)
