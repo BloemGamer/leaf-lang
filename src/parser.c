@@ -916,7 +916,7 @@ static AST* make_unary(const Token* op, AST* rhs) // NOLINT
 {
 	AST* node = (AST*)calloc(1, sizeof(AST));
 	node->type = AST_UNARY;
-	node->node.unary_expr.op = op;
+	node->node.unary_expr.op = *op;
 	node->node.unary_expr.rhs = rhs;
 	return node;
 }
@@ -2351,7 +2351,7 @@ static void print_unary_expr(const UnaryExpr* unary_expr, const usize depth)
 	print_indent(depth);
 	printf("Unary:\n");
 	print_indent(depth + 1);
-	printf("Op: %s\n", token_to_string(unary_expr->op->token_type));
+	printf("Op: %s\n", token_to_string(unary_expr->op.token_type));
 	parse_print_impl(unary_expr->rhs, depth + 1);
 }
 

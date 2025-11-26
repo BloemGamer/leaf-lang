@@ -172,7 +172,7 @@ typedef struct
 
 typedef struct
 {
-	Token const* op;
+	Token op;
 	AST* rhs;
 } UnaryExpr;
 
