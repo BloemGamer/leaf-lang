@@ -53,7 +53,7 @@ int main(int argc, char** argv)
 	puts(".c file");
 	puts(files.c_file);
 
-	write_file("slang-test/main.c", files.h_file);
+	write_file("slang-test/main.h", files.h_file);
 	write_file("slang-test/main.c", files.c_file);
 	system("clang-format -i slang-test/main.h"); // NOLINT
 	system("clang-format -i slang-test/main.c"); // NOLINT
