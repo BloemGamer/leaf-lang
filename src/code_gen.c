@@ -913,7 +913,14 @@ static void gen_type(CodeBlock* code_block, VarType var_type)
 	str_cat(code_block, var_type.name);
 	for (usize i = 0; i < var_type.pointer_count; i++) // NOLINT
 	{
-		str_cat(code_block, "*");
+		if (var_type.pointer_types[i] == pointer_type_const)
+		{
+			str_cat(code_block, "* const");
+		}
+		else
+		{
+			str_cat(code_block, "*");
+		}
 	}
 }
 
