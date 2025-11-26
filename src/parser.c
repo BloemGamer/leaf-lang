@@ -475,13 +475,21 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		{
 			usize saved_pos = parser_state->pos;
 			AST* tmp = parse_statement(parser_state);
+
+			// Check if next token is closing brace
 			if (!global_block && peek(parser_state)->token_type == end_token)
 			{
-				(void)consume(parser_state);
-				node->node.block.statements = statements;
-				node->node.block.statement_count = statements_len;
-				node->node.block.trailing_expr = tmp;
-				break;
+				// Look back to see if we just consumed a semicolon
+				// If there was a semicolon, this is NOT a trailing expression
+				if (parser_state->pos > 0 &&
+					parser_state->tokens[parser_state->pos - 1].token_type != token_type_semicolon)
+				{
+					(void)consume(parser_state);
+					node->node.block.statements = statements;
+					node->node.block.statement_count = statements_len;
+					node->node.block.trailing_expr = tmp;
+					break;
+				}
 			}
 			varray_push(statements, tmp); // NOLINT
 		}
