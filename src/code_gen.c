@@ -128,6 +128,15 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 					code_gen->current_block = CODE_BLOCK_CODE;
 				}
 			}
+			if (code_gen->current_block == CODE_BLOCK_PRIV_VARS)
+
+			{
+				str_cat(code_block, "static ");
+			}
+			else if (code_gen->current_block == CODE_BLOCK_PUB_VARS)
+			{
+				str_cat(code_block, "extern ");
+			}
 			gen_var_def(code_gen, node.var_def);
 
 			if (node.var_def.equals == nullptr)
