@@ -57,7 +57,38 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			code_gen->global_block = node.block.global;
 			for (usize i = 0; i < node.block.statement_count; i++) // NOLINT
 			{
+				code_block = get_code_block(code_gen);
 				gen_code(code_gen, node.block.statements[i]);
+				switch (node.block.statements[i]->type)
+				{
+					case AST_IDENTIFIER:
+					case AST_MEMBER_ACCESS:
+					case AST_ARRAY_INIT:
+					case AST_BREAK_STMT:
+					case AST_CONTINUE_STMT:
+					case AST_RETURN_STMT:
+					case AST_BINARY_EXPR:
+					case AST_FUNC_CALL:
+					case AST_LITERAL:
+					case AST_RANGE_EXPR:
+					case AST_CAST_EXPR:
+					case AST_STRUCT_INIT:
+						str_cat(code_block, ";");
+						break;
+					case AST_STRUCT_DEF:
+					case AST_UNION_DEF:
+					case AST_ENUM_DEF:
+					case AST_VAR_DEF:
+					case AST_FUNC_DEF:
+					case AST_INDEX_EXPR:
+					case AST_IF_EXPR:
+					case AST_FOR_EXPR:
+					case AST_WHILE_EXPR:
+					case AST_BLOCK:
+					case AST_UNARY:
+					case AST_MESSAGE:
+						break;
+				}
 			}
 			code_gen->global_block = prev_global_block;
 
@@ -180,15 +211,14 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			}
 			return;
 		case AST_BREAK_STMT:
-			str_cat(&code_gen->code, "break;");
+			str_cat(&code_gen->code, "break");
 			return;
 		case AST_CONTINUE_STMT:
-			str_cat(&code_gen->code, "continue;");
+			str_cat(&code_gen->code, "continue");
 			return;
 		case AST_RETURN_STMT:
 			str_cat(&code_gen->code, "return ");
 			gen_code(code_gen, node.return_stmt.return_stmt);
-			str_cat(&code_gen->code, ";");
 			return;
 		case AST_STRUCT_DEF:
 			code_gen->current_block = CODE_BLOCK_PRIV_TYPES;
@@ -282,6 +312,33 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			str_cat(code_block, ";");
 			code_gen->current_block = CODE_BLOCK_NONE;
 			return;
+		case AST_MEMBER_ACCESS:
+			code_block = get_code_block(code_gen);
+			gen_code(code_gen, node.member_access.left);
+			if (node.member_access.direct)
+			{
+				str_cat(code_block, ".");
+			}
+			else
+			{
+				str_cat(code_block, "->");
+			}
+			gen_code(code_gen, node.member_access.right);
+			return;
+		case AST_FUNC_CALL:
+			code_block = get_code_block(code_gen);
+			gen_code(code_gen, node.func_call.callee);
+			str_cat(code_block, "(");
+			for (usize i = 0; i < node.func_call.arg_count; i++) // NOLINT
+			{
+				gen_code(code_gen, node.func_call.args[i]);
+			}
+			str_cat(code_block, ")");
+			return;
+		case AST_IDENTIFIER:
+			code_block = get_code_block(code_gen);
+			str_cat(code_block, node.identifier.identifier.str_val);
+			return;
 	}
 	// assert(false && "code gen: not yet implemented");
 }
@@ -358,9 +415,8 @@ static CodeBlock* get_code_block(CodeGen* code_gen)
 		case CODE_BLOCK_PUB_VARS:
 			return &code_gen->pub_vars;
 		case CODE_BLOCK_CODE:
-			return &code_gen->code;
 		case CODE_BLOCK_NONE:
-			return nullptr;
+			return &code_gen->code;
 	}
 	assert(false);
 }
