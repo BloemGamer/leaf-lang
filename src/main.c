@@ -71,7 +71,8 @@ char* read_file_to_str(const char* filename)
 	}
 
 	(void)fseek(file, 0, SEEK_END);
-	long length = ftell(file);
+	long ftell_ret = ftell(file);
+	unsigned long length = (unsigned long)ftell_ret;
 	(void)fseek(file, 0, SEEK_SET);
 
 	char* buffer = malloc((length + 1) * sizeof(char));
@@ -81,7 +82,7 @@ char* read_file_to_str(const char* filename)
 		return nullptr;
 	}
 
-	usize read = fread(buffer, 1, length, file);
+	unsigned long read = fread(buffer, 1, length, file);
 	if (read != length)
 	{
 		if (ferror(file))

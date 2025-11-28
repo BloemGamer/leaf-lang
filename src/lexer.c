@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "assert.h"
+#include "basic_types.h"
 #include "lexer.h"
 #include "log.h"
 #include "tokens.h"
@@ -45,7 +46,6 @@ Token* lex(const char* input)
 		token.token_type = token_type_sof;
 		add_token(&token, &tokens, &token_size, &token_max_size);
 	}
-#pragma unroll
 	while (*input != '\0')
 	{
 		TokenResult next_token = string_to_token(input);
@@ -96,7 +96,6 @@ Token* lex(const char* input)
 
 static Pos amount_enters(const char* input, usize size, Pos pos)
 {
-#pragma unroll 2
 	for (usize i = 0; i < size; i++)
 	{
 		if (input[i] == '\n')
@@ -191,7 +190,7 @@ static TokenResult string_to_ignored_token(const char* input)
 		}
 		else
 		{
-			token_res.size = endline - input;
+			token_res.size = (usize)(endline - input);
 		}
 
 		token_res.token.token_type = token_type_comment;
@@ -206,7 +205,7 @@ static TokenResult string_to_ignored_token(const char* input)
 		}
 		else
 		{
-			token_res.size = endline - input;
+			token_res.size = (usize)(endline - input);
 			token_res.token.token_type = token_type_comment;
 		}
 
@@ -228,7 +227,6 @@ static TokenResult string_to_simple_token(const char* input)
 
 	constexpr usize amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
 
-#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		// the next part of the function only works if this returns true, otherwise it will skipt tokens
@@ -236,7 +234,6 @@ static TokenResult string_to_simple_token(const char* input)
 		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 3);
 	}
 
-#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1] &&
@@ -247,7 +244,6 @@ static TokenResult string_to_simple_token(const char* input)
 			return token_res;
 		}
 	}
-#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
@@ -257,7 +253,6 @@ static TokenResult string_to_simple_token(const char* input)
 			return token_res;
 		}
 	}
-#pragma unroll
 	for (usize i = 0; i < amount_tokens; i++)
 	{
 		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0])
@@ -290,7 +285,6 @@ static TokenResult string_to_keyword_token(const char* input)
 	buffer[0] = input[0];
 	usize len = 0;
 
-#pragma unroll
 	for (len = 1; len < buffer_size; len++)
 	{
 		if (isalnum(input[len]) != false || input[len] == '_') // NOLINT
@@ -304,7 +298,6 @@ static TokenResult string_to_keyword_token(const char* input)
 	}
 	buffer[len] = '\0';
 
-#pragma unroll
 	for (usize i = 0; i < amount_tokens_keywords; i++)
 	{
 		if (strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
@@ -315,7 +308,6 @@ static TokenResult string_to_keyword_token(const char* input)
 		}
 	}
 
-#pragma unroll
 	for (usize i = 0; i < amount_tokens_modifier; i++)
 	{
 		if (strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
@@ -424,7 +416,6 @@ static TokenResult string_to_literals_token(const char* input) // NOLINT
 		bool is_int = false;
 
 		constexpr char num_starts[][3] = {"0b", "0x", "0o"};
-#pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(num_starts); i++)
 		{
 			if (strncmp(num_starts[i], input, 2) == 0)
@@ -512,7 +503,6 @@ void lex_free(Token* tokens)
 	Token tok;
 	while ((tok = *tokens++).token_type != token_type_eof)
 	{
-#pragma unroll
 		for (usize i = 0; i < ARRAY_SIZE(TOKENS_LEX_FREE); i++)
 		{
 			if (tok.token_type == TOKENS_LEX_FREE[i])

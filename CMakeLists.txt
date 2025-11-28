@@ -23,6 +23,8 @@ add_library(hash STATIC
 	src/utils/hash.c
 )
 
+
+
 target_include_directories(hash PUBLIC
 	${CMAKE_SOURCE_DIR}/include
 )
@@ -53,3 +55,9 @@ target_include_directories(s-lang PRIVATE include)
 # Tests directory
 # -------------------------------------------------------
 add_subdirectory(tests)
+
+
+target_compile_options(s-lang PRIVATE
+	-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+	-Wshadow -Wdouble-promotion -Wformat=2
+)

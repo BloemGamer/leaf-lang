@@ -69,10 +69,10 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	{
 		assert(code_gen != nullptr);
 	}
-	typeof(ast->node) node = ast->node;
-	CodeBlock* code_block = nullptr;
-	CodeBlockType saved_block = CODE_BLOCK_NONE;
-	char buffer[MAX_BUFFER_SIZE] = {0};
+	// typeof(ast->node) node = ast->node;
+	// CodeBlock* code_block = nullptr;
+	// CodeBlockType saved_block = CODE_BLOCK_NONE;
+	// char buffer[MAX_BUFFER_SIZE] = {0};
 
 	switch (ast->type)
 	{
@@ -159,7 +159,7 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var
 
 	if (!node.block.global && !code_gen->skip_brace)
 	{
-		bool prev_global_block = code_gen->global_block;
+		// bool prev_global_block = code_gen->global_block;
 		code_block = get_code_block(code_gen);
 
 		str_cat(code_block, "{");
@@ -684,7 +684,7 @@ static void gen_ast_array_init(CodeGen* code_gen, const AST* ast)
 		str_cat(code_block, "{");
 		assert(node.array_init.size_expr->type == AST_LITERAL);
 		assert(node.array_init.size_expr->node.literal.literal.token_type == token_type_number);
-		for (usize i = 0; i < node.array_init.size_expr->node.literal.literal.num_val; i++) // NOLINT
+		for (i64 i = 0; i < node.array_init.size_expr->node.literal.literal.num_val; i++) // NOLINT
 		{
 			for (usize j = 0; j < node.array_init.element_count; j++) // NOLINT
 			{
@@ -1029,7 +1029,7 @@ static void str_cat(CodeBlock* code_block, const char* str)
 		}
 		code_block->code = (char*)realloc((void*)code_block->code, code_block->cap); // NOLINT
 	}
-	memcpy((void*)code_block->code + code_block->len, (void*)str, str_len);
+	memcpy((void*)(code_block->code + code_block->len), (void*)str, str_len);
 	code_block->len += str_len;
 	code_block->code[code_block->len] = '\0';
 }

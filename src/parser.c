@@ -58,18 +58,19 @@ static AST* parse_break_expr(ParserState* parser_state);
 static AST* parse_continue_expr(ParserState* parser_state);
 static AST* parse_array_init(ParserState* parser_state);
 static AST* parse_compound_literal(ParserState* parser_state);
-static AST* parse_cast_or_compound(ParserState* parser_state);
+// static AST* parse_cast_or_compound(ParserState* parser_state);
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
 static AST* parse_prefix(ParserState* parser_state);
 static AST* parse_postfix(ParserState* parser_state, AST* left);
 
 static const Token* peek(ParserState* parser_state);
-static const Token* peek_amount(ParserState* parser_state, i64 amount);
+// static const Token* peek_count(ParserState* parser_state, i64 count);
 static const Token* consume(ParserState* parser_state);
 static bool match(ParserState* parser_state, TokenType type);
 static void step_back(ParserState* parser_state);
 static bool is_modifier(TokenType token_type);
+// static bool is_identefier(TokenType token_type);
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, usize count);
 static TokenArray get_modifiers(ParserState* parser_state);
 static i32 precedence(TokenType token_type);
@@ -473,7 +474,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 			break;
 		}
 		{
-			usize saved_pos = parser_state->pos;
+			// usize saved_pos = parser_state->pos;
 			AST* tmp = parse_statement(parser_state);
 
 			// Check if next token is closing brace
@@ -879,21 +880,21 @@ static AST* parse_compound_literal(ParserState* parser_state)
 	}
 }
 
-static AST* parse_cast_or_compound(ParserState* parser_state)
-{
-	assert(consume(parser_state)->token_type == token_type_lparen);
-
-	AST* node = calloc(1, sizeof(AST));
-	node->type = AST_CAST_EXPR;
-
-	node->node.cast_expr.target_type = parse_var_def(parser_state);
-
-	assert(consume(parser_state)->token_type == token_type_rparen);
-
-	node->node.cast_expr.expr = parse_prefix(parser_state);
-
-	return node;
-}
+// static AST* parse_cast_or_compound(ParserState* parser_state)
+// {
+// 	assert(consume(parser_state)->token_type == token_type_lparen);
+//
+// 	AST* node = calloc(1, sizeof(AST));
+// 	node->type = AST_CAST_EXPR;
+//
+// 	node->node.cast_expr.target_type = parse_var_def(parser_state);
+//
+// 	assert(consume(parser_state)->token_type == token_type_rparen);
+//
+// 	node->node.cast_expr.expr = parse_prefix(parser_state);
+//
+// 	return node;
+// }
 
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
@@ -1139,10 +1140,10 @@ static const Token* peek(ParserState* parser_state)
 	return parser_state->pos < parser_state->count ? &parser_state->tokens[parser_state->pos] : nullptr;
 }
 
-static const Token* peek_count(ParserState* parser_state, const i64 count)
-{
-	return parser_state->pos < parser_state->count ? &parser_state->tokens[parser_state->pos + count] : nullptr;
-}
+// static const Token* peek_count(ParserState* parser_state, const i64 count)
+// {
+// 	return parser_state->pos < parser_state->count ? &parser_state->tokens[(i64)parser_state->pos + count] : nullptr;
+// }
 
 static const Token* consume(ParserState* parser_state)
 {
@@ -1167,8 +1168,7 @@ static void step_back(ParserState* parser_state)
 
 static bool is_modifier(const TokenType token_type)
 {
-#pragma unroll
-	for (int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_MODIFIER); i++)
+	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_MODIFIER); i++)
 	{
 		if (token_type == TOKENS_TYPES_MODIFIER[i])
 		{
@@ -1178,18 +1178,17 @@ static bool is_modifier(const TokenType token_type)
 	return false;
 }
 
-static bool is_identifier(const TokenType token_type)
-{
-#pragma unroll
-	for (int i = 0; i < ARRAY_SIZE(TOKENS_TYPES_IDENTIFIER); i++)
-	{
-		if (token_type == TOKENS_TYPES_IDENTIFIER[i])
-		{
-			return true;
-		}
-	}
-	return false;
-}
+// static bool is_identifier(const TokenType token_type)
+// {
+// 	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_IDENTIFIER); i++)
+// 	{
+// 		if (token_type == TOKENS_TYPES_IDENTIFIER[i])
+// 		{
+// 			return true;
+// 		}
+// 	}
+// 	return false;
+// }
 
 static TokenType token_type_search_until(const ParserState* parser_state, const TokenType* reject, const usize count)
 {
@@ -1288,7 +1287,7 @@ static i32 precedence(TokenType token_type)
 
 static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 {
-	VarDef var_def = {.name = nullptr, .equals = nullptr, .type = nullptr, .modifier_count = 0, .modifiers = nullptr};
+	VarDef var_def = {.name = nullptr, .equals = nullptr, .type = {}, .modifier_count = 0, .modifiers = nullptr};
 	TokenArray mod_arr = get_modifiers(parser_state);
 	var_def.modifiers = mod_arr.tokens;
 	var_def.modifier_count = mod_arr.count;
@@ -1307,15 +1306,9 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 	{
 		varray_make(PointerType*, pointer_types);
 
-#pragma unroll 2
 		while (peek(parser_state)->token_type == token_type_ampersand ||
 			   peek(parser_state)->token_type == token_type_star || peek(parser_state)->token_type == token_type_and)
 		{
-			usize extra_len = 0;
-			if (peek(parser_state)->token_type == token_type_and)
-			{
-				extra_len = 1;
-			}
 			const Token token = *consume(parser_state);
 
 			if (token.token_type == token_type_and)
@@ -1739,7 +1732,6 @@ static f64 make_float(const Token* token)
 
 static void add_basic_types(ParserState* parser_state)
 {
-#pragma unroll
 	for (usize i = 0; i < ARRAY_SIZE(BASIC_TYPES); i++)
 	{
 		(void)hash_str_push(&parser_state->known_types, BASIC_TYPES[i]);
@@ -2338,7 +2330,6 @@ static void print_member_access(const MemberAccess* member_access, const usize d
 static void print_binary_expr(const BinaryExpr* binary_expr, const usize depth) // NOLINT
 {
 	print_indent(depth);
-#pragma unroll
 	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_LITERAL); i++)
 	{
 		if (binary_expr->op.token_type == TOKENS_TYPES_LITERAL[i])
