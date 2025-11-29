@@ -14,7 +14,7 @@ static constexpr i64 MAX_BUFFER_SIZE = 64;
 
 static void gen_code(CodeGen* code_gen, AST* ast);
 
-static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var);
+static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr);
 static void gen_ast_func_def(CodeGen* code_gen, const AST* ast);
 static void gen_ast_var_def(CodeGen* code_gen, const AST* ast);
 static void gen_ast_literal(CodeGen* code_gen, const AST* ast);
@@ -32,7 +32,7 @@ static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast);
 static void gen_ast_cast_expr(CodeGen* code_gen, const AST* ast);
 static void gen_ast_index_expr(CodeGen* code_gen, const AST* ast);
 static void gen_ast_array_init(CodeGen* code_gen, const AST* ast);
-static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_var);
+static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr);
 static void gen_ast_while_expr(CodeGen* code_gen, const AST* ast);
 static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast);
 static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast);
@@ -152,7 +152,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	assert(false && "code gen: not yet implemented");
 }
 
-static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var)
+static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -205,11 +205,11 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var
 	}
 	code_gen->global_block = prev_global_block;
 
-	if (tmp_var != nullptr)
+	if (add_before_trailing_expr != nullptr)
 	{
 		assert(node.block.trailing_expr != nullptr);
-		str_cat(code_block, tmp_var);
-		str_cat(code_block, "=");
+		str_cat(code_block, add_before_trailing_expr);
+		// str_cat(code_block, "=");
 
 		switch (node.block.trailing_expr->type)
 		{
@@ -240,7 +240,7 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* tmp_var
 				break;
 			case AST_IF_EXPR:
 			case AST_BLOCK:
-				gen_ast_block(code_gen, node.block.trailing_expr, tmp_var);
+				gen_ast_block(code_gen, node.block.trailing_expr, add_before_trailing_expr);
 				break;
 		}
 	}
@@ -362,13 +362,15 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 	if (node.var_def.equals != nullptr &&
 		(node.var_def.equals->type == AST_BLOCK || node.var_def.equals->type == AST_IF_EXPR))
 	{
-		(void)snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
+		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
 		gen_type(code_block, node.var_def.type);
 		str_cat(code_block, " ");
 		str_cat(code_block, tmp_var);
 		str_cat(code_block, ";");
+		strcat(tmp_var, "=");
+		// strcat(tmp_var, "=");
 		if (node.var_def.equals->type == AST_BLOCK)
 		{
 			gen_ast_block(code_gen, node.var_def.equals, tmp_var);
@@ -377,6 +379,7 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 		{
 			gen_ast_if_expr(code_gen, node.var_def.equals, tmp_var);
 		}
+		tmp_var[tmp_var_len] = '\0';
 	}
 	if (code_gen->current_block == CODE_BLOCK_PRIV_VARS)
 	{
@@ -634,11 +637,43 @@ static void gen_ast_binary_expr(CodeGen* code_gen, const AST* ast)
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	str_cat(code_block, "(");
-	gen_code(code_gen, node.binary_expr.left);
-	str_cat(code_block, TOKENS_STR_IDENT[node.binary_expr.op.token_type]);
-	gen_code(code_gen, node.binary_expr.right);
-	str_cat(code_block, ")");
+	if (strchr(TOKENS_STR_IDENT[node.binary_expr.op.token_type], '=') &&
+		(node.binary_expr.right->type == AST_BLOCK || node.binary_expr.right->type == AST_IF_EXPR))
+	{
+		char tmp_var[MAX_BUFFER_SIZE] = {};
+		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
+		code_gen->tmp_num++;
+
+		str_cat(code_block, "typeof_unqual(");
+		gen_code(code_gen, node.binary_expr.left);
+		str_cat(code_block, ") ");
+		str_cat(code_block, tmp_var);
+		str_cat(code_block, ";");
+
+		strcat(tmp_var, "=");
+		if (node.binary_expr.right->type == AST_BLOCK)
+		{
+			gen_ast_block(code_gen, node.binary_expr.right, tmp_var);
+		}
+		else if (node.binary_expr.right->type == AST_IF_EXPR)
+		{
+			gen_ast_if_expr(code_gen, node.binary_expr.right, tmp_var);
+		}
+		tmp_var[tmp_var_len] = '\0';
+
+		gen_code(code_gen, node.binary_expr.left);
+		str_cat(code_block, TOKENS_STR_IDENT[node.binary_expr.op.token_type]);
+		str_cat(code_block, tmp_var);
+	}
+	else
+	{
+
+		str_cat(code_block, "(");
+		gen_code(code_gen, node.binary_expr.left);
+		str_cat(code_block, TOKENS_STR_IDENT[node.binary_expr.op.token_type]);
+		gen_code(code_gen, node.binary_expr.right);
+		str_cat(code_block, ")");
+	}
 }
 
 static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast)
@@ -706,7 +741,7 @@ static void gen_ast_array_init(CodeGen* code_gen, const AST* ast)
 	}
 }
 
-static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_var)
+static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr)
 {
 	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -714,7 +749,7 @@ static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_v
 	str_cat(code_block, "if(");
 	gen_code(code_gen, node.if_expr.condition);
 	str_cat(code_block, ")");
-	if (tmp_var == nullptr)
+	if (add_before_trailing_expr == nullptr)
 	{
 		gen_code(code_gen, node.if_expr.then_block);
 		str_cat(code_block, "else ");
@@ -726,14 +761,14 @@ static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* tmp_v
 		assert(node.if_expr.else_block != nullptr);
 		assert(node.if_expr.then_block->type == AST_BLOCK);
 		assert(node.if_expr.else_block->type == AST_BLOCK || node.if_expr.else_block->type == AST_IF_EXPR);
-		gen_ast_block(code_gen, node.if_expr.then_block, tmp_var);
+		gen_ast_block(code_gen, node.if_expr.then_block, add_before_trailing_expr);
 		if (node.if_expr.else_block->type == AST_BLOCK)
 		{
-			gen_ast_block(code_gen, node.if_expr.else_block, tmp_var);
+			gen_ast_block(code_gen, node.if_expr.else_block, add_before_trailing_expr);
 		}
 		else if (node.if_expr.else_block->type == AST_IF_EXPR)
 		{
-			gen_ast_if_expr(code_gen, node.if_expr.else_block, tmp_var);
+			gen_ast_if_expr(code_gen, node.if_expr.else_block, add_before_trailing_expr);
 		}
 	}
 }
