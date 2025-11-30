@@ -14,29 +14,29 @@ static constexpr i64 MAX_BUFFER_SIZE = 64;
 
 static void gen_code(CodeGen* code_gen, AST* ast);
 
-static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr);
-static void gen_ast_func_def(CodeGen* code_gen, const AST* ast);
-static void gen_ast_var_def(CodeGen* code_gen, const AST* ast);
-static void gen_ast_literal(CodeGen* code_gen, const AST* ast);
-static void gen_ast_break_stmt(CodeGen* code_gen, const AST* ast);
-static void gen_ast_continue_stmt(CodeGen* code_gen, const AST* ast);
-static void gen_ast_return_stmt(CodeGen* code_gen, const AST* ast);
-static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast);
-static void gen_ast_union_def(CodeGen* code_gen, const AST* ast);
-static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast);
-static void gen_ast_member_access(CodeGen* code_gen, const AST* ast);
-static void gen_ast_func_call(CodeGen* code_gen, const AST* ast);
-static void gen_ast_identifier(CodeGen* code_gen, const AST* ast);
-static void gen_ast_binary_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_cast_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_index_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_array_init(CodeGen* code_gen, const AST* ast);
-static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr);
-static void gen_ast_while_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast);
-static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast);
-static void gen_ast_message(CodeGen* code_gen, const AST* ast);
+static void gen_ast_block(CodeGen* code_gen, Block block, const char* add_before_trailing_expr);
+static void gen_ast_func_def(CodeGen* code_gen, FuncDef func_def);
+static void gen_ast_var_def(CodeGen* code_gen, VarDef var_def);
+static void gen_ast_literal(CodeGen* code_gen, Literal literal);
+static void gen_ast_break_stmt(CodeGen* code_gen);
+static void gen_ast_continue_stmt(CodeGen* code_gen);
+static void gen_ast_return_stmt(CodeGen* code_gen, ReturnStmt return_stmt);
+static void gen_ast_struct_def(CodeGen* code_gen, StructDef struct_def);
+static void gen_ast_union_def(CodeGen* code_gen, UnionDef union_def);
+static void gen_ast_enum_def(CodeGen* code_gen, EnumDef enum_def);
+static void gen_ast_member_access(CodeGen* code_gen, MemberAccess member_access);
+static void gen_ast_func_call(CodeGen* code_gen, FuncCall func_call);
+static void gen_ast_identifier(CodeGen* code_gen, Identifier identifier);
+static void gen_ast_binary_expr(CodeGen* code_gen, BinaryExpr binary_expr);
+static void gen_ast_unary_expr(CodeGen* code_gen, UnaryExpr unary_expr);
+static void gen_ast_cast_expr(CodeGen* code_gen, CastExpr cast_expr);
+static void gen_ast_index_expr(CodeGen* code_gen, IndexExpr index_expr);
+static void gen_ast_array_init(CodeGen* code_gen, ArrayInit array_init);
+static void gen_ast_if_expr(CodeGen* code_gen, IfExpr if_expr, const char* add_before_trailing_expr);
+static void gen_ast_while_expr(CodeGen* code_gen, WhileExpr while_expr);
+static void gen_ast_for_expr(CodeGen* code_gen, ForExpr for_expr);
+static void gen_ast_struct_init(CodeGen* code_gen, StructInit struct_init);
+static void gen_ast_message(CodeGen* code_gen, Message message);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
 static void gen_var_def(CodeGen* code_gen, VarDef var_def);
@@ -69,110 +69,103 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	{
 		assert(code_gen != nullptr);
 	}
-	// typeof(ast->node) node = ast->node;
-	// CodeBlock* code_block = nullptr;
-	// CodeBlockType saved_block = CODE_BLOCK_NONE;
-	// char buffer[MAX_BUFFER_SIZE] = {0};
 
 	switch (ast->type)
 	{
 		case AST_BLOCK:
-			gen_ast_block(code_gen, ast, nullptr);
+			gen_ast_block(code_gen, ast->node.block, nullptr);
 			return;
 		case AST_FUNC_DEF:
-			gen_ast_func_def(code_gen, ast);
+			gen_ast_func_def(code_gen, ast->node.func_def);
 			return;
 		case AST_VAR_DEF:
-			gen_ast_var_def(code_gen, ast);
+			gen_ast_var_def(code_gen, ast->node.var_def);
 			return;
 		case AST_LITERAL:
-			gen_ast_literal(code_gen, ast);
+			gen_ast_literal(code_gen, ast->node.literal);
 			return;
 		case AST_BREAK_STMT:
-			gen_ast_break_stmt(code_gen, ast);
+			gen_ast_break_stmt(code_gen);
 			return;
 		case AST_CONTINUE_STMT:
-			gen_ast_continue_stmt(code_gen, ast);
+			gen_ast_continue_stmt(code_gen);
 			return;
 		case AST_RETURN_STMT:
-			gen_ast_return_stmt(code_gen, ast);
+			gen_ast_return_stmt(code_gen, ast->node.return_stmt);
 			return;
 		case AST_STRUCT_DEF:
-			gen_ast_struct_def(code_gen, ast);
+			gen_ast_struct_def(code_gen, ast->node.struct_def);
 			return;
 		case AST_UNION_DEF:
-			gen_ast_union_def(code_gen, ast);
+			gen_ast_union_def(code_gen, ast->node.union_def);
 			return;
 		case AST_ENUM_DEF:
-			gen_ast_enum_def(code_gen, ast);
+			gen_ast_enum_def(code_gen, ast->node.enum_def);
 			return;
 		case AST_MEMBER_ACCESS:
-			gen_ast_member_access(code_gen, ast);
+			gen_ast_member_access(code_gen, ast->node.member_access);
 			return;
 		case AST_FUNC_CALL:
-			gen_ast_func_call(code_gen, ast);
+			gen_ast_func_call(code_gen, ast->node.func_call);
 			return;
 		case AST_IDENTIFIER:
-			gen_ast_identifier(code_gen, ast);
+			gen_ast_identifier(code_gen, ast->node.identifier);
 			return;
 		case AST_BINARY_EXPR:
-			gen_ast_binary_expr(code_gen, ast);
+			gen_ast_binary_expr(code_gen, ast->node.binary_expr);
 			return;
 		case AST_UNARY:
-			gen_ast_unary_expr(code_gen, ast);
+			gen_ast_unary_expr(code_gen, ast->node.unary_expr);
 			return;
 		case AST_CAST_EXPR:
-			gen_ast_cast_expr(code_gen, ast);
+			gen_ast_cast_expr(code_gen, ast->node.cast_expr);
 			return;
 		case AST_INDEX_EXPR:
-			gen_ast_index_expr(code_gen, ast);
+			gen_ast_index_expr(code_gen, ast->node.index_expr);
 			return;
 		case AST_ARRAY_INIT:
-			gen_ast_array_init(code_gen, ast);
+			gen_ast_array_init(code_gen, ast->node.array_init);
 			return;
 		case AST_IF_EXPR:
-			gen_ast_if_expr(code_gen, ast, nullptr);
+			gen_ast_if_expr(code_gen, ast->node.if_expr, nullptr);
 			return;
 		case AST_WHILE_EXPR:
-			gen_ast_while_expr(code_gen, ast);
+			gen_ast_while_expr(code_gen, ast->node.while_expr);
 			return;
 		case AST_FOR_EXPR:
-			gen_ast_for_expr(code_gen, ast);
+			gen_ast_for_expr(code_gen, ast->node.for_expr);
 			return;
 		case AST_RANGE_EXPR:
 			assert(false && "code gen: range expression should not be used outside of for statement");
 			return;
 		case AST_STRUCT_INIT:
-			gen_ast_struct_init(code_gen, ast);
+			gen_ast_struct_init(code_gen, ast->node.struct_init);
 			return;
 		case AST_MESSAGE:
-			gen_ast_message(code_gen, ast);
+			gen_ast_message(code_gen, ast->node.message);
 			return;
 	}
 	assert(false && "code gen: not yet implemented");
 }
 
-static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr)
+static void gen_ast_block(CodeGen* code_gen, Block block, const char* add_before_trailing_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	if (!node.block.global && !code_gen->skip_brace)
+	if (!block.global && !code_gen->skip_brace)
 	{
-		// bool prev_global_block = code_gen->global_block;
 		code_block = get_code_block(code_gen);
-
 		str_cat(code_block, "{");
 	}
 	bool prev_global_block = code_gen->global_block;
-	code_gen->global_block = node.block.global;
+	code_gen->global_block = block.global;
 	bool prev_skip_brace = code_gen->skip_brace;
 	code_gen->skip_brace = false;
-	for (usize i = 0; i < node.block.statement_count; i++) // NOLINT
+	for (usize i = 0; i < block.statement_count; i++)
 	{
 		code_block = get_code_block(code_gen);
-		gen_code(code_gen, node.block.statements[i]);
-		switch (node.block.statements[i]->type)
+		gen_code(code_gen, block.statements[i]);
+		switch (block.statements[i]->type)
 		{
 			case AST_IDENTIFIER:
 			case AST_MEMBER_ACCESS:
@@ -207,11 +200,10 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_bef
 
 	if (add_before_trailing_expr != nullptr)
 	{
-		assert(node.block.trailing_expr != nullptr);
+		assert(block.trailing_expr != nullptr);
 		str_cat(code_block, add_before_trailing_expr);
-		// str_cat(code_block, "=");
 
-		switch (node.block.trailing_expr->type)
+		switch (block.trailing_expr->type)
 		{
 			case AST_IDENTIFIER:
 			case AST_MEMBER_ACCESS:
@@ -235,20 +227,20 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_bef
 			case AST_MESSAGE:
 			case AST_FOR_EXPR:
 			case AST_WHILE_EXPR:
-				gen_code(code_gen, node.block.trailing_expr);
+				gen_code(code_gen, block.trailing_expr);
 				str_cat(code_block, ";");
 				break;
 			case AST_IF_EXPR:
 			case AST_BLOCK:
-				gen_ast_block(code_gen, node.block.trailing_expr, add_before_trailing_expr);
+				gen_ast_block(code_gen, block.trailing_expr->node.block, add_before_trailing_expr);
 				break;
 		}
 	}
-	else if (node.block.trailing_expr != nullptr)
+	else if (block.trailing_expr != nullptr)
 	{
 		code_block = get_code_block(code_gen);
-		gen_code(code_gen, node.block.trailing_expr);
-		switch (node.block.trailing_expr->type)
+		gen_code(code_gen, block.trailing_expr);
+		switch (block.trailing_expr->type)
 		{
 			case AST_IDENTIFIER:
 			case AST_MEMBER_ACCESS:
@@ -280,23 +272,22 @@ static void gen_ast_block(CodeGen* code_gen, const AST* ast, const char* add_bef
 		}
 	}
 
-	if (!node.block.global && !prev_skip_brace)
+	if (!block.global && !prev_skip_brace)
 	{
 		str_cat(code_block, "}");
 	}
 	code_gen->skip_brace = prev_skip_brace;
 }
 
-static void gen_ast_func_def(CodeGen* code_gen, const AST* ast)
+static void gen_ast_func_def(CodeGen* code_gen, FuncDef func_def)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 
 	code_gen->current_block = CODE_BLOCK_PRIV_FUNCTIONS;
 	code_block = &code_gen->priv_functions;
-	for (usize i = 0; i < node.func_def.modifier_count; i++) // NOLINT
+	for (usize i = 0; i < func_def.modifier_count; i++)
 	{
-		if (node.func_def.modifiers[i].token_type == token_type_pub)
+		if (func_def.modifiers[i].token_type == token_type_pub)
 		{
 			code_gen->current_block = CODE_BLOCK_PUB_FUNCTIONS;
 			code_block = &code_gen->pub_functions;
@@ -304,7 +295,7 @@ static void gen_ast_func_def(CodeGen* code_gen, const AST* ast)
 		}
 	}
 
-	if (strcmp(node.func_def.name, "main") != 0)
+	if (strcmp(func_def.name, "main") != 0)
 	{
 		if (code_gen->current_block == CODE_BLOCK_PRIV_FUNCTIONS)
 		{
@@ -314,7 +305,7 @@ static void gen_ast_func_def(CodeGen* code_gen, const AST* ast)
 		{
 			str_cat(code_block, "extern ");
 		}
-		gen_func_signature(code_gen, node.func_def);
+		gen_func_signature(code_gen, func_def);
 		str_cat(code_block, ";");
 		if (code_gen->current_block == CODE_BLOCK_PRIV_FUNCTIONS)
 		{
@@ -323,25 +314,24 @@ static void gen_ast_func_def(CodeGen* code_gen, const AST* ast)
 	}
 
 	code_gen->current_block = CODE_BLOCK_CODE;
-	gen_func_signature(code_gen, node.func_def);
+	gen_func_signature(code_gen, func_def);
 
-	gen_code(code_gen, node.func_def.body);
+	gen_code(code_gen, func_def.body);
 
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
+static void gen_ast_var_def(CodeGen* code_gen, VarDef var_def)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 
 	if (code_gen->global_block)
 	{
 		code_gen->current_block = CODE_BLOCK_PRIV_VARS;
 		code_block = &code_gen->priv_vars;
-		for (usize i = 0; i < node.var_def.modifier_count; i++) // NOLINT
+		for (usize i = 0; i < var_def.modifier_count; i++)
 		{
-			if (node.var_def.modifiers[i].token_type == token_type_pub)
+			if (var_def.modifiers[i].token_type == token_type_pub)
 			{
 				code_gen->current_block = CODE_BLOCK_PUB_VARS;
 				code_block = &code_gen->pub_vars;
@@ -359,25 +349,23 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 		}
 	}
 	char tmp_var[MAX_BUFFER_SIZE] = {};
-	if (node.var_def.equals != nullptr &&
-		(node.var_def.equals->type == AST_BLOCK || node.var_def.equals->type == AST_IF_EXPR))
+	if (var_def.equals != nullptr && (var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR))
 	{
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
-		gen_type(code_block, node.var_def.type);
+		gen_type(code_block, var_def.type);
 		str_cat(code_block, " ");
 		str_cat(code_block, tmp_var);
 		str_cat(code_block, ";");
 		strcat(tmp_var, "=");
-		// strcat(tmp_var, "=");
-		if (node.var_def.equals->type == AST_BLOCK)
+		if (var_def.equals->type == AST_BLOCK)
 		{
-			gen_ast_block(code_gen, node.var_def.equals, tmp_var);
+			gen_ast_block(code_gen, var_def.equals->node.block, tmp_var);
 		}
-		else if (node.var_def.equals->type == AST_IF_EXPR)
+		else if (var_def.equals->type == AST_IF_EXPR)
 		{
-			gen_ast_if_expr(code_gen, node.var_def.equals, tmp_var);
+			gen_ast_if_expr(code_gen, var_def.equals->node.if_expr, tmp_var);
 		}
 		tmp_var[tmp_var_len] = '\0';
 	}
@@ -389,9 +377,9 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 	{
 		str_cat(code_block, "extern ");
 	}
-	gen_var_def(code_gen, node.var_def);
+	gen_var_def(code_gen, var_def);
 
-	if (node.var_def.equals == nullptr)
+	if (var_def.equals == nullptr)
 	{
 		str_cat(code_block, ";");
 		code_gen->current_block = CODE_BLOCK_NONE;
@@ -399,14 +387,13 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 	}
 	str_cat(code_block, "=");
 
-	if (node.var_def.equals != nullptr &&
-		(node.var_def.equals->type == AST_BLOCK || node.var_def.equals->type == AST_IF_EXPR))
+	if (var_def.equals != nullptr && (var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR))
 	{
 		str_cat(code_block, tmp_var);
 	}
 	else
 	{
-		gen_code(code_gen, node.var_def.equals);
+		gen_code(code_gen, var_def.equals);
 	}
 
 	if (!code_gen->no_semicolon)
@@ -416,10 +403,9 @@ static void gen_ast_var_def(CodeGen* code_gen, const AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_literal(CodeGen* code_gen, const AST* ast)
+static void gen_ast_literal(CodeGen* code_gen, Literal literal)
 {
-	typeof(ast->node) node = ast->node;
-	Token token = node.literal.literal;
+	Token token = literal.literal;
 	CodeBlock* code_block = get_code_block(code_gen);
 	if (code_block == nullptr)
 	{
@@ -456,35 +442,31 @@ static void gen_ast_literal(CodeGen* code_gen, const AST* ast)
 	}
 }
 
-static void gen_ast_break_stmt(CodeGen* code_gen, const AST* ast)
+static void gen_ast_break_stmt(CodeGen* code_gen)
 {
-	(void)ast; // will use the ast prob later
 	str_cat(&code_gen->code, "break");
 }
 
-static void gen_ast_continue_stmt(CodeGen* code_gen, const AST* ast)
+static void gen_ast_continue_stmt(CodeGen* code_gen)
 {
-	(void)ast; // will use the ast prob later
 	str_cat(&code_gen->code, "continue");
 }
 
-static void gen_ast_return_stmt(CodeGen* code_gen, const AST* ast)
+static void gen_ast_return_stmt(CodeGen* code_gen, ReturnStmt return_stmt)
 {
-	typeof(ast->node) node = ast->node;
 	str_cat(&code_gen->code, "return ");
-	gen_code(code_gen, node.return_stmt.return_stmt);
+	gen_code(code_gen, return_stmt.return_stmt);
 }
 
-static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast)
+static void gen_ast_struct_def(CodeGen* code_gen, StructDef struct_def)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 
 	code_gen->current_block = CODE_BLOCK_PRIV_TYPES;
 	code_block = &code_gen->priv_types;
-	for (usize i = 0; i < node.struct_def.modifier_count; i++) // NOLINT
+	for (usize i = 0; i < struct_def.modifier_count; i++)
 	{
-		if (node.struct_def.modifiers[i].token_type == token_type_pub)
+		if (struct_def.modifiers[i].token_type == token_type_pub)
 		{
 			code_gen->current_block = CODE_BLOCK_PUB_TYPES;
 			code_block = &code_gen->pub_types;
@@ -492,18 +474,18 @@ static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast)
 		}
 	}
 	str_cat(code_block, "typedef struct ");
-	str_cat(code_block, node.struct_def.name);
+	str_cat(code_block, struct_def.name);
 	str_cat(code_block, "{");
 
-	for (usize i = 0; i < node.struct_def.member_count; i++) // NOLINT
+	for (usize i = 0; i < struct_def.member_count; i++)
 	{
-		assert(node.struct_def.members[i]->type == AST_VAR_DEF);
-		gen_var_def_with_const(code_gen, node.struct_def.members[i]->node.var_def, false);
+		assert(struct_def.members[i]->type == AST_VAR_DEF);
+		gen_var_def_with_const(code_gen, struct_def.members[i]->node.var_def, false);
 		str_cat(code_block, ";");
 	}
 
 	str_cat(code_block, "}");
-	str_cat(code_block, node.struct_def.name);
+	str_cat(code_block, struct_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -511,16 +493,15 @@ static void gen_ast_struct_def(CodeGen* code_gen, const AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_union_def(CodeGen* code_gen, const AST* ast)
+static void gen_ast_union_def(CodeGen* code_gen, UnionDef union_def)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 
 	code_gen->current_block = CODE_BLOCK_PRIV_TYPES;
 	code_block = &code_gen->priv_types;
-	for (usize i = 0; i < node.union_def.modifier_count; i++) // NOLINT
+	for (usize i = 0; i < union_def.modifier_count; i++)
 	{
-		if (node.union_def.modifiers[i].token_type == token_type_pub)
+		if (union_def.modifiers[i].token_type == token_type_pub)
 		{
 			code_gen->current_block = CODE_BLOCK_PUB_TYPES;
 			code_block = &code_gen->pub_types;
@@ -528,18 +509,18 @@ static void gen_ast_union_def(CodeGen* code_gen, const AST* ast)
 		}
 	}
 	str_cat(code_block, "typedef union ");
-	str_cat(code_block, node.union_def.name);
+	str_cat(code_block, union_def.name);
 	str_cat(code_block, "{");
 
-	for (usize i = 0; i < node.union_def.member_count; i++) // NOLINT
+	for (usize i = 0; i < union_def.member_count; i++)
 	{
-		assert(node.union_def.members[i]->type == AST_VAR_DEF);
-		gen_var_def_with_const(code_gen, node.union_def.members[i]->node.var_def, false);
+		assert(union_def.members[i]->type == AST_VAR_DEF);
+		gen_var_def_with_const(code_gen, union_def.members[i]->node.var_def, false);
 		str_cat(code_block, ";");
 	}
 
 	str_cat(code_block, "}");
-	str_cat(code_block, node.union_def.name);
+	str_cat(code_block, union_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -547,16 +528,15 @@ static void gen_ast_union_def(CodeGen* code_gen, const AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast)
+static void gen_ast_enum_def(CodeGen* code_gen, EnumDef enum_def)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = nullptr;
 
 	code_gen->current_block = CODE_BLOCK_PRIV_TYPES;
 	code_block = &code_gen->priv_types;
-	for (usize i = 0; i < node.enum_def.modifier_count; i++) // NOLINT
+	for (usize i = 0; i < enum_def.modifier_count; i++)
 	{
-		if (node.enum_def.modifiers[i].token_type == token_type_pub)
+		if (enum_def.modifiers[i].token_type == token_type_pub)
 		{
 			code_gen->current_block = CODE_BLOCK_PUB_TYPES;
 			code_block = &code_gen->pub_types;
@@ -564,26 +544,26 @@ static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast)
 		}
 	}
 	str_cat(code_block, "typedef enum ");
-	if (node.enum_def.type != nullptr)
+	if (enum_def.type != nullptr)
 	{
 		str_cat(code_block, ":");
-		str_cat(code_block, node.enum_def.type);
+		str_cat(code_block, enum_def.type);
 	}
 	str_cat(code_block, "{");
-	for (usize i = 0; i < node.enum_def.member_count; i++) // NOLINT
+	for (usize i = 0; i < enum_def.member_count; i++)
 	{
-		str_cat(code_block, node.enum_def.members[i].name);
-		if (node.enum_def.members[i].has_value)
+		str_cat(code_block, enum_def.members[i].name);
+		if (enum_def.members[i].has_value)
 		{
 			str_cat(code_block, "=");
 			char buffer[MAX_BUFFER_SIZE] = {0};
-			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "%" PRId64, node.enum_def.members[i].value);
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "%" PRId64, enum_def.members[i].value);
 			str_cat(code_block, buffer);
 		}
 		str_cat(code_block, ",");
 	}
 	str_cat(code_block, "}");
-	str_cat(code_block, node.enum_def.name);
+	str_cat(code_block, enum_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -591,12 +571,11 @@ static void gen_ast_enum_def(CodeGen* code_gen, const AST* ast)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_member_access(CodeGen* code_gen, const AST* ast)
+static void gen_ast_member_access(CodeGen* code_gen, MemberAccess member_access)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
-	gen_code(code_gen, node.member_access.left);
-	if (node.member_access.direct)
+	gen_code(code_gen, member_access.left);
+	if (member_access.direct)
 	{
 		str_cat(code_block, ".");
 	}
@@ -604,126 +583,119 @@ static void gen_ast_member_access(CodeGen* code_gen, const AST* ast)
 	{
 		str_cat(code_block, "->");
 	}
-	gen_code(code_gen, node.member_access.right);
+	gen_code(code_gen, member_access.right);
 }
 
-static void gen_ast_func_call(CodeGen* code_gen, const AST* ast)
+static void gen_ast_func_call(CodeGen* code_gen, FuncCall func_call)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
-	gen_code(code_gen, node.func_call.callee);
+	gen_code(code_gen, func_call.callee);
 	str_cat(code_block, "(");
-	if (node.func_call.arg_count > 0)
+	if (func_call.arg_count > 0)
 	{
-		gen_code(code_gen, node.func_call.args[0]);
+		gen_code(code_gen, func_call.args[0]);
 	}
-	for (usize i = 1; i < node.func_call.arg_count; i++) // NOLINT
+	for (usize i = 1; i < func_call.arg_count; i++)
 	{
 		str_cat(code_block, ",");
-		gen_code(code_gen, node.func_call.args[i]);
+		gen_code(code_gen, func_call.args[i]);
 	}
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_identifier(CodeGen* code_gen, const AST* ast)
+static void gen_ast_identifier(CodeGen* code_gen, Identifier identifier)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
-	str_cat(code_block, node.identifier.identifier.str_val);
+	str_cat(code_block, identifier.identifier.str_val);
 }
 
-static void gen_ast_binary_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_binary_expr(CodeGen* code_gen, BinaryExpr binary_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	if (strchr(TOKENS_STR_IDENT[node.binary_expr.op.token_type], '=') &&
-		(node.binary_expr.right->type == AST_BLOCK || node.binary_expr.right->type == AST_IF_EXPR))
+	if (strchr(TOKENS_STR_IDENT[binary_expr.op.token_type], '=') &&
+		(binary_expr.right->type == AST_BLOCK || binary_expr.right->type == AST_IF_EXPR))
 	{
 		char tmp_var[MAX_BUFFER_SIZE] = {};
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
 		str_cat(code_block, "typeof_unqual(");
-		gen_code(code_gen, node.binary_expr.left);
+		gen_code(code_gen, binary_expr.left);
 		str_cat(code_block, ") ");
 		str_cat(code_block, tmp_var);
 		str_cat(code_block, ";");
 
 		strcat(tmp_var, "=");
-		if (node.binary_expr.right->type == AST_BLOCK)
+		if (binary_expr.right->type == AST_BLOCK)
 		{
-			gen_ast_block(code_gen, node.binary_expr.right, tmp_var);
+			gen_ast_block(code_gen, binary_expr.right->node.block, tmp_var);
 		}
-		else if (node.binary_expr.right->type == AST_IF_EXPR)
+		else if (binary_expr.right->type == AST_IF_EXPR)
 		{
-			gen_ast_if_expr(code_gen, node.binary_expr.right, tmp_var);
+			gen_ast_if_expr(code_gen, binary_expr.right->node.if_expr, tmp_var);
 		}
 		tmp_var[tmp_var_len] = '\0';
 
-		gen_code(code_gen, node.binary_expr.left);
-		str_cat(code_block, TOKENS_STR_IDENT[node.binary_expr.op.token_type]);
+		gen_code(code_gen, binary_expr.left);
+		str_cat(code_block, TOKENS_STR_IDENT[binary_expr.op.token_type]);
 		str_cat(code_block, tmp_var);
 	}
 	else
 	{
 
 		str_cat(code_block, "(");
-		gen_code(code_gen, node.binary_expr.left);
-		str_cat(code_block, TOKENS_STR_IDENT[node.binary_expr.op.token_type]);
-		gen_code(code_gen, node.binary_expr.right);
+		gen_code(code_gen, binary_expr.left);
+		str_cat(code_block, TOKENS_STR_IDENT[binary_expr.op.token_type]);
+		gen_code(code_gen, binary_expr.right);
 		str_cat(code_block, ")");
 	}
 }
 
-static void gen_ast_unary_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_unary_expr(CodeGen* code_gen, UnaryExpr unary_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	str_cat(code_block, "(");
-	str_cat(code_block, TOKENS_STR_IDENT[node.unary_expr.op.token_type]);
-	gen_code(code_gen, node.unary_expr.rhs);
+	str_cat(code_block, TOKENS_STR_IDENT[unary_expr.op.token_type]);
+	gen_code(code_gen, unary_expr.rhs);
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_cast_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_cast_expr(CodeGen* code_gen, CastExpr cast_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	str_cat(code_block, "((");
-	gen_var_def(code_gen, node.cast_expr.target_type);
+	gen_var_def(code_gen, cast_expr.target_type);
 	str_cat(code_block, ")");
-	gen_code(code_gen, node.cast_expr.expr);
+	gen_code(code_gen, cast_expr.expr);
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_index_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_index_expr(CodeGen* code_gen, IndexExpr index_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, "(");
-	gen_code(code_gen, node.index_expr.left);
+	gen_code(code_gen, index_expr.left);
 	str_cat(code_block, "[");
-	gen_code(code_gen, node.index_expr.index);
+	gen_code(code_gen, index_expr.index);
 	str_cat(code_block, "])");
 }
 
-static void gen_ast_array_init(CodeGen* code_gen, const AST* ast)
+static void gen_ast_array_init(CodeGen* code_gen, ArrayInit array_init)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
-	if (node.array_init.is_sized)
+	if (array_init.is_sized)
 	{
 		str_cat(code_block, "{");
-		assert(node.array_init.size_expr->type == AST_LITERAL);
-		assert(node.array_init.size_expr->node.literal.literal.token_type == token_type_number);
-		for (i64 i = 0; i < node.array_init.size_expr->node.literal.literal.num_val; i++) // NOLINT
+		assert(array_init.size_expr->type == AST_LITERAL);
+		assert(array_init.size_expr->node.literal.literal.token_type == token_type_number);
+		for (i64 i = 0; i < array_init.size_expr->node.literal.literal.num_val; i++)
 		{
-			for (usize j = 0; j < node.array_init.element_count; j++) // NOLINT
+			for (usize j = 0; j < array_init.element_count; j++)
 			{
-				gen_code(code_gen, node.array_init.elements[j]);
+				gen_code(code_gen, array_init.elements[j]);
 				str_cat(code_block, ",");
 			}
 		}
@@ -732,76 +704,73 @@ static void gen_ast_array_init(CodeGen* code_gen, const AST* ast)
 	else
 	{
 		str_cat(code_block, "{");
-		for (usize i = 0; i < node.array_init.element_count; i++) // NOLINT
+		for (usize i = 0; i < array_init.element_count; i++)
 		{
-			gen_code(code_gen, node.array_init.elements[i]);
+			gen_code(code_gen, array_init.elements[i]);
 			str_cat(code_block, ",");
 		}
 		str_cat(code_block, "}");
 	}
 }
 
-static void gen_ast_if_expr(CodeGen* code_gen, const AST* ast, const char* add_before_trailing_expr)
+static void gen_ast_if_expr(CodeGen* code_gen, IfExpr if_expr, const char* add_before_trailing_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	str_cat(code_block, "if(");
-	gen_code(code_gen, node.if_expr.condition);
+	gen_code(code_gen, if_expr.condition);
 	str_cat(code_block, ")");
 	if (add_before_trailing_expr == nullptr)
 	{
-		gen_code(code_gen, node.if_expr.then_block);
+		gen_code(code_gen, if_expr.then_block);
 		str_cat(code_block, "else ");
-		gen_code(code_gen, node.if_expr.else_block);
+		gen_code(code_gen, if_expr.else_block);
 	}
 	else
 	{
-		assert(node.if_expr.then_block != nullptr);
-		assert(node.if_expr.else_block != nullptr);
-		assert(node.if_expr.then_block->type == AST_BLOCK);
-		assert(node.if_expr.else_block->type == AST_BLOCK || node.if_expr.else_block->type == AST_IF_EXPR);
-		gen_ast_block(code_gen, node.if_expr.then_block, add_before_trailing_expr);
-		if (node.if_expr.else_block->type == AST_BLOCK)
+		assert(if_expr.then_block != nullptr);
+		assert(if_expr.else_block != nullptr);
+		assert(if_expr.then_block->type == AST_BLOCK);
+		assert(if_expr.else_block->type == AST_BLOCK || if_expr.else_block->type == AST_IF_EXPR);
+		gen_ast_block(code_gen, if_expr.then_block->node.block, add_before_trailing_expr);
+		if (if_expr.else_block->type == AST_BLOCK)
 		{
-			gen_ast_block(code_gen, node.if_expr.else_block, add_before_trailing_expr);
+			gen_ast_block(code_gen, if_expr.else_block->node.block, add_before_trailing_expr);
 		}
-		else if (node.if_expr.else_block->type == AST_IF_EXPR)
+		else if (if_expr.else_block->type == AST_IF_EXPR)
 		{
-			gen_ast_if_expr(code_gen, node.if_expr.else_block, add_before_trailing_expr);
+			gen_ast_if_expr(code_gen, if_expr.else_block->node.if_expr, add_before_trailing_expr);
 		}
 	}
 }
 
-static void gen_ast_while_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_while_expr(CodeGen* code_gen, WhileExpr while_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	str_cat(code_block, "while(");
-	gen_code(code_gen, node.while_expr.condition);
+	gen_code(code_gen, while_expr.condition);
 	str_cat(code_block, ")");
-	gen_code(code_gen, node.while_expr.then_block);
+	gen_code(code_gen, while_expr.then_block);
 }
 
-static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
+static void gen_ast_for_expr(CodeGen* code_gen, ForExpr for_expr)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	if (node.for_expr.style == FOR_STYLE_C)
+	if (for_expr.style == FOR_STYLE_C)
 	{
 		str_cat(code_block, "for(");
 		code_gen->no_semicolon = true;
-		gen_code(code_gen, node.for_expr.c_style.init);
+		gen_code(code_gen, for_expr.c_style.init);
 		str_cat(code_block, ";");
-		gen_code(code_gen, node.for_expr.c_style.condition);
+		gen_code(code_gen, for_expr.c_style.condition);
 		str_cat(code_block, ";");
-		gen_code(code_gen, node.for_expr.c_style.increment);
+		gen_code(code_gen, for_expr.c_style.increment);
 		code_gen->no_semicolon = false;
 		str_cat(code_block, ")");
 
-		gen_code(code_gen, node.for_expr.body);
+		gen_code(code_gen, for_expr.body);
 	}
 	else // Rust-style
 	{
@@ -817,12 +786,12 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		(void)snprintf(tmp_iter, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "iter_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
-		assert(node.for_expr.rust_style.iterable->type == AST_RANGE_EXPR);
-		RangeExpr range_expr = node.for_expr.rust_style.iterable->node.range_expr;
+		assert(for_expr.rust_style.iterable->type == AST_RANGE_EXPR);
+		RangeExpr range_expr = for_expr.rust_style.iterable->node.range_expr;
 
 		if (range_expr.start->type == AST_BLOCK || range_expr.start->type == AST_IF_EXPR)
 		{
-			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			gen_type(code_block, for_expr.rust_style.var_def.type);
 			str_cat(code_block, " ");
 			str_cat(code_block, tmp_start);
 			str_cat(code_block, ";");
@@ -831,18 +800,18 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 
 			if (range_expr.start->type == AST_BLOCK)
 			{
-				gen_ast_block(code_gen, range_expr.start, tmp_start);
+				gen_ast_block(code_gen, range_expr.start->node.block, tmp_start);
 			}
 			else if (range_expr.start->type == AST_IF_EXPR)
 			{
-				gen_ast_if_expr(code_gen, range_expr.start, tmp_start);
+				gen_ast_if_expr(code_gen, range_expr.start->node.if_expr, tmp_start);
 			}
 
 			tmp_start[tmp_start_len] = '\0';
 		}
 		else
 		{
-			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			gen_type(code_block, for_expr.rust_style.var_def.type);
 			str_cat(code_block, " ");
 			str_cat(code_block, tmp_start);
 			str_cat(code_block, "=");
@@ -851,7 +820,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		}
 		if (range_expr.end->type == AST_BLOCK || range_expr.end->type == AST_IF_EXPR)
 		{
-			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			gen_type(code_block, for_expr.rust_style.var_def.type);
 			str_cat(code_block, " ");
 			str_cat(code_block, tmp_end);
 			str_cat(code_block, ";");
@@ -860,18 +829,18 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 
 			if (range_expr.end->type == AST_BLOCK)
 			{
-				gen_ast_block(code_gen, range_expr.start, tmp_end);
+				gen_ast_block(code_gen, range_expr.start->node.block, tmp_end);
 			}
-			else if (node.binary_expr.right->type == AST_IF_EXPR)
+			else if (range_expr.end->type == AST_IF_EXPR)
 			{
-				gen_ast_if_expr(code_gen, range_expr.start, tmp_end);
+				gen_ast_if_expr(code_gen, range_expr.start->node.if_expr, tmp_end);
 			}
 
 			tmp_end[tmp_end_len] = '\0';
 		}
 		else
 		{
-			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			gen_type(code_block, for_expr.rust_style.var_def.type);
 			str_cat(code_block, " ");
 			str_cat(code_block, tmp_end);
 			str_cat(code_block, "=");
@@ -890,7 +859,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		str_cat(code_block, "for(");
 
 		// for (x; _; _)
-		gen_type(code_block, node.for_expr.rust_style.var_def.type);
+		gen_type(code_block, for_expr.rust_style.var_def.type);
 		str_cat(code_block, " ");
 		str_cat(code_block, tmp_iter);
 		str_cat(code_block, "=");
@@ -940,26 +909,25 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		str_cat(code_block, ")");
 
 		str_cat(code_block, "{");
-		gen_var_def(code_gen, node.for_expr.rust_style.var_def);
+		gen_var_def(code_gen, for_expr.rust_style.var_def);
 		str_cat(code_block, "=");
 		str_cat(code_block, tmp_iter);
 		str_cat(code_block, ";");
 		code_gen->skip_brace = true;
-		gen_code(code_gen, node.for_expr.body);
+		gen_code(code_gen, for_expr.body);
 		code_gen->skip_brace = false;
 		str_cat(code_block, "}");
 	}
 }
 
-static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast)
+static void gen_ast_struct_init(CodeGen* code_gen, StructInit struct_init)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, "{");
-	for (usize i = 0; i < node.struct_init.field_count; i++) // NOLINT
+	for (usize i = 0; i < struct_init.field_count; i++)
 	{
 		str_cat(code_block, ".");
-		const StructFieldInit field = node.struct_init.fields[i];
+		const StructFieldInit field = struct_init.fields[i];
 		str_cat(code_block, field.field_name);
 		str_cat(code_block, "=");
 		gen_code(code_gen, field.value);
@@ -968,25 +936,24 @@ static void gen_ast_struct_init(CodeGen* code_gen, const AST* ast)
 	str_cat(code_block, "}");
 }
 
-static void gen_ast_message(CodeGen* code_gen, const AST* ast)
+static void gen_ast_message(CodeGen* code_gen, Message message)
 {
-	typeof(ast->node) node = ast->node;
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	switch (node.message.msg)
+	switch (message.msg)
 	{
 		case msg_invalid:
 			assert(false && "invalid message");
 		case msg_import:
 			str_cat(&code_gen->includes, "#include \"");
-			str_cat(&code_gen->includes, node.message.import.import);
+			str_cat(&code_gen->includes, message.import.import);
 			str_cat(&code_gen->includes, "\"\n");
 			break;
 		case msg_c_type:
 			break;
 		case msg_include:
 			str_cat(code_block, "#include \"");
-			str_cat(code_block, node.message.import.import);
+			str_cat(code_block, message.import.import);
 			str_cat(code_block, "\"\n");
 			break;
 		case msg_use:
@@ -998,7 +965,7 @@ static void gen_ast_message(CodeGen* code_gen, const AST* ast)
 static void gen_type(CodeBlock* code_block, VarType var_type)
 {
 	str_cat(code_block, var_type.name);
-	for (usize i = 0; i < var_type.pointer_count; i++) // NOLINT
+	for (usize i = 0; i < var_type.pointer_count; i++)
 	{
 		if (var_type.pointer_types[i] == pointer_type_const)
 		{
@@ -1022,7 +989,7 @@ static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const
 
 	debug_assert(code_block != nullptr);
 	{
-		for (usize i = 0; i < var_def.modifier_count; i++) // NOLINT
+		for (usize i = 0; i < var_def.modifier_count; i++)
 		{
 			if (var_def.modifiers[i].token_type == token_type_mut)
 			{
@@ -1038,7 +1005,7 @@ static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const
 	str_cat(code_block, " ");
 	str_cat(code_block, var_def.name);
 
-	for (usize i = 0; i < var_def.type.array_count; i++) // NOLINT
+	for (usize i = 0; i < var_def.type.array_count; i++)
 	{
 		str_cat(code_block, "[");
 		gen_code(code_gen, var_def.type.array_sizes[i]);
@@ -1065,7 +1032,7 @@ static void gen_func_signature(CodeGen* code_gen, FuncDef func_def)
 	{
 		gen_var_def(code_gen, func_def.params[0]->node.var_def);
 	}
-	for (usize i = 1; i < func_def.param_count; i++) // NOLINT
+	for (usize i = 1; i < func_def.param_count; i++)
 	{
 		str_cat(code_block, ",");
 		gen_var_def(code_gen, func_def.params[i]->node.var_def);
@@ -1107,7 +1074,7 @@ static void str_cat(CodeBlock* code_block, const char* str)
 	usize str_len = strlen(str);
 	if (code_block->len + str_len + 1 >= code_block->cap)
 	{
-		while (code_block->len + str_len + 1 >= code_block->cap) // NOLINT
+		while (code_block->len + str_len + 1 >= code_block->cap)
 		{
 			code_block->cap = MAX(code_block->cap, 1);
 			code_block->cap *= 2;
