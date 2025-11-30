@@ -805,29 +805,79 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 	}
 	else // Rust-style
 	{
-		char tmp_end[MAX_BUFFER_SIZE] = {};
 		char tmp_start[MAX_BUFFER_SIZE] = {};
+		char tmp_end[MAX_BUFFER_SIZE] = {};
 		char tmp_dir[MAX_BUFFER_SIZE] = {};
 		char tmp_iter[MAX_BUFFER_SIZE] = {};
-		(void)snprintf(tmp_end, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "end_%" PRIu32, code_gen->tmp_num);
-		(void)snprintf(tmp_start, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "start_%" PRIu32, code_gen->tmp_num);
+
+		int tmp_start_len =
+			snprintf(tmp_start, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "start_%" PRIu32, code_gen->tmp_num);
+		int tmp_end_len = snprintf(tmp_end, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "end_%" PRIu32, code_gen->tmp_num);
 		(void)snprintf(tmp_dir, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "dir_%" PRIu32, code_gen->tmp_num);
 		(void)snprintf(tmp_iter, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "iter_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
-		gen_type(code_block, node.for_expr.rust_style.var_def.type);
-		str_cat(code_block, " ");
-		str_cat(code_block, tmp_end);
-		str_cat(code_block, "=");
-		gen_code(code_gen, node.for_expr.rust_style.iterable->node.range_expr.end);
-		str_cat(code_block, ";");
+		assert(node.for_expr.rust_style.iterable->type == AST_RANGE_EXPR);
+		RangeExpr range_expr = node.for_expr.rust_style.iterable->node.range_expr;
 
-		gen_type(code_block, node.for_expr.rust_style.var_def.type);
-		str_cat(code_block, " ");
-		str_cat(code_block, tmp_start);
-		str_cat(code_block, "=");
-		gen_code(code_gen, node.for_expr.rust_style.iterable->node.range_expr.start);
-		str_cat(code_block, ";");
+		if (range_expr.start->type == AST_BLOCK || range_expr.start->type == AST_IF_EXPR)
+		{
+			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			str_cat(code_block, " ");
+			str_cat(code_block, tmp_start);
+			str_cat(code_block, ";");
+
+			tmp_start[tmp_start_len] = '=';
+
+			if (range_expr.start->type == AST_BLOCK)
+			{
+				gen_ast_block(code_gen, range_expr.start, tmp_start);
+			}
+			else if (range_expr.start->type == AST_IF_EXPR)
+			{
+				gen_ast_if_expr(code_gen, range_expr.start, tmp_start);
+			}
+
+			tmp_start[tmp_start_len] = '\0';
+		}
+		else
+		{
+			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			str_cat(code_block, " ");
+			str_cat(code_block, tmp_start);
+			str_cat(code_block, "=");
+			gen_code(code_gen, range_expr.start);
+			str_cat(code_block, ";");
+		}
+		if (range_expr.end->type == AST_BLOCK || range_expr.end->type == AST_IF_EXPR)
+		{
+			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			str_cat(code_block, " ");
+			str_cat(code_block, tmp_end);
+			str_cat(code_block, ";");
+
+			tmp_end[tmp_end_len] = '=';
+
+			if (range_expr.end->type == AST_BLOCK)
+			{
+				gen_ast_block(code_gen, range_expr.start, tmp_end);
+			}
+			else if (node.binary_expr.right->type == AST_IF_EXPR)
+			{
+				gen_ast_if_expr(code_gen, range_expr.start, tmp_end);
+			}
+
+			tmp_end[tmp_end_len] = '\0';
+		}
+		else
+		{
+			gen_type(code_block, node.for_expr.rust_style.var_def.type);
+			str_cat(code_block, " ");
+			str_cat(code_block, tmp_end);
+			str_cat(code_block, "=");
+			gen_code(code_gen, range_expr.end);
+			str_cat(code_block, ";");
+		}
 
 		str_cat(code_block, "bool ");
 		str_cat(code_block, tmp_dir);
@@ -853,7 +903,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		str_cat(code_block, tmp_dir);
 		str_cat(code_block, "?");
 		str_cat(code_block, tmp_iter);
-		if (node.for_expr.rust_style.iterable->node.range_expr.inclusive)
+		if (range_expr.inclusive)
 		{
 			str_cat(code_block, "<=");
 		}
@@ -864,7 +914,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, const AST* ast)
 		str_cat(code_block, tmp_end);
 		str_cat(code_block, ":");
 		str_cat(code_block, tmp_iter);
-		if (node.for_expr.rust_style.iterable->node.range_expr.inclusive)
+		if (range_expr.inclusive)
 		{
 			str_cat(code_block, ">=");
 		}
