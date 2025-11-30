@@ -1,5 +1,6 @@
 #pragma once
 
+#include "basic_types.h"
 #include "parser.h"
 
 typedef struct
@@ -33,6 +34,7 @@ typedef struct
 	CodeBlock pub_vars;
 	CodeBlock code;
 	CodeBlockType current_block;
+	usize close_paren_count;
 	u32 tmp_num;
 	bool global_block;
 	bool skip_brace;

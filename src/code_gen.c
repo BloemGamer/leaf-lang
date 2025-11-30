@@ -30,6 +30,7 @@ static void gen_ast_identifier(CodeGen code_gen[static 1], Identifier identifier
 static void gen_ast_binary_expr(CodeGen code_gen[static 1], BinaryExpr binary_expr);
 static void gen_ast_unary_expr(CodeGen code_gen[static 1], UnaryExpr unary_expr);
 static void gen_ast_cast_expr(CodeGen code_gen[static 1], CastExpr cast_expr);
+static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, const char* add_before_trailing_expr);
 static void gen_ast_index_expr(CodeGen code_gen[static 1], IndexExpr index_expr);
 static void gen_ast_array_init(CodeGen code_gen[static 1], ArrayInit array_init);
 static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const char* add_before_trailing_expr);
@@ -44,6 +45,7 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def);
 
 static CodeBlock* get_code_block(CodeGen code_gen[static 1]);
+static bool casted_block(CastExpr cast_expr);
 static void str_cat(CodeBlock* code_block, const char* str);
 
 static void free_code_block(CodeBlock code_block);
@@ -228,6 +230,10 @@ static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* a
 			case AST_FOR_EXPR:
 			case AST_WHILE_EXPR:
 				gen_code(code_gen, block.trailing_expr);
+				for (usize i = 0; i < code_gen->close_paren_count; i++)
+				{
+					str_cat(code_block, ")");
+				}
 				str_cat(code_block, ";");
 				break;
 			case AST_IF_EXPR:
@@ -614,7 +620,8 @@ static void gen_ast_binary_expr(CodeGen code_gen[static 1], BinaryExpr binary_ex
 	CodeBlock* code_block = get_code_block(code_gen);
 
 	if (strchr(TOKENS_STR_IDENT[binary_expr.op.token_type], '=') &&
-		(binary_expr.right->type == AST_BLOCK || binary_expr.right->type == AST_IF_EXPR))
+		(binary_expr.right->type == AST_BLOCK || binary_expr.right->type == AST_IF_EXPR ||
+		 (binary_expr.right->type == AST_CAST_EXPR && casted_block(binary_expr.right->node.cast_expr)))) // NOLINT
 	{
 		char tmp_var[MAX_BUFFER_SIZE] = {};
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
@@ -634,6 +641,10 @@ static void gen_ast_binary_expr(CodeGen code_gen[static 1], BinaryExpr binary_ex
 		else if (binary_expr.right->type == AST_IF_EXPR)
 		{
 			gen_ast_if_expr(code_gen, binary_expr.right->node.if_expr, tmp_var);
+		}
+		else if (binary_expr.right->type == AST_CAST_EXPR)
+		{
+			gen_ast_cast_block(code_gen, binary_expr.right->node.cast_expr, tmp_var);
 		}
 		tmp_var[tmp_var_len] = '\0';
 
@@ -671,6 +682,110 @@ static void gen_ast_cast_expr(CodeGen code_gen[static 1], CastExpr cast_expr)
 	str_cat(code_block, ")");
 	gen_code(code_gen, cast_expr.expr);
 	str_cat(code_block, ")");
+}
+
+static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cast_expr, char** add_before_trailing_expr,
+										usize* cap, usize* len, usize* paren_count)
+{
+	// Calculate the length needed for this cast: ((type)
+	usize cast_len = 2; // for "(("
+	cast_len += strlen(cast_expr.target_type.type.name);
+	for (usize i = 0; i < cast_expr.target_type.type.pointer_count; i++)
+	{
+		if (cast_expr.target_type.type.pointer_types[i] == pointer_type_const)
+		{
+			cast_len += strlen("* const");
+		}
+		else
+		{
+			cast_len += 1; // for "*"
+		}
+	}
+	cast_len += 1; // for closing ")"
+
+	// Ensure we have enough capacity
+	while (*len + cast_len + 1 > *cap)
+	{
+		*cap *= 2;
+		*add_before_trailing_expr = (char*)realloc(*add_before_trailing_expr, *cap);
+	}
+
+	// Append the cast prefix: ((type)
+	strcat(*add_before_trailing_expr, "((");
+	strcat(*add_before_trailing_expr, cast_expr.target_type.type.name);
+	for (usize i = 0; i < cast_expr.target_type.type.pointer_count; i++)
+	{
+		if (cast_expr.target_type.type.pointer_types[i] == pointer_type_const)
+		{
+			strcat(*add_before_trailing_expr, "* const");
+		}
+		else
+		{
+			strcat(*add_before_trailing_expr, "*");
+		}
+	}
+	strcat(*add_before_trailing_expr, ")");
+	*len = strlen(*add_before_trailing_expr);
+	(*paren_count)++; // Increment paren count for this cast level
+
+	// Recursively handle nested casts - always recurse if inner is a cast
+	if (cast_expr.expr->type == AST_CAST_EXPR)
+	{
+		CastExpr inner_cast = cast_expr.expr->node.cast_expr;
+		gen_ast_cast_block_internal(code_gen, inner_cast, add_before_trailing_expr, cap, len, paren_count);
+	}
+}
+
+static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, const char* add_before_trailing_expr)
+{
+	// Allocate buffer for the new prefix
+	usize cap = MAX_BUFFER_SIZE;
+	char* before_trailing_expr = (char*)malloc(cap);
+
+	// Copy the existing prefix (e.g., "sl_tmp_cast_0=")
+	if (add_before_trailing_expr != nullptr)
+	{
+		strcpy(before_trailing_expr, add_before_trailing_expr);
+	}
+	else
+	{
+		before_trailing_expr[0] = '\0';
+	}
+
+	usize len = strlen(before_trailing_expr);
+	usize paren_count = 0;
+
+	// Add the cast wrapper(s) to the prefix recursively
+	gen_ast_cast_block_internal(code_gen, cast_expr, &before_trailing_expr, &cap, &len, &paren_count);
+
+	// Store paren count in code_gen so gen_ast_block can access it
+	code_gen->close_paren_count = paren_count;
+
+	// Find the deepest non-cast expression
+	AST* deepest_expr = cast_expr.expr;
+	while (deepest_expr->type == AST_CAST_EXPR)
+	{
+		deepest_expr = deepest_expr->node.cast_expr.expr;
+	}
+
+	// Generate the deepest block or if expression with our cast prefix
+	if (deepest_expr->type == AST_BLOCK)
+	{
+		gen_ast_block(code_gen, deepest_expr->node.block, before_trailing_expr);
+	}
+	else if (deepest_expr->type == AST_IF_EXPR)
+	{
+		gen_ast_if_expr(code_gen, deepest_expr->node.if_expr, before_trailing_expr);
+	}
+	else
+	{
+		assert(false && "not an expected type");
+	}
+
+	// Reset paren count
+	code_gen->close_paren_count = 0;
+
+	free(before_trailing_expr);
 }
 
 static void gen_ast_index_expr(CodeGen code_gen[static 1], IndexExpr index_expr)
@@ -1063,6 +1178,15 @@ static CodeBlock* get_code_block(CodeGen code_gen[static 1])
 			return &code_gen->code;
 	}
 	assert(false);
+}
+
+static bool casted_block(CastExpr cast_expr)
+{
+	while (cast_expr.expr->type == AST_CAST_EXPR)
+	{
+		cast_expr = cast_expr.expr->node.cast_expr;
+	}
+	return (cast_expr.expr->type == AST_BLOCK || cast_expr.expr->type == AST_IF_EXPR);
 }
 
 static void str_cat(CodeBlock* code_block, const char* str)
