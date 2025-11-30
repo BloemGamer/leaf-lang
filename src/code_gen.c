@@ -14,36 +14,36 @@ static constexpr i64 MAX_BUFFER_SIZE = 64;
 
 static void gen_code(CodeGen* code_gen, AST* ast);
 
-static void gen_ast_block(CodeGen* code_gen, Block block, const char* add_before_trailing_expr);
-static void gen_ast_func_def(CodeGen* code_gen, FuncDef func_def);
-static void gen_ast_var_def(CodeGen* code_gen, VarDef var_def);
-static void gen_ast_literal(CodeGen* code_gen, Literal literal);
-static void gen_ast_break_stmt(CodeGen* code_gen);
-static void gen_ast_continue_stmt(CodeGen* code_gen);
-static void gen_ast_return_stmt(CodeGen* code_gen, ReturnStmt return_stmt);
-static void gen_ast_struct_def(CodeGen* code_gen, StructDef struct_def);
-static void gen_ast_union_def(CodeGen* code_gen, UnionDef union_def);
-static void gen_ast_enum_def(CodeGen* code_gen, EnumDef enum_def);
-static void gen_ast_member_access(CodeGen* code_gen, MemberAccess member_access);
-static void gen_ast_func_call(CodeGen* code_gen, FuncCall func_call);
-static void gen_ast_identifier(CodeGen* code_gen, Identifier identifier);
-static void gen_ast_binary_expr(CodeGen* code_gen, BinaryExpr binary_expr);
-static void gen_ast_unary_expr(CodeGen* code_gen, UnaryExpr unary_expr);
-static void gen_ast_cast_expr(CodeGen* code_gen, CastExpr cast_expr);
-static void gen_ast_index_expr(CodeGen* code_gen, IndexExpr index_expr);
-static void gen_ast_array_init(CodeGen* code_gen, ArrayInit array_init);
-static void gen_ast_if_expr(CodeGen* code_gen, IfExpr if_expr, const char* add_before_trailing_expr);
-static void gen_ast_while_expr(CodeGen* code_gen, WhileExpr while_expr);
-static void gen_ast_for_expr(CodeGen* code_gen, ForExpr for_expr);
-static void gen_ast_struct_init(CodeGen* code_gen, StructInit struct_init);
-static void gen_ast_message(CodeGen* code_gen, Message message);
+static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* add_before_trailing_expr);
+static void gen_ast_func_def(CodeGen code_gen[static 1], FuncDef func_def);
+static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def);
+static void gen_ast_literal(CodeGen code_gen[static 1], Literal literal);
+static void gen_ast_break_stmt(CodeGen code_gen[static 1]);
+static void gen_ast_continue_stmt(CodeGen code_gen[static 1]);
+static void gen_ast_return_stmt(CodeGen code_gen[static 1], ReturnStmt return_stmt);
+static void gen_ast_struct_def(CodeGen code_gen[static 1], StructDef struct_def);
+static void gen_ast_union_def(CodeGen code_gen[static 1], UnionDef union_def);
+static void gen_ast_enum_def(CodeGen code_gen[static 1], EnumDef enum_def);
+static void gen_ast_member_access(CodeGen code_gen[static 1], MemberAccess member_access);
+static void gen_ast_func_call(CodeGen code_gen[static 1], FuncCall func_call);
+static void gen_ast_identifier(CodeGen code_gen[static 1], Identifier identifier);
+static void gen_ast_binary_expr(CodeGen code_gen[static 1], BinaryExpr binary_expr);
+static void gen_ast_unary_expr(CodeGen code_gen[static 1], UnaryExpr unary_expr);
+static void gen_ast_cast_expr(CodeGen code_gen[static 1], CastExpr cast_expr);
+static void gen_ast_index_expr(CodeGen code_gen[static 1], IndexExpr index_expr);
+static void gen_ast_array_init(CodeGen code_gen[static 1], ArrayInit array_init);
+static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const char* add_before_trailing_expr);
+static void gen_ast_while_expr(CodeGen code_gen[static 1], WhileExpr while_expr);
+static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr);
+static void gen_ast_struct_init(CodeGen code_gen[static 1], StructInit struct_init);
+static void gen_ast_message(CodeGen code_gen[static 1], Message message);
 
 static void gen_type(CodeBlock* code_block, VarType var_type);
-static void gen_var_def(CodeGen* code_gen, VarDef var_def);
-static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const_var);
-static void gen_func_signature(CodeGen* code_gen, FuncDef func_def);
+static void gen_var_def(CodeGen code_gen[static 1], VarDef var_def);
+static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, bool const_var);
+static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def);
 
-static CodeBlock* get_code_block(CodeGen* code_gen);
+static CodeBlock* get_code_block(CodeGen code_gen[static 1]);
 static void str_cat(CodeBlock* code_block, const char* str);
 
 static void free_code_block(CodeBlock code_block);
@@ -148,7 +148,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	assert(false && "code gen: not yet implemented");
 }
 
-static void gen_ast_block(CodeGen* code_gen, Block block, const char* add_before_trailing_expr)
+static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* add_before_trailing_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -279,7 +279,7 @@ static void gen_ast_block(CodeGen* code_gen, Block block, const char* add_before
 	code_gen->skip_brace = prev_skip_brace;
 }
 
-static void gen_ast_func_def(CodeGen* code_gen, FuncDef func_def)
+static void gen_ast_func_def(CodeGen code_gen[static 1], FuncDef func_def)
 {
 	CodeBlock* code_block = nullptr;
 
@@ -321,7 +321,7 @@ static void gen_ast_func_def(CodeGen* code_gen, FuncDef func_def)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_var_def(CodeGen* code_gen, VarDef var_def)
+static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 {
 	CodeBlock* code_block = nullptr;
 
@@ -403,7 +403,7 @@ static void gen_ast_var_def(CodeGen* code_gen, VarDef var_def)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_literal(CodeGen* code_gen, Literal literal)
+static void gen_ast_literal(CodeGen code_gen[static 1], Literal literal)
 {
 	Token token = literal.literal;
 	CodeBlock* code_block = get_code_block(code_gen);
@@ -442,23 +442,23 @@ static void gen_ast_literal(CodeGen* code_gen, Literal literal)
 	}
 }
 
-static void gen_ast_break_stmt(CodeGen* code_gen)
+static void gen_ast_break_stmt(CodeGen code_gen[static 1])
 {
 	str_cat(&code_gen->code, "break");
 }
 
-static void gen_ast_continue_stmt(CodeGen* code_gen)
+static void gen_ast_continue_stmt(CodeGen code_gen[static 1])
 {
 	str_cat(&code_gen->code, "continue");
 }
 
-static void gen_ast_return_stmt(CodeGen* code_gen, ReturnStmt return_stmt)
+static void gen_ast_return_stmt(CodeGen code_gen[static 1], ReturnStmt return_stmt)
 {
 	str_cat(&code_gen->code, "return ");
 	gen_code(code_gen, return_stmt.return_stmt);
 }
 
-static void gen_ast_struct_def(CodeGen* code_gen, StructDef struct_def)
+static void gen_ast_struct_def(CodeGen code_gen[static 1], StructDef struct_def)
 {
 	CodeBlock* code_block = nullptr;
 
@@ -493,7 +493,7 @@ static void gen_ast_struct_def(CodeGen* code_gen, StructDef struct_def)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_union_def(CodeGen* code_gen, UnionDef union_def)
+static void gen_ast_union_def(CodeGen code_gen[static 1], UnionDef union_def)
 {
 	CodeBlock* code_block = nullptr;
 
@@ -528,7 +528,7 @@ static void gen_ast_union_def(CodeGen* code_gen, UnionDef union_def)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_enum_def(CodeGen* code_gen, EnumDef enum_def)
+static void gen_ast_enum_def(CodeGen code_gen[static 1], EnumDef enum_def)
 {
 	CodeBlock* code_block = nullptr;
 
@@ -571,7 +571,7 @@ static void gen_ast_enum_def(CodeGen* code_gen, EnumDef enum_def)
 	code_gen->current_block = CODE_BLOCK_NONE;
 }
 
-static void gen_ast_member_access(CodeGen* code_gen, MemberAccess member_access)
+static void gen_ast_member_access(CodeGen code_gen[static 1], MemberAccess member_access)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	gen_code(code_gen, member_access.left);
@@ -586,7 +586,7 @@ static void gen_ast_member_access(CodeGen* code_gen, MemberAccess member_access)
 	gen_code(code_gen, member_access.right);
 }
 
-static void gen_ast_func_call(CodeGen* code_gen, FuncCall func_call)
+static void gen_ast_func_call(CodeGen code_gen[static 1], FuncCall func_call)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	gen_code(code_gen, func_call.callee);
@@ -603,13 +603,13 @@ static void gen_ast_func_call(CodeGen* code_gen, FuncCall func_call)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_identifier(CodeGen* code_gen, Identifier identifier)
+static void gen_ast_identifier(CodeGen code_gen[static 1], Identifier identifier)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, identifier.identifier.str_val);
 }
 
-static void gen_ast_binary_expr(CodeGen* code_gen, BinaryExpr binary_expr)
+static void gen_ast_binary_expr(CodeGen code_gen[static 1], BinaryExpr binary_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -652,7 +652,7 @@ static void gen_ast_binary_expr(CodeGen* code_gen, BinaryExpr binary_expr)
 	}
 }
 
-static void gen_ast_unary_expr(CodeGen* code_gen, UnaryExpr unary_expr)
+static void gen_ast_unary_expr(CodeGen code_gen[static 1], UnaryExpr unary_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -662,7 +662,7 @@ static void gen_ast_unary_expr(CodeGen* code_gen, UnaryExpr unary_expr)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_cast_expr(CodeGen* code_gen, CastExpr cast_expr)
+static void gen_ast_cast_expr(CodeGen code_gen[static 1], CastExpr cast_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -673,7 +673,7 @@ static void gen_ast_cast_expr(CodeGen* code_gen, CastExpr cast_expr)
 	str_cat(code_block, ")");
 }
 
-static void gen_ast_index_expr(CodeGen* code_gen, IndexExpr index_expr)
+static void gen_ast_index_expr(CodeGen code_gen[static 1], IndexExpr index_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, "(");
@@ -683,7 +683,7 @@ static void gen_ast_index_expr(CodeGen* code_gen, IndexExpr index_expr)
 	str_cat(code_block, "])");
 }
 
-static void gen_ast_array_init(CodeGen* code_gen, ArrayInit array_init)
+static void gen_ast_array_init(CodeGen code_gen[static 1], ArrayInit array_init)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	if (array_init.is_sized)
@@ -713,7 +713,7 @@ static void gen_ast_array_init(CodeGen* code_gen, ArrayInit array_init)
 	}
 }
 
-static void gen_ast_if_expr(CodeGen* code_gen, IfExpr if_expr, const char* add_before_trailing_expr)
+static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const char* add_before_trailing_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -744,7 +744,7 @@ static void gen_ast_if_expr(CodeGen* code_gen, IfExpr if_expr, const char* add_b
 	}
 }
 
-static void gen_ast_while_expr(CodeGen* code_gen, WhileExpr while_expr)
+static void gen_ast_while_expr(CodeGen code_gen[static 1], WhileExpr while_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -754,7 +754,7 @@ static void gen_ast_while_expr(CodeGen* code_gen, WhileExpr while_expr)
 	gen_code(code_gen, while_expr.then_block);
 }
 
-static void gen_ast_for_expr(CodeGen* code_gen, ForExpr for_expr)
+static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -920,7 +920,7 @@ static void gen_ast_for_expr(CodeGen* code_gen, ForExpr for_expr)
 	}
 }
 
-static void gen_ast_struct_init(CodeGen* code_gen, StructInit struct_init)
+static void gen_ast_struct_init(CodeGen code_gen[static 1], StructInit struct_init)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	str_cat(code_block, "{");
@@ -936,7 +936,7 @@ static void gen_ast_struct_init(CodeGen* code_gen, StructInit struct_init)
 	str_cat(code_block, "}");
 }
 
-static void gen_ast_message(CodeGen* code_gen, Message message)
+static void gen_ast_message(CodeGen code_gen[static 1], Message message)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -978,12 +978,12 @@ static void gen_type(CodeBlock* code_block, VarType var_type)
 	}
 }
 
-static void gen_var_def(CodeGen* code_gen, VarDef var_def)
+static void gen_var_def(CodeGen code_gen[static 1], VarDef var_def)
 {
 	gen_var_def_with_const(code_gen, var_def, true);
 }
 
-static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const_var)
+static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, bool const_var)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
@@ -1013,7 +1013,7 @@ static void gen_var_def_with_const(CodeGen* code_gen, VarDef var_def, bool const
 	}
 }
 
-static void gen_func_signature(CodeGen* code_gen, FuncDef func_def)
+static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 	if (func_def.return_type.type.name != nullptr)
@@ -1040,7 +1040,7 @@ static void gen_func_signature(CodeGen* code_gen, FuncDef func_def)
 	str_cat(code_block, ")");
 }
 
-static CodeBlock* get_code_block(CodeGen* code_gen)
+static CodeBlock* get_code_block(CodeGen code_gen[static 1])
 {
 	switch (code_gen->current_block)
 	{
