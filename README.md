@@ -17,7 +17,7 @@ A C-based language with modern features and a platform to learn compiler design.
 
 ## Code previeuw
 ```rs
-@embed "stdio.h" 							// #include <stdio.h> in C
+@import "stdio.h" 							// #include <stdio.h> in C
 
 fn main(i64 argc, char&& argc) -> int
 {

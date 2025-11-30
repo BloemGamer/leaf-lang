@@ -977,7 +977,7 @@ static void gen_ast_message(CodeGen* code_gen, const AST* ast)
 	{
 		case msg_invalid:
 			assert(false && "invalid message");
-		case msg_embed:
+		case msg_import:
 			str_cat(&code_gen->includes, "#include \"");
 			str_cat(&code_gen->includes, node.message.import.import);
 			str_cat(&code_gen->includes, "\"\n");
@@ -989,7 +989,7 @@ static void gen_ast_message(CodeGen* code_gen, const AST* ast)
 			str_cat(code_block, node.message.import.import);
 			str_cat(code_block, "\"\n");
 			break;
-		case msg_import:
+		case msg_use:
 		case msg_include_str:
 			assert(false && "code_gen: not yet implemented");
 	}

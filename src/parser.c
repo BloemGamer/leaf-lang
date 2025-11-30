@@ -405,7 +405,7 @@ static AST* parse_enum(ParserState* parser_state)
 				node->node.enum_def.member_count = members_len;
 				break;
 			}
-			EnumType tmp = {nullptr};
+			EnumType tmp = {};
 			{
 				const Token token = *consume(parser_state);
 				assert(token.token_type == token_type_identifier);
@@ -558,11 +558,11 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 static AST* parse_message(ParserState* parser_state)
 {
 	const Token token_g = *consume(parser_state);
-	if (strcmp(token_g.str_val, "@embed") == 0)
+	if (strcmp(token_g.str_val, "@import") == 0)
 	{
 		AST* node = calloc(1, sizeof(AST));
 		node->type = AST_MESSAGE;
-		node->node.message.msg = msg_embed;
+		node->node.message.msg = msg_import;
 		const Token token = *consume(parser_state);
 		if (token.token_type == token_type_less)
 		{
@@ -1882,8 +1882,8 @@ void free_token_tree(AST* ast)
 		case AST_MESSAGE:
 			switch (ast->node.message.msg)
 			{
-				case msg_embed:
 				case msg_import:
+				case msg_use:
 				case msg_include:
 				case msg_include_str:
 					free((void*)ast->node.message.import.import);
@@ -2439,10 +2439,10 @@ static void print_message(const Message* message, const usize depth)
 {
 	print_indent(depth);
 	printf("Message:\n");
-	if (message->msg == msg_embed)
+	if (message->msg == msg_import)
 	{
 		print_indent(depth + 1);
-		printf("@embed \"%s\"\n", message->import.import);
+		printf("@import \"%s\"\n", message->import.import);
 	}
 	if (message->msg == msg_c_type)
 	{
