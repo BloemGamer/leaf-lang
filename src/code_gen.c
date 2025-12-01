@@ -1227,6 +1227,7 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	c_file_len += code_gen->code.len;
 
 	usize h_file_len = 0;
+	h_file_len += strlen("#pragma once\n");
 	h_file_len += strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n") + strlen("#ifdef __cplusplus\n}\n#endif\n");
 	h_file_len += strlen(s_lang_header);
 	h_file_len += code_gen->pub_types.len;
@@ -1295,6 +1296,9 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 
 	memcpy(files.h_file + h_offset, s_lang_header, strlen(s_lang_header));
 	h_offset += strlen(s_lang_header);
+
+	memcpy(files.h_file + h_offset, "#pragma once\n", strlen("#pragma once\n"));
+	h_offset += strlen("#pragma once\n");
 
 	memcpy(files.h_file + h_offset, "#ifdef __cplusplus\nextern \"C\"{\n#endif\n",
 		   strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n"));
