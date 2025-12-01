@@ -498,7 +498,23 @@ static void gen_ast_struct_def(CodeGen code_gen[static 1], StructDef struct_def)
 			break;
 		}
 	}
-	str_cat(code_block, "typedef struct ");
+	if (code_gen->current_block == CODE_BLOCK_PUB_TYPES)
+	{
+		str_cat(&code_gen->pub_typedefs, "typedef struct ");
+		str_cat(&code_gen->pub_typedefs, struct_def.name);
+		str_cat(&code_gen->pub_typedefs, " ");
+		str_cat(&code_gen->pub_typedefs, struct_def.name);
+		str_cat(&code_gen->pub_typedefs, ";");
+	}
+	else
+	{
+		str_cat(&code_gen->priv_typedefs, "typedef struct ");
+		str_cat(&code_gen->priv_typedefs, struct_def.name);
+		str_cat(&code_gen->priv_typedefs, " ");
+		str_cat(&code_gen->priv_typedefs, struct_def.name);
+		str_cat(&code_gen->priv_typedefs, ";");
+	}
+	str_cat(code_block, "struct ");
 	str_cat(code_block, struct_def.name);
 	str_cat(code_block, "{");
 
@@ -510,7 +526,6 @@ static void gen_ast_struct_def(CodeGen code_gen[static 1], StructDef struct_def)
 	}
 
 	str_cat(code_block, "}");
-	str_cat(code_block, struct_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -533,7 +548,23 @@ static void gen_ast_union_def(CodeGen code_gen[static 1], UnionDef union_def)
 			break;
 		}
 	}
-	str_cat(code_block, "typedef union ");
+	if (code_gen->current_block == CODE_BLOCK_PUB_TYPES)
+	{
+		str_cat(&code_gen->pub_typedefs, "typedef union ");
+		str_cat(&code_gen->pub_typedefs, union_def.name);
+		str_cat(&code_gen->pub_typedefs, " ");
+		str_cat(&code_gen->pub_typedefs, union_def.name);
+		str_cat(&code_gen->pub_typedefs, ";");
+	}
+	else
+	{
+		str_cat(&code_gen->priv_typedefs, "typedef union ");
+		str_cat(&code_gen->priv_typedefs, union_def.name);
+		str_cat(&code_gen->priv_typedefs, " ");
+		str_cat(&code_gen->priv_typedefs, union_def.name);
+		str_cat(&code_gen->priv_typedefs, ";");
+	}
+	str_cat(code_block, "union ");
 	str_cat(code_block, union_def.name);
 	str_cat(code_block, "{");
 
@@ -545,7 +576,6 @@ static void gen_ast_union_def(CodeGen code_gen[static 1], UnionDef union_def)
 	}
 
 	str_cat(code_block, "}");
-	str_cat(code_block, union_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -568,7 +598,24 @@ static void gen_ast_enum_def(CodeGen code_gen[static 1], EnumDef enum_def)
 			break;
 		}
 	}
-	str_cat(code_block, "typedef enum ");
+	if (code_gen->current_block == CODE_BLOCK_PUB_TYPES)
+	{
+		str_cat(&code_gen->pub_typedefs, "typedef enum ");
+		str_cat(&code_gen->pub_typedefs, enum_def.name);
+		str_cat(&code_gen->pub_typedefs, " ");
+		str_cat(&code_gen->pub_typedefs, enum_def.name);
+		str_cat(&code_gen->pub_typedefs, ";");
+	}
+	else
+	{
+		str_cat(&code_gen->priv_typedefs, "typedef enum ");
+		str_cat(&code_gen->priv_typedefs, enum_def.name);
+		str_cat(&code_gen->priv_typedefs, " ");
+		str_cat(&code_gen->priv_typedefs, enum_def.name);
+		str_cat(&code_gen->priv_typedefs, ";");
+	}
+	str_cat(code_block, "enum ");
+	str_cat(code_block, enum_def.name);
 	if (enum_def.type != nullptr)
 	{
 		str_cat(code_block, ":");
@@ -588,7 +635,6 @@ static void gen_ast_enum_def(CodeGen code_gen[static 1], EnumDef enum_def)
 		str_cat(code_block, ",");
 	}
 	str_cat(code_block, "}");
-	str_cat(code_block, enum_def.name);
 	if (!code_gen->no_semicolon)
 	{
 		str_cat(code_block, ";");
@@ -1314,16 +1360,15 @@ static void str_cat_escaped(CodeBlock* code_block, const char* str)
 	}
 }
 
-NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
+NewFiles code_gen_to_files(const CodeGen* code_gen, const char* file_name)
 {
 	NewFiles files = {.c_file = nullptr, .h_file = nullptr};
 	const char s_lang_header[] = "/* Generated with S-lang */\n";
+	const char pragma[] = "\n#pragma once\n";
+	const char ifdef_cpp[] = "\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n";
+	const char ifndef_cpp[] = "\n#ifdef __cplusplus\n}\n#endif\n";
 
-	if (code_gen == nullptr)
-	{
-		return files;
-	}
-	if (file_name == nullptr)
+	if (code_gen == nullptr || file_name == nullptr)
 	{
 		return files;
 	}
@@ -1331,30 +1376,33 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	usize file_name_len = strlen(file_name);
 
 	usize c_file_len = 0;
-	c_file_len += strlen(s_lang_header);
-	c_file_len += strlen("#include \"") + file_name_len + strlen(".h\"\n");
+	c_file_len += sizeof(s_lang_header) - 1;
+	c_file_len += sizeof("\n#include \"") - 1 + file_name_len + sizeof(".h\"\n") - 1;
 	c_file_len += code_gen->includes.len;
+	c_file_len += code_gen->priv_typedefs.len;
 	c_file_len += code_gen->priv_types.len;
 	c_file_len += code_gen->priv_vars.len;
 	c_file_len += code_gen->priv_functions.len;
 	c_file_len += code_gen->code.len;
 
 	usize h_file_len = 0;
-	h_file_len += strlen("\n#pragma once\n");
-	h_file_len += strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n") + strlen("\n#ifdef __cplusplus\n}\n#endif\n");
-	h_file_len += strlen(s_lang_header);
+	h_file_len += sizeof(s_lang_header) - 1;
+	h_file_len += sizeof(pragma) - 1;
+	h_file_len += sizeof(ifdef_cpp) - 1;
+	h_file_len += code_gen->pub_typedefs.len;
 	h_file_len += code_gen->pub_types.len;
 	h_file_len += code_gen->pub_vars.len;
 	h_file_len += code_gen->pub_functions.len;
+	h_file_len += sizeof(ifndef_cpp) - 1;
 
 	files.c_file = (char*)malloc(c_file_len + 1);
-	if (files.c_file == nullptr)
+	if (!files.c_file)
 	{
 		return files;
 	}
 
 	files.h_file = (char*)malloc(h_file_len + 1);
-	if (files.h_file == nullptr)
+	if (!files.h_file)
 	{
 		free(files.c_file);
 		files.c_file = nullptr;
@@ -1363,41 +1411,49 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 
 	usize c_offset = 0;
 
-	memcpy(files.c_file + c_offset, s_lang_header, strlen(s_lang_header));
-	c_offset += strlen(s_lang_header);
+	memcpy(files.c_file + c_offset, s_lang_header, sizeof(s_lang_header) - 1);
+	c_offset += sizeof(s_lang_header) - 1;
 
-	memcpy(files.c_file + c_offset, "\n#include \"", strlen("\n#include \""));
-	c_offset += strlen("\n#include \"");
+	memcpy(files.c_file + c_offset, "\n#include \"", sizeof("\n#include \"") - 1);
+	c_offset += sizeof("\n#include \"") - 1;
+
 	memcpy(files.c_file + c_offset, file_name, file_name_len);
 	c_offset += file_name_len;
-	memcpy(files.c_file + c_offset, ".h\"\n", strlen(".h\"\n"));
-	c_offset += strlen(".h\"\n");
 
-	if (code_gen->includes.code != nullptr)
+	memcpy(files.c_file + c_offset, ".h\"\n", sizeof(".h\"\n") - 1);
+	c_offset += sizeof(".h\"\n") - 1;
+
+	if (code_gen->includes.code)
 	{
 		memcpy(files.c_file + c_offset, code_gen->includes.code, code_gen->includes.len);
 		c_offset += code_gen->includes.len;
 	}
 
-	if (code_gen->priv_types.code != nullptr)
+	if (code_gen->priv_typedefs.code)
+	{
+		memcpy(files.c_file + c_offset, code_gen->priv_typedefs.code, code_gen->priv_typedefs.len);
+		c_offset += code_gen->priv_typedefs.len;
+	}
+
+	if (code_gen->priv_types.code)
 	{
 		memcpy(files.c_file + c_offset, code_gen->priv_types.code, code_gen->priv_types.len);
 		c_offset += code_gen->priv_types.len;
 	}
 
-	if (code_gen->priv_vars.code != nullptr)
+	if (code_gen->priv_vars.code)
 	{
 		memcpy(files.c_file + c_offset, code_gen->priv_vars.code, code_gen->priv_vars.len);
 		c_offset += code_gen->priv_vars.len;
 	}
 
-	if (code_gen->priv_functions.code != nullptr)
+	if (code_gen->priv_functions.code)
 	{
 		memcpy(files.c_file + c_offset, code_gen->priv_functions.code, code_gen->priv_functions.len);
 		c_offset += code_gen->priv_functions.len;
 	}
 
-	if (code_gen->code.code != nullptr)
+	if (code_gen->code.code)
 	{
 		memcpy(files.c_file + c_offset, code_gen->code.code, code_gen->code.len);
 		c_offset += code_gen->code.len;
@@ -1407,36 +1463,42 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 
 	usize h_offset = 0;
 
-	memcpy(files.h_file + h_offset, s_lang_header, strlen(s_lang_header));
-	h_offset += strlen(s_lang_header);
+	memcpy(files.h_file + h_offset, s_lang_header, sizeof(s_lang_header) - 1);
+	h_offset += sizeof(s_lang_header) - 1;
 
-	memcpy(files.h_file + h_offset, "\n#pragma once\n", strlen("\n#pragma once\n"));
-	h_offset += strlen("#pragma once\n");
+	memcpy(files.h_file + h_offset, pragma, sizeof(pragma) - 1);
+	h_offset += sizeof(pragma) - 1;
 
-	memcpy(files.h_file + h_offset, "\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n",
-		   strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n"));
-	h_offset += strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n");
+	memcpy(files.h_file + h_offset, ifdef_cpp, sizeof(ifdef_cpp) - 1);
+	h_offset += sizeof(ifdef_cpp) - 1;
 
-	if (code_gen->pub_types.code != nullptr)
+	if (code_gen->pub_typedefs.code)
+	{
+		memcpy(files.h_file + h_offset, code_gen->pub_typedefs.code, code_gen->pub_typedefs.len);
+		h_offset += code_gen->pub_typedefs.len;
+	}
+
+	if (code_gen->pub_types.code)
 	{
 		memcpy(files.h_file + h_offset, code_gen->pub_types.code, code_gen->pub_types.len);
 		h_offset += code_gen->pub_types.len;
 	}
 
-	if (code_gen->pub_vars.code != nullptr)
+	if (code_gen->pub_vars.code)
 	{
 		memcpy(files.h_file + h_offset, code_gen->pub_vars.code, code_gen->pub_vars.len);
 		h_offset += code_gen->pub_vars.len;
 	}
 
-	if (code_gen->pub_functions.code != nullptr)
+	if (code_gen->pub_functions.code)
 	{
 		memcpy(files.h_file + h_offset, code_gen->pub_functions.code, code_gen->pub_functions.len);
 		h_offset += code_gen->pub_functions.len;
 	}
 
-	memcpy(files.h_file + h_offset, "\n#ifdef __cplusplus\n}\n#endif\n", strlen("\n#ifdef __cplusplus\n}\n#endif\n"));
-	h_offset += strlen("\n#ifdef __cplusplus\n}\n#endif\n");
+	memcpy(files.h_file + h_offset, ifndef_cpp, sizeof(ifndef_cpp) - 1);
+	h_offset += sizeof(ifndef_cpp) - 1;
+
 	files.h_file[h_offset] = '\0';
 
 	return files;
@@ -1445,10 +1507,12 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 void code_gen_free_code_gen(CodeGen code_gen)
 {
 	free_code_block(code_gen.includes);
+	free_code_block(code_gen.priv_typedefs);
 	free_code_block(code_gen.priv_types);
 	free_code_block(code_gen.priv_functions);
 	free_code_block(code_gen.priv_vars);
 	free_code_block(code_gen.pub_functions);
+	free_code_block(code_gen.pub_typedefs);
 	free_code_block(code_gen.pub_types);
 	free_code_block(code_gen.pub_vars);
 	free_code_block(code_gen.code);

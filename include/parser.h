@@ -24,6 +24,8 @@ typedef struct
 typedef struct
 {
 	char* name;
+	Token* modifiers;
+	usize modifier_count;
 	bool has_value;
 	i64 value;
 } EnumType;

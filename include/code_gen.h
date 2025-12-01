@@ -26,10 +26,12 @@ typedef enum
 typedef struct
 {
 	CodeBlock includes;
+	CodeBlock priv_typedefs;
 	CodeBlock priv_types;
 	CodeBlock priv_functions;
 	CodeBlock priv_vars;
 	CodeBlock pub_functions;
+	CodeBlock pub_typedefs;
 	CodeBlock pub_types;
 	CodeBlock pub_vars;
 	CodeBlock code;
@@ -52,6 +54,6 @@ typedef struct
 
 extern CodeGen generate_code(AST* ast, const char* filename);
 
-extern NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name);
+extern NewFiles code_gen_to_files(const CodeGen* code_gen, const char* file_name);
 extern void code_gen_free_code_gen(CodeGen code_gen);
 extern void code_gen_free_new_files(NewFiles new_files);

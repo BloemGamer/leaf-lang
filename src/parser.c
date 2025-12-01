@@ -299,6 +299,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
+	TokenArray mod_arr = get_modifiers(parser_state);
 	switch (consume(parser_state)->token_type)
 	{
 		case token_type_struct:
@@ -313,7 +314,6 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 #define PARSE(_type)                                                                  \
 	do                                                                                \
 	{                                                                                 \
-		TokenArray mod_arr = get_modifiers(parser_state);                             \
 		node->node._type##_def.modifiers = mod_arr.tokens;                            \
 		node->node._type##_def.modifier_count = mod_arr.count;                        \
 		{                                                                             \
@@ -325,10 +325,6 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			node->pos = token.pos;                                                    \
 		}                                                                             \
 		assert(consume(parser_state)->token_type == token_type_lbrace);               \
-		if (peek(parser_state)->token_type == token_type_rbrace)                      \
-		{                                                                             \
-			break;                                                                    \
-		}                                                                             \
 		varray_make(AST**, members);                                                  \
 		while (true) /* NOLINT */                                                     \
 		{                                                                             \
@@ -414,6 +410,7 @@ static AST* parse_enum(ParserState* parser_state)
 		{
 			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
 			{
+				consume(parser_state);
 				node->node.enum_def.members = members;
 				node->node.enum_def.member_count = members_len;
 				break;
@@ -442,6 +439,7 @@ static AST* parse_enum(ParserState* parser_state)
 			}
 			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/
 			{
+				(void)consume(parser_state);
 				node->node.enum_def.members = members;
 				node->node.enum_def.member_count = members_len;
 				break;
@@ -567,7 +565,7 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 	{
 		return parse_decl(parser_state);
 	}
-	assert(false && "not an expected type");
+	assert(false, "not an expected type, found: %s", token_to_string(token.token_type));
 }
 
 static AST* parse_message(ParserState* parser_state)
