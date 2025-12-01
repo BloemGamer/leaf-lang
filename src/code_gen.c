@@ -1140,6 +1140,26 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
+	for (usize i = 0; i < func_def.modifier_count; i++)
+	{
+		switch (func_def.modifiers[i].token_type)
+		{
+			case token_type_pub:
+				break;
+			case token_type_static:
+				assert(false, "Static is not supported on global variables\n Static variables are the default "
+							  "if you don't add pub for globals");
+				break;
+			case token_type_volatile:
+				str_cat(code_block, "volatile ");
+				break;
+			case token_type_const:
+				assert(false, "const functions not yet supported");
+				break;
+			default:
+				assert(false, "not a supported token%s", token_to_string(func_def.modifiers[i].token_type))
+		}
+	}
 	if (func_def.return_type.type.name != nullptr)
 	{
 		gen_type(code_block, func_def.return_type.type);
