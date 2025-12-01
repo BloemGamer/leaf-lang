@@ -708,6 +708,7 @@ static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cas
 	{
 		*cap *= 2;
 		*add_before_trailing_expr = (char*)realloc(*add_before_trailing_expr, *cap);
+		assert(*add_before_trailing_expr != nullptr);
 	}
 
 	// Append the cast prefix: ((type)
@@ -1204,6 +1205,7 @@ static void str_cat(CodeBlock* code_block, const char* str)
 			code_block->cap *= 2;
 		}
 		code_block->code = (char*)realloc((void*)code_block->code, code_block->cap); // NOLINT
+		assert(code_block != nullptr);
 	}
 	memcpy((void*)(code_block->code + code_block->len), (void*)str, str_len);
 	code_block->len += str_len;

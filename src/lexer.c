@@ -121,6 +121,7 @@ static void add_token(const Token* next, Token** tokens, usize* token_size, usiz
 		}
 		*token_max_size *= 2;
 		*tokens = (Token*)realloc((void*)*tokens, *token_max_size * sizeof(Token));
+		assert(*tokens != nullptr);
 	}
 	(*tokens)[*token_size] = *next;
 	*token_size += 1;
@@ -486,6 +487,7 @@ static TokenResult string_to_identifier_token(const char* input)
 		{
 			buffer_max_size *= 2;
 			buffer = (char*)realloc((void*)buffer, buffer_max_size * sizeof(*buffer)); // NOLINT
+			assert(buffer != nullptr);
 		}
 		buffer[buffer_size] = input[buffer_size];
 		buffer_size++;

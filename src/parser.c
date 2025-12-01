@@ -16,15 +16,16 @@
 	usize name##_len = 0;       \
 	usize name##_cap = 0
 
-#define varray_push(name, push)                                                    \
-	{                                                                              \
-		if (name##_len >= name##_cap)                                              \
-		{                                                                          \
-			name##_cap = MAX(name##_cap, 1);                                       \
-			name##_cap *= 2;                                                       \
-			name = (typeof(name))realloc((void*)name, name##_cap * sizeof(*name)); \
-		}                                                                          \
-		name[name##_len++] = push;                                                 \
+#define varray_push(name, push)                                                               \
+	{                                                                                         \
+		if (name##_len >= name##_cap)                                                         \
+		{                                                                                     \
+			name##_cap = MAX(name##_cap, 1);                                                  \
+			name##_cap *= 2;                                                                  \
+			name = (typeof(name))realloc((void*)name, name##_cap * sizeof(*name)); /*NOLINT*/ \
+			assert(name != nullptr);                                                          \
+		}                                                                                     \
+		name[name##_len++] = push;                                                            \
 	}
 
 typedef struct // NOLINT
@@ -1081,6 +1082,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 					do // NOLINT
 					{
 						args = (AST**)realloc((void*)args, sizeof(AST*) * (arg_count + 1)); // NOLINT
+						assert(args != nullptr);
 						args[arg_count++] = parse_expr(parser_state);
 					} while (match(parser_state, token_type_comma));
 
