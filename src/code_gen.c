@@ -1096,11 +1096,30 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 	{
 		for (usize i = 0; i < var_def.modifier_count; i++)
 		{
-			if (var_def.modifiers[i].token_type == token_type_mut)
+			switch (var_def.modifiers[i].token_type)
 			{
-				const_var = false;
+				case token_type_mut:
+					const_var = false;
+					break;
+				case token_type_static:
+					if (code_gen->global_block)
+					{
+						assert(false, "Static is not supported on global variables\n Static variables are the default "
+									  "if you don't add pub for globals");
+					}
+					str_cat(code_block, "static ");
+					break;
+				case token_type_volatile:
+					str_cat(code_block, "volatile ");
+					break;
+				case token_type_const:
+					str_cat(code_block, "constexpr ");
+					break;
+				default:
+					assert(false, "not a supported token%s", token_to_string(var_def.modifiers[i].token_type))
 			}
 		}
+
 		if (const_var)
 		{
 			str_cat(code_block, "const ");

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basic_types.h"
+#include <stdnoreturn.h>
 
 // clang-format off
 #define __TOKENS_SIMPLE_SINGLE \
@@ -69,7 +70,7 @@
 	X(else)						/* else */ \
 	X(true)						/* true */ \
 	X(false)					/* false */ \
-	X(do)						/* do {} while */ \
+	X(do)						/* now just to make sure this is not used */ \
 	X(while)					/* while */ \
 	X(for)						/* for */ \
 	X(in)						/* in */ \
@@ -98,7 +99,20 @@
 	X(mut)						/* mut */ \
 	X(static)					/* static */ \
 	X(const)					/* constexpr */ \
-	X(pub)						/* public for functions */
+	X(pub)						/* public for functions, variables and types */ \
+	X(volatile)					/* volatile */ \
+	X(signed)					/* signed */ \
+	X(unsigned)					/* unsigned */ \
+	X(noreturn)					/* noreturn */ \
+	\
+	X(constexpr)				/* now just to make sure this is not used */ \
+	X(restrict)					/* now just to make sure this is not used */ \
+	X(extern)					/* now just to make sure this is not used */ \
+	X(register)					/* now just to make sure this is not used */ \
+	X(auto)						/* now just to make sure this is not used */ \
+	X(switch)					/* now just to make sure this is not used */ \
+	X(match)					/* now just to make sure this is not used */ \
+	X(goto)						/* now just to make sure this is not used */ \
 
 #define __TOKENS_IDENTIFIER 	\
 	X(identifier)				/* id */ \
@@ -109,7 +123,9 @@
 #define __TOKENS_MISC \
 	X(eof)						/* always appended as the End Of File (Last token, much like string terminator) */ \
 	X(sof)						/* always at the Start Of File (firt token, so the parser can safely go back) */ \
-	X(invalid)					/* only used for errors */
+	X(invalid)					/* only used for errors */ \
+	X(typedef)					/* now just to make sure this is not used */ \
+	X(default)					/* now just to make sure this is not used */
 
 // clang-format on
 
