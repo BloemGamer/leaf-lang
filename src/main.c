@@ -30,7 +30,7 @@ int main(int argc, char** argv)
 		filename = argv[1];
 	}
 	const char* file = read_file_to_str(filename);
-	if (file == NULL)
+	if (file == nullptr)
 	{
 		(void)fprintf(stderr, "Could not open file: %s\n", filename);
 		return EXIT_FAILURE;
@@ -65,7 +65,7 @@ char* read_file_to_str(const char* filename)
 #else // LINUX
 	FILE* file = fopen(filename, "rbe");
 #endif
-	if (file == NULL)
+	if (file == nullptr)
 	{
 		return nullptr;
 	}
@@ -76,7 +76,7 @@ char* read_file_to_str(const char* filename)
 	(void)fseek(file, 0, SEEK_SET);
 
 	char* buffer = malloc((length + 1) * sizeof(char));
-	if (buffer == NULL)
+	if (buffer == nullptr)
 	{
 		(void)fclose(file);
 		return nullptr;

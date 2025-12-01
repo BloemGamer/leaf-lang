@@ -47,6 +47,7 @@ bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 	if (node->str == nullptr)
 	{
 		node->str = strdup(str);
+		assert(node->str != nullptr);
 		node->next = nullptr;
 		hash->size++;
 		return false;
@@ -61,7 +62,9 @@ bool hash_str_push(HashStr* hash, const char* str) // NOLINT
 		if (node->next == nullptr)
 		{
 			HashStrNode* new_node = malloc(sizeof(HashStrNode));
+			assert(new_node != nullptr);
 			new_node->str = strdup(str);
+			assert(new_node->str != nullptr);
 			new_node->next = nullptr;
 
 			node->next = new_node;
@@ -129,6 +132,7 @@ bool hash_str_remove(HashStr* hash, const char* str)
 HashStr hash_str_clone(const HashStr* hash)
 {
 	HashStr new_hash = {.cap = hash->cap, .size = hash->size, .node = calloc(hash->cap, sizeof(HashStrNode))};
+	assert(new_hash.node != nullptr);
 
 	for (usize i = 0; i < hash->cap; i++)
 	{
@@ -141,6 +145,7 @@ HashStr hash_str_clone(const HashStr* hash)
 		}
 
 		new->str = strdup(old->str);
+		assert(new->str != nullptr);
 		new->next = nullptr;
 
 		HashStrNode* tail = new;
@@ -150,7 +155,9 @@ HashStr hash_str_clone(const HashStr* hash)
 			old = old->next;
 
 			HashStrNode* copy = malloc(sizeof(HashStrNode));
+			assert(copy != nullptr);
 			copy->str = strdup(old->str);
+			assert(copy->str != nullptr);
 			copy->next = nullptr;
 
 			tail->next = copy;
@@ -203,6 +210,7 @@ void hash_str_free(HashStr* hash)
 static void hash_str_resize(HashStr* hash, usize new_cap)
 {
 	HashStrNode* new_nodes = calloc(new_cap, sizeof(HashStrNode));
+	assert(new_nodes != nullptr);
 
 	for (usize i = 0; i < hash->cap; i++)
 	{
@@ -221,6 +229,7 @@ static void hash_str_resize(HashStr* hash, usize new_cap)
 			if (new_node->str == nullptr)
 			{
 				new_node->str = strdup(node->str);
+				assert(node->str != nullptr);
 				new_node->next = nullptr;
 			}
 			else
@@ -231,7 +240,9 @@ static void hash_str_resize(HashStr* hash, usize new_cap)
 				}
 
 				HashStrNode* chain_node = malloc(sizeof(HashStrNode));
+				assert(chain_node != nullptr);
 				chain_node->str = strdup(node->str);
+				assert(chain_node->str != nullptr);
 				chain_node->next = nullptr;
 				new_node->next = chain_node;
 			}
@@ -278,5 +289,6 @@ HashStr hash_str_new(const usize cap)
 {
 	debug_assert(cap > 0);
 	HashStr hash = {.cap = cap, .size = 0, .node = calloc(cap, sizeof(HashStrNode))};
+	assert(hash.node != nullptr);
 	return hash;
 }

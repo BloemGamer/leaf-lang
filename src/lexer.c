@@ -200,7 +200,7 @@ static TokenResult string_to_ignored_token(const char* input)
 	else if (input[0] == '/' && input[1] == '*')
 	{
 		char* endline = strstr(input, "*/");
-		if (endline == NULL)
+		if (endline == nullptr)
 		{
 			token_res.token.token_type = token_type_invalid_comment;
 		}
@@ -448,6 +448,7 @@ static TokenResult string_to_literals_token(const char* input) // NOLINT
 			token_res.token.token_type = token_type_float;
 		}
 		token_res.token.str_val = (char*)malloc(num_len * (sizeof(char) + 1));
+		assert(token_res.token.str_val != nullptr);
 		memcpy(token_res.token.str_val, input, num_len);
 		token_res.token.str_val[num_len] = '\0';
 		return token_res;
@@ -478,6 +479,7 @@ static TokenResult string_to_identifier_token(const char* input)
 	usize buffer_size = 1;
 	usize buffer_max_size = 16;
 	char* buffer = (char*)malloc(buffer_max_size * sizeof(*buffer));
+	assert(buffer != nullptr);
 
 	buffer[0] = input[0];
 	char c;																 // NOLINT
