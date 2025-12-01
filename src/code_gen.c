@@ -934,11 +934,11 @@ static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr)
 
 			if (range_expr.end->type == AST_BLOCK)
 			{
-				gen_ast_block(code_gen, range_expr.start->node.block, tmp_end);
+				gen_ast_block(code_gen, range_expr.end->node.block, tmp_end);
 			}
 			else if (range_expr.end->type == AST_IF_EXPR)
 			{
-				gen_ast_if_expr(code_gen, range_expr.start->node.if_expr, tmp_end);
+				gen_ast_if_expr(code_gen, range_expr.end->node.if_expr, tmp_end);
 			}
 
 			tmp_end[tmp_end_len] = '\0';
