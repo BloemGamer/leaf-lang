@@ -687,8 +687,7 @@ static void gen_ast_cast_expr(CodeGen code_gen[static 1], CastExpr cast_expr)
 static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cast_expr, char** add_before_trailing_expr,
 										usize* cap, usize* len, usize* paren_count)
 {
-	// Calculate the length needed for this cast: ((type)
-	usize cast_len = 2; // for "(("
+	usize cast_len = 2;
 	cast_len += strlen(cast_expr.target_type.type.name);
 	for (usize i = 0; i < cast_expr.target_type.type.pointer_count; i++)
 	{
@@ -698,12 +697,11 @@ static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cas
 		}
 		else
 		{
-			cast_len += 1; // for "*"
+			cast_len += 1;
 		}
 	}
-	cast_len += 1; // for closing ")"
+	cast_len += 1;
 
-	// Ensure we have enough capacity
 	while (*len + cast_len + 1 > *cap)
 	{
 		*cap *= 2;
@@ -711,7 +709,6 @@ static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cas
 		assert(*add_before_trailing_expr != nullptr);
 	}
 
-	// Append the cast prefix: ((type)
 	strcat(*add_before_trailing_expr, "((");
 	strcat(*add_before_trailing_expr, cast_expr.target_type.type.name);
 	for (usize i = 0; i < cast_expr.target_type.type.pointer_count; i++)
@@ -727,9 +724,8 @@ static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cas
 	}
 	strcat(*add_before_trailing_expr, ")");
 	*len = strlen(*add_before_trailing_expr);
-	(*paren_count)++; // Increment paren count for this cast level
+	(*paren_count)++;
 
-	// Recursively handle nested casts - always recurse if inner is a cast
 	if (cast_expr.expr->type == AST_CAST_EXPR)
 	{
 		CastExpr inner_cast = cast_expr.expr->node.cast_expr;
@@ -739,11 +735,9 @@ static void gen_ast_cast_block_internal(CodeGen code_gen[static 1], CastExpr cas
 
 static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, const char* add_before_trailing_expr)
 {
-	// Allocate buffer for the new prefix
 	usize cap = MAX_BUFFER_SIZE;
 	char* before_trailing_expr = (char*)malloc(cap);
 
-	// Copy the existing prefix (e.g., "sl_tmp_cast_0=")
 	if (add_before_trailing_expr != nullptr)
 	{
 		strcpy(before_trailing_expr, add_before_trailing_expr);
@@ -756,20 +750,16 @@ static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, c
 	usize len = strlen(before_trailing_expr);
 	usize paren_count = 0;
 
-	// Add the cast wrapper(s) to the prefix recursively
 	gen_ast_cast_block_internal(code_gen, cast_expr, &before_trailing_expr, &cap, &len, &paren_count);
 
-	// Store paren count in code_gen so gen_ast_block can access it
 	code_gen->close_paren_count = paren_count;
 
-	// Find the deepest non-cast expression
 	AST* deepest_expr = cast_expr.expr;
 	while (deepest_expr->type == AST_CAST_EXPR)
 	{
 		deepest_expr = deepest_expr->node.cast_expr.expr;
 	}
 
-	// Generate the deepest block or if expression with our cast prefix
 	if (deepest_expr->type == AST_BLOCK)
 	{
 		gen_ast_block(code_gen, deepest_expr->node.block, before_trailing_expr);
@@ -783,7 +773,6 @@ static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, c
 		assert(false && "not an expected type");
 	}
 
-	// Reset paren count
 	code_gen->close_paren_count = 0;
 
 	free(before_trailing_expr);
