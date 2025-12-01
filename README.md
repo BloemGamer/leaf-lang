@@ -42,11 +42,13 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 ### Short-term
 - [ ] Finish first compiler version
 - [ ] Adding the namespace like syntax
+- [ ] Add the ability to use documenting comments
 - [ ] Add tests
 - [ ] Write documentation
-- [ ] Make the lexer threadsafe
+- [x] Make the lexer threadsafe
 - [ ] Add error handeling in the lexer
 - [ ] Add error handeling in the parser
+- [ ] Add error handeling in the code generation
 - [ ] Add a switch or match statement
 
 ### Long-term
