@@ -14,25 +14,26 @@
 
 typedef struct
 {
-	Token token;
-	usize size;
-} TokenResult;
-
-typedef struct
-{
-	usize size;
-	char char_val;
-} CharToken;
+	const char* tokens;
+	usize count;
+	usize pos;
+	usize amount_errors;
+	usize amount_warnings;
+} LexerState;
 
 static void add_token(const Token* next, Token** tokens, usize* token_size, usize* token_max_size)
 	__attribute((nonnull(2, 3, 4)));
-static Pos amount_enters(const char* input, usize size, Pos pos);
-static TokenResult string_to_token(const char* input);
-static TokenResult string_to_ignored_token(const char* input);
-static TokenResult string_to_simple_token(const char* input);
-static TokenResult string_to_keyword_token(const char* input);
-static TokenResult string_to_literals_token(const char* input);
-static TokenResult string_to_identifier_token(const char* input);
+static Pos amount_enters(LexerState lexer_state[static 1], usize size, Pos pos);
+
+static bool string_to_ignored_token(LexerState lexer_state[static 1], Token* out);
+static bool string_to_simple_token(LexerState lexer_state[static 1], Token* out);
+static bool string_to_keyword_token(LexerState lexer_state[static 1], Token* out);
+static bool string_to_literals_token(LexerState lexer_state[static 1], Token* out);
+static bool string_to_identifier_token(LexerState lexer_state[static 1], Token* out);
+
+static const char* peek(LexerState* lexer_state);
+static const char* peek_count(LexerState* lexer_state, i64 count);
+static const char* consume(LexerState* lexer_state);
 
 Token* lex(const char* input)
 {
@@ -40,65 +41,106 @@ Token* lex(const char* input)
 	usize token_size = 0;
 	usize token_max_size = 0;
 	Pos pos = {.line = 1, .character = 1};
+	LexerState lexer_state = {
+		.tokens = input,
+		.count = input ? (usize)strlen(input) : 0,
+		.pos = 0,
+		.amount_errors = 0,
+		.amount_warnings = 0,
+	};
 
 	{
 		Token token = {0};
 		token.token_type = token_type_sof;
 		add_token(&token, &tokens, &token_size, &token_max_size);
 	}
-	while (*input != '\0')
+
+	while (lexer_state.pos < lexer_state.count)
 	{
-		TokenResult next_token = string_to_token(input);
-		pos = amount_enters(input, next_token.size, pos);
-		input += next_token.size > 0 ? next_token.size : 1;
-		if (next_token.token.token_type == token_type_whitespace || next_token.token.token_type == token_type_comment)
+		const usize start_pos = lexer_state.pos;
+
+		Token next = {0};
+		bool matched = string_to_ignored_token(&lexer_state, &next) || string_to_simple_token(&lexer_state, &next) ||
+					   string_to_keyword_token(&lexer_state, &next) || string_to_literals_token(&lexer_state, &next) ||
+					   string_to_identifier_token(&lexer_state, &next);
+
+		const usize consumed = lexer_state.pos - start_pos;
+
+		if (consumed > 0)
+		{
+			pos = amount_enters(&lexer_state, consumed, pos);
+		}
+		else
+		{
+			const char* bad_ptr = consume(&lexer_state);
+			const char bad = bad_ptr ? *bad_ptr : '\0'; // NOLINT
+			pos = amount_enters(&lexer_state, 1, pos);
+			LOG_ERROR(pos, "Invalid token: '%c'\n", bad);
+			lexer_state.amount_errors++;
+			continue;
+		}
+
+		if (!matched)
 		{
 			continue;
 		}
-		if (next_token.token.token_type == token_type_invalid)
+
+		if (next.token_type == token_type_whitespace || next.token_type == token_type_comment)
 		{
-			LOG_ERROR(pos, "An invalid token, found: '%c'\n", input[-1]);
+			continue;
 		}
-		if (next_token.token.token_type == token_type_invalid_comment)
+		if (next.token_type == token_type_invalid)
 		{
-			LOG_ERROR(pos, "An invalid unclosed /*\n");
+			LOG_ERROR(pos, "Invalid token sequence\n");
+			lexer_state.amount_errors++;
+			continue;
+		}
+		if (next.token_type == token_type_invalid_comment)
+		{
+			LOG_ERROR(pos, "Invalid unclosed /*\n");
+			lexer_state.amount_errors++;
 			break;
 		}
-		if (next_token.token.token_type == token_type_invalid_string)
+		if (next.token_type == token_type_invalid_string)
 		{
-			LOG_ERROR(pos, "An invalid unclosed /*\n");
+			LOG_ERROR(pos, "Invalid unclosed string\n");
+			lexer_state.amount_errors++;
 			break;
 		}
-		next_token.token.pos = pos;
-		add_token(&next_token.token, &tokens, &token_size, &token_max_size);
+
+		next.pos = pos;
+		add_token(&next, &tokens, &token_size, &token_max_size);
 	}
+
 	{
 		Token token = {0};
 		token.token_type = token_type_eof;
 		add_token(&token, &tokens, &token_size, &token_max_size);
 	}
 
-	if (amount_errors != 0)
+	if (lexer_state.amount_warnings != 0)
 	{
-		(void)errprintf("Could not finish lexing because of amount errors: %zu\n", amount_errors);
+		(void)errprintf("Found amount warnings: %zu\n", lexer_state.amount_warnings);
 	}
-	if (amount_warnings != 0)
+	if (lexer_state.amount_errors != 0)
 	{
-		(void)errprintf("Fount amount warnings: %zu\n", amount_errors);
-	}
-	if (amount_errors != 0)
-	{
-		exit(EXIT_FAILURE);
+		(void)errprintf("Could not finish lexing because of amount errors: %zu\n", lexer_state.amount_errors);
+		exit(EXIT_FAILURE); // NOLINT
 	}
 
 	return tokens;
 }
 
-static Pos amount_enters(const char* input, usize size, Pos pos)
+static Pos amount_enters(LexerState lexer_state[static 1], usize size, Pos pos)
 {
+	const usize base = lexer_state->pos - size;
 	for (usize i = 0; i < size; i++)
 	{
-		if (input[i] == '\n')
+		if ((base + i) >= lexer_state->count)
+		{
+			break;
+		}
+		if (lexer_state->tokens[base + i] == '\n')
 		{
 			pos.line++;
 			pos.character = 1;
@@ -117,9 +159,12 @@ static void add_token(const Token* next, Token** tokens, usize* token_size, usiz
 	{
 		if (*token_max_size == 0)
 		{
-			*token_max_size += 1;
+			*token_max_size = 1;
 		}
-		*token_max_size *= 2;
+		else
+		{
+			*token_max_size *= 2;
+		}
 		*tokens = (Token*)realloc((void*)*tokens, *token_max_size * sizeof(Token));
 		assert(*tokens != nullptr);
 	}
@@ -127,378 +172,335 @@ static void add_token(const Token* next, Token** tokens, usize* token_size, usiz
 	*token_size += 1;
 }
 
-static TokenResult string_to_token(const char* input)
+static bool string_to_ignored_token(LexerState lexer_state[static 1], Token* out)
 {
-	TokenResult token_res = {0};
-
-	token_res = string_to_ignored_token(input);
-	if (token_res.size != 0)
+	const char* current = peek(lexer_state);
+	if (current && isspace((unsigned char)*current))
 	{
-		return token_res;
+		while (current && isspace((unsigned char)*current))
+		{
+			consume(lexer_state);
+			current = peek(lexer_state);
+		}
+		out->token_type = token_type_whitespace;
+		return true;
 	}
 
-	token_res = string_to_simple_token(input);
-	if (token_res.size != 0)
+	if (current && *current == '/' && peek_count(lexer_state, 1) && *peek_count(lexer_state, 1) == '/')
 	{
-		return token_res;
+		consume(lexer_state);
+		consume(lexer_state);
+		while ((current = peek(lexer_state)) && *current != '\n')
+		{
+			consume(lexer_state);
+		}
+		out->token_type = token_type_comment;
+		return true;
 	}
 
-	token_res = string_to_keyword_token(input);
-	if (token_res.size != 0)
+	if (current && *current == '/' && peek_count(lexer_state, 1) && *peek_count(lexer_state, 1) == '*')
 	{
-		return token_res;
+		consume(lexer_state);
+		consume(lexer_state);
+		while (true)
+		{
+			current = peek(lexer_state);
+			if (!current)
+			{
+				out->token_type = token_type_invalid_comment;
+				return true;
+			}
+			if (*current == '*' && peek_count(lexer_state, 1) && *peek_count(lexer_state, 1) == '/')
+			{
+				consume(lexer_state);
+				consume(lexer_state);
+				out->token_type = token_type_comment;
+				return true;
+			}
+			consume(lexer_state);
+		}
 	}
 
-	token_res = string_to_literals_token(input);
-	if (token_res.size != 0)
-	{
-		return token_res;
-	}
-
-	token_res = string_to_identifier_token(input);
-	if (token_res.size != 0)
-	{
-		return token_res;
-	}
-
-	token_res.token.token_type = token_type_invalid;
-	token_res.size = 0;
-	return token_res;
+	return false;
 }
 
-static TokenResult string_to_ignored_token(const char* input)
+static bool string_to_simple_token(LexerState lexer_state[static 1], Token* out)
 {
-	TokenResult token_res = {0};
-
-	if (isspace(input[0]))
+	const char* ch0 = peek(lexer_state);
+	if (!ch0)
 	{
-		usize i = 1;			  // NOLINT
-		while (isspace(input[i])) // NOLINT
-		{
-			i++;
-		}
-
-		token_res.token.token_type = token_type_whitespace;
-		token_res.size = i;
-		return token_res;
+		return false;
 	}
-	else if (input[0] == '/' && input[1] == '/') // NOLINT
+	if (isalnum((unsigned char)*ch0) || *ch0 == '_' || *ch0 == '@' || *ch0 == '"' || *ch0 == '\'')
 	{
-		char* endline = strchr(input, '\n');
-		if (endline == nullptr)
-		{
-			token_res.size = strlen(input);
-		}
-		else
-		{
-			token_res.size = (usize)(endline - input);
-		}
-
-		token_res.token.token_type = token_type_comment;
-		return token_res;
-	}
-	else if (input[0] == '/' && input[1] == '*')
-	{
-		char* endline = strstr(input, "*/");
-		if (endline == nullptr)
-		{
-			token_res.token.token_type = token_type_invalid_comment;
-		}
-		else
-		{
-			token_res.size = (usize)(endline - input);
-			token_res.token.token_type = token_type_comment;
-		}
-
-		return token_res;
-	}
-	token_res.size = 0;
-	return token_res;
-}
-
-static TokenResult string_to_simple_token(const char* input)
-{
-	TokenResult token_res = {0};
-
-	if (isalnum(input[0]) != false) // NOLINT
-	{
-		token_res.size = 0;
-		return token_res;
+		return false;
 	}
 
-	constexpr usize amount_tokens = ARRAY_SIZE(TOKENS_TYPES_SIMPLE);
+	usize best_len = 0;
+	TokenType best_type = token_type_invalid;
 
-	for (usize i = 0; i < amount_tokens; i++)
+	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_SIMPLE); i++)
 	{
-		// the next part of the function only works if this returns true, otherwise it will skipt tokens
-		// I wanted this to run at compiletime, but I could not make it work sadly
-		debug_assert(strlen(TOKENS_STR_IDENT_SIMPLE[i]) <= 3);
-	}
-
-	for (usize i = 0; i < amount_tokens; i++)
-	{
-		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1] &&
-			input[2] == TOKENS_STR_IDENT_SIMPLE[i][2])
+		const char* str = TOKENS_STR_IDENT_SIMPLE[i];
+		const usize len = (usize)strlen(str);
+		if (len == 0)
 		{
-			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
-			token_res.size = 3;
-			return token_res;
+			continue;
 		}
-	}
-	for (usize i = 0; i < amount_tokens; i++)
-	{
-		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0] && input[1] == TOKENS_STR_IDENT_SIMPLE[i][1])
+
+		bool ok = true; // NOLINT
+		for (usize j = 0; j < len; j++)
 		{
-			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
-			token_res.size = 2;
-			return token_res;
-		}
-	}
-	for (usize i = 0; i < amount_tokens; i++)
-	{
-		if (input[0] == TOKENS_STR_IDENT_SIMPLE[i][0])
-		{
-			token_res.token.token_type = TOKENS_TYPES_SIMPLE[i];
-			token_res.size = 1;
-			return token_res;
-		}
-	}
-
-	token_res.size = 0;
-	return token_res;
-}
-
-static TokenResult string_to_keyword_token(const char* input)
-{
-	TokenResult token_res = {0};
-
-	if (isalpha(input[0]) == false) // NOLINT
-	{
-		token_res.size = 0;
-		return token_res;
-	}
-
-	constexpr usize buffer_size = MAX(sizeof(TOKENS_STR_IDENT_KEYWORD[0]), sizeof(TOKENS_STR_IDENT_MODIFIER[0]));
-	constexpr usize amount_tokens_keywords = ARRAY_SIZE(TOKENS_TYPES_KEYWORD);
-	constexpr usize amount_tokens_modifier = ARRAY_SIZE(TOKENS_TYPES_MODIFIER);
-	char buffer[buffer_size] = {0};
-
-	buffer[0] = input[0];
-	usize len = 0;
-
-	for (len = 1; len < buffer_size; len++)
-	{
-		if (isalnum(input[len]) != false || input[len] == '_') // NOLINT
-		{
-			buffer[len] = input[len];
-		}
-		else
-		{
-			break;
-		}
-	}
-	buffer[len] = '\0';
-
-	for (usize i = 0; i < amount_tokens_keywords; i++)
-	{
-		if (strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
-		{
-			token_res.token.token_type = TOKENS_TYPES_KEYWORD[i];
-			token_res.size = len;
-			return token_res;
-		}
-	}
-
-	for (usize i = 0; i < amount_tokens_modifier; i++)
-	{
-		if (strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
-		{
-			token_res.token.token_type = TOKENS_TYPES_MODIFIER[i];
-			token_res.size = len;
-			return token_res;
-		}
-	}
-	token_res.size = 0;
-	return token_res;
-}
-
-static TokenResult string_to_literals_token(const char* input) // NOLINT
-{
-	TokenResult token_res = {0};
-
-	if (input[0] == '"') // strings
-	{
-		const char* end_str = input;
-		while (true) // NOLINT
-		{
-			end_str = strchr(end_str + 1, '"');
-			if (end_str == nullptr)
+			const char* ch = peek_count(lexer_state, (i64)j); // NOLINT
+			if (!ch || *ch != str[j])
 			{
-				token_res.size = 0;
-				token_res.token.token_type = token_type_invalid_string;
-				return token_res;
-			}
-			i64 place = 0;
-			i64 count = 0;
-			while (end_str[place] == '\\') // NOLINT
-			{
-				place--;
-				count++;
-			}
-			if ((count % 2) == 0)
-			{
-				usize total_len = (usize)(end_str - input + 1);
-				usize inner_len = total_len - 2;
-
-				token_res.token.str_val = (char*)malloc((inner_len + 1) * sizeof(char));
-				if (token_res.token.str_val == nullptr)
-				{
-					token_res.token.token_type = token_type_invalid;
-					token_res.size = 0;
-					return token_res;
-				}
-
-				token_res.size = total_len;
-				token_res.token.token_type = token_type_string;
-
-				memcpy((void*)token_res.token.str_val, (void*)(input + 1), inner_len);
-				token_res.token.str_val[inner_len] = '\0';
-
-				return token_res;
-			}
-		}
-	}
-	if (input[0] == '\'')
-	{
-		const char* end_str = input;
-		while (true) // NOLINT
-		{
-			end_str = strchr(end_str + 1, '\'');
-			if (end_str == nullptr)
-			{
-				token_res.size = 0;
-				token_res.token.token_type = token_type_invalid_string;
-				return token_res;
-			}
-			i64 place = 0;
-			i64 count = 0;
-			while (end_str[place] == '\\') // NOLINT
-			{
-				place--;
-				count++;
-			}
-			if ((count % 2) == 0)
-			{
-				usize total_len = (usize)(end_str - input + 1);
-				usize inner_len = total_len - 2;
-
-				token_res.token.str_val = (char*)malloc((inner_len + 1) * sizeof(char));
-				if (token_res.token.str_val == nullptr)
-				{
-					token_res.token.token_type = token_type_invalid;
-					token_res.size = 0;
-					return token_res;
-				}
-
-				token_res.size = total_len;
-				token_res.token.token_type = token_type_char;
-
-				memcpy((void*)token_res.token.str_val, (void*)(input + 1), inner_len);
-				token_res.token.str_val[inner_len] = '\0';
-
-				return token_res;
-			}
-		}
-	}
-	if (isdigit(input[0]))
-	{
-		const char* start_str = input;
-		usize start_str_offset = 0;
-		bool is_int = false;
-
-		constexpr char num_starts[][3] = {"0b", "0x", "0o"};
-		for (usize i = 0; i < ARRAY_SIZE(num_starts); i++)
-		{
-			if (strncmp(num_starts[i], input, 2) == 0)
-			{
-				start_str += 2;
-				start_str_offset += 2;
-				is_int = true;
+				ok = false;
 				break;
 			}
 		}
-		usize num_len = strcspn(start_str, TOKENS_STOP) + start_str_offset;
-		if (start_str[num_len] == '.' && isdigit(start_str[num_len + 1]))
+		if (ok && len > best_len)
 		{
-			num_len++;
-			num_len += strcspn(start_str + num_len, TOKENS_STOP);
+			best_len = len;
+			best_type = TOKENS_TYPES_SIMPLE[i];
 		}
-		else
-		{
-			is_int = true;
-		}
-
-		token_res.size = num_len;
-		if (is_int)
-		{
-			token_res.token.token_type = token_type_number;
-		}
-		else
-		{
-			token_res.token.token_type = token_type_float;
-		}
-		token_res.token.str_val = (char*)malloc(num_len * (sizeof(char) + 1));
-		assert(token_res.token.str_val != nullptr);
-		memcpy(token_res.token.str_val, input, num_len);
-		token_res.token.str_val[num_len] = '\0';
-		return token_res;
 	}
 
-	token_res.size = 0;
-	return token_res;
+	if (best_len > 0)
+	{
+		for (usize j = 0; j < best_len; j++)
+		{
+			consume(lexer_state);
+		}
+		out->token_type = best_type;
+		return true;
+	}
+
+	return false;
 }
 
-static TokenResult string_to_identifier_token(const char* input)
+static bool string_to_keyword_token(LexerState lexer_state[static 1], Token* out)
 {
-	TokenResult token_res = {0};
-
-	if (isalpha(input[0]) != false || input[0] == '_') // NOLINT
+	const char* cur0 = peek(lexer_state);
+	if (!cur0 || !isalpha((unsigned char)*cur0))
 	{
-		token_res.token.token_type = token_type_identifier;
-	}
-	else if (input[0] == '@')
-	{
-		token_res.token.token_type = token_type_message;
-	}
-	else
-	{
-		token_res.size = 0;
-		return token_res;
+		return false;
 	}
 
-	usize buffer_size = 1;
-	usize buffer_max_size = 16;
-	char* buffer = (char*)malloc(buffer_max_size * sizeof(*buffer));
-	assert(buffer != nullptr);
-
-	buffer[0] = input[0];
-	char c;																 // NOLINT
-	while (isalnum(c = input[buffer_size]) || input[buffer_size] == '_') // NOLINT
+	char buffer[64];
+	usize len = 0;
+	while (true)
 	{
-		if (buffer_size >= buffer_max_size)
+		const char* ch = peek_count(lexer_state, (i64)len); // NOLINT
+		if (!ch || !(isalnum((unsigned char)*ch) || *ch == '_'))
 		{
-			buffer_max_size *= 2;
-			buffer = (char*)realloc((void*)buffer, buffer_max_size * sizeof(*buffer)); // NOLINT
-			assert(buffer != nullptr);
+			break;
 		}
-		buffer[buffer_size] = input[buffer_size];
-		buffer_size++;
+		if (len >= sizeof(buffer) - 1)
+		{
+			break;
+		}
+		buffer[len++] = *ch;
 	}
-	buffer[buffer_size] = '\0';
+	buffer[len] = '\0';
 
-	token_res.token.str_val = buffer;
-	token_res.size = buffer_size;
-	return token_res;
+	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_KEYWORD); i++)
+	{
+		if (strcmp(buffer, TOKENS_STR_IDENT_KEYWORD[i]) == 0)
+		{
+			for (usize j = 0; j < len; j++)
+			{
+				consume(lexer_state);
+			}
+			out->token_type = TOKENS_TYPES_KEYWORD[i];
+			return true;
+		}
+	}
+
+	for (usize i = 0; i < ARRAY_SIZE(TOKENS_TYPES_MODIFIER); i++)
+	{
+		if (strcmp(buffer, TOKENS_STR_IDENT_MODIFIER[i]) == 0)
+		{
+			for (usize j = 0; j < len; j++)
+			{
+				consume(lexer_state);
+			}
+			out->token_type = TOKENS_TYPES_MODIFIER[i];
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool string_to_literals_token(LexerState lexer_state[static 1], Token* out)
+{
+	const char* current = peek(lexer_state);
+	if (!current)
+	{
+		return false;
+	}
+
+	if (*current == '"')
+	{
+		consume(lexer_state);
+		const char* start = peek(lexer_state);
+		while (true)
+		{
+			const char* ch = consume(lexer_state); // NOLINT
+			if (!ch)
+			{
+				out->token_type = token_type_invalid_string;
+				return true;
+			}
+			if (*ch == '"')
+			{
+				const char* back = ch - 1;
+				usize esc = 0;
+				while (back >= start && *back == '\\')
+				{
+					esc++;
+					back--;
+				}
+				if ((esc % 2) == 0)
+				{
+					const usize inner_len = (usize)(ch - start);
+					out->str_val = (char*)malloc(inner_len + 1);
+					if (out->str_val == nullptr)
+					{
+						out->token_type = token_type_invalid;
+						return true;
+					}
+					memcpy(out->str_val, start, inner_len);
+					out->str_val[inner_len] = '\0';
+					out->token_type = token_type_string;
+					return true;
+				}
+			}
+		}
+	}
+
+	if (*current == '\'')
+	{
+		consume(lexer_state);
+		const char* start = peek(lexer_state);
+		while (true)
+		{
+			const char* ch = consume(lexer_state); // NOLINT
+			if (!ch)
+			{
+				out->token_type = token_type_invalid_string;
+				return true;
+			}
+			if (*ch == '\'')
+			{
+				const char* back = ch - 1;
+				usize esc = 0;
+				while (back >= start && *back == '\\')
+				{
+					esc++;
+					back--;
+				}
+				if ((esc % 2) == 0)
+				{
+					const usize inner_len = (usize)(ch - start);
+					out->str_val = (char*)malloc(inner_len + 1);
+					if (out->str_val == nullptr)
+					{
+						out->token_type = token_type_invalid;
+						return true;
+					}
+					memcpy(out->str_val, start, inner_len);
+					out->str_val[inner_len] = '\0';
+					out->token_type = token_type_char;
+					return true;
+				}
+			}
+		}
+	}
+
+	if (isdigit((unsigned char)*current))
+	{
+		const char* start = current;
+		usize offset = 0;
+
+		if (peek_count(lexer_state, 1))
+		{
+			const char* ch = peek_count(lexer_state, 1); // NOLINT
+			if (*start == '0' && (*ch == 'b' || *ch == 'x' || *ch == 'o'))
+			{
+				offset = 2;
+			}
+		}
+
+		const char* scan = peek_count(lexer_state, (i64)offset);
+		if (!scan)
+		{
+			scan = start + offset;
+		}
+		usize inner_len = strcspn(scan, TOKENS_STOP);
+
+		bool is_float = false;
+		const char* after_inner = scan + inner_len;
+		if ((after_inner < (lexer_state->tokens + lexer_state->count)) && (*after_inner == '.') &&
+			(after_inner + 1) < (lexer_state->tokens + lexer_state->count) &&
+			isdigit((unsigned char)*(after_inner + 1)))
+		{
+			is_float = true;
+			inner_len += 1 + strcspn(after_inner + 1, TOKENS_STOP);
+		}
+
+		const usize total_len = offset + inner_len;
+		char* buf = (char*)malloc(total_len + 1);
+		assert(buf != nullptr);
+		for (usize i = 0; i < total_len; i++)
+		{
+			const char* ch = consume(lexer_state); // NOLINT
+			buf[i] = ch ? *ch : '\0';			   // NOLINT
+		}
+		buf[total_len] = '\0';
+
+		out->str_val = buf;
+		out->token_type = is_float ? token_type_float : token_type_number;
+		return true;
+	}
+
+	return false;
+}
+
+static bool string_to_identifier_token(LexerState lexer_state[static 1], Token* out)
+{
+	const char* current = peek(lexer_state);
+	if (!current)
+	{
+		return false;
+	}
+
+	if (!(isalpha((unsigned char)*current) || *current == '_' || *current == '@'))
+	{
+		return false;
+	}
+
+	usize cap = 16;
+	usize len = 0;
+	char* buf = (char*)malloc(cap);
+	assert(buf != nullptr);
+
+	while ((current = peek(lexer_state)) && (isalnum((unsigned char)*current) || *current == '_' || *current == '@'))
+	{
+		if (len + 1 >= cap)
+		{
+			cap *= 2;
+			buf = (char*)realloc(buf, cap); // NOLINT
+			assert(buf != nullptr);
+		}
+		buf[len++] = *current;
+		consume(lexer_state);
+	}
+	buf[len] = '\0';
+
+	out->str_val = buf;
+	out->token_type = (buf[0] == '@') ? token_type_message : token_type_identifier;
+	return true;
 }
 
 void lex_free(Token* tokens)
@@ -521,7 +523,7 @@ void lex_free(Token* tokens)
 void lex_print(Token* tokens)
 {
 	Token lex;
-	while ((lex = *tokens++).token_type != token_type_eof) // NOLINT
+	while ((lex = *tokens++).token_type != token_type_eof)
 	{
 		puts(token_to_string(lex.token_type));
 		if (lex.token_type == token_type_string)
@@ -532,7 +534,7 @@ void lex_print(Token* tokens)
 		{
 			printf("\t'%s'\n", lex.str_val);
 		}
-		if (lex.token_type == token_type_number)
+		if (lex.token_type == token_type_number || lex.token_type == token_type_float)
 		{
 			printf("\t%s\n", lex.str_val);
 		}
@@ -542,4 +544,21 @@ void lex_print(Token* tokens)
 		}
 	}
 	puts(token_to_string(lex.token_type));
+}
+
+static const char* peek(LexerState* lexer_state)
+{
+	return lexer_state->pos < lexer_state->count ? &lexer_state->tokens[lexer_state->pos] : nullptr;
+}
+
+static const char* peek_count(LexerState* lexer_state, const i64 count)
+{
+	return ((i64)lexer_state->pos + count) < (i64)lexer_state->count
+			   ? &lexer_state->tokens[(i64)lexer_state->pos + count]
+			   : nullptr;
+}
+
+static const char* consume(LexerState* lexer_state)
+{
+	return lexer_state->pos < lexer_state->count ? &lexer_state->tokens[lexer_state->pos++] : nullptr;
 }
