@@ -49,6 +49,7 @@ static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def);
 static CodeBlock* get_code_block(CodeGen code_gen[static 1]);
 static bool casted_block(CastExpr cast_expr);
 static void str_cat(CodeBlock* code_block, const char* str);
+static void str_cat_escaped(CodeBlock* code_block, const char* str);
 
 static void free_code_block(CodeBlock code_block);
 
@@ -440,7 +441,7 @@ static void gen_ast_literal(CodeGen code_gen[static 1], Literal literal)
 	{
 		case token_type_string:
 			str_cat(code_block, "\"");
-			str_cat(code_block, token.str_val);
+			str_cat_escaped(code_block, token.str_val);
 			str_cat(code_block, "\"");
 			break;
 		case token_type_number:
@@ -448,7 +449,7 @@ static void gen_ast_literal(CodeGen code_gen[static 1], Literal literal)
 			str_cat(code_block, buffer);
 			break;
 		case token_type_char:
-			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "'%c'", token.char_val);
+			(void)snprintf(buffer, MAX_BUFFER_SIZE - 1, "0x%02x", token.char_val);
 			str_cat(code_block, buffer);
 			break;
 		case token_type_float:
@@ -1256,6 +1257,61 @@ static void str_cat(CodeBlock* code_block, const char* str)
 	memcpy((void*)(code_block->code + code_block->len), (void*)str, str_len);
 	code_block->len += str_len;
 	code_block->code[code_block->len] = '\0';
+}
+
+static void str_cat_escaped(CodeBlock* code_block, const char* str)
+{
+	for (const char* ptr = str; *ptr; ptr++)
+	{
+		switch (*ptr)
+		{
+			case '\a':
+				str_cat(code_block, "\\a");
+				break;
+			case '\b':
+				str_cat(code_block, "\\b");
+				break;
+			case '\f':
+				str_cat(code_block, "\\f");
+				break;
+			case '\n':
+				str_cat(code_block, "\\n");
+				break;
+			case '\r':
+				str_cat(code_block, "\\r");
+				break;
+			case '\t':
+				str_cat(code_block, "\\t");
+				break;
+			case '\v':
+				str_cat(code_block, "\\v");
+				break;
+			case '\\':
+				str_cat(code_block, "\\\\");
+				break;
+			case '\'':
+				str_cat(code_block, "\\\'");
+				break;
+			case '\"':
+				str_cat(code_block, "\\\"");
+				break;
+			case '0':
+				str_cat(code_block, "\\0");
+				break;
+			default:
+				if (*ptr >= 0x20 && *ptr < 0x7E)
+				{
+					char buf[2] = {*ptr, 0};
+					str_cat(code_block, buf);
+				}
+				else
+				{
+					char buf[8];
+					(void)snprintf(buf, sizeof(buf), "\\x%02x", (unsigned char)*ptr);
+					str_cat(code_block, buf);
+				}
+		}
+	}
 }
 
 NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
