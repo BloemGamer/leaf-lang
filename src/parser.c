@@ -175,7 +175,6 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	assert(node != nullptr);
 
 	node->type = AST_FUNC_DEF;
-
 	TokenArray mod_arr = get_modifiers(parser_state);
 	node->node.func_def.modifiers = mod_arr.tokens;
 	node->node.func_def.modifier_count = mod_arr.count;
@@ -186,6 +185,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		const Token token = *consume(parser_state);
 		node->node.func_def.name = strdup(token.str_val);
 		assert(node->node.func_def.name != nullptr);
+		node->pos = token.pos;
 	}
 
 	// parse templates, //will do this later
@@ -249,7 +249,9 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
 
+	const Token* start_token = peek(parser_state);
 	node->type = AST_VAR_DEF;
+	node->pos = start_token->pos;
 
 	node->node.var_def = parse_var_def(parser_state);
 
@@ -320,6 +322,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			node->node._type##_def.name = strdup(token.str_val);                      \
 			assert(node->node._type##_def.name != nullptr);                           \
 			hash_str_push(&parser_state->known_types, token.str_val);                 \
+			node->pos = token.pos;                                                    \
 		}                                                                             \
 		assert(consume(parser_state)->token_type == token_type_lbrace);               \
 		if (peek(parser_state)->token_type == token_type_rbrace)                      \
@@ -378,7 +381,6 @@ static AST* parse_enum(ParserState* parser_state)
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
 	node->type = AST_ENUM_DEF;
-
 	TokenArray mod_arr = get_modifiers(parser_state);
 	node->node.enum_def.modifiers = mod_arr.tokens;
 	node->node.enum_def.modifier_count = mod_arr.count;
@@ -391,6 +393,7 @@ static AST* parse_enum(ParserState* parser_state)
 		node->node.enum_def.name = strdup(token.str_val);
 		assert(node->node.enum_def.name != nullptr);
 		hash_str_push(&parser_state->known_types, token.str_val);
+		node->pos = token.pos;
 	}
 	if (match(parser_state, token_type_colon))
 	{
@@ -575,6 +578,7 @@ static AST* parse_message(ParserState* parser_state)
 		AST* node = calloc(1, sizeof(AST));
 		assert(node != nullptr);
 		node->type = AST_MESSAGE;
+		node->pos = token_g.pos;
 		node->node.message.msg = msg_import;
 		const Token token = *consume(parser_state);
 		if (token.token_type == token_type_less)
@@ -602,6 +606,7 @@ static AST* parse_message(ParserState* parser_state)
 	{
 		AST* node = calloc(1, sizeof(AST));
 		assert(node != nullptr);
+		node->pos = token_g.pos;
 		node->type = AST_MESSAGE;
 		node->node.message.msg = msg_c_type;
 		const Token token = *consume(parser_state);
@@ -622,8 +627,9 @@ static AST* parse_if_expr(ParserState* parser_state)
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
 	node->type = AST_IF_EXPR;
-
-	assert(consume(parser_state)->token_type == token_type_if);
+	Token token = *consume(parser_state);
+	assert(token.token_type == token_type_if);
+	node->pos = token.pos;
 
 	node->node.if_expr.condition = parse_expr(parser_state);
 
@@ -658,8 +664,9 @@ static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
 	node->type = AST_WHILE_EXPR;
-
-	assert(consume(parser_state)->token_type == token_type_while);
+	Token token = *consume(parser_state);
+	assert(token.token_type == token_type_while);
+	node->pos = token.pos;
 
 	node->node.while_expr.condition = parse_expr(parser_state);
 
@@ -675,7 +682,11 @@ static AST* parse_for_expr(ParserState* parser_state)
 	assert(node != nullptr);
 	node->type = AST_FOR_EXPR;
 
-	assert(consume(parser_state)->token_type == token_type_for);
+	{
+		Token token = *consume(parser_state);
+		assert(token.token_type == token_type_for);
+		node->pos = token.pos;
+	}
 
 	if (peek(parser_state)->token_type == token_type_lparen)
 	{
@@ -753,9 +764,11 @@ static AST* parse_return_expr(ParserState* parser_state) // NOLINT
 {
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
-	node->type = AST_RETURN_STMT;
 
-	assert(consume(parser_state)->token_type == token_type_return);
+	node->type = AST_RETURN_STMT;
+	Token token = *consume(parser_state);
+	assert(token.token_type == token_type_return);
+	node->pos = token.pos;
 
 	node->node.return_stmt.return_stmt = parse_expr(parser_state);
 	return node;
@@ -765,8 +778,12 @@ static AST* parse_break_expr(ParserState* parser_state)
 {
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
+
 	node->type = AST_BREAK_STMT;
-	assert(consume(parser_state)->token_type == token_type_break);
+	Token token = *consume(parser_state);
+	assert(token.token_type == token_type_break);
+	node->pos = token.pos;
+
 	return node;
 }
 
@@ -774,19 +791,24 @@ static AST* parse_continue_expr(ParserState* parser_state)
 {
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
+
 	node->type = AST_CONTINUE_STMT;
-	assert(consume(parser_state)->token_type == token_type_continue);
+	Token token = *consume(parser_state);
+	assert(token.token_type == token_type_continue);
+	node->pos = token.pos;
+
 	return node;
 }
 
 static AST* parse_array_init(ParserState* parser_state)
 {
-	consume(parser_state); // '['
+	Token token = *consume(parser_state); // '['
+	assert(token.token_type == token_type_rsqbracket);
 
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
 	node->type = AST_ARRAY_INIT;
-
+	node->pos = token.pos;
 	if (match(parser_state, token_type_rsqbracket))
 	{
 		node->node.array_init.elements = nullptr;
@@ -909,23 +931,6 @@ static AST* parse_compound_literal(ParserState* parser_state)
 	}
 }
 
-// static AST* parse_cast_or_compound(ParserState* parser_state)
-// {
-// 	assert(consume(parser_state)->token_type == token_type_lparen);
-//
-// 	AST* node = calloc(1, sizeof(AST));
-//  assert(node != nullptr);
-// 	node->type = AST_CAST_EXPR;
-//
-// 	node->node.cast_expr.target_type = parse_var_def(parser_state);
-//
-// 	assert(consume(parser_state)->token_type == token_type_rparen);
-//
-// 	node->node.cast_expr.expr = parse_prefix(parser_state);
-//
-// 	return node;
-// }
-
 static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
 	AST* left = parse_prefix(parser_state);
@@ -962,9 +967,12 @@ static AST* make_unary(const Token* op, AST* rhs) // NOLINT
 {
 	AST* node = (AST*)calloc(1, sizeof(AST));
 	assert(node != nullptr);
+
 	node->type = AST_UNARY;
 	node->node.unary_expr.op = *op;
 	node->node.unary_expr.rhs = rhs;
+	node->pos = op->pos;
+
 	return node;
 }
 
@@ -1367,6 +1375,7 @@ static AST* make_literal(const Token* token)
 	assert(node != nullptr);
 
 	node->type = AST_LITERAL;
+	node->pos = token->pos;
 
 	switch (token->token_type)
 	{
@@ -1408,6 +1417,7 @@ static AST* make_identifier(const Token* token)
 	assert(node != nullptr);
 
 	node->type = AST_IDENTIFIER;
+	node->pos = token->pos;
 	node->node.identifier.identifier = *token;
 	node->node.identifier.identifier.str_val = strdup(token->str_val);
 	assert(node->node.identifier.identifier.str_val != nullptr);
@@ -1425,6 +1435,7 @@ static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 		node->node.range_expr.start = left;
 		node->node.range_expr.end = right;
 		node->node.range_expr.inclusive = false;
+		node->pos = op->pos;
 		if (op->token_type == token_type_dot_dot_equal)
 		{
 			node->node.range_expr.inclusive = true;
@@ -1436,6 +1447,7 @@ static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 		node->node.binary_expr.op = *op;
 		node->node.binary_expr.left = left;
 		node->node.binary_expr.right = right;
+		node->pos = op->pos;
 	}
 	return node;
 }
@@ -1449,6 +1461,7 @@ static AST* make_call(AST* callee, AST** args, usize arg_count)
 	node->node.func_call.callee = callee;
 	node->node.func_call.args = args;
 	node->node.func_call.arg_count = arg_count;
+	node->pos = callee->pos;
 
 	return node;
 }
@@ -1462,6 +1475,7 @@ static AST* make_member_access(AST* left, AST* right, bool direct) // NOLINT
 	node->node.member_access.left = left;
 	node->node.member_access.right = right;
 	node->node.member_access.direct = direct;
+	node->pos = left->pos;
 
 	return node;
 }
@@ -1474,6 +1488,7 @@ static AST* make_index(AST* left, AST* index) // NOLINT
 	node->type = AST_INDEX_EXPR;
 	node->node.index_expr.left = left;
 	node->node.index_expr.index = index;
+	node->pos = left->pos;
 
 	return node;
 }

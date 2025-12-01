@@ -300,6 +300,7 @@ typedef struct AbstractSyntaxTree
 
 		Message message;
 	} node;
+	Pos pos;
 } AST;
 
 /// parses the Token array given by the lexer

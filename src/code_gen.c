@@ -12,6 +12,8 @@
 #define TMP_VAR_PREFIX "sl_tmp_"
 static constexpr i64 MAX_BUFFER_SIZE = 64;
 
+static constexpr bool GEN_LINE = true;
+
 static void gen_code(CodeGen* code_gen, AST* ast);
 
 static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* add_before_trailing_expr);
@@ -50,9 +52,11 @@ static void str_cat(CodeBlock* code_block, const char* str);
 
 static void free_code_block(CodeBlock code_block);
 
-CodeGen generate_code(AST* ast)
+static void emit_line_directive(CodeGen* code_gen, Pos pos);
+
+CodeGen generate_code(AST* ast, const char* filename)
 {
-	CodeGen code_gen = {.current_block = CODE_BLOCK_NONE};
+	CodeGen code_gen = {.current_block = CODE_BLOCK_NONE, .source_filename = filename};
 
 	str_cat(&code_gen.includes, "#include <assert.h>\n");
 	str_cat(&code_gen.includes, "#include <basic_types.h>\n");
@@ -74,26 +78,52 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 
 	switch (ast->type)
 	{
-		case AST_BLOCK:
-			gen_ast_block(code_gen, ast->node.block, nullptr);
-			return;
-		case AST_FUNC_DEF:
-			gen_ast_func_def(code_gen, ast->node.func_def);
-			return;
 		case AST_VAR_DEF:
+			emit_line_directive(code_gen, ast->pos);
 			gen_ast_var_def(code_gen, ast->node.var_def);
 			return;
-		case AST_LITERAL:
-			gen_ast_literal(code_gen, ast->node.literal);
+		case AST_FUNC_DEF:
+			emit_line_directive(code_gen, ast->pos);
+			gen_ast_func_def(code_gen, ast->node.func_def);
+			return;
+		case AST_IF_EXPR:
+			emit_line_directive(code_gen, ast->pos);
+			gen_ast_if_expr(code_gen, ast->node.if_expr, nullptr);
+			return;
+		case AST_WHILE_EXPR:
+			emit_line_directive(code_gen, ast->pos);
+			gen_ast_while_expr(code_gen, ast->node.while_expr);
+			return;
+		case AST_FOR_EXPR:
+			emit_line_directive(code_gen, ast->pos);
+			gen_ast_for_expr(code_gen, ast->node.for_expr);
+			return;
+		case AST_RETURN_STMT:
+			emit_line_directive(code_gen, ast->pos);
+			gen_ast_return_stmt(code_gen, ast->node.return_stmt);
 			return;
 		case AST_BREAK_STMT:
+			emit_line_directive(code_gen, ast->pos);
 			gen_ast_break_stmt(code_gen);
 			return;
 		case AST_CONTINUE_STMT:
+			emit_line_directive(code_gen, ast->pos);
 			gen_ast_continue_stmt(code_gen);
 			return;
-		case AST_RETURN_STMT:
-			gen_ast_return_stmt(code_gen, ast->node.return_stmt);
+
+		case AST_FUNC_CALL:
+			if (code_gen->current_block == CODE_BLOCK_CODE)
+			{
+				emit_line_directive(code_gen, ast->pos);
+			}
+			gen_ast_func_call(code_gen, ast->node.func_call);
+			return;
+
+		case AST_BLOCK:
+			gen_ast_block(code_gen, ast->node.block, nullptr);
+			return;
+		case AST_LITERAL:
+			gen_ast_literal(code_gen, ast->node.literal);
 			return;
 		case AST_STRUCT_DEF:
 			gen_ast_struct_def(code_gen, ast->node.struct_def);
@@ -106,9 +136,6 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_MEMBER_ACCESS:
 			gen_ast_member_access(code_gen, ast->node.member_access);
-			return;
-		case AST_FUNC_CALL:
-			gen_ast_func_call(code_gen, ast->node.func_call);
 			return;
 		case AST_IDENTIFIER:
 			gen_ast_identifier(code_gen, ast->node.identifier);
@@ -127,15 +154,6 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			return;
 		case AST_ARRAY_INIT:
 			gen_ast_array_init(code_gen, ast->node.array_init);
-			return;
-		case AST_IF_EXPR:
-			gen_ast_if_expr(code_gen, ast->node.if_expr, nullptr);
-			return;
-		case AST_WHILE_EXPR:
-			gen_ast_while_expr(code_gen, ast->node.while_expr);
-			return;
-		case AST_FOR_EXPR:
-			gen_ast_for_expr(code_gen, ast->node.for_expr);
 			return;
 		case AST_RANGE_EXPR:
 			assert(false && "code gen: range expression should not be used outside of for statement");
@@ -1391,5 +1409,42 @@ static void free_code_block(CodeBlock code_block)
 	if (code_block.code != nullptr)
 	{
 		free((void*)code_block.code);
+	}
+}
+
+static void emit_line_directive(CodeGen* code_gen, Pos pos)
+{
+	if (!GEN_LINE)
+	{
+		return;
+	}
+
+	CodeBlock* code_block = get_code_block(code_gen);
+	if (!code_block)
+	{
+		return;
+	}
+
+	if (code_gen->current_block != CODE_BLOCK_CODE && code_gen->current_block != CODE_BLOCK_PRIV_FUNCTIONS &&
+		code_gen->current_block != CODE_BLOCK_PUB_FUNCTIONS)
+	{
+		return;
+	}
+
+	if (code_gen->current_line != pos.line)
+	{
+
+		char line_buf[256];
+		if (code_gen->source_filename)
+		{
+			(void)snprintf(line_buf, sizeof(line_buf), "\n#line %zu \"%s\"\n", pos.line, code_gen->source_filename);
+		}
+		else
+		{
+			(void)snprintf(line_buf, sizeof(line_buf), "\n#line %zu\n", pos.line);
+		}
+		str_cat(code_block, line_buf);
+
+		code_gen->current_line = pos.line;
 	}
 }

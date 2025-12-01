@@ -39,6 +39,9 @@ typedef struct
 	bool global_block;
 	bool skip_brace;
 	bool no_semicolon;
+	const char* source_filename;
+	usize current_line;
+	bool line_directive_needed;
 } CodeGen;
 
 typedef struct
@@ -47,8 +50,8 @@ typedef struct
 	char* h_file;
 } NewFiles;
 
-extern CodeGen generate_code(AST* ast);
+extern CodeGen generate_code(AST* ast, const char* filename);
 
 extern NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name);
-void code_gen_free_code_gen(CodeGen code_gen);
-void code_gen_free_new_files(NewFiles new_files);
+extern void code_gen_free_code_gen(CodeGen code_gen);
+extern void code_gen_free_new_files(NewFiles new_files);
