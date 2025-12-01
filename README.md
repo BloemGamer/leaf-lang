@@ -37,7 +37,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 
 ## Roadmap
 ### Now busy with
-- [ ] Code generation
+- [ ] Rewriting code so it is more clean
 
 ### Short-term
 - [ ] Finish first compiler version
@@ -61,7 +61,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 - [x] Parsing -> parse
 - [ ] Semantic analyser
 - [ ] Optimisations (Low priority)
-- [ ] Code generator
+- [x] Code generator
 - [ ] Calling C compiler
 
 ## Installation
