@@ -1246,8 +1246,8 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	c_file_len += code_gen->code.len;
 
 	usize h_file_len = 0;
-	h_file_len += strlen("#pragma once\n");
-	h_file_len += strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n") + strlen("#ifdef __cplusplus\n}\n#endif\n");
+	h_file_len += strlen("\n#pragma once\n");
+	h_file_len += strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n") + strlen("\n#ifdef __cplusplus\n}\n#endif\n");
 	h_file_len += strlen(s_lang_header);
 	h_file_len += code_gen->pub_types.len;
 	h_file_len += code_gen->pub_vars.len;
@@ -1272,8 +1272,8 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	memcpy(files.c_file + c_offset, s_lang_header, strlen(s_lang_header));
 	c_offset += strlen(s_lang_header);
 
-	memcpy(files.c_file + c_offset, "#include \"", strlen("#include \""));
-	c_offset += strlen("#include \"");
+	memcpy(files.c_file + c_offset, "\n#include \"", strlen("\n#include \""));
+	c_offset += strlen("\n#include \"");
 	memcpy(files.c_file + c_offset, file_name, file_name_len);
 	c_offset += file_name_len;
 	memcpy(files.c_file + c_offset, ".h\"\n", strlen(".h\"\n"));
@@ -1316,12 +1316,12 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	memcpy(files.h_file + h_offset, s_lang_header, strlen(s_lang_header));
 	h_offset += strlen(s_lang_header);
 
-	memcpy(files.h_file + h_offset, "#pragma once\n", strlen("#pragma once\n"));
+	memcpy(files.h_file + h_offset, "\n#pragma once\n", strlen("\n#pragma once\n"));
 	h_offset += strlen("#pragma once\n");
 
-	memcpy(files.h_file + h_offset, "#ifdef __cplusplus\nextern \"C\"{\n#endif\n",
-		   strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n"));
-	h_offset += strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n");
+	memcpy(files.h_file + h_offset, "\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n",
+		   strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n"));
+	h_offset += strlen("\n#ifdef __cplusplus\nextern \"C\"{\n#endif\n");
 
 	if (code_gen->pub_types.code != nullptr)
 	{
@@ -1341,8 +1341,8 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 		h_offset += code_gen->pub_functions.len;
 	}
 
-	memcpy(files.h_file + h_offset, "#ifdef __cplusplus\n}\n#endif\n", strlen("#ifdef __cplusplus\n}\n#endif\n"));
-	h_offset += strlen("#ifdef __cplusplus\n}\n#endif\n");
+	memcpy(files.h_file + h_offset, "\n#ifdef __cplusplus\n}\n#endif\n", strlen("\n#ifdef __cplusplus\n}\n#endif\n"));
+	h_offset += strlen("\n#ifdef __cplusplus\n}\n#endif\n");
 	files.h_file[h_offset] = '\0';
 
 	return files;
