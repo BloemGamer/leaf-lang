@@ -1236,6 +1236,7 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	c_file_len += code_gen->code.len;
 
 	usize h_file_len = 0;
+	h_file_len += strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n") + strlen("#ifdef __cplusplus\n}\n#endif\n");
 	h_file_len += strlen(s_lang_header);
 	h_file_len += code_gen->pub_types.len;
 	h_file_len += code_gen->pub_vars.len;
@@ -1304,6 +1305,10 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 	memcpy(files.h_file + h_offset, s_lang_header, strlen(s_lang_header));
 	h_offset += strlen(s_lang_header);
 
+	memcpy(files.h_file + h_offset, "#ifdef __cplusplus\nextern \"C\"{\n#endif\n",
+		   strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n"));
+	h_offset += strlen("#ifdef __cplusplus\nextern \"C\"{\n#endif\n");
+
 	if (code_gen->pub_types.code != nullptr)
 	{
 		memcpy(files.h_file + h_offset, code_gen->pub_types.code, code_gen->pub_types.len);
@@ -1322,6 +1327,8 @@ NewFiles code_gen_to_files(const CodeGen* code_gen, char* file_name)
 		h_offset += code_gen->pub_functions.len;
 	}
 
+	memcpy(files.h_file + h_offset, "#ifdef __cplusplus\n}\n#endif\n", strlen("#ifdef __cplusplus\n}\n#endif\n"));
+	h_offset += strlen("#ifdef __cplusplus\n}\n#endif\n");
 	files.h_file[h_offset] = '\0';
 
 	return files;
