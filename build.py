@@ -50,6 +50,10 @@ def main(input: list[str]):
 					setup_config("clang", "Debug")
 				case "clang-release":
 					setup_config("clang", "Release")
+				case _ if "-" in cmd:
+					compiler, mode = cmd.split("-")
+					mode = mode.capitalize()
+					setup_config(compiler, mode)
 
 			# Dynamic compiler-mode parsing for compilers like MSVC or modes like RelWithDebInfo
 		case _ if "-" in cmd:
