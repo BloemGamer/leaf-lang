@@ -3,6 +3,11 @@ import os
 import sys
 import shutil
 import subprocess
+import glob
+
+exe_files = ["s-lang"]
+exe_files += glob.glob("test_*")
+
 
 compilers: list[str] = ["gcc", "clang"]
 modes: list[str] = ["Debug", "Release"]
@@ -11,7 +16,13 @@ def main(input: list[str]):
 	if len(input) == 0:
 		return;
 	cmd = input[0]
-	os.makedirs("build", exist_ok=True)
+	for file_path in exe_files:
+		try:
+			os.remove(file_path)
+		except:
+			pass
+		sys.exception
+		os.makedirs("build", exist_ok=True)
 	match cmd:
 		case "clean":
 			shutil.rmtree("build", ignore_errors=True)
@@ -88,7 +99,7 @@ def build_file(compiler: str | None, mode: str):
 		print(f"\033[1;35mBuilding {compiler} {mode}...\033[0m")
 
 	result = subprocess.run(
-			["cmake", "--build", build_path, "--parallel"],
+			["cmake", "--build", build_path],
 			capture_output=False
 			)
 	if result.returncode != 0:
