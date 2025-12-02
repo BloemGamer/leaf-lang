@@ -56,7 +56,7 @@ def test_ctest(compiler: str, mode: str):
 
 def test_valgrind_all(compiler: str, mode: str):
 	leak = False
-	modules = ["s-lang", "hash_test"]
+	modules = ["s-lang", "test_hash"]
 	leak_modules = []
 
 	for mod in modules:

@@ -1,6 +1,6 @@
 # hash
 	# Test executable
-	add_executable(test_hash hash_test.c)
+	add_executable(test_hash test_hash.c)
 
 	target_include_directories(test_hash PRIVATE
 		${CMAKE_SOURCE_DIR}/include
