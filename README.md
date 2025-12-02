@@ -80,12 +80,11 @@ The build is tested for Linux and Windows. macOS is not currently supported.
 ```sh
 git clone https://github.com/BloemGamer/S-lang.git
 cd S-lang
-cmake -S . -B cmake-build-debug -DCMAKE_BUILD_TYPE=Debug
-cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release # change the "Release" to "Debug" if you want to debug
 ```
 ```sh
-cmake --build cmake-build-debug		# Debug
-cmake --build cmake-build-release	# Release
+cmake --build build	# Build
+./s-lang <file>		# Run
 ```
 
 ## License
