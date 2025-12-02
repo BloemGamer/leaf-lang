@@ -2,16 +2,11 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "code_gen.h"
 #include "lexer.h"
-#include "log.h"
 #include "parser.h"
 #include "tokens.h"
-
-size_t amount_errors = 0;
-size_t amount_warnings = 0;
 
 char* read_file_to_str(const char* filename);
 void write_file(char* filename, char* input);

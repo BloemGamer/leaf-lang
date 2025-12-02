@@ -1,10 +1,5 @@
 #pragma once
 
-#include <stdio.h>
-
-extern size_t amount_errors;
-extern size_t amount_warnings;
-
 #define LOG_ERROR(pos, format, ...) LOG("\x1B[31m", "ERROR", pos, format __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG_WARN(pos, format, ...) LOG("\x1B[33m", "WARNING", pos, format __VA_OPT__(, ) __VA_ARGS__)
