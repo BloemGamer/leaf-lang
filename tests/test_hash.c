@@ -1,108 +1,111 @@
-#include <assert.h>
+#include "utils/hash.h"
 #include <stdio.h>
 
-#include "utils/hash.h"
+#define ASSERT(condition, message)                                                                    \
+	do                                                                                                \
+	{                                                                                                 \
+		if (!(condition))                                                                             \
+		{                                                                                             \
+			(void)fprintf(stderr, "ASSERTION FAILED: %s\n  at %s:%d\n", message, __FILE__, __LINE__); \
+			return 1;                                                                                 \
+		}                                                                                             \
+	} while (0)
 
-void test_basic_operations()
+#define ASSERT_EQ(actual, expected, message) ASSERT((actual) == (expected), message)
+
+// Test: Basic insert and contains
+int test_basic_operations(void)
 {
-	printf("Test 1: Basic insert and contains\n");
 	HashStr hash = hash_str_new(8);
 
-	assert(hash_str_push(&hash, "hello") == false); // First insert
-	assert(hash_str_contains(&hash, "hello") == true);
-	assert(hash.size == 1);
+	ASSERT_EQ(hash_str_push(&hash, "hello"), false, "First insert should return false");
+	ASSERT_EQ(hash_str_contains(&hash, "hello"), true, "Should contain inserted element");
+	ASSERT_EQ(hash.size, 1, "Size should be 1");
 
-	assert(hash_str_push(&hash, "hello") == true); // Duplicate
-	assert(hash.size == 1);						   // Size shouldn't change
+	ASSERT_EQ(hash_str_push(&hash, "hello"), true, "Duplicate insert should return true");
+	ASSERT_EQ(hash.size, 1, "Size shouldn't change on duplicate");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_collision_handling()
+// Test: Collision handling
+int test_collision_handling(void)
 {
-	printf("Test 2: Collision handling\n");
-	HashStr hash = hash_str_new(4); // Small capacity forces collisions
+	HashStr hash = hash_str_new(4);
 
 	hash_str_push(&hash, "test1");
 	hash_str_push(&hash, "test2");
 	hash_str_push(&hash, "test3");
 
-	assert(hash_str_contains(&hash, "test1"));
-	assert(hash_str_contains(&hash, "test2"));
-	assert(hash_str_contains(&hash, "test3"));
-	assert(hash.size == 3);
+	ASSERT(hash_str_contains(&hash, "test1"), "Should contain test1");
+	ASSERT(hash_str_contains(&hash, "test2"), "Should contain test2");
+	ASSERT(hash_str_contains(&hash, "test3"), "Should contain test3");
+	ASSERT_EQ(hash.size, 3, "Size should be 3");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_resize_trigger()
+// Test: Resize trigger (CRITICAL BUG TEST)
+int test_resize_trigger(void)
 {
-	printf("Test 3: Resize trigger (CRITICAL BUG TEST)\n");
 	HashStr hash = hash_str_new(4);
 
-	// Insert until resize is triggered (size * 2 >= cap)
-	// With cap=4, resize triggers when size >= 2
-	hash_str_push(&hash, "item1"); // size=1
-	hash_str_push(&hash, "item2"); // size=2, should trigger resize
-	hash_str_push(&hash, "item3"); // size=3
+	hash_str_push(&hash, "item1");
+	hash_str_push(&hash, "item2");
+	hash_str_push(&hash, "item3");
 
-	printf("After resize - cap: %lu, size: %lu\n", hash.cap, hash.size);
-
-	// Verify all items are still accessible
-	assert(hash_str_contains(&hash, "item1"));
-	assert(hash_str_contains(&hash, "item2"));
-	assert(hash_str_contains(&hash, "item3"));
+	ASSERT(hash_str_contains(&hash, "item1"), "Should contain item1 after resize");
+	ASSERT(hash_str_contains(&hash, "item2"), "Should contain item2 after resize");
+	ASSERT(hash_str_contains(&hash, "item3"), "Should contain item3 after resize");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_remove_operations()
+// Test: Remove operations
+int test_remove_operations(void)
 {
-	printf("Test 4: Remove operations\n");
 	HashStr hash = hash_str_new(8);
 
 	hash_str_push(&hash, "remove_me");
 	hash_str_push(&hash, "keep_me");
 
-	assert(hash_str_remove(&hash, "remove_me") == true);
-	assert(hash_str_contains(&hash, "remove_me") == false);
-	assert(hash_str_contains(&hash, "keep_me") == true);
-	assert(hash.size == 1);
+	ASSERT_EQ(hash_str_remove(&hash, "remove_me"), true, "Remove should return true");
+	ASSERT_EQ(hash_str_contains(&hash, "remove_me"), false, "Should not contain removed element");
+	ASSERT(hash_str_contains(&hash, "keep_me"), "Should still contain other elements");
+	ASSERT_EQ(hash.size, 1, "Size should be 1 after removal");
 
-	// Remove non-existent
-	assert(hash_str_remove(&hash, "never_existed") == false);
-	assert(hash.size == 1);
+	ASSERT_EQ(hash_str_remove(&hash, "never_existed"), false, "Remove non-existent should return false");
+	ASSERT_EQ(hash.size, 1, "Size shouldn't change on failed removal");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_remove_from_chain()
+// Test: Remove from collision chain
+int test_remove_from_chain(void)
 {
-	printf("Test 5: Remove from collision chain\n");
-	HashStr hash = hash_str_new(2); // Force collisions
+	HashStr hash = hash_str_new(2);
 
 	hash_str_push(&hash, "a");
 	hash_str_push(&hash, "b");
 	hash_str_push(&hash, "c");
 
-	// Remove middle of chain
 	hash_str_remove(&hash, "b");
 
-	assert(hash_str_contains(&hash, "a"));
-	assert(hash_str_contains(&hash, "b") == false);
-	assert(hash_str_contains(&hash, "c"));
+	ASSERT(hash_str_contains(&hash, "a"), "Should still contain a");
+	ASSERT_EQ(hash_str_contains(&hash, "b"), false, "Should not contain removed b");
+	ASSERT(hash_str_contains(&hash, "c"), "Should still contain c");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_clone()
+// Test: Clone operation
+int test_clone(void)
 {
-	printf("Test 6: Clone operation\n");
 	HashStr hash = hash_str_new(8);
 
 	hash_str_push(&hash, "one");
@@ -111,77 +114,72 @@ void test_clone()
 
 	HashStr cloned = hash_str_clone(&hash);
 
-	assert(cloned.size == hash.size);
-	assert(cloned.cap == hash.cap);
-	assert(hash_str_contains(&cloned, "one"));
-	assert(hash_str_contains(&cloned, "two"));
-	assert(hash_str_contains(&cloned, "three"));
+	ASSERT_EQ(cloned.size, hash.size, "Clone should have same size");
+	ASSERT_EQ(cloned.cap, hash.cap, "Clone should have same capacity");
+	ASSERT(hash_str_contains(&cloned, "one"), "Clone should contain one");
+	ASSERT(hash_str_contains(&cloned, "two"), "Clone should contain two");
+	ASSERT(hash_str_contains(&cloned, "three"), "Clone should contain three");
 
-	// Modify original, clone should be unaffected
 	hash_str_push(&hash, "four");
-	assert(hash_str_contains(&hash, "four"));
-	assert(hash_str_contains(&cloned, "four") == false);
+	ASSERT(hash_str_contains(&hash, "four"), "Original should contain four");
+	ASSERT_EQ(hash_str_contains(&cloned, "four"), false, "Clone should not contain four");
 
 	hash_str_free(&hash);
 	hash_str_free(&cloned);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_empty_string()
+// Test: Empty string handling
+int test_empty_string(void)
 {
-	printf("Test 7: Empty string handling\n");
 	HashStr hash = hash_str_new(8);
 
 	hash_str_push(&hash, "");
-	assert(hash_str_contains(&hash, "") == true);
-	assert(hash.size == 1);
+	ASSERT(hash_str_contains(&hash, ""), "Should contain empty string");
+	ASSERT_EQ(hash.size, 1, "Size should be 1");
 
 	hash_str_remove(&hash, "");
-	assert(hash_str_contains(&hash, "") == false);
+	ASSERT_EQ(hash_str_contains(&hash, ""), false, "Should not contain empty string after removal");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_large_scale()
+// Test: Large scale operations (stress test)
+int test_large_scale(void)
 {
-	printf("Test 8: Large scale operations (stress test)\n");
 	HashStr hash = hash_str_new(8);
 	char buffer[100];
 
-	// Insert 1000 items
 	for (int i = 0; i < 1000; i++)
 	{
-		sprintf(buffer, "item_%d", i);
+		(void)sprintf(buffer, "item_%d", i);
 		hash_str_push(&hash, buffer);
 	}
 
-	assert(hash.size == 1000);
-	printf("Inserted 1000 items, final capacity: %lu\n", hash.cap);
+	ASSERT_EQ(hash.size, 1000, "Should contain 1000 items");
 
-	// Verify all items exist
 	for (int i = 0; i < 1000; i++)
 	{
-		sprintf(buffer, "item_%d", i);
-		assert(hash_str_contains(&hash, buffer));
+		(void)sprintf(buffer, "item_%d", i);
+		ASSERT(hash_str_contains(&hash, buffer), "Should contain all inserted items");
 	}
 
-	// Remove half
 	for (int i = 0; i < 500; i++)
 	{
-		sprintf(buffer, "item_%d", i);
+		(void)sprintf(buffer, "item_%d", i);
 		hash_str_remove(&hash, buffer);
 	}
 
-	assert(hash.size == 500);
+	ASSERT_EQ(hash.size, 500, "Should contain 500 items after removal");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_special_characters()
+// Test: Special characters
+int test_special_characters(void)
 {
-	printf("Test 9: Special characters\n");
 	HashStr hash = hash_str_new(8);
 
 	hash_str_push(&hash, "hello world");
@@ -189,44 +187,67 @@ void test_special_characters()
 	hash_str_push(&hash, "newline\n");
 	hash_str_push(&hash, "quote\"test");
 
-	assert(hash_str_contains(&hash, "hello world"));
-	assert(hash_str_contains(&hash, "tab\there"));
-	assert(hash_str_contains(&hash, "newline\n"));
+	ASSERT(hash_str_contains(&hash, "hello world"), "Should contain string with space");
+	ASSERT(hash_str_contains(&hash, "tab\there"), "Should contain string with tab");
+	ASSERT(hash_str_contains(&hash, "newline\n"), "Should contain string with newline");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-void test_capacity_edge_cases()
+// Test: Capacity 1 edge case
+int test_capacity_edge_cases(void)
 {
-	printf("Test 10: Capacity 1 edge case\n");
 	HashStr hash = hash_str_new(1);
 
 	hash_str_push(&hash, "a");
-	hash_str_push(&hash, "b"); // Should trigger resize immediately
+	hash_str_push(&hash, "b");
 
-	assert(hash_str_contains(&hash, "a"));
-	assert(hash_str_contains(&hash, "b"));
+	ASSERT(hash_str_contains(&hash, "a"), "Should contain a");
+	ASSERT(hash_str_contains(&hash, "b"), "Should contain b");
 
 	hash_str_free(&hash);
-	printf("✓ Passed\n\n");
+	return 0;
 }
 
-int main()
+// Main test runner
+int main(void)
 {
-	printf("=== Hash String Table Tests ===\n\n");
+	int failed = 0;
+	int total = 0;
 
-	test_basic_operations();
-	test_collision_handling();
-	test_resize_trigger();
-	test_remove_operations();
-	test_remove_from_chain();
-	test_clone();
-	test_empty_string();
-	test_large_scale();
-	test_special_characters();
-	test_capacity_edge_cases();
+#define RUN_TEST(test)                   \
+	do                                   \
+	{                                    \
+		total++;                         \
+		printf("Running %s... ", #test); \
+		if (test() == 0)                 \
+		{                                \
+			printf("PASSED\n");          \
+		}                                \
+		else                             \
+		{                                \
+			printf("FAILED\n");          \
+			failed++;                    \
+		}                                \
+	} while (0)
 
-	printf("=== All Tests Passed ===\n");
-	return 0;
+	RUN_TEST(test_basic_operations);
+	RUN_TEST(test_collision_handling);
+	RUN_TEST(test_resize_trigger);
+	RUN_TEST(test_remove_operations);
+	RUN_TEST(test_remove_from_chain);
+	RUN_TEST(test_clone);
+	RUN_TEST(test_empty_string);
+	RUN_TEST(test_large_scale);
+	RUN_TEST(test_special_characters);
+	RUN_TEST(test_capacity_edge_cases);
+
+	printf("\n========================================\n");
+	printf("Tests run: %d\n", total);
+	printf("Tests passed: %d\n", total - failed);
+	printf("Tests failed: %d\n", failed);
+	printf("========================================\n");
+
+	return failed > 0 ? 1 : 0;
 }
