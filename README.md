@@ -66,25 +66,44 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 - [x] Code generator
 - [ ] Calling C compiler
 
+
+
 ## Installation
 
 ### Prerequisites
-- CMake >= 3.10
-- Any C compiler that has C23 fully implemented (Fully tested with GCC 14.2.0)
+- **CMake** >= 3.10
+- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
+- **Python** >= 3.10 (for building and testing, setting up CMake by yourself is also an option)
 
-Currently, S-lang is under development, but you can build it from source.
-The build is tested for Linux and Windows. macOS is not currently supported.
+S-lang is currently under development, but you can build it from source.
+The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
 
-![Linux][Linux-shield] ![Linux_mint][Linux-Mint-shield] ![Windows][Windows-shield]
+![Linux][Linux-shield] ![Linux Mint][Linux-Mint-shield] ![Windows][Windows-shield]
 
+### Cloning the Repository
 ```sh
 git clone https://github.com/BloemGamer/S-lang.git
 cd S-lang
-./build.py # Or how you would run a python file
-```
+````
+
+### Building the Project
+
+Run the build script using Python:
+
 ```sh
-./s-lang <file>		# Run
+# Linux
+python3 build.py
+
+# Windows
+python build.py
 ```
+
+### Running the Compiler
+
+```sh
+./s-lang <file>   # Compile and run a source file
+```
+
 
 ## License
 S-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
