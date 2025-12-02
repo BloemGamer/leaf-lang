@@ -1,13 +1,13 @@
 # hash
 	# Test executable
-	add_executable(hash_test hash_test.c)
+	add_executable(test_hash hash_test.c)
 
-	target_include_directories(hash_test PRIVATE
+	target_include_directories(test_hash PRIVATE
 		${CMAKE_SOURCE_DIR}/include
 	)
 
-	target_link_libraries(hash_test PRIVATE hash)
+	target_link_libraries(test_hash PRIVATE hash)
 
 	# Register with CTest
-	add_test(NAME HashTableTests COMMAND hash_test)
+	add_test(NAME HashTableTests COMMAND test_hash)
 
