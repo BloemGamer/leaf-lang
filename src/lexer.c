@@ -58,6 +58,7 @@ Token* lex(const char* input)
 	while (lexer_state.pos < lexer_state.count)
 	{
 		const usize start_pos = lexer_state.pos;
+		Pos token_start_pos = pos; // Save the position BEFORE consuming
 
 		Token next = {0};
 		bool matched = string_to_ignored_token(&lexer_state, &next) || string_to_simple_token(&lexer_state, &next) ||
@@ -73,9 +74,9 @@ Token* lex(const char* input)
 		else
 		{
 			const char* bad_ptr = consume(&lexer_state);
-			const char bad = bad_ptr ? *bad_ptr : '\0'; // NOLINT
+			const char bad = bad_ptr ? *bad_ptr : '\0';
+			LOG_ERROR(pos, "Invalid token: '%c'\n", bad); // Use current pos for error
 			pos = amount_enters(&lexer_state, 1, pos);
-			LOG_ERROR(pos, "Invalid token: '%c'\n", bad);
 			lexer_state.amount_errors++;
 			continue;
 		}
@@ -91,24 +92,24 @@ Token* lex(const char* input)
 		}
 		if (next.token_type == token_type_invalid)
 		{
-			LOG_ERROR(pos, "Invalid token sequence\n");
+			LOG_ERROR(token_start_pos, "Invalid token sequence\n"); // Use start position
 			lexer_state.amount_errors++;
 			continue;
 		}
 		if (next.token_type == token_type_invalid_comment)
 		{
-			LOG_ERROR(pos, "Invalid unclosed /*\n");
+			LOG_ERROR(token_start_pos, "Invalid unclosed /*\n");
 			lexer_state.amount_errors++;
 			break;
 		}
 		if (next.token_type == token_type_invalid_string)
 		{
-			LOG_ERROR(pos, "Invalid unclosed string\n");
+			LOG_ERROR(token_start_pos, "Invalid unclosed string\n");
 			lexer_state.amount_errors++;
 			break;
 		}
 
-		next.pos = pos;
+		next.pos = token_start_pos; // Assign the STARTING position
 		add_token(&next, &tokens, &token_size, &token_max_size);
 	}
 
