@@ -426,9 +426,12 @@ static AST* parse_enum(ParserState* parser_state)
 			{
 				{
 					const Token token = *consume(parser_state);
-					assert(token.token_type == token_type_identifier);
+					assert(token.token_type == token_type_number, "expected token = number, but token = %s",
+						   token_to_string(token.token_type));
+
 					tmp.value = make_number(
 						&(const Token){.str_val = token.str_val, .token_type = token_type_number, .pos = token.pos});
+					tmp.has_value = true;
 				}
 			}
 			varray_push(members, tmp); // NOLINT
