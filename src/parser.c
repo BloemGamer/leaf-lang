@@ -804,7 +804,7 @@ static AST* parse_continue_expr(ParserState* parser_state)
 static AST* parse_array_init(ParserState* parser_state)
 {
 	Token token = *consume(parser_state); // '['
-	assert(token.token_type == token_type_rsqbracket);
+	assert(token.token_type == token_type_lsqbracket);
 
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
