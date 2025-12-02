@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
+# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 
 # add_compile_options(-std=gnu2y)
@@ -16,18 +16,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 enable_testing()
 
-# -------------------------------------------------------
-# Create hash library
-# -------------------------------------------------------
-add_library(hash STATIC
-	src/utils/hash.c
-)
-
-
-
-target_include_directories(hash PUBLIC
-	${CMAKE_SOURCE_DIR}/include
-)
 
 # -------------------------------------------------------
 # Main executable
@@ -38,10 +26,9 @@ add_executable(s-lang
 	src/lexer.c
 	src/parser.c
 	src/code_gen.c
-)
 
-# Link to the hash library target
-target_link_libraries(s-lang PRIVATE hash)
+	src/utils/hash.c
+)
 
 target_include_directories(s-lang PRIVATE include)
 
@@ -56,8 +43,9 @@ target_include_directories(s-lang PRIVATE include)
 # -------------------------------------------------------
 add_subdirectory(tests)
 
-
-target_compile_options(s-lang PRIVATE
-	-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
-	-Wshadow -Wdouble-promotion -Wformat=2
-)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+	target_compile_options(s-lang PRIVATE
+		-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion
+		-Wshadow -Wdouble-promotion -Wformat=2
+	)
+endif()
