@@ -28,7 +28,6 @@ def test(compiler: str, mode: str) -> dict:
 		result["ctest"] = True
 	except subprocess.CalledProcessError:
 		result["ctest"] = False
-		return result
 
 	try:
 		test_valgrind_all(compiler, mode)
