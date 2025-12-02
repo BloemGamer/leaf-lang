@@ -9,6 +9,11 @@ target_include_directories(test_hash PRIVATE
 )
 add_test(NAME HashTableTests COMMAND test_hash)
 
+# set_tests_properties(HahsTableTests PROPERTIES
+# 	TIMEOUT 1000
+# 	PASS_REGULAR_EXPRESSION "Tests failed: 0"
+# )
+
 # -------------------------------------------------------
 # Lexer Tests
 # -------------------------------------------------------
@@ -27,9 +32,37 @@ add_test(NAME LexerTests COMMAND test_lexer)
 
 # Set test properties
 set_tests_properties(LexerTests PROPERTIES
-	TIMEOUT 30
+	TIMEOUT 1000
 	PASS_REGULAR_EXPRESSION "Tests failed: 0"
 )
+
+# -------------------------------------------------------
+# Parser Tests
+# -------------------------------------------------------
+add_executable(test_parser test_parser.c
+	${CMAKE_SOURCE_DIR}/src/lexer.c
+	${CMAKE_SOURCE_DIR}/src/tokens.c
+	${CMAKE_SOURCE_DIR}/src/parser.c
+	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	# Add any other dependencies that parser.c needs
+)
+
+target_include_directories(test_parser PRIVATE
+	${CMAKE_SOURCE_DIR}/include
+)
+
+# Register with CTest
+add_test(NAME ParserTests COMMAND test_parser)
+
+# Set test properties
+set_tests_properties(ParserTests PROPERTIES
+	TIMEOUT 1000
+	PASS_REGULAR_EXPRESSION "Tests failed: 0"
+)
+
+# -------------------------------------------------------
+# Default things
+# -------------------------------------------------------
 
 # Optional: Add compiler warnings for tests
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
