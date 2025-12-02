@@ -135,10 +135,10 @@ AST* parse(const Token* tokens)
 	}
 	ParserState parser_state = {.tokens = tokens, .count = count, .pos = 0, .known_types = hash_str_new(10)};
 	add_basic_types(&parser_state);
-	while (peek(&parser_state)->token_type == token_type_sof) // NOLINT
-	{
-		consume(&parser_state);
-	}
+	// while (peek(&parser_state)->token_type == token_type_sof) // NOLINT
+	// {
+	// 	consume(&parser_state);
+	// }
 	AST* ret = parse_block(&parser_state);
 	hash_str_free(&parser_state.known_types);
 	return ret;
@@ -468,6 +468,10 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 	{
 		global_block = false;
 		end_token = token_type_rbrace;
+	}
+	else
+	{
+		assert(consume(parser_state)->token_type == token_type_sof);
 	}
 
 	AST* node = calloc(1, sizeof(AST));
