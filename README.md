@@ -73,7 +73,7 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 ### Prerequisites
 - **CMake** >= 3.10
 - **C compiler** with full C23 support (fully tested with GCC 14.2.0)
-- **Python** >= 3.10 (for building and testing, setting up CMake by yourself is also an option)
+- **Python** >= 3.10 (required for building and testing; you can also set up CMake manually)
 
 S-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
