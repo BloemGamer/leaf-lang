@@ -279,8 +279,8 @@ static usize hash_str_hash(const char* str)
 	unsigned long hash = 5381;
 	usize c; // NOLINT
 
-	while (c = (usize)(unsigned char)*str++) // NOLINT
-		hash = ((hash << 5U) + hash) + c;	 /* hash * 33 + c */
+	while ((c = (usize)(unsigned char)*str++)) // NOLINT
+		hash = ((hash << 5U) + hash) + c;	   /* hash * 33 + c */
 
 	return hash;
 }
