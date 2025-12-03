@@ -14,14 +14,13 @@ modes: list[str] = ["Debug", "Release"]
 
 def main(input: list[str]):
 	if len(input) == 0:
-		return;
+		return
 	cmd = input[0]
 	for file_path in exe_files:
 		try:
 			os.remove(file_path)
 		except:
 			pass
-		sys.exception
 		os.makedirs("build", exist_ok=True)
 	match cmd:
 		case "clean":
