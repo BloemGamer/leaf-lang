@@ -376,6 +376,8 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 	char tmp_var[MAX_BUFFER_SIZE] = {};
 	if (var_def.equals != nullptr && (var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR))
 	{
+		assert(code_gen->current_block == CODE_BLOCK_CODE,
+			   "(for now) you can't have a global variable with a block or if initialiser");
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
@@ -394,13 +396,17 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 		}
 		tmp_var[tmp_var_len] = '\0';
 	}
-	if (code_gen->current_block == CODE_BLOCK_PRIV_VARS)
-	{
-		str_cat(code_block, "static ");
-	}
-	else if (code_gen->current_block == CODE_BLOCK_PUB_VARS)
+	if (code_gen->current_block == CODE_BLOCK_PUB_VARS)
 	{
 		str_cat(code_block, "extern ");
+		gen_var_def(code_gen, var_def);
+		str_cat(code_block, ";");
+		code_gen->current_block = CODE_BLOCK_PRIV_VARS;
+		code_block = get_code_block(code_gen);
+	}
+	else if (code_gen->current_block == CODE_BLOCK_PRIV_VARS)
+	{
+		str_cat(code_block, "static ");
 	}
 	gen_var_def(code_gen, var_def);
 
@@ -1166,6 +1172,8 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 				case token_type_mut:
 					const_var = false;
 					break;
+				case token_type_pub:
+					break;
 				case token_type_static:
 					if (code_gen->global_block)
 					{
@@ -1181,7 +1189,7 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 					str_cat(code_block, "constexpr ");
 					break;
 				default:
-					assert(false, "not a supported token%s", token_to_string(var_def.modifiers[i].token_type))
+					assert(false, "not a supported token: %s", token_to_string(var_def.modifiers[i].token_type))
 			}
 		}
 
