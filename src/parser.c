@@ -1980,6 +1980,7 @@ void free_token_tree(AST* ast)
 				for (usize i = 0; i < ast->node.struct_init.field_count; i++) // NOLINT
 				{
 					free_token_tree(ast->node.struct_init.fields[i].value);
+					free((void*)ast->node.struct_init.fields[i].field_name);
 				}
 				free((void*)ast->node.struct_init.fields);
 			}
