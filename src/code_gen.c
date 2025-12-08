@@ -375,7 +375,9 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 		}
 	}
 	char tmp_var[MAX_BUFFER_SIZE] = {};
-	if (var_def.equals != nullptr && (var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR))
+	if (var_def.equals != nullptr &&
+		(var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR ||
+		 (var_def.equals->type == AST_CAST_EXPR && casted_block(var_def.equals->node.cast_expr))))
 	{
 		assert(code_gen->current_block == CODE_BLOCK_CODE,
 			   "(for now) you can't have a global variable with a block or if initialiser");
@@ -394,6 +396,10 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 		else if (var_def.equals->type == AST_IF_EXPR)
 		{
 			gen_ast_if_expr(code_gen, var_def.equals->node.if_expr, tmp_var);
+		}
+		else if (var_def.equals->type == AST_CAST_EXPR)
+		{
+			gen_ast_cast_block(code_gen, var_def.equals->node.cast_expr, tmp_var);
 		}
 		tmp_var[tmp_var_len] = '\0';
 	}
@@ -419,7 +425,9 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 	}
 	str_cat(code_block, "=");
 
-	if (var_def.equals != nullptr && (var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR))
+	if (var_def.equals != nullptr &&
+		(var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR ||
+		 (var_def.equals->type == AST_CAST_EXPR && casted_block(var_def.equals->node.cast_expr))))
 	{
 		str_cat(code_block, tmp_var);
 	}
