@@ -61,6 +61,31 @@ set_tests_properties(ParserTests PROPERTIES
 )
 
 # -------------------------------------------------------
+# Code Gen Tests
+# -------------------------------------------------------
+add_executable(test_code_gen test_code_gen.c
+	${CMAKE_SOURCE_DIR}/src/lexer.c
+	${CMAKE_SOURCE_DIR}/src/tokens.c
+	${CMAKE_SOURCE_DIR}/src/parser.c
+	${CMAKE_SOURCE_DIR}/src/code_gen.c
+	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	# Add any other dependencies that code_gen.c needs
+)
+
+target_include_directories(test_code_gen PRIVATE
+	${CMAKE_SOURCE_DIR}/include
+)
+
+# Register with CTest
+add_test(NAME CodeGenTests COMMAND test_code_gen)
+
+# Set test properties
+set_tests_properties(CodeGenTests PROPERTIES
+	TIMEOUT 1000
+	PASS_REGULAR_EXPRESSION "Tests failed: 0"
+)
+
+# -------------------------------------------------------
 # Default things
 # -------------------------------------------------------
 
