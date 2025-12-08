@@ -37,8 +37,8 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 
 ## Roadmap
 ### Now busy with
-- [ ] Rewriting code so it is more clean
-- [ ] Adding tests
+- [x] Adding tests
+- [ ] Making error messages instead of just assertion
 
 ### Short-term
 - [ ] Finish first compiler version
