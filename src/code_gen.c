@@ -217,7 +217,6 @@ static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* a
 				break;
 		}
 	}
-	code_gen->global_block = prev_global_block;
 
 	if (add_before_trailing_expr != nullptr)
 	{
@@ -296,6 +295,8 @@ static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* a
 				break;
 		}
 	}
+
+	code_gen->global_block = prev_global_block;
 
 	if (!block.global && !prev_skip_brace)
 	{
