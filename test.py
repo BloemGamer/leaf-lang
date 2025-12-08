@@ -55,7 +55,7 @@ def test_ctest(compiler: str, mode: str):
 
 def test_valgrind_all(compiler: str, mode: str):
 	leak = False
-	modules = ["s-lang", "test_hash"]
+	modules = ["s-lang", "test_hash", "test_parser", "test_code_gen"]
 	leak_modules = []
 
 	for mod in modules:
@@ -83,6 +83,7 @@ def test_valgrind(compiler: str, mode: str, module: str) -> subprocess.Completed
 				"--leak-check=full",
 				"--show-leak-kinds=all",
 				"--track-origins=yes",
+				"--error-exitcode=1",
 				f"--log-file=test_output/{compiler}/{mode}/valgrind/{module}.log",
 				f"./{module}"
 				],
