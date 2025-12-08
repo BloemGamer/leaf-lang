@@ -379,7 +379,7 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 		(var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR ||
 		 (var_def.equals->type == AST_CAST_EXPR && casted_block(var_def.equals->node.cast_expr))))
 	{
-		assert(code_gen->current_block == CODE_BLOCK_CODE,
+		assert(code_gen->current_block == CODE_BLOCK_CODE || code_gen->current_block == CODE_BLOCK_NONE,
 			   "(for now) you can't have a global variable with a block or if initialiser");
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
