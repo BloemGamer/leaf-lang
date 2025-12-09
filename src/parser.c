@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +35,8 @@ typedef struct // NOLINT
 	usize count;
 	usize pos;
 	HashStr known_types;
+	usize warnings;
+	usize errors;
 } ParserState;
 
 typedef struct // NOLINT
@@ -127,6 +130,11 @@ static void print_array_init(const ArrayInit* array_init, usize depth);
 static void print_struct_init(const StructInit* struct_init, usize depth);
 static void print_cast_expr(const CastExpr* cast_expr, usize depth);
 
+static void parser_error(ParserState* parser_state, Pos pos, const char* fmt, ...);
+static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...);
+static bool expect_token(ParserState* parser_state, TokenType expected, const char* context);
+static void synchronize(ParserState* parser_state);
+
 AST* parse(const Token* tokens)
 {
 	usize count = 0;
@@ -162,10 +170,14 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 		case token_type_message:
 			return parse_message(parser_state);
 		case token_type_eof:
-			assert(false && "found eof");
+			parser_error(parser_state, peek(parser_state)->pos, "Unexpected end of file in declaration");
+			return nullptr;
 
 		default:
-			assert(false && "not implemented (yet)");
+			parser_error(parser_state, peek(parser_state)->pos, "Unexpected token in declaration: '%s'",
+						 token_to_string(peek(parser_state)->token_type));
+			synchronize(parser_state);
+			return nullptr;
 	}
 }
 
@@ -179,7 +191,11 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	node->node.func_def.modifiers = mod_arr.tokens;
 	node->node.func_def.modifier_count = mod_arr.count;
 
-	assert(consume(parser_state)->token_type == token_type_fn);
+	if (!expect_token(parser_state, token_type_fn, "function definition"))
+	{
+		free(node);
+		return nullptr;
+	}
 
 	{
 		const Token token = *consume(parser_state);
@@ -190,7 +206,13 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 
 	// parse templates, //will do this later
 
-	assert(consume(parser_state)->token_type == token_type_lparen);
+	if (!expect_token(parser_state, token_type_lparen, "function parameters"))
+	{
+		free((void*)node->node.func_def.name);
+		free((void*)node->node.func_def.modifiers);
+		free((void*)node);
+		return nullptr;
+	}
 
 	{
 		Token token;
@@ -215,22 +237,51 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 				}
 				else
 				{
-					assert(false && "not an token that should happen");
+					parser_error(parser_state, peek(parser_state)->pos,
+								 "Expected ',' or ')' in function parameters, got '%s'",
+								 token_to_string(peek(parser_state)->token_type));
+					for (usize i = 0; i < params_len; i++)
+					{
+						free_token_tree(params[i]);
+					}
+					free((void*)params);
+					free((void*)node->node.func_def.name);
+					free((void*)node->node.func_def.modifiers);
+					free((void*)node);
+					return nullptr;
 				}
 			}
 		}
 	}
 
-	assert(consume(parser_state)->token_type == token_type_rparen);
-
+	if (!expect_token(parser_state, token_type_rparen, "function parameters"))
+	{
+		// Cleanup params if allocated
+		if (node->node.func_def.params)
+		{
+			for (usize i = 0; i < node->node.func_def.param_count; i++)
+			{
+				free_token_tree(node->node.func_def.params[i]);
+			}
+			free((void*)node->node.func_def.params);
+		}
+		free((void*)node->node.func_def.name);
+		free((void*)node->node.func_def.modifiers);
+		free((void*)node);
+		return nullptr;
+	}
 	if (peek(parser_state)->token_type == token_type_lbrace)
 	{
 		node->node.func_def.body = parse_block(parser_state);
 		return node;
 	}
 
-	assert(consume(parser_state)->token_type == token_type_arrow);
-
+	if (!expect_token(parser_state, token_type_arrow, "function return type"))
+	{
+		free_func_def(&node->node.func_def);
+		free((void*)node);
+		return nullptr;
+	}
 	Token token;
 	if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 		is_modifier(token.token_type))										 // NOLINT
@@ -256,10 +307,25 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	node->node.var_def = parse_var_def(parser_state);
 
 	{
-		const Token token = *consume(parser_state);
-		assert(token.token_type == token_type_identifier);
-		node->node.var_def.name = strdup(token.str_val);
-		assert(node->node.var_def.name != nullptr);
+		{
+			const Token token = *consume(parser_state);
+			if (token.token_type != token_type_identifier)
+			{
+				parser_error(parser_state, token.pos, "Expected identifier in variable definition, got '%s'",
+							 token_to_string(token.token_type));
+				free_var_def(&node->node.var_def);
+				free(node);
+				return nullptr;
+			}
+			node->node.var_def.name = strdup(token.str_val);
+			if (node->node.var_def.name == nullptr)
+			{
+				parser_error(parser_state, token.pos, "Memory allocation failed");
+				free_var_def(&node->node.var_def);
+				free(node);
+				return nullptr;
+			}
+		}
 	}
 
 	{
@@ -275,7 +341,13 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 			{
 				varray_push(array_sizes, parse_expr(parser_state)); // NOLINT
 			}
-			assert(consume(parser_state)->token_type == token_type_rsqbracket);
+			if (!expect_token(parser_state, token_type_rsqbracket, "array size"))
+			{
+				free(node->node.var_def.name);
+				free_var_def(&node->node.var_def);
+				free(node);
+				return nullptr;
+			}
 		}
 		node->node.var_def.type.array_sizes = array_sizes;
 		node->node.var_def.type.array_count = array_sizes_len;
@@ -286,12 +358,23 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 		return node;
 	}
 
-	assert(consume(parser_state)->token_type == token_type_equal);
-
+	if (!expect_token(parser_state, token_type_equal, "variable initialization"))
+	{
+		free(node->node.var_def.name);
+		free_var_def(&node->node.var_def);
+		free(node);
+		return nullptr;
+	}
 	node->node.var_def.equals = parse_expr(parser_state);
 
-	assert(consume(parser_state)->token_type == token_type_semicolon);
-
+	if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
+	{
+		free_token_tree(node->node.var_def.equals);
+		free(node->node.var_def.name);
+		free_var_def(&node->node.var_def);
+		free(node);
+		return nullptr;
+	}
 	return node;
 }
 
@@ -309,52 +392,69 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			node->type = AST_UNION_DEF;
 			break;
 		default:
-			assert(false);
+			parser_error(parser_state, peek(parser_state)->pos, "Expected 'struct' or 'union'");
+			free(mod_arr.tokens);
+			free(node);
+			return nullptr;
 	}
-#define PARSE(_type)                                                                  \
-	do                                                                                \
-	{                                                                                 \
-		node->node._type##_def.modifiers = mod_arr.tokens;                            \
-		node->node._type##_def.modifier_count = mod_arr.count;                        \
-		{                                                                             \
-			Token token = *consume(parser_state);                                     \
-			assert(token.token_type == token_type_identifier);                        \
-			node->node._type##_def.name = strdup(token.str_val);                      \
-			assert(node->node._type##_def.name != nullptr);                           \
-			hash_str_push(&parser_state->known_types, token.str_val);                 \
-			node->pos = token.pos;                                                    \
-		}                                                                             \
-		assert(consume(parser_state)->token_type == token_type_lbrace);               \
-		varray_make(AST**, members);                                                  \
-		while (true) /* NOLINT */                                                     \
-		{                                                                             \
-			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/      \
-			{                                                                         \
-				(void)consume(parser_state);                                          \
-				node->node._type##_def.members = members;                             \
-				node->node._type##_def.member_count = members_len;                    \
-				break;                                                                \
-			}                                                                         \
-			assert(peek(parser_state)->token_type == token_type_identifier);          \
-			AST* tmp = parse_var(parser_state);                                       \
-			varray_push(members, tmp); /* NOLINT */                                   \
-			if (peek(parser_state)->token_type == token_type_comma)                   \
-			{                                                                         \
-				(void)consume(parser_state);                                          \
-				continue;                                                             \
-			}                                                                         \
-			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/ \
-			{                                                                         \
-				(void)consume(parser_state);                                          \
-				node->node._type##_def.members = members;                             \
-				node->node._type##_def.member_count = members_len;                    \
-				break;                                                                \
-			}                                                                         \
-			else                                                                      \
-			{                                                                         \
-				assert(false && "not an token that should happen"); /*NOLINT*/        \
-			}                                                                         \
-		}                                                                             \
+#define PARSE(_type)                                                                                                \
+	do                                                                                                              \
+	{                                                                                                               \
+		node->node._type##_def.modifiers = mod_arr.tokens;                                                          \
+		node->node._type##_def.modifier_count = mod_arr.count;                                                      \
+		{                                                                                                           \
+			Token token = *consume(parser_state);                                                                   \
+			if (token.token_type != token_type_identifier)                                                          \
+			{                                                                                                       \
+				parser_error(parser_state, token.pos, "Expected identifier for " #_type " name");                   \
+				free(mod_arr.tokens);                                                                               \
+				free(node);                                                                                         \
+				return nullptr;                                                                                     \
+			}                                                                                                       \
+			node->node._type##_def.name = strdup(token.str_val);                                                    \
+			assert(node->node._type##_def.name != nullptr);                                                         \
+			hash_str_push(&parser_state->known_types, token.str_val);                                               \
+			node->pos = token.pos;                                                                                  \
+		}                                                                                                           \
+		if (!expect_token(parser_state, token_type_lbrace, #_type " body"))                                         \
+		{                                                                                                           \
+			free(node->node.struct_def.name);                                                                       \
+			free(node->node.struct_def.modifiers);                                                                  \
+			free(node);                                                                                             \
+			return nullptr;                                                                                         \
+		}                                                                                                           \
+		varray_make(AST**, members);                                                                                \
+		while (true) /* NOLINT */                                                                                   \
+		{                                                                                                           \
+			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/                                    \
+			{                                                                                                       \
+				(void)consume(parser_state);                                                                        \
+				node->node._type##_def.members = members;                                                           \
+				node->node._type##_def.member_count = members_len;                                                  \
+				break;                                                                                              \
+			}                                                                                                       \
+			assert(peek(parser_state)->token_type == token_type_identifier);                                        \
+			AST* tmp = parse_var(parser_state);                                                                     \
+			varray_push(members, tmp); /* NOLINT */                                                                 \
+			if (peek(parser_state)->token_type == token_type_comma)                                                 \
+			{                                                                                                       \
+				(void)consume(parser_state);                                                                        \
+				continue;                                                                                           \
+			}                                                                                                       \
+			else if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/                               \
+			{                                                                                                       \
+				(void)consume(parser_state);                                                                        \
+				node->node._type##_def.members = members;                                                           \
+				node->node._type##_def.member_count = members_len;                                                  \
+				break;                                                                                              \
+			}                                                                                                       \
+			else                                                                                                    \
+			{                                                                                                       \
+				parser_error(parser_state, peek(parser_state)->pos, "Expected ',' or '}' in struct/union members"); \
+				synchronize(parser_state);                                                                          \
+				continue;                                                                                           \
+			}                                                                                                       \
+		}                                                                                                           \
 	} while (0)
 
 	switch (node->type)
@@ -381,8 +481,12 @@ static AST* parse_enum(ParserState* parser_state)
 	node->node.enum_def.modifiers = mod_arr.tokens;
 	node->node.enum_def.modifier_count = mod_arr.count;
 
-	assert(consume(parser_state)->token_type == token_type_enum);
-
+	if (!expect_token(parser_state, token_type_enum, "enum definition"))
+	{
+		free(mod_arr.tokens);
+		free(node);
+		return nullptr;
+	}
 	{
 		const Token token = *consume(parser_state);
 		assert(token.token_type == token_type_identifier);
@@ -418,16 +522,37 @@ static AST* parse_enum(ParserState* parser_state)
 			EnumType tmp = {};
 			{
 				const Token token = *consume(parser_state);
-				assert(token.token_type == token_type_identifier);
+				if (token.token_type != token_type_identifier)
+				{
+					parser_error(parser_state, token.pos, "Expected identifier for enum name");
+					free(node->node.enum_def.modifiers);
+					free(node);
+					return nullptr;
+				}
 				tmp.name = strdup(token.str_val);
-				assert(tmp.name != nullptr);
+				if (tmp.name == nullptr)
+				{
+					parser_error(parser_state, token.pos, "Memory allocation failed");
+					free(node->node.enum_def.modifiers);
+					free(node);
+					return nullptr;
+				}
 			}
 			if (match(parser_state, token_type_equal))
 			{
 				{
 					const Token token = *consume(parser_state);
-					assert(token.token_type == token_type_number, "expected token = number, but token = %s",
-						   token_to_string(token.token_type));
+					if (token.token_type != token_type_number)
+					{
+						parser_error(parser_state, token.pos, "Expected number for enum value, got '%s'",
+									 token_to_string(token.token_type));
+						tmp.has_value = false;
+					}
+					else
+					{
+						tmp.value = make_number(&token);
+						tmp.has_value = true;
+					}
 
 					tmp.value = make_number(
 						&(const Token){.str_val = token.str_val, .token_type = token_type_number, .pos = token.pos});
@@ -566,13 +691,15 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 		case token_type_false:
 			return parse_expr(parser_state);
 		default:
-			break;
+			if (is_modifier(token.token_type))
+			{
+				return parse_decl(parser_state);
+			}
+			parser_error(parser_state, token.pos, "Unexpected token in statement: '%s'",
+						 token_to_string(token.token_type));
+			synchronize(parser_state);
+			return nullptr;
 	}
-	if (is_modifier(token.token_type))
-	{
-		return parse_decl(parser_state);
-	}
-	assert(false, "not an expected type, found: %s", token_to_string(token.token_type));
 }
 
 static AST* parse_message(ParserState* parser_state)
@@ -590,14 +717,23 @@ static AST* parse_message(ParserState* parser_state)
 		{
 			{
 				const Token token_l = *consume(parser_state);
-				assert(token_l.token_type == token_type_identifier);
+				if (token_l.token_type != token_type_identifier)
+				{
+					parser_error(parser_state, token_l.pos, "Expected identifier in @import");
+					free(node);
+					return nullptr;
+				}
 
 				node->node.message.import.import = strdup(token_l.str_val);
 				assert(node->node.message.import.import != nullptr);
 				node->node.message.import.type = import_type_user;
 			}
-			const Token token_l = *consume(parser_state);
-			assert(token_l.token_type == token_type_greater);
+			if (!expect_token(parser_state, token_type_greater, "@import"))
+			{
+				free(node->node.message.import.import);
+				free(node);
+				return nullptr;
+			}
 		}
 		if (token.token_type == token_type_string)
 		{
@@ -624,7 +760,8 @@ static AST* parse_message(ParserState* parser_state)
 
 		return node;
 	}
-	assert(false && "not (yet) a compiler message");
+	parser_error(parser_state, token_g.pos, "Unknown compiler message: '%s'", token_g.str_val);
+	return nullptr;
 }
 
 static AST* parse_if_expr(ParserState* parser_state)
@@ -633,12 +770,23 @@ static AST* parse_if_expr(ParserState* parser_state)
 	assert(node != nullptr);
 	node->type = AST_IF_EXPR;
 	Token token = *consume(parser_state);
-	assert(token.token_type == token_type_if);
+	if (token.token_type != token_type_if)
+	{
+		parser_error(parser_state, token.pos, "Expected 'if'");
+		free(node);
+		return nullptr;
+	}
 	node->pos = token.pos;
 
 	node->node.if_expr.condition = parse_expr(parser_state);
 
-	assert(peek(parser_state)->token_type == token_type_lbrace);
+	if (peek(parser_state)->token_type != token_type_lbrace)
+	{
+		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after if condition");
+		free_token_tree(node->node.if_expr.condition);
+		free(node);
+		return nullptr;
+	}
 	node->node.if_expr.then_block = parse_block(parser_state);
 
 	if (match(parser_state, token_type_else))
@@ -653,7 +801,11 @@ static AST* parse_if_expr(ParserState* parser_state)
 		}
 		else
 		{
-			assert(false && "else must be followed by block or if");
+			parser_error(parser_state, peek(parser_state)->pos, "Expected '{' or 'if' after 'else'");
+			free_token_tree(node->node.if_expr.condition);
+			free_token_tree(node->node.if_expr.then_block);
+			free(node);
+			return nullptr;
 		}
 	}
 	else
@@ -670,12 +822,23 @@ static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 	assert(node != nullptr);
 	node->type = AST_WHILE_EXPR;
 	Token token = *consume(parser_state);
-	assert(token.token_type == token_type_while);
+	if (token.token_type != token_type_while)
+	{
+		parser_error(parser_state, token.pos, "Expected 'while'");
+		free(node);
+		return nullptr;
+	}
 	node->pos = token.pos;
 
 	node->node.while_expr.condition = parse_expr(parser_state);
 
-	assert(peek(parser_state)->token_type == token_type_lbrace);
+	if (peek(parser_state)->token_type != token_type_lbrace)
+	{
+		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after while condition");
+		free_token_tree(node->node.while_expr.condition);
+		free(node);
+		return nullptr;
+	}
 	node->node.while_expr.then_block = parse_block(parser_state);
 
 	return node;
@@ -689,7 +852,12 @@ static AST* parse_for_expr(ParserState* parser_state)
 
 	{
 		Token token = *consume(parser_state);
-		assert(token.token_type == token_type_for);
+		if (token.token_type != token_type_for)
+		{
+			parser_error(parser_state, token.pos, "Expected 'for'");
+			free(node);
+			return nullptr;
+		}
 		node->pos = token.pos;
 	}
 
@@ -710,12 +878,16 @@ static AST* parse_for_expr(ParserState* parser_state)
 			if (hash_str_contains(&parser_state->known_types, token.str_val) || is_modifier(token.token_type)) // NOLINT
 			{
 				node->node.for_expr.c_style.init = parse_var(parser_state);
-				// Always takes the semicolon with it
 			}
 			else
 			{
 				node->node.for_expr.c_style.init = parse_expr(parser_state);
-				assert(peek(parser_state)->token_type == token_type_semicolon);
+				if (!expect_token(parser_state, token_type_semicolon, "for loop condition"))
+				{
+					free_token_tree(node->node.for_expr.c_style.init);
+					free(node);
+					return nullptr;
+				}
 			}
 		}
 
@@ -728,7 +900,13 @@ static AST* parse_for_expr(ParserState* parser_state)
 			node->node.for_expr.c_style.condition = parse_expr(parser_state);
 		}
 
-		assert(consume(parser_state)->token_type == token_type_semicolon);
+		if (!expect_token(parser_state, token_type_semicolon, "for loop"))
+		{
+			free_token_tree(node->node.for_expr.c_style.init);
+			free_token_tree(node->node.for_expr.c_style.condition);
+			free(node);
+			return nullptr;
+		}
 
 		if (peek(parser_state)->token_type == token_type_rparen)
 		{
@@ -739,7 +917,14 @@ static AST* parse_for_expr(ParserState* parser_state)
 			node->node.for_expr.c_style.increment = parse_expr(parser_state);
 		}
 
-		assert(consume(parser_state)->token_type == token_type_rparen);
+		if (!expect_token(parser_state, token_type_rparen, "for loop"))
+		{
+			free_token_tree(node->node.for_expr.c_style.init);
+			free_token_tree(node->node.for_expr.c_style.condition);
+			free_token_tree(node->node.for_expr.c_style.increment);
+			free(node);
+			return nullptr;
+		}
 	}
 	else
 	{
@@ -754,12 +939,33 @@ static AST* parse_for_expr(ParserState* parser_state)
 			assert(node->node.for_expr.rust_style.var_def.name != nullptr);
 		}
 
-		assert(consume(parser_state)->token_type == token_type_in);
+		if (!expect_token(parser_state, token_type_in, "for-in loop"))
+		{
+			free_var_def(&node->node.for_expr.rust_style.var_def);
+			free(node);
+			return nullptr;
+		}
 
 		node->node.for_expr.rust_style.iterable = parse_expr(parser_state);
 	}
 
-	assert(peek(parser_state)->token_type == token_type_lbrace);
+	if (peek(parser_state)->token_type != token_type_lbrace)
+	{
+		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' for for loop body");
+		if (node->node.for_expr.style == FOR_STYLE_C)
+		{
+			free_token_tree(node->node.for_expr.c_style.init);
+			free_token_tree(node->node.for_expr.c_style.condition);
+			free_token_tree(node->node.for_expr.c_style.increment);
+		}
+		else
+		{
+			free_var_def(&node->node.for_expr.rust_style.var_def);
+			free_token_tree(node->node.for_expr.rust_style.iterable);
+		}
+		free(node);
+		return nullptr;
+	}
 	node->node.for_expr.body = parse_block(parser_state);
 
 	return node;
@@ -772,7 +978,12 @@ static AST* parse_return_expr(ParserState* parser_state) // NOLINT
 
 	node->type = AST_RETURN_STMT;
 	Token token = *consume(parser_state);
-	assert(token.token_type == token_type_return);
+	if (token.token_type != token_type_return)
+	{
+		parser_error(parser_state, token.pos, "Expected 'return'");
+		free(node);
+		return nullptr;
+	}
 	node->pos = token.pos;
 
 	node->node.return_stmt.return_stmt = parse_expr(parser_state);
@@ -786,7 +997,12 @@ static AST* parse_break_expr(ParserState* parser_state)
 
 	node->type = AST_BREAK_STMT;
 	Token token = *consume(parser_state);
-	assert(token.token_type == token_type_break);
+	if (token.token_type != token_type_break)
+	{
+		parser_error(parser_state, token.pos, "Expected 'break'");
+		free(node);
+		return nullptr;
+	}
 	node->pos = token.pos;
 
 	return node;
@@ -2698,4 +2914,68 @@ static void print_cast_expr(const CastExpr* cast_expr, usize depth)
 	print_indent(depth + 1);
 	printf("Expression:\n");
 	parse_print_impl(cast_expr->expr, depth + 2);
+}
+
+static void parser_error(ParserState* parser_state, Pos pos, const char* fmt, ...)
+{
+	parser_state->errors++;
+	va_list args;
+	va_start(args, fmt);
+	(void)fprintf(stderr, "\x1B[31m[line %zu:%zu] ERROR: \x1B[0m", pos.line, pos.character);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+	(void)vfprintf(stderr, fmt, args);
+#pragma GCC diagnostic pop
+	(void)fprintf(stderr, "\n");
+	va_end(args);
+}
+
+static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...)
+{
+	parser_state->warnings++;
+	va_list args;
+	va_start(args, fmt);
+	(void)fprintf(stderr, "\x1B[33m[line %zu:%zu] WARNING: \x1B[0m", pos.line, pos.character);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+	(void)vfprintf(stderr, fmt, args);
+#pragma GCC diagnostic pop
+	(void)fprintf(stderr, "\n");
+	va_end(args);
+}
+
+static bool expect_token(ParserState* parser_state, TokenType expected, const char* context)
+{
+	const Token* token = peek(parser_state);
+	if (!token || token->token_type != expected)
+	{
+		parser_error(parser_state, token ? token->pos : (Pos){0, 0}, "Expected '%s' in %s, but got '%s'",
+					 token_to_string(expected), context, token ? token_to_string(token->token_type) : "EOF");
+		return false;
+	}
+	consume(parser_state);
+	return true;
+}
+
+static void synchronize(ParserState* parser_state)
+{
+	while (peek(parser_state)->token_type != token_type_eof)
+	{
+		const Token* token = peek(parser_state);
+
+		if (token->token_type == token_type_semicolon)
+		{
+			consume(parser_state);
+			return;
+		}
+
+		if (token->token_type == token_type_fn || token->token_type == token_type_struct ||
+			token->token_type == token_type_union || token->token_type == token_type_enum ||
+			is_modifier(token->token_type))
+		{
+			return;
+		}
+
+		consume(parser_state);
+	}
 }
