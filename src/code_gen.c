@@ -368,11 +368,6 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 	else
 	{
 		code_block = get_code_block(code_gen);
-		if (code_block == nullptr)
-		{
-			code_block = &code_gen->code;
-			code_gen->current_block = CODE_BLOCK_CODE;
-		}
 	}
 	char tmp_var[MAX_BUFFER_SIZE] = {};
 	if (var_def.equals != nullptr &&
@@ -943,6 +938,9 @@ static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr)
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
+	bool old_global = code_gen->global_block;
+	code_gen->global_block = false;
+
 	if (for_expr.style == FOR_STYLE_C)
 	{
 		str_cat(code_block, "for(");
@@ -1103,6 +1101,7 @@ static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr)
 		code_gen->skip_brace = false;
 		str_cat(code_block, "}");
 	}
+	code_gen->global_block = old_global;
 }
 
 static void gen_ast_struct_init(CodeGen code_gen[static 1], StructInit struct_init)
