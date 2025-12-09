@@ -375,6 +375,7 @@ int test_for_loop_c_style(void)
 	ASSERT_STR_CONTAINS(files.c_file, "const i32 i=0;", "Should have init");
 	ASSERT_STR_CONTAINS(files.c_file, "(i<10);", "Should have condition");
 	ASSERT_STR_CONTAINS(files.c_file, "(i=(i+1))", "Should have increment");
+	ASSERT_STR_CONTAINS(files.c_file, "for(const i32 i=0;(i<10);(i=(i+1)))", "Should have a full for loop defined");
 
 	code_gen_free_new_files(files);
 	return 0;
