@@ -903,8 +903,11 @@ static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const ch
 	if (add_before_trailing_expr == nullptr)
 	{
 		gen_code(code_gen, if_expr.then_block);
-		str_cat(code_block, "else ");
-		gen_code(code_gen, if_expr.else_block);
+		if (if_expr.else_block != nullptr)
+		{
+			str_cat(code_block, "else ");
+			gen_code(code_gen, if_expr.else_block);
+		}
 	}
 	else
 	{
