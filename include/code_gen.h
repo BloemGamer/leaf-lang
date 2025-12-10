@@ -44,6 +44,9 @@ typedef struct
 	const char* source_filename;
 	usize current_line;
 	bool line_directive_needed;
+	usize errors;
+	usize warnings;
+	Pos pos;
 } CodeGen;
 
 typedef struct

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,9 @@ static void free_code_block(CodeBlock code_block);
 
 static void emit_line_directive(CodeGen* code_gen, Pos pos);
 
+static void code_gen_error(CodeGen* code_gen, const char* fmt, ...);
+static void code_gen_warn(CodeGen* code_gen, const char* fmt, ...);
+
 CodeGen generate_code(AST* ast, const char* filename)
 {
 	CodeGen code_gen = {.current_block = CODE_BLOCK_NONE, .source_filename = filename};
@@ -76,6 +80,7 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 	{
 		assert(code_gen != nullptr);
 	}
+	code_gen->pos = ast->pos;
 
 	switch (ast->type)
 	{
@@ -157,7 +162,9 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			gen_ast_array_init(code_gen, ast->node.array_init);
 			return;
 		case AST_RANGE_EXPR:
-			assert(false && "code gen: range expression should not be used outside of for statement");
+			code_gen->pos = ast->pos;
+			code_gen_error(code_gen,
+						   "Range expressions are not yet implemented for anything other than for statements");
 			return;
 		case AST_STRUCT_INIT:
 			gen_ast_struct_init(code_gen, ast->node.struct_init);
@@ -166,7 +173,8 @@ static void gen_code(CodeGen* code_gen, AST* ast)
 			gen_ast_message(code_gen, ast->node.message);
 			return;
 	}
-	assert(false && "code gen: not yet implemented");
+	code_gen->pos = ast->pos;
+	code_gen_error(code_gen, "Token not yet impelemted, this should not happen, report this as a bug");
 }
 
 static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* add_before_trailing_expr)
@@ -220,7 +228,11 @@ static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* a
 
 	if (add_before_trailing_expr != nullptr)
 	{
-		assert(block.trailing_expr != nullptr);
+		if (block.trailing_expr == nullptr)
+		{
+			code_gen_error(code_gen, "Expected trailing expression");
+			return;
+		}
 		str_cat(code_block, add_before_trailing_expr);
 
 		switch (block.trailing_expr->type)
@@ -374,8 +386,11 @@ static void gen_ast_var_def(CodeGen code_gen[static 1], VarDef var_def)
 		(var_def.equals->type == AST_BLOCK || var_def.equals->type == AST_IF_EXPR ||
 		 (var_def.equals->type == AST_CAST_EXPR && casted_block(var_def.equals->node.cast_expr))))
 	{
-		assert(code_gen->current_block == CODE_BLOCK_CODE || code_gen->current_block == CODE_BLOCK_NONE,
-			   "(for now) you can't have a global variable with a block or if initialiser");
+		if (code_gen->current_block != CODE_BLOCK_CODE && code_gen->current_block != CODE_BLOCK_NONE)
+		{
+			code_gen_error(code_gen, "(for now) you can't have a global variable with a block or if initialiser");
+			return;
+		}
 		int tmp_var_len = snprintf(tmp_var, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "ret_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
@@ -473,7 +488,8 @@ static void gen_ast_literal(CodeGen code_gen[static 1], Literal literal)
 			str_cat(code_block, "false");
 			break;
 		default:
-			assert(false && "code gen: not an literal");
+			code_gen_error(code_gen, "not an literal");
+			return;
 	}
 }
 
@@ -530,7 +546,11 @@ static void gen_ast_struct_def(CodeGen code_gen[static 1], StructDef struct_def)
 
 	for (usize i = 0; i < struct_def.member_count; i++)
 	{
-		assert(struct_def.members[i]->type == AST_VAR_DEF);
+		if (struct_def.members[i]->type != AST_VAR_DEF)
+		{
+			code_gen_error(code_gen, "Expected an var def");
+			return;
+		}
 		gen_var_def_with_const(code_gen, struct_def.members[i]->node.var_def, false);
 		str_cat(code_block, ";");
 	}
@@ -580,7 +600,11 @@ static void gen_ast_union_def(CodeGen code_gen[static 1], UnionDef union_def)
 
 	for (usize i = 0; i < union_def.member_count; i++)
 	{
-		assert(union_def.members[i]->type == AST_VAR_DEF);
+		if (union_def.members[i]->type != AST_VAR_DEF)
+		{
+			code_gen_error(code_gen, "Expected an var def");
+			return;
+		}
 		gen_var_def_with_const(code_gen, union_def.members[i]->node.var_def, false);
 		str_cat(code_block, ";");
 	}
@@ -845,7 +869,8 @@ static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, c
 	}
 	else
 	{
-		assert(false && "not an expected type");
+		code_gen_error(code_gen, "not an expected type");
+		return;
 	}
 
 	code_gen->close_paren_count = 0;
@@ -869,8 +894,12 @@ static void gen_ast_array_init(CodeGen code_gen[static 1], ArrayInit array_init)
 	if (array_init.is_sized)
 	{
 		str_cat(code_block, "{");
-		assert(array_init.size_expr->type == AST_LITERAL);
-		assert(array_init.size_expr->node.literal.literal.token_type == token_type_number);
+		if (array_init.size_expr->type != AST_LITERAL ||
+			array_init.size_expr->node.literal.literal.token_type != token_type_number)
+		{
+			code_gen_error(code_gen, "Size expression should be a number");
+			return;
+		}
 		for (i64 i = 0; i < array_init.size_expr->node.literal.literal.num_val; i++)
 		{
 			for (usize j = 0; j < array_init.element_count; j++)
@@ -900,6 +929,11 @@ static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const ch
 	str_cat(code_block, "if(");
 	gen_code(code_gen, if_expr.condition);
 	str_cat(code_block, ")");
+	if (if_expr.then_block == nullptr || if_expr.then_block->type != AST_BLOCK)
+	{
+		code_gen_error(code_gen, "if should have a statement and be a block -> {}");
+		return;
+	}
 	if (add_before_trailing_expr == nullptr)
 	{
 		gen_code(code_gen, if_expr.then_block);
@@ -911,10 +945,12 @@ static void gen_ast_if_expr(CodeGen code_gen[static 1], IfExpr if_expr, const ch
 	}
 	else
 	{
-		assert(if_expr.then_block != nullptr);
-		assert(if_expr.else_block != nullptr);
-		assert(if_expr.then_block->type == AST_BLOCK);
-		assert(if_expr.else_block->type == AST_BLOCK || if_expr.else_block->type == AST_IF_EXPR);
+		if (if_expr.else_block == nullptr ||
+			!(if_expr.else_block->type == AST_BLOCK || if_expr.else_block->type == AST_IF_EXPR))
+		{
+			code_gen_error(code_gen, "<expr> = if should have an else statement");
+			return;
+		}
 		gen_ast_block(code_gen, if_expr.then_block->node.block, add_before_trailing_expr);
 		if (if_expr.else_block->type == AST_BLOCK)
 		{
@@ -972,7 +1008,11 @@ static void gen_ast_for_expr(CodeGen code_gen[static 1], ForExpr for_expr)
 		(void)snprintf(tmp_iter, MAX_BUFFER_SIZE - 1, TMP_VAR_PREFIX "iter_%" PRIu32, code_gen->tmp_num);
 		code_gen->tmp_num++;
 
-		assert(for_expr.rust_style.iterable->type == AST_RANGE_EXPR);
+		if (for_expr.rust_style.iterable->type != AST_RANGE_EXPR)
+		{
+			code_gen_warn(code_gen, "for <> in <> is only implemented for a range expression yet");
+			return;
+		}
 		RangeExpr range_expr = for_expr.rust_style.iterable->node.range_expr;
 
 		if (range_expr.start->type == AST_BLOCK || range_expr.start->type == AST_IF_EXPR)
@@ -1130,7 +1170,8 @@ static void gen_ast_message(CodeGen code_gen[static 1], Message message)
 	switch (message.msg)
 	{
 		case msg_invalid:
-			assert(false && "invalid message");
+			code_gen_error(code_gen, "invallid message");
+			return;
 		case msg_import:
 			str_cat(&code_gen->includes, "#include \"");
 			str_cat(&code_gen->includes, message.import.import);
@@ -1145,7 +1186,8 @@ static void gen_ast_message(CodeGen code_gen[static 1], Message message)
 			break;
 		case msg_use:
 		case msg_include_str:
-			assert(false && "code_gen: not yet implemented");
+			code_gen_error(code_gen, "message not (yet) implemented");
+			return;
 	}
 }
 
@@ -1174,7 +1216,6 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 {
 	CodeBlock* code_block = get_code_block(code_gen);
 
-	debug_assert(code_block != nullptr);
 	{
 		for (usize i = 0; i < var_def.modifier_count; i++)
 		{
@@ -1188,8 +1229,10 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 				case token_type_static:
 					if (code_gen->global_block)
 					{
-						assert(false, "Static is not supported on global variables\n Static variables are the default "
-									  "if you don't add pub for globals");
+						code_gen_error(code_gen,
+									   "Static is not supported on global variables\n Static variables are the default "
+									   "if you don't add pub for globals");
+						return;
 					}
 					str_cat(code_block, "static ");
 					break;
@@ -1200,7 +1243,9 @@ static void gen_var_def_with_const(CodeGen code_gen[static 1], VarDef var_def, b
 					str_cat(code_block, "constexpr ");
 					break;
 				default:
-					assert(false, "not a supported token: %s", token_to_string(var_def.modifiers[i].token_type))
+					code_gen_error(code_gen, "not a supported token: %s",
+								   token_to_string(var_def.modifiers[i].token_type));
+					return;
 			}
 		}
 
@@ -1231,17 +1276,19 @@ static void gen_func_signature(CodeGen code_gen[static 1], FuncDef func_def)
 			case token_type_pub:
 				break;
 			case token_type_static:
-				assert(false, "Static is not supported on global variables\n Static variables are the default "
-							  "if you don't add pub for globals");
-				break;
+				code_gen_error(code_gen,
+							   "Static is not supported on global variables\n Static variables are the default "
+							   "if you don't add pub for globals");
+				return;
 			case token_type_volatile:
 				str_cat(code_block, "volatile ");
 				break;
 			case token_type_const:
-				assert(false, "const functions not yet supported");
+				code_gen_warn(code_gen, "const functions not yet supported");
 				break;
 			default:
-				assert(false, "not a supported token%s", token_to_string(func_def.modifiers[i].token_type))
+				code_gen_error(code_gen, "not a supported token%s", token_to_string(func_def.modifiers[i].token_type));
+				return;
 		}
 	}
 	if (func_def.return_type.type.name != nullptr)
@@ -1290,7 +1337,7 @@ static CodeBlock* get_code_block(CodeGen code_gen[static 1])
 		case CODE_BLOCK_NONE:
 			return &code_gen->code;
 	}
-	assert(false);
+	assert(false && "Something is not implemented, mark this as a bug");
 }
 
 static bool casted_block(CastExpr cast_expr)
@@ -1317,7 +1364,7 @@ static void str_cat(CodeBlock* code_block, const char* str)
 			code_block->cap *= 2;
 		}
 		code_block->code = (char*)realloc((void*)code_block->code, code_block->cap); // NOLINT
-		assert(code_block != nullptr);
+		assert(code_block != nullptr, "Could not get memory");
 	}
 	memcpy((void*)(code_block->code + code_block->len), (void*)str, str_len);
 	code_block->len += str_len;
@@ -1586,4 +1633,32 @@ static void emit_line_directive(CodeGen* code_gen, Pos pos)
 
 		code_gen->current_line = pos.line;
 	}
+}
+
+static void code_gen_error(CodeGen* code_gen, const char* fmt, ...)
+{
+	code_gen->errors++;
+	va_list args;
+	va_start(args, fmt);
+	(void)fprintf(stderr, "\x1B[31m[line %zu:%zu] ERROR: \x1B[0m", code_gen->pos.line, code_gen->pos.character);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+	(void)vfprintf(stderr, fmt, args);
+#pragma GCC diagnostic pop
+	(void)fprintf(stderr, "\n");
+	va_end(args);
+}
+
+static void code_gen_warn(CodeGen* code_gen, const char* fmt, ...)
+{
+	code_gen->warnings++;
+	va_list args;
+	va_start(args, fmt);
+	(void)fprintf(stderr, "\x1B[33m[line %zu:%zu] WARNING: \x1B[0m", code_gen->pos.line, code_gen->pos.character);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+	(void)vfprintf(stderr, fmt, args);
+#pragma GCC diagnostic pop
+	(void)fprintf(stderr, "\n");
+	va_end(args);
 }
