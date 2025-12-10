@@ -131,7 +131,7 @@ static void print_struct_init(const StructInit* struct_init, usize depth);
 static void print_cast_expr(const CastExpr* cast_expr, usize depth);
 
 static void parser_error(ParserState* parser_state, Pos pos, const char* fmt, ...);
-static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...);
+// static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...);
 static bool expect_token(ParserState* parser_state, TokenType expected, const char* context);
 static void synchronize(ParserState* parser_state);
 
@@ -180,6 +180,7 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 			return parse_message(parser_state);
 		case token_type_eof:
 			parser_error(parser_state, peek(parser_state)->pos, "Unexpected end of file in declaration");
+			synchronize(parser_state);
 			return nullptr;
 
 		default:
@@ -630,6 +631,17 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		{
 			// usize saved_pos = parser_state->pos;
 			AST* tmp = parse_statement(parser_state);
+
+			if (tmp == nullptr)
+			{
+				free_token_tree(node);
+				for (usize i = 0; i < statements_len; i++)
+				{
+					free_token_tree(statements[i]);
+				}
+				free((void*)statements);
+				return nullptr;
+			}
 
 			// Check if next token is closing brace
 			if (!global_block && peek(parser_state)->token_type == end_token)
@@ -3041,19 +3053,19 @@ static void parser_error(ParserState* parser_state, Pos pos, const char* fmt, ..
 	va_end(args);
 }
 
-static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...)
-{
-	parser_state->warnings++;
-	va_list args;
-	va_start(args, fmt);
-	(void)fprintf(stderr, "\x1B[33m[line %zu:%zu] WARNING: \x1B[0m", pos.line, pos.character);
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-nonliteral"
-	(void)vfprintf(stderr, fmt, args);
-#pragma GCC diagnostic pop
-	(void)fprintf(stderr, "\n");
-	va_end(args);
-}
+// static void parser_warn(ParserState* parser_state, Pos pos, const char* fmt, ...)
+// {
+// 	parser_state->warnings++;
+// 	va_list args;
+// 	va_start(args, fmt);
+// 	(void)fprintf(stderr, "\x1B[33m[line %zu:%zu] WARNING: \x1B[0m", pos.line, pos.character);
+// #pragma GCC diagnostic push
+// #pragma GCC diagnostic ignored "-Wformat-nonliteral"
+// 	(void)vfprintf(stderr, fmt, args);
+// #pragma GCC diagnostic pop
+// 	(void)fprintf(stderr, "\n");
+// 	va_end(args);
+// }
 
 static bool expect_token(ParserState* parser_state, TokenType expected, const char* context)
 {
