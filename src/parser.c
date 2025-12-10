@@ -149,6 +149,15 @@ AST* parse(const Token* tokens)
 	// }
 	AST* ret = parse_block(&parser_state);
 	hash_str_free(&parser_state.known_types);
+	if (parser_state.errors > 0)
+	{
+		(void)errprintf("\nParsing completed with %zu error(s) and %zu warning(s)\n", parser_state.errors,
+						parser_state.warnings);
+	}
+	else if (parser_state.warnings > 0)
+	{
+		(void)errprintf("\nParsing completed with %zu warning(s)\n", parser_state.warnings);
+	}
 	return ret;
 }
 
@@ -1015,7 +1024,12 @@ static AST* parse_continue_expr(ParserState* parser_state)
 
 	node->type = AST_CONTINUE_STMT;
 	Token token = *consume(parser_state);
-	assert(token.token_type == token_type_continue);
+	if (token.token_type != token_type_continue)
+	{
+		parser_error(parser_state, token.pos, "Expected 'continue'");
+		free(node);
+		return nullptr;
+	}
 	node->pos = token.pos;
 
 	return node;
@@ -1024,7 +1038,11 @@ static AST* parse_continue_expr(ParserState* parser_state)
 static AST* parse_array_init(ParserState* parser_state)
 {
 	Token token = *consume(parser_state); // '['
-	assert(token.token_type == token_type_lsqbracket);
+	if (token.token_type != token_type_lsqbracket)
+	{
+		parser_error(parser_state, token.pos, "Expected '['");
+		return nullptr;
+	}
 
 	AST* node = calloc(1, sizeof(AST));
 	assert(node != nullptr);
@@ -1061,15 +1079,35 @@ static AST* parse_array_init(ParserState* parser_state)
 
 	node->node.array_init.elements = elements;
 	node->node.array_init.element_count = elements_len;
-	assert(consume(parser_state)->token_type == token_type_rsqbracket);
+	if (!expect_token(parser_state, token_type_rsqbracket, "array initialization"))
+	{
+		for (usize i = 0; i < elements_len; i++)
+		{
+			free_token_tree(elements[i]);
+		}
+		free((void*)elements);
+		if (node->node.array_init.is_sized)
+		{
+			free_token_tree(node->node.array_init.size_expr);
+		}
+		free(node);
+		return nullptr;
+	}
 	return node;
 }
 
 static AST* parse_compound_literal(ParserState* parser_state)
 {
-	assert(consume(parser_state)->token_type == token_type_lparen);
+	if (!expect_token(parser_state, token_type_lparen, "compound literal"))
+	{
+		return nullptr;
+	}
 	VarDef type_def = parse_var_def(parser_state);
-	assert(consume(parser_state)->token_type == token_type_rparen);
+	if (!expect_token(parser_state, token_type_rparen, "compound literal"))
+	{
+		free_var_def(&type_def);
+		return nullptr;
+	}
 
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
@@ -1081,7 +1119,11 @@ static AST* parse_compound_literal(ParserState* parser_state)
 		return node;
 	}
 
-	assert(consume(parser_state)->token_type == token_type_lbrace);
+	if (!expect_token(parser_state, token_type_lbrace, "struct initialization"))
+	{
+		free_var_def(&type_def);
+		return nullptr;
+	}
 
 	if (match(parser_state, token_type_rbrace))
 	{
@@ -1106,13 +1148,48 @@ static AST* parse_compound_literal(ParserState* parser_state)
 		while (true) // NOLINT
 		{
 			StructFieldInit field = {.field_name = nullptr, .value = nullptr};
-			assert(consume(parser_state)->token_type == token_type_dot);
+			if (!expect_token(parser_state, token_type_dot, "struct field"))
+			{
+				for (usize i = 0; i < fields_len; i++)
+				{
+					free(fields[i].field_name);
+					free_token_tree(fields[i].value);
+				}
+				free(fields);
+				free_var_def(&type_def);
+				free(node);
+				return nullptr;
+			}
 
 			const Token* field_token = consume(parser_state);
-			assert(field_token->token_type == token_type_identifier);
+			if (field_token->token_type != token_type_identifier)
+			{
+				parser_error(parser_state, field_token->pos, "Expected field name");
+				for (usize i = 0; i < fields_len; i++)
+				{
+					free(fields[i].field_name);
+					free_token_tree(fields[i].value);
+				}
+				free(fields);
+				free_var_def(&type_def);
+				free(node);
+				return nullptr;
+			}
 
 			field.field_name = strdup(field_token->str_val);
-			assert(consume(parser_state)->token_type == token_type_equal);
+			if (!expect_token(parser_state, token_type_equal, "struct field initialization"))
+			{
+				free(field.field_name);
+				for (usize i = 0; i < fields_len; i++)
+				{
+					free(fields[i].field_name);
+					free_token_tree(fields[i].value);
+				}
+				free(fields);
+				free_var_def(&type_def);
+				free(node);
+				return nullptr;
+			}
 
 			field.value = parse_expr(parser_state);
 			varray_push(fields, field); // NOLINT
@@ -1132,7 +1209,16 @@ static AST* parse_compound_literal(ParserState* parser_state)
 			}
 			else
 			{
-				assert(false && "expected ',' or '}'");
+				parser_error(parser_state, peek(parser_state)->pos, "Expected ',' or '}' in struct initialization");
+				for (usize i = 0; i <= fields_len; i++)
+				{
+					free(fields[i].field_name);
+					free_token_tree(fields[i].value);
+				}
+				free(fields);
+				free_var_def(&type_def);
+				free(node);
+				return nullptr;
 			}
 		}
 		node->node.struct_init.fields = fields;
@@ -1296,9 +1382,9 @@ static AST* parse_prefix(ParserState* parser_state)
 			}
 
 			AST* expr = parse_expr(parser_state);
-			if (!match(parser_state, token_type_rparen))
+			if (!expect_token(parser_state, token_type_rparen, "parenthesized expression"))
 			{
-				assert(false && "expected ')'");
+				free_token_tree(expr);
 				return nullptr;
 			}
 			return expr;
@@ -1313,7 +1399,8 @@ static AST* parse_prefix(ParserState* parser_state)
 			return parse_if_expr(parser_state);
 
 		default:
-			assert(false && "unexpected token in parse_prefix");
+			parser_error(parser_state, token->pos, "Unexpected token in expression: '%s'",
+						 token_to_string(token->token_type));
 			return nullptr;
 	}
 }
@@ -1345,10 +1432,13 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 						args[arg_count++] = parse_expr(parser_state);
 					} while (match(parser_state, token_type_comma));
 
-					if (!match(parser_state, token_type_rparen))
+					if (!expect_token(parser_state, token_type_rparen, "function call"))
 					{
-						(void)errprintf("Error: expected ')'\n");
-						assert(false);
+						for (usize i = 0; i < arg_count; i++)
+						{
+							free_token_tree(args[i]);
+						}
+						free((void*)args);
 						return left;
 					}
 				}
@@ -1365,7 +1455,8 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 				const Token* id = peek(parser_state); // NOLINT
 				if (!id || id->token_type != token_type_identifier)
 				{
-					assert(false);
+					parser_error(parser_state, id ? id->pos : token->pos, "Expected identifier after '%s'",
+								 token_to_string(token->token_type));
 					return left;
 				}
 				(void)consume(parser_state);
@@ -1380,9 +1471,9 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 			{
 				consume(parser_state); // '['
 				AST* index_expr = parse_expr(parser_state);
-				if (!match(parser_state, token_type_rsqbracket))
+				if (!expect_token(parser_state, token_type_rsqbracket, "array index"))
 				{
-					assert(false);
+					free_token_tree(index_expr);
 					return left;
 				}
 
@@ -1555,10 +1646,28 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 
 	{
 		const Token token = *consume(parser_state);
-		assert(token.token_type == token_type_identifier);
-		assert(hash_str_contains(&parser_state->known_types, token.str_val) == true);
+		if (token.token_type != token_type_identifier)
+		{
+			parser_error(parser_state, token.pos, "Expected type name, got '%s'", token_to_string(token.token_type));
+			free(var_def.modifiers);
+			var_def.modifiers = nullptr;
+			return var_def;
+		}
+		if (!hash_str_contains(&parser_state->known_types, token.str_val))
+		{
+			parser_error(parser_state, token.pos, "Unknown type '%s'", token.str_val);
+			free(var_def.modifiers);
+			var_def.modifiers = nullptr;
+			return var_def;
+		}
 		var_def.type.name = strdup(token.str_val);
-		assert(var_def.type.name != nullptr);
+		if (var_def.type.name == nullptr)
+		{
+			parser_error(parser_state, token.pos, "Memory allocation failed");
+			free(var_def.modifiers);
+			var_def.modifiers = nullptr;
+			return var_def;
+		}
 	}
 
 	var_def.type.array_count = 0;
@@ -1626,7 +1735,9 @@ static AST* make_literal(const Token* token)
 			node->node.literal.literal.pos = token->pos;
 			break;
 		default:
-			assert(false);
+			(void)errprintf("Unknown literal type: %s\n", token_to_string(token->token_type));
+			free(node);
+			return nullptr;
 	}
 
 	return node;
