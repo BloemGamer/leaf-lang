@@ -2275,9 +2275,7 @@ void free_token_tree_token(ASTToken** ast_ptr)
 
 		case AST_STRUCT_DEF:
 			free_set_nullptr(ast->node.struct_def.name);
-			ast->node.struct_def.name = nullptr;
 			free_set_nullptr(ast->node.struct_def.modifiers);
-			ast->node.struct_def.modifiers = nullptr;
 			if (ast->node.struct_def.members)
 			{
 				for (usize i = 0; i < ast->node.struct_def.member_count; i++)
@@ -2285,15 +2283,12 @@ void free_token_tree_token(ASTToken** ast_ptr)
 					free_token_tree_token(&ast->node.struct_def.members[i]);
 				}
 				free_set_nullptr(ast->node.struct_def.members);
-				ast->node.struct_def.members = nullptr;
 			}
 			break;
 
 		case AST_UNION_DEF:
 			free_set_nullptr(ast->node.union_def.modifiers);
-			ast->node.union_def.modifiers = nullptr;
 			free_set_nullptr(ast->node.union_def.name);
-			ast->node.union_def.name = nullptr;
 			if (ast->node.union_def.members)
 			{
 				for (usize i = 0; i < ast->node.union_def.member_count; i++)
@@ -2301,15 +2296,12 @@ void free_token_tree_token(ASTToken** ast_ptr)
 					free_token_tree_token(&ast->node.union_def.members[i]);
 				}
 				free_set_nullptr(ast->node.union_def.members);
-				ast->node.union_def.members = nullptr;
 			}
 			break;
 
 		case AST_ENUM_DEF:
 			free_set_nullptr(ast->node.enum_def.modifiers);
-			ast->node.enum_def.modifiers = nullptr;
 			free_set_nullptr(ast->node.enum_def.name);
-			ast->node.enum_def.name = nullptr;
 			if (ast->node.enum_def.members)
 			{
 				for (usize i = 0; i < ast->node.enum_def.member_count; i++)
@@ -2317,10 +2309,8 @@ void free_token_tree_token(ASTToken** ast_ptr)
 					free_enum_type(&ast->node.enum_def.members[i]);
 				}
 				free_set_nullptr(ast->node.enum_def.members);
-				ast->node.enum_def.members = nullptr;
 			}
 			free_set_nullptr(ast->node.enum_def.type);
-			ast->node.enum_def.type = nullptr;
 			break;
 
 		case AST_FUNC_CALL:
@@ -2332,7 +2322,6 @@ void free_token_tree_token(ASTToken** ast_ptr)
 					free_token_tree_token(&ast->node.func_call.args[i]);
 				}
 				free_set_nullptr(ast->node.func_call.args);
-				ast->node.func_call.args = nullptr;
 			}
 			break;
 
@@ -2355,13 +2344,11 @@ void free_token_tree_token(ASTToken** ast_ptr)
 			if (ast->node.literal.literal.token_type == token_type_string)
 			{
 				free_set_nullptr(ast->node.literal.literal.str_val);
-				ast->node.literal.literal.str_val = nullptr;
 			}
 			break;
 
 		case AST_IDENTIFIER:
 			free_set_nullptr(ast->node.identifier.identifier.str_val);
-			ast->node.identifier.identifier.str_val = nullptr;
 			break;
 
 		case AST_BLOCK:
@@ -2372,7 +2359,6 @@ void free_token_tree_token(ASTToken** ast_ptr)
 					free_token_tree_token(&ast->node.block.statements[i]);
 				}
 				free_set_nullptr(ast->node.block.statements);
-				ast->node.block.statements = nullptr;
 			}
 			free_token_tree_token(&ast->node.block.trailing_expr);
 			break;
@@ -2419,11 +2405,9 @@ void free_token_tree_token(ASTToken** ast_ptr)
 				case msg_include:
 				case msg_include_str:
 					free_set_nullptr(ast->node.message.import.import);
-					ast->node.message.import.import = nullptr;
 					break;
 				case msg_c_type:
 					free_set_nullptr(ast->node.message.c_type.type);
-					ast->node.message.c_type.type = nullptr;
 					break;
 				case msg_invalid:
 				default:
@@ -2445,7 +2429,6 @@ void free_token_tree_token(ASTToken** ast_ptr)
 				free_token_tree_token(&ast->node.array_init.elements[i]);
 			}
 			free_set_nullptr(ast->node.array_init.elements);
-			ast->node.array_init.elements = nullptr;
 			break;
 		case AST_STRUCT_INIT:
 			free_set_nullptr(ast->node.struct_init.struct_name);
@@ -2456,10 +2439,8 @@ void free_token_tree_token(ASTToken** ast_ptr)
 				{
 					free_token_tree_token(&ast->node.struct_init.fields[i].value);
 					free_set_nullptr(ast->node.struct_init.fields[i].field_name);
-					ast->node.struct_init.fields[i].field_name = nullptr;
 				}
 				free_set_nullptr(ast->node.struct_init.fields);
-				ast->node.struct_init.fields = nullptr;
 			}
 			break;
 		case AST_CAST_EXPR:
@@ -2469,7 +2450,6 @@ void free_token_tree_token(ASTToken** ast_ptr)
 	}
 
 	free_set_nullptr(ast);
-	*ast_ptr = nullptr;
 }
 
 void parse_print(const AST ast)
