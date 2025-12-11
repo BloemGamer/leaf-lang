@@ -2163,96 +2163,6 @@ void free_token_tree(AST ast)
 {
 	free_token_tree_token(&ast.ast);
 }
-static void free_var_type(VarType* type)
-{
-	if (!type)
-	{
-		return;
-	}
-	free_set_nullptr(type->name);
-	type->name = nullptr;
-	free_set_nullptr(type->pointer_types);
-	type->pointer_types = nullptr;
-
-	if (type->array_sizes)
-	{
-		for (usize i = 0; i < type->array_count; i++)
-		{
-			free_token_tree_token(&type->array_sizes[i]);
-		}
-		free_set_nullptr(type->array_sizes);
-		type->array_sizes = nullptr;
-	}
-}
-
-static void free_enum_type(EnumType* enum_type)
-{
-	if (!enum_type)
-	{
-		return;
-	}
-	free_set_nullptr(enum_type->name);
-	enum_type->name = nullptr;
-}
-
-static void free_var_def(VarDef* def)
-{
-	if (!def)
-	{
-		return;
-	}
-
-	if (def->name != nullptr)
-	{
-		free_set_nullptr(def->name);
-		def->name = nullptr;
-	}
-	if (def->modifiers != nullptr)
-	{
-		free_set_nullptr(def->modifiers);
-		def->modifiers = nullptr;
-	}
-	free_var_type(&def->type);
-	if (def->equals != nullptr)
-	{
-		free_token_tree_token(&def->equals);
-	}
-}
-
-static void free_func_def(FuncDef* func)
-{
-	if (!func)
-	{
-		return;
-	}
-
-	free_set_nullptr(func->name);
-	func->name = nullptr;
-	free_set_nullptr(func->modifiers);
-	func->modifiers = nullptr;
-
-	if (func->template_types)
-	{
-		for (usize i = 0; i < func->template_count; i++)
-		{
-			free_token_tree_token(&func->template_types[i]);
-		}
-		free_set_nullptr(func->template_types);
-		func->template_types = nullptr;
-	}
-
-	if (func->params)
-	{
-		for (usize i = 0; i < func->param_count; i++)
-		{
-			free_token_tree_token(&func->params[i]);
-		}
-		free_set_nullptr(func->params);
-		func->params = nullptr;
-	}
-	free_var_def(&func->return_type);
-	free_token_tree_token(&func->body);
-}
 
 void free_token_tree_token(ASTToken** ast_ptr)
 {
@@ -2450,6 +2360,88 @@ void free_token_tree_token(ASTToken** ast_ptr)
 	}
 
 	free_set_nullptr(ast);
+}
+
+static void free_var_type(VarType* type)
+{
+	if (!type)
+	{
+		return;
+	}
+	free_set_nullptr(type->name);
+	free_set_nullptr(type->pointer_types);
+
+	if (type->array_sizes)
+	{
+		for (usize i = 0; i < type->array_count; i++)
+		{
+			free_token_tree_token(&type->array_sizes[i]);
+		}
+		free_set_nullptr(type->array_sizes);
+	}
+}
+
+static void free_enum_type(EnumType* enum_type)
+{
+	if (!enum_type)
+	{
+		return;
+	}
+	free_set_nullptr(enum_type->name);
+}
+
+static void free_var_def(VarDef* def)
+{
+	if (!def)
+	{
+		return;
+	}
+
+	if (def->name != nullptr)
+	{
+		free_set_nullptr(def->name);
+	}
+	if (def->modifiers != nullptr)
+	{
+		free_set_nullptr(def->modifiers);
+		def->modifiers = nullptr;
+	}
+	free_var_type(&def->type);
+	if (def->equals != nullptr)
+	{
+		free_token_tree_token(&def->equals);
+	}
+}
+
+static void free_func_def(FuncDef* func)
+{
+	if (!func)
+	{
+		return;
+	}
+
+	free_set_nullptr(func->name);
+	free_set_nullptr(func->modifiers);
+
+	if (func->template_types)
+	{
+		for (usize i = 0; i < func->template_count; i++)
+		{
+			free_token_tree_token(&func->template_types[i]);
+		}
+		free_set_nullptr(func->template_types);
+	}
+
+	if (func->params)
+	{
+		for (usize i = 0; i < func->param_count; i++)
+		{
+			free_token_tree_token(&func->params[i]);
+		}
+		free_set_nullptr(func->params);
+	}
+	free_var_def(&func->return_type);
+	free_token_tree_token(&func->body);
 }
 
 void parse_print(const AST ast)
