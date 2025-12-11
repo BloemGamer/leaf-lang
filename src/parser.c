@@ -2359,7 +2359,7 @@ void free_token_tree_token(ASTToken** ast_ptr)
 			break;
 	}
 
-	free_set_nullptr(ast);
+	free_set_nullptr(*ast_ptr);
 }
 
 static void free_var_type(VarType* type)
