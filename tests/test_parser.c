@@ -15,6 +15,7 @@
 	} while (0)
 
 #define ASSERT_EQ(actual, expected, message) ASSERT((actual) == (expected), message)
+#define ASSERT_NOT_EQ(actual, not_expected, message) ASSERT((actual) != (not_expected), message)
 
 #define ASSERT_STR_EQ(actual, expected, message) ASSERT(strcmp(actual, expected) == 0, message)
 
@@ -637,6 +638,7 @@ int test_modifiers(void)
 int test_error_missing_semicolon(void)
 {
 	AST ast = parse_input("i32 x = 42");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -644,7 +646,7 @@ int test_error_missing_semicolon(void)
 int test_error_missing_closing_brace(void)
 {
 	AST ast = parse_input("fn test() { i32 x = 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -652,7 +654,7 @@ int test_error_missing_closing_brace(void)
 int test_error_missing_opening_brace(void)
 {
 	AST ast = parse_input("fn test() i32 x = 42; }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -660,7 +662,7 @@ int test_error_missing_opening_brace(void)
 int test_error_missing_rparen_params(void)
 {
 	AST ast = parse_input("fn test(i32 x { }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -668,7 +670,7 @@ int test_error_missing_rparen_params(void)
 int test_error_invalid_param_separator(void)
 {
 	AST ast = parse_input("fn test(i32 x; i32 y) { }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -676,7 +678,7 @@ int test_error_invalid_param_separator(void)
 int test_error_missing_var_type(void)
 {
 	AST ast = parse_input("x = 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -684,7 +686,7 @@ int test_error_missing_var_type(void)
 int test_error_unknown_type(void)
 {
 	AST ast = parse_input("UnknownType x = 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -692,7 +694,7 @@ int test_error_unknown_type(void)
 int test_error_missing_array_bracket(void)
 {
 	AST ast = parse_input("i32 arr[10 = 0;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -700,7 +702,7 @@ int test_error_missing_array_bracket(void)
 int test_error_missing_struct_name(void)
 {
 	AST ast = parse_input("struct { i32 x }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -708,7 +710,7 @@ int test_error_missing_struct_name(void)
 int test_error_invalid_struct_separator(void)
 {
 	AST ast = parse_input("struct Point { i32 x; i32 y }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -716,7 +718,7 @@ int test_error_invalid_struct_separator(void)
 int test_error_missing_enum_name(void)
 {
 	AST ast = parse_input("enum { Red, Green, Blue }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -724,7 +726,7 @@ int test_error_missing_enum_name(void)
 int test_error_invalid_enum_value(void)
 {
 	AST ast = parse_input("enum Color { Red = asfasdf }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -732,7 +734,7 @@ int test_error_invalid_enum_value(void)
 int test_error_missing_if_condition(void)
 {
 	AST ast = parse_input("if { return 42; }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -740,7 +742,7 @@ int test_error_missing_if_condition(void)
 int test_error_missing_if_body(void)
 {
 	AST ast = parse_input("if x > 0");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -748,7 +750,7 @@ int test_error_missing_if_body(void)
 int test_error_invalid_else(void)
 {
 	AST ast = parse_input("if x > 0 { } else return 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -756,7 +758,7 @@ int test_error_invalid_else(void)
 int test_error_missing_while_body(void)
 {
 	AST ast = parse_input("while x < 10");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -764,7 +766,7 @@ int test_error_missing_while_body(void)
 int test_error_missing_for_semicolons(void)
 {
 	AST ast = parse_input("for (i32 i = 0 i < 10 i = i + 1) { }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -772,7 +774,7 @@ int test_error_missing_for_semicolons(void)
 int test_error_missing_for_rparen(void)
 {
 	AST ast = parse_input("for (i32 i = 0; i < 10; i = i + 1 { }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -780,7 +782,7 @@ int test_error_missing_for_rparen(void)
 int test_error_missing_in_keyword(void)
 {
 	AST ast = parse_input("for i32 i 0..10 { }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -788,7 +790,7 @@ int test_error_missing_in_keyword(void)
 int test_error_missing_call_rparen(void)
 {
 	AST ast = parse_input("print(42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -796,7 +798,7 @@ int test_error_missing_call_rparen(void)
 int test_error_missing_member_name(void)
 {
 	AST ast = parse_input("point.;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -804,7 +806,7 @@ int test_error_missing_member_name(void)
 int test_error_missing_index_bracket(void)
 {
 	AST ast = parse_input("arr[0;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -812,7 +814,7 @@ int test_error_missing_index_bracket(void)
 int test_error_missing_return_value(void)
 {
 	AST ast = parse_input("return;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -820,7 +822,7 @@ int test_error_missing_return_value(void)
 int test_error_invalid_expression(void)
 {
 	AST ast = parse_input("+ 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -828,7 +830,7 @@ int test_error_invalid_expression(void)
 int test_error_missing_array_init_bracket(void)
 {
 	AST ast = parse_input("i32 x = [1, 2, 3;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -836,7 +838,7 @@ int test_error_missing_array_init_bracket(void)
 int test_error_missing_cast_rparen(void)
 {
 	AST ast = parse_input("i32 x = (i32 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -844,7 +846,7 @@ int test_error_missing_cast_rparen(void)
 int test_error_struct_init_missing_dot(void)
 {
 	AST ast = parse_input("@c_type Point\nPoint p = (Point){ x = 1 };");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -852,7 +854,7 @@ int test_error_struct_init_missing_dot(void)
 int test_error_struct_init_missing_equals(void)
 {
 	AST ast = parse_input("@c_type Point\nPoint p = (Point){ .x 1 };");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -860,7 +862,7 @@ int test_error_struct_init_missing_equals(void)
 int test_error_struct_init_missing_brace(void)
 {
 	AST ast = parse_input("@c_type Point\nPoint p = (Point){ .x = 1;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -868,7 +870,7 @@ int test_error_struct_init_missing_brace(void)
 int test_error_invalid_import(void)
 {
 	AST ast = parse_input("@import file.h");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -876,7 +878,7 @@ int test_error_invalid_import(void)
 int test_error_import_missing_bracket(void)
 {
 	AST ast = parse_input("@import <stdio.h");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -884,7 +886,7 @@ int test_error_import_missing_bracket(void)
 int test_error_unknown_message(void)
 {
 	AST ast = parse_input("@unknown_directive");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -892,7 +894,7 @@ int test_error_unknown_message(void)
 int test_error_missing_c_type_arg(void)
 {
 	AST ast = parse_input("@c_type");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -900,7 +902,7 @@ int test_error_missing_c_type_arg(void)
 int test_error_unexpected_token_in_decl(void)
 {
 	AST ast = parse_input("pub const + i32 x = 42;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -908,7 +910,7 @@ int test_error_unexpected_token_in_decl(void)
 int test_error_missing_arrow(void)
 {
 	AST ast = parse_input("fn test() i32 { return 42; }");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -916,7 +918,7 @@ int test_error_missing_arrow(void)
 int test_error_mismatched_parens(void)
 {
 	AST ast = parse_input("i32 x = (1 + 2;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -924,7 +926,7 @@ int test_error_mismatched_parens(void)
 int test_error_multiple_errors(void)
 {
 	AST ast = parse_input("fn test( { i32 x = ");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -932,7 +934,7 @@ int test_error_multiple_errors(void)
 int test_error_incomplete_expression(void)
 {
 	AST ast = parse_input("i32 x = 1 +;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -940,7 +942,7 @@ int test_error_incomplete_expression(void)
 int test_error_invalid_token_in_expr(void)
 {
 	AST ast = parse_input("i32 x = struct;");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -948,7 +950,7 @@ int test_error_invalid_token_in_expr(void)
 int test_error_eof_in_statement(void)
 {
 	AST ast = parse_input("fn test() {");
-	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
 	free_token_tree(ast);
 	return 0;
 }
@@ -1017,46 +1019,46 @@ int main(void)
 	RUN_TEST(test_precedence);
 	RUN_TEST(test_modifiers);
 
-	// RUN_TEST(test_error_missing_semicolon);
-	// RUN_TEST(test_error_missing_closing_brace);
-	// RUN_TEST(test_error_missing_opening_brace);
-	// RUN_TEST(test_error_missing_rparen_params);
-	// RUN_TEST(test_error_invalid_param_separator);
-	// RUN_TEST(test_error_missing_var_type);
-	// RUN_TEST(test_error_unknown_type);
-	// RUN_TEST(test_error_missing_array_bracket);
-	// RUN_TEST(test_error_missing_struct_name);
-	// RUN_TEST(test_error_invalid_struct_separator);
-	// RUN_TEST(test_error_missing_enum_name);
-	// RUN_TEST(test_error_invalid_enum_value);
-	// RUN_TEST(test_error_missing_if_condition);
-	// RUN_TEST(test_error_missing_if_body);
-	// RUN_TEST(test_error_invalid_else);
-	// RUN_TEST(test_error_missing_while_body);
-	// RUN_TEST(test_error_missing_for_semicolons);
-	// RUN_TEST(test_error_missing_for_rparen);
-	// RUN_TEST(test_error_missing_in_keyword);
-	// RUN_TEST(test_error_missing_call_rparen);
-	// RUN_TEST(test_error_missing_member_name);
-	// RUN_TEST(test_error_missing_index_bracket);
-	// RUN_TEST(test_error_missing_return_value);
-	// RUN_TEST(test_error_invalid_expression);
-	// RUN_TEST(test_error_missing_array_init_bracket);
-	// RUN_TEST(test_error_missing_cast.ast_rparen);
-	// RUN_TEST(test_error_struct_init_missing_dot);
-	// RUN_TEST(test_error_struct_init_missing_equals);
-	// RUN_TEST(test_error_struct_init_missing_brace);
-	// RUN_TEST(test_error_invalid_import);
-	// RUN_TEST(test_error_import_missing_bracket);
-	// RUN_TEST(test_error_unknown_message);
-	// RUN_TEST(test_error_missing_c_type_arg);
-	// RUN_TEST(test_error_unexpected_token_in_decl);
-	// RUN_TEST(test_error_missing_arrow);
-	// RUN_TEST(test_error_mismatched_parens);
-	// RUN_TEST(test_error_multiple_errors);
-	// RUN_TEST(test_error_incomplete_expression);
-	// RUN_TEST(test_error_invalid_token_in_expr);
-	// RUN_TEST(test_error_eof_in_statement);
+	RUN_TEST(test_error_missing_semicolon);
+	RUN_TEST(test_error_missing_closing_brace);
+	RUN_TEST(test_error_missing_opening_brace);
+	RUN_TEST(test_error_missing_rparen_params);
+	RUN_TEST(test_error_invalid_param_separator);
+	RUN_TEST(test_error_missing_var_type);
+	RUN_TEST(test_error_unknown_type);
+	RUN_TEST(test_error_missing_array_bracket);
+	RUN_TEST(test_error_missing_struct_name);
+	RUN_TEST(test_error_invalid_struct_separator);
+	RUN_TEST(test_error_missing_enum_name);
+	RUN_TEST(test_error_invalid_enum_value);
+	RUN_TEST(test_error_missing_if_condition);
+	RUN_TEST(test_error_missing_if_body);
+	RUN_TEST(test_error_invalid_else);
+	RUN_TEST(test_error_missing_while_body);
+	RUN_TEST(test_error_missing_for_semicolons);
+	RUN_TEST(test_error_missing_for_rparen);
+	RUN_TEST(test_error_missing_in_keyword);
+	RUN_TEST(test_error_missing_call_rparen);
+	RUN_TEST(test_error_missing_member_name);
+	RUN_TEST(test_error_missing_index_bracket);
+	RUN_TEST(test_error_missing_return_value);
+	RUN_TEST(test_error_invalid_expression);
+	RUN_TEST(test_error_missing_array_init_bracket);
+	RUN_TEST(test_error_missing_cast_rparen);
+	RUN_TEST(test_error_struct_init_missing_dot);
+	RUN_TEST(test_error_struct_init_missing_equals);
+	RUN_TEST(test_error_struct_init_missing_brace);
+	RUN_TEST(test_error_invalid_import);
+	RUN_TEST(test_error_import_missing_bracket);
+	RUN_TEST(test_error_unknown_message);
+	RUN_TEST(test_error_missing_c_type_arg);
+	RUN_TEST(test_error_unexpected_token_in_decl);
+	RUN_TEST(test_error_missing_arrow);
+	RUN_TEST(test_error_mismatched_parens);
+	RUN_TEST(test_error_multiple_errors);
+	RUN_TEST(test_error_incomplete_expression);
+	RUN_TEST(test_error_invalid_token_in_expr);
+	RUN_TEST(test_error_eof_in_statement);
 
 	printf("\n========================================\n");
 	printf("Tests run: %d\n", total);
