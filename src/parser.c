@@ -354,7 +354,13 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 			}
 			if (!expect_token(parser_state, token_type_rsqbracket, "array size"))
 			{
+				for (usize i = 0; i < array_sizes_len; i++)
+				{
+					free_token_tree(array_sizes[i]);
+				}
+				free((void*)array_sizes);
 				free(node->node.var_def.name);
+				free_var_def(&node->node.var_def);
 				free(node);
 				return nullptr;
 			}
@@ -1395,7 +1401,7 @@ static AST* parse_prefix(ParserState* parser_state)
 
 				parser_state->pos = saved_pos;
 			}
-
+			consume(parser_state);
 			AST* expr = parse_expr(parser_state);
 			if (!expect_token(parser_state, token_type_rparen, "parenthesized expression"))
 			{
@@ -1668,26 +1674,20 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 		if (token.token_type != token_type_identifier)
 		{
 			parser_error(parser_state, token.pos, "Expected type name, got '%s'", token_to_string(token.token_type));
-			free(var_def.modifiers);
-			var_def.modifiers = nullptr;
-			var_def.modifier_count = 0;
+			free_var_def(&var_def);
 			return var_def;
 		}
 		if (!hash_str_contains(&parser_state->known_types, token.str_val))
 		{
 			parser_error(parser_state, token.pos, "Unknown type '%s'", token.str_val);
-			free(var_def.modifiers);
-			var_def.modifiers = nullptr;
-			var_def.modifier_count = 0;
+			free_var_def(&var_def);
 			return var_def;
 		}
 		var_def.type.name = strdup(token.str_val);
 		if (var_def.type.name == nullptr)
 		{
 			parser_error(parser_state, token.pos, "Memory allocation failed");
-			free(var_def.modifiers);
-			var_def.modifiers = nullptr;
-			var_def.modifier_count = 0;
+			free_var_def(&var_def);
 			return var_def;
 		}
 	}
