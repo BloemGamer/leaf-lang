@@ -376,7 +376,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 
 	if (!expect_token(parser_state, token_type_equal, "variable initialization"))
 	{
-		free(node->node.var_def.name);
+		free_var_def(&node->node.var_def);
 		free(node);
 		return nullptr;
 	}
@@ -385,8 +385,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
 	{
 		free_token_tree(node->node.var_def.equals);
-		free(node->node.var_def.name);
-		// free_var_def(&node->node.var_def);
+		free_var_def(&node->node.var_def);
 		free(node);
 		return nullptr;
 	}
@@ -2378,8 +2377,14 @@ static void free_var_def(VarDef* def)
 		return;
 	}
 
-	free((void*)def->name);
-	free((void*)def->modifiers);
+	if (def->name != nullptr)
+	{
+		free((void*)def->name);
+	}
+	if (def->modifiers != nullptr)
+	{
+		free((void*)def->modifiers);
+	}
 	free_var_type(&def->type);
 	free_token_tree(def->equals);
 }
