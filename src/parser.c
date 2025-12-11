@@ -18,6 +18,7 @@
 	usize name##_cap = 0
 
 #define varray_push(name, push)                                                               \
+	do                                                                                        \
 	{                                                                                         \
 		if (name##_len >= name##_cap)                                                         \
 		{                                                                                     \
@@ -27,7 +28,7 @@
 			assert(name != nullptr);                                                          \
 		}                                                                                     \
 		name[name##_len++] = push;                                                            \
-	}
+	} while (0)
 
 typedef struct // NOLINT
 {
@@ -354,7 +355,6 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 			if (!expect_token(parser_state, token_type_rsqbracket, "array size"))
 			{
 				free(node->node.var_def.name);
-				free_var_def(&node->node.var_def);
 				free(node);
 				return nullptr;
 			}
@@ -371,7 +371,6 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	if (!expect_token(parser_state, token_type_equal, "variable initialization"))
 	{
 		free(node->node.var_def.name);
-		free_var_def(&node->node.var_def);
 		free(node);
 		return nullptr;
 	}
@@ -381,7 +380,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	{
 		free_token_tree(node->node.var_def.equals);
 		free(node->node.var_def.name);
-		free_var_def(&node->node.var_def);
+		// free_var_def(&node->node.var_def);
 		free(node);
 		return nullptr;
 	}
@@ -499,7 +498,11 @@ static AST* parse_enum(ParserState* parser_state)
 	}
 	{
 		const Token token = *consume(parser_state);
-		assert(token.token_type == token_type_identifier);
+		if (token.token_type != token_type_identifier)
+		{
+			parser_error(parser_state, token.pos, "Token name should be an identifier");
+			return nullptr;
+		}
 		node->node.enum_def.name = strdup(token.str_val);
 		assert(node->node.enum_def.name != nullptr);
 		hash_str_push(&parser_state->known_types, token.str_val);
@@ -1456,6 +1459,10 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 				}
 
 				left = make_call(left, args, arg_count);
+				if (left == nullptr)
+				{
+					return nullptr;
+				}
 				break;
 			}
 
@@ -1663,6 +1670,7 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 			parser_error(parser_state, token.pos, "Expected type name, got '%s'", token_to_string(token.token_type));
 			free(var_def.modifiers);
 			var_def.modifiers = nullptr;
+			var_def.modifier_count = 0;
 			return var_def;
 		}
 		if (!hash_str_contains(&parser_state->known_types, token.str_val))
@@ -1670,6 +1678,7 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 			parser_error(parser_state, token.pos, "Unknown type '%s'", token.str_val);
 			free(var_def.modifiers);
 			var_def.modifiers = nullptr;
+			var_def.modifier_count = 0;
 			return var_def;
 		}
 		var_def.type.name = strdup(token.str_val);
@@ -1678,6 +1687,7 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 			parser_error(parser_state, token.pos, "Memory allocation failed");
 			free(var_def.modifiers);
 			var_def.modifiers = nullptr;
+			var_def.modifier_count = 0;
 			return var_def;
 		}
 	}
