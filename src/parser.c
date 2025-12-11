@@ -788,7 +788,12 @@ static ASTToken* parse_message(ParserState* parser_state)
 		node->node.message.msg = msg_c_type;
 		const Token token = *consume(parser_state);
 
-		assert(token.token_type == token_type_identifier);
+		if (token.token_type != token_type_identifier)
+		{
+			parser_error(parser_state, token.pos, "expected an identefier as @c_type");
+			free_set_nullptr(node);
+			return nullptr;
+		};
 		node->node.message.c_type.type = strdup(token.str_val);
 		assert(node->node.message.c_type.type != nullptr);
 
