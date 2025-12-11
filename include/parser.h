@@ -316,7 +316,7 @@ typedef struct
 [[gnu::warn_unused_result]]
 AST parse(const Token* tokens);
 
-void free_token_tree_token(ASTToken* ast);
+void free_token_tree_token(ASTToken** ast);
 void free_token_tree(AST ast);
 
 void parse_print(AST ast);

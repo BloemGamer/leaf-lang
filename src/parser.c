@@ -11,6 +11,13 @@
 #include "utils.h"
 #include "utils/hash.h"
 
+#define free_set_nullptr(ptr) \
+	do                        \
+	{                         \
+		free((void*)ptr);     \
+		ptr = nullptr;        \
+	} while (0)
+
 // macro's for having variable array length
 #define varray_make(type, name) \
 	type name = nullptr;        \
@@ -204,7 +211,7 @@ static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 
 	if (!expect_token(parser_state, token_type_fn, "function definition"))
 	{
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 
@@ -219,9 +226,9 @@ static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 
 	if (!expect_token(parser_state, token_type_lparen, "function parameters"))
 	{
-		free((void*)node->node.func_def.name);
-		free((void*)node->node.func_def.modifiers);
-		free((void*)node);
+		free_set_nullptr(node->node.func_def.name);
+		free_set_nullptr(node->node.func_def.modifiers);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 
@@ -253,12 +260,12 @@ static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 								 token_to_string(peek(parser_state)->token_type));
 					for (usize i = 0; i < params_len; i++)
 					{
-						free_token_tree_token(params[i]);
+						free_token_tree_token(&params[i]);
 					}
-					free((void*)params);
-					free((void*)node->node.func_def.name);
-					free((void*)node->node.func_def.modifiers);
-					free((void*)node);
+					free_set_nullptr(params);
+					free_set_nullptr(node->node.func_def.name);
+					free_set_nullptr(node->node.func_def.modifiers);
+					free_set_nullptr(node);
 					return nullptr;
 				}
 			}
@@ -272,13 +279,13 @@ static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 		{
 			for (usize i = 0; i < node->node.func_def.param_count; i++)
 			{
-				free_token_tree_token(node->node.func_def.params[i]);
+				free_token_tree_token(&node->node.func_def.params[i]);
 			}
-			free((void*)node->node.func_def.params);
+			free_set_nullptr(node->node.func_def.params);
 		}
-		free((void*)node->node.func_def.name);
-		free((void*)node->node.func_def.modifiers);
-		free((void*)node);
+		free_set_nullptr(node->node.func_def.name);
+		free_set_nullptr(node->node.func_def.modifiers);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	if (peek(parser_state)->token_type == token_type_lbrace)
@@ -290,7 +297,7 @@ static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 	if (!expect_token(parser_state, token_type_arrow, "function return type"))
 	{
 		free_func_def(&node->node.func_def);
-		free((void*)node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	Token token;
@@ -325,7 +332,7 @@ static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 				parser_error(parser_state, token.pos, "Expected identifier in variable definition, got '%s'",
 							 token_to_string(token.token_type));
 				free_var_def(&node->node.var_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 			node->node.var_def.name = strdup(token.str_val);
@@ -333,7 +340,7 @@ static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 			{
 				parser_error(parser_state, token.pos, "Memory allocation failed");
 				free_var_def(&node->node.var_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 		}
@@ -356,12 +363,12 @@ static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 			{
 				for (usize i = 0; i < array_sizes_len; i++)
 				{
-					free_token_tree_token(array_sizes[i]);
+					free_token_tree_token(&array_sizes[i]);
 				}
-				free((void*)array_sizes);
-				free(node->node.var_def.name);
+				free_set_nullptr(array_sizes);
+				free_set_nullptr(node->node.var_def.name);
 				free_var_def(&node->node.var_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 		}
@@ -377,16 +384,16 @@ static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 	if (!expect_token(parser_state, token_type_equal, "variable initialization"))
 	{
 		free_var_def(&node->node.var_def);
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->node.var_def.equals = parse_expr(parser_state);
 
 	if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
 	{
-		free_token_tree_token(node->node.var_def.equals);
+		free_token_tree_token(&node->node.var_def.equals);
 		free_var_def(&node->node.var_def);
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	return node;
@@ -407,8 +414,8 @@ static ASTToken* parse_struct(ParserState* parser_state) // NOLINT
 			break;
 		default:
 			parser_error(parser_state, peek(parser_state)->pos, "Expected 'struct' or 'union'");
-			free(mod_arr.tokens);
-			free(node);
+			free_set_nullptr(mod_arr.tokens);
+			free_set_nullptr(node);
 			return nullptr;
 	}
 #define PARSE(_type)                                                                                                \
@@ -421,8 +428,8 @@ static ASTToken* parse_struct(ParserState* parser_state) // NOLINT
 			if (token.token_type != token_type_identifier)                                                          \
 			{                                                                                                       \
 				parser_error(parser_state, token.pos, "Expected identifier for " #_type " name");                   \
-				free(mod_arr.tokens);                                                                               \
-				free(node);                                                                                         \
+				free_set_nullptr(mod_arr.tokens);                                                                   \
+				free_set_nullptr(node);                                                                             \
 				return nullptr;                                                                                     \
 			}                                                                                                       \
 			node->node._type##_def.name = strdup(token.str_val);                                                    \
@@ -432,9 +439,9 @@ static ASTToken* parse_struct(ParserState* parser_state) // NOLINT
 		}                                                                                                           \
 		if (!expect_token(parser_state, token_type_lbrace, #_type " body"))                                         \
 		{                                                                                                           \
-			free(node->node.struct_def.name);                                                                       \
-			free(node->node.struct_def.modifiers);                                                                  \
-			free(node);                                                                                             \
+			free_set_nullptr(node->node.struct_def.name);                                                           \
+			free_set_nullptr(node->node.struct_def.modifiers);                                                      \
+			free_set_nullptr(node);                                                                                 \
 			return nullptr;                                                                                         \
 		}                                                                                                           \
 		varray_make(ASTToken**, members);                                                                           \
@@ -497,8 +504,8 @@ static ASTToken* parse_enum(ParserState* parser_state)
 
 	if (!expect_token(parser_state, token_type_enum, "enum definition"))
 	{
-		free(mod_arr.tokens);
-		free(node);
+		free_set_nullptr(mod_arr.tokens);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	{
@@ -543,16 +550,16 @@ static ASTToken* parse_enum(ParserState* parser_state)
 				if (token.token_type != token_type_identifier)
 				{
 					parser_error(parser_state, token.pos, "Expected identifier for enum name");
-					free(node->node.enum_def.modifiers);
-					free(node);
+					free_set_nullptr(node->node.enum_def.modifiers);
+					free_set_nullptr(node);
 					return nullptr;
 				}
 				tmp.name = strdup(token.str_val);
 				if (tmp.name == nullptr)
 				{
 					parser_error(parser_state, token.pos, "Memory allocation failed");
-					free(node->node.enum_def.modifiers);
-					free(node);
+					free_set_nullptr(node->node.enum_def.modifiers);
+					free_set_nullptr(node);
 					return nullptr;
 				}
 			}
@@ -642,12 +649,12 @@ static ASTToken* parse_block(ParserState* parser_state) // NOLINT
 
 			if (tmp == nullptr)
 			{
-				free_token_tree_token(node);
+				free_token_tree_token(&node);
 				for (usize i = 0; i < statements_len; i++)
 				{
-					free_token_tree_token(statements[i]);
+					free_token_tree_token(&statements[i]);
 				}
-				free((void*)statements);
+				free_set_nullptr(statements);
 				return nullptr;
 			}
 
@@ -749,7 +756,7 @@ static ASTToken* parse_message(ParserState* parser_state)
 				if (token_l.token_type != token_type_identifier)
 				{
 					parser_error(parser_state, token_l.pos, "Expected identifier in @import");
-					free(node);
+					free_set_nullptr(node);
 					return nullptr;
 				}
 
@@ -759,8 +766,8 @@ static ASTToken* parse_message(ParserState* parser_state)
 			}
 			if (!expect_token(parser_state, token_type_greater, "@import"))
 			{
-				free(node->node.message.import.import);
-				free(node);
+				free_set_nullptr(node->node.message.import.import);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 		}
@@ -802,7 +809,7 @@ static ASTToken* parse_if_expr(ParserState* parser_state)
 	if (token.token_type != token_type_if)
 	{
 		parser_error(parser_state, token.pos, "Expected 'if'");
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->pos = token.pos;
@@ -812,8 +819,8 @@ static ASTToken* parse_if_expr(ParserState* parser_state)
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after if condition");
-		free_token_tree_token(node->node.if_expr.condition);
-		free(node);
+		free_token_tree_token(&node->node.if_expr.condition);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->node.if_expr.then_block = parse_block(parser_state);
@@ -831,9 +838,9 @@ static ASTToken* parse_if_expr(ParserState* parser_state)
 		else
 		{
 			parser_error(parser_state, peek(parser_state)->pos, "Expected '{' or 'if' after 'else'");
-			free_token_tree_token(node->node.if_expr.condition);
-			free_token_tree_token(node->node.if_expr.then_block);
-			free(node);
+			free_token_tree_token(&node->node.if_expr.condition);
+			free_token_tree_token(&node->node.if_expr.then_block);
+			free_set_nullptr(node);
 			return nullptr;
 		}
 	}
@@ -854,7 +861,7 @@ static ASTToken* parse_while_expr(ParserState* parser_state) // NOLINT
 	if (token.token_type != token_type_while)
 	{
 		parser_error(parser_state, token.pos, "Expected 'while'");
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->pos = token.pos;
@@ -864,8 +871,8 @@ static ASTToken* parse_while_expr(ParserState* parser_state) // NOLINT
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after while condition");
-		free_token_tree_token(node->node.while_expr.condition);
-		free(node);
+		free_token_tree_token(&node->node.while_expr.condition);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->node.while_expr.then_block = parse_block(parser_state);
@@ -884,7 +891,7 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 		if (token.token_type != token_type_for)
 		{
 			parser_error(parser_state, token.pos, "Expected 'for'");
-			free(node);
+			free_set_nullptr(node);
 			return nullptr;
 		}
 		node->pos = token.pos;
@@ -913,8 +920,8 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 				node->node.for_expr.c_style.init = parse_expr(parser_state);
 				if (!expect_token(parser_state, token_type_semicolon, "for loop condition"))
 				{
-					free_token_tree_token(node->node.for_expr.c_style.init);
-					free(node);
+					free_token_tree_token(&node->node.for_expr.c_style.init);
+					free_set_nullptr(node);
 					return nullptr;
 				}
 			}
@@ -931,9 +938,9 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 
 		if (!expect_token(parser_state, token_type_semicolon, "for loop"))
 		{
-			free_token_tree_token(node->node.for_expr.c_style.init);
-			free_token_tree_token(node->node.for_expr.c_style.condition);
-			free(node);
+			free_token_tree_token(&node->node.for_expr.c_style.init);
+			free_token_tree_token(&node->node.for_expr.c_style.condition);
+			free_set_nullptr(node);
 			return nullptr;
 		}
 
@@ -948,10 +955,10 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 
 		if (!expect_token(parser_state, token_type_rparen, "for loop"))
 		{
-			free_token_tree_token(node->node.for_expr.c_style.init);
-			free_token_tree_token(node->node.for_expr.c_style.condition);
-			free_token_tree_token(node->node.for_expr.c_style.increment);
-			free(node);
+			free_token_tree_token(&node->node.for_expr.c_style.init);
+			free_token_tree_token(&node->node.for_expr.c_style.condition);
+			free_token_tree_token(&node->node.for_expr.c_style.increment);
+			free_set_nullptr(node);
 			return nullptr;
 		}
 	}
@@ -971,7 +978,7 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 		if (!expect_token(parser_state, token_type_in, "for-in loop"))
 		{
 			free_var_def(&node->node.for_expr.rust_style.var_def);
-			free(node);
+			free_set_nullptr(node);
 			return nullptr;
 		}
 
@@ -983,16 +990,16 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' for for loop body");
 		if (node->node.for_expr.style == FOR_STYLE_C)
 		{
-			free_token_tree_token(node->node.for_expr.c_style.init);
-			free_token_tree_token(node->node.for_expr.c_style.condition);
-			free_token_tree_token(node->node.for_expr.c_style.increment);
+			free_token_tree_token(&node->node.for_expr.c_style.init);
+			free_token_tree_token(&node->node.for_expr.c_style.condition);
+			free_token_tree_token(&node->node.for_expr.c_style.increment);
 		}
 		else
 		{
 			free_var_def(&node->node.for_expr.rust_style.var_def);
-			free_token_tree_token(node->node.for_expr.rust_style.iterable);
+			free_token_tree_token(&node->node.for_expr.rust_style.iterable);
 		}
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->node.for_expr.body = parse_block(parser_state);
@@ -1010,7 +1017,7 @@ static ASTToken* parse_return_expr(ParserState* parser_state) // NOLINT
 	if (token.token_type != token_type_return)
 	{
 		parser_error(parser_state, token.pos, "Expected 'return'");
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->pos = token.pos;
@@ -1029,7 +1036,7 @@ static ASTToken* parse_break_expr(ParserState* parser_state)
 	if (token.token_type != token_type_break)
 	{
 		parser_error(parser_state, token.pos, "Expected 'break'");
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->pos = token.pos;
@@ -1047,7 +1054,7 @@ static ASTToken* parse_continue_expr(ParserState* parser_state)
 	if (token.token_type != token_type_continue)
 	{
 		parser_error(parser_state, token.pos, "Expected 'continue'");
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	node->pos = token.pos;
@@ -1103,14 +1110,14 @@ static ASTToken* parse_array_init(ParserState* parser_state)
 	{
 		for (usize i = 0; i < elements_len; i++)
 		{
-			free_token_tree_token(elements[i]);
+			free_token_tree_token(&elements[i]);
 		}
-		free((void*)elements);
+		free_set_nullptr(elements);
 		if (node->node.array_init.is_sized)
 		{
-			free_token_tree_token(node->node.array_init.size_expr);
+			free_token_tree_token(&node->node.array_init.size_expr);
 		}
-		free(node);
+		free_set_nullptr(node);
 		return nullptr;
 	}
 	return node;
@@ -1172,12 +1179,12 @@ static ASTToken* parse_compound_literal(ParserState* parser_state)
 			{
 				for (usize i = 0; i < fields_len; i++)
 				{
-					free(fields[i].field_name);
-					free_token_tree_token(fields[i].value);
+					free_set_nullptr(fields[i].field_name);
+					free_token_tree_token(&fields[i].value);
 				}
-				free(fields);
+				free_set_nullptr(fields);
 				free_var_def(&type_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 
@@ -1187,27 +1194,27 @@ static ASTToken* parse_compound_literal(ParserState* parser_state)
 				parser_error(parser_state, field_token->pos, "Expected field name");
 				for (usize i = 0; i < fields_len; i++)
 				{
-					free(fields[i].field_name);
-					free_token_tree_token(fields[i].value);
+					free_set_nullptr(fields[i].field_name);
+					free_token_tree_token(&fields[i].value);
 				}
-				free(fields);
+				free_set_nullptr(fields);
 				free_var_def(&type_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 
 			field.field_name = strdup(field_token->str_val);
 			if (!expect_token(parser_state, token_type_equal, "struct field initialization"))
 			{
-				free(field.field_name);
+				free_set_nullptr(field.field_name);
 				for (usize i = 0; i < fields_len; i++)
 				{
-					free(fields[i].field_name);
-					free_token_tree_token(fields[i].value);
+					free_set_nullptr(fields[i].field_name);
+					free_token_tree_token(&fields[i].value);
 				}
-				free(fields);
+				free_set_nullptr(fields);
 				free_var_def(&type_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 
@@ -1230,14 +1237,14 @@ static ASTToken* parse_compound_literal(ParserState* parser_state)
 			else
 			{
 				parser_error(parser_state, peek(parser_state)->pos, "Expected ',' or '}' in struct initialization");
-				for (usize i = 0; i <= fields_len; i++)
+				for (usize i = 0; i < fields_len; i++)
 				{
-					free(fields[i].field_name);
-					free_token_tree_token(fields[i].value);
+					free_set_nullptr(fields[i].field_name);
+					free_token_tree_token(&fields[i].value);
 				}
-				free(fields);
+				free_set_nullptr(fields);
 				free_var_def(&type_def);
-				free(node);
+				free_set_nullptr(node);
 				return nullptr;
 			}
 		}
@@ -1404,7 +1411,7 @@ static ASTToken* parse_prefix(ParserState* parser_state)
 			ASTToken* expr = parse_expr(parser_state);
 			if (!expect_token(parser_state, token_type_rparen, "parenthesized expression"))
 			{
-				free_token_tree_token(expr);
+				free_token_tree_token(&expr);
 				return nullptr;
 			}
 			return expr;
@@ -1456,9 +1463,9 @@ static ASTToken* parse_postfix(ParserState* parser_state, ASTToken* left) // NOL
 					{
 						for (usize i = 0; i < arg_count; i++)
 						{
-							free_token_tree_token(args[i]);
+							free_token_tree_token(&args[i]);
 						}
-						free((void*)args);
+						free_set_nullptr(args);
 						return left;
 					}
 				}
@@ -1497,7 +1504,7 @@ static ASTToken* parse_postfix(ParserState* parser_state, ASTToken* left) // NOL
 				ASTToken* index_expr = parse_expr(parser_state);
 				if (!expect_token(parser_state, token_type_rsqbracket, "array index"))
 				{
-					free_token_tree_token(index_expr);
+					free_token_tree_token(&index_expr);
 					return left;
 				}
 
@@ -1757,7 +1764,7 @@ static ASTToken* make_literal(const Token* token)
 			break;
 		default:
 			(void)errprintf("Unknown literal type: %s\n", token_to_string(token->token_type));
-			free(node);
+			free_set_nullptr(node);
 			return nullptr;
 	}
 
@@ -2149,14 +2156,107 @@ static void add_basic_types(ParserState* parser_state)
 
 void free_token_tree(AST ast)
 {
-	free_token_tree_token(ast.ast);
+	free_token_tree_token(&ast.ast);
 }
-void free_token_tree_token(ASTToken* ast)
+static void free_var_type(VarType* type)
 {
-	if (!ast)
+	if (!type)
 	{
 		return;
 	}
+	free_set_nullptr(type->name);
+	type->name = nullptr;
+	free_set_nullptr(type->pointer_types);
+	type->pointer_types = nullptr;
+
+	if (type->array_sizes)
+	{
+		for (usize i = 0; i < type->array_count; i++)
+		{
+			free_token_tree_token(&type->array_sizes[i]);
+		}
+		free_set_nullptr(type->array_sizes);
+		type->array_sizes = nullptr;
+	}
+}
+
+static void free_enum_type(EnumType* enum_type)
+{
+	if (!enum_type)
+	{
+		return;
+	}
+	free_set_nullptr(enum_type->name);
+	enum_type->name = nullptr;
+}
+
+static void free_var_def(VarDef* def)
+{
+	if (!def)
+	{
+		return;
+	}
+
+	if (def->name != nullptr)
+	{
+		free_set_nullptr(def->name);
+		def->name = nullptr;
+	}
+	if (def->modifiers != nullptr)
+	{
+		free_set_nullptr(def->modifiers);
+		def->modifiers = nullptr;
+	}
+	free_var_type(&def->type);
+	if (def->equals != nullptr)
+	{
+		free_token_tree_token(&def->equals);
+	}
+}
+
+static void free_func_def(FuncDef* func)
+{
+	if (!func)
+	{
+		return;
+	}
+
+	free_set_nullptr(func->name);
+	func->name = nullptr;
+	free_set_nullptr(func->modifiers);
+	func->modifiers = nullptr;
+
+	if (func->template_types)
+	{
+		for (usize i = 0; i < func->template_count; i++)
+		{
+			free_token_tree_token(&func->template_types[i]);
+		}
+		free_set_nullptr(func->template_types);
+		func->template_types = nullptr;
+	}
+
+	if (func->params)
+	{
+		for (usize i = 0; i < func->param_count; i++)
+		{
+			free_token_tree_token(&func->params[i]);
+		}
+		free_set_nullptr(func->params);
+		func->params = nullptr;
+	}
+	free_var_def(&func->return_type);
+	free_token_tree_token(&func->body);
+}
+
+void free_token_tree_token(ASTToken** ast_ptr)
+{
+	if (!ast_ptr || !*ast_ptr)
+	{
+		return;
+	}
+
+	ASTToken* ast = *ast_ptr;
 
 	switch (ast->type)
 	{
@@ -2169,123 +2269,137 @@ void free_token_tree_token(ASTToken* ast)
 			break;
 
 		case AST_STRUCT_DEF:
-			free((void*)ast->node.struct_def.name);
-			free((void*)ast->node.struct_def.modifiers);
+			free_set_nullptr(ast->node.struct_def.name);
+			ast->node.struct_def.name = nullptr;
+			free_set_nullptr(ast->node.struct_def.modifiers);
+			ast->node.struct_def.modifiers = nullptr;
 			if (ast->node.struct_def.members)
 			{
-				for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.struct_def.member_count; i++)
 				{
-					free_token_tree_token(ast->node.struct_def.members[i]);
+					free_token_tree_token(&ast->node.struct_def.members[i]);
 				}
-				free((void*)ast->node.struct_def.members);
+				free_set_nullptr(ast->node.struct_def.members);
+				ast->node.struct_def.members = nullptr;
 			}
 			break;
 
 		case AST_UNION_DEF:
-			free((void*)ast->node.union_def.modifiers);
-			free((void*)ast->node.union_def.name);
+			free_set_nullptr(ast->node.union_def.modifiers);
+			ast->node.union_def.modifiers = nullptr;
+			free_set_nullptr(ast->node.union_def.name);
+			ast->node.union_def.name = nullptr;
 			if (ast->node.union_def.members)
 			{
-				for (usize i = 0; i < ast->node.union_def.member_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.union_def.member_count; i++)
 				{
-					free_token_tree_token(ast->node.union_def.members[i]);
+					free_token_tree_token(&ast->node.union_def.members[i]);
 				}
-				free((void*)ast->node.union_def.members);
+				free_set_nullptr(ast->node.union_def.members);
+				ast->node.union_def.members = nullptr;
 			}
 			break;
 
 		case AST_ENUM_DEF:
-			free((void*)ast->node.enum_def.modifiers);
-			free((void*)ast->node.enum_def.name);
+			free_set_nullptr(ast->node.enum_def.modifiers);
+			ast->node.enum_def.modifiers = nullptr;
+			free_set_nullptr(ast->node.enum_def.name);
+			ast->node.enum_def.name = nullptr;
 			if (ast->node.enum_def.members)
 			{
-				for (usize i = 0; i < ast->node.enum_def.member_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.enum_def.member_count; i++)
 				{
 					free_enum_type(&ast->node.enum_def.members[i]);
 				}
-				free((void*)ast->node.enum_def.members);
+				free_set_nullptr(ast->node.enum_def.members);
+				ast->node.enum_def.members = nullptr;
 			}
-			free((void*)ast->node.enum_def.type);
+			free_set_nullptr(ast->node.enum_def.type);
+			ast->node.enum_def.type = nullptr;
 			break;
 
 		case AST_FUNC_CALL:
-			free_token_tree_token(ast->node.func_call.callee);
+			free_token_tree_token(&ast->node.func_call.callee);
 			if (ast->node.func_call.args)
 			{
-				for (usize i = 0; i < ast->node.func_call.arg_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.func_call.arg_count; i++)
 				{
-					free_token_tree_token(ast->node.func_call.args[i]);
+					free_token_tree_token(&ast->node.func_call.args[i]);
 				}
-				free((void*)ast->node.func_call.args);
+				free_set_nullptr(ast->node.func_call.args);
+				ast->node.func_call.args = nullptr;
 			}
 			break;
 
 		case AST_MEMBER_ACCESS:
-			free_token_tree_token(ast->node.member_access.left);
-			free_token_tree_token(ast->node.member_access.right);
+			free_token_tree_token(&ast->node.member_access.left);
+			free_token_tree_token(&ast->node.member_access.right);
 			break;
 
 		case AST_BINARY_EXPR:
-			free_token_tree_token(ast->node.binary_expr.left);
-			free_token_tree_token(ast->node.binary_expr.right);
+			free_token_tree_token(&ast->node.binary_expr.left);
+			free_token_tree_token(&ast->node.binary_expr.right);
 			break;
 
 		case AST_INDEX_EXPR:
-			free_token_tree_token(ast->node.index_expr.left);
-			free_token_tree_token(ast->node.index_expr.index);
+			free_token_tree_token(&ast->node.index_expr.left);
+			free_token_tree_token(&ast->node.index_expr.index);
 			break;
 
 		case AST_LITERAL:
 			if (ast->node.literal.literal.token_type == token_type_string)
 			{
-				free((void*)ast->node.literal.literal.str_val);
+				free_set_nullptr(ast->node.literal.literal.str_val);
+				ast->node.literal.literal.str_val = nullptr;
 			}
 			break;
 
 		case AST_IDENTIFIER:
-			free((void*)ast->node.identifier.identifier.str_val);
+			free_set_nullptr(ast->node.identifier.identifier.str_val);
+			ast->node.identifier.identifier.str_val = nullptr;
 			break;
 
 		case AST_BLOCK:
 			if (ast->node.block.statements)
 			{
-				for (usize i = 0; i < ast->node.block.statement_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.block.statement_count; i++)
 				{
-					free_token_tree_token(ast->node.block.statements[i]);
+					free_token_tree_token(&ast->node.block.statements[i]);
 				}
-				free((void*)ast->node.block.statements);
+				free_set_nullptr(ast->node.block.statements);
+				ast->node.block.statements = nullptr;
 			}
-			free_token_tree_token(ast->node.block.trailing_expr);
+			free_token_tree_token(&ast->node.block.trailing_expr);
 			break;
 
 		case AST_IF_EXPR:
-			free_token_tree_token(ast->node.if_expr.condition);
-			free_token_tree_token(ast->node.if_expr.then_block);
-			free_token_tree_token(ast->node.if_expr.else_block);
+			free_token_tree_token(&ast->node.if_expr.condition);
+			free_token_tree_token(&ast->node.if_expr.then_block);
+			free_token_tree_token(&ast->node.if_expr.else_block);
 			break;
 
 		case AST_WHILE_EXPR:
-			free_token_tree_token(ast->node.while_expr.condition);
-			free_token_tree_token(ast->node.while_expr.then_block);
+			free_token_tree_token(&ast->node.while_expr.condition);
+			free_token_tree_token(&ast->node.while_expr.then_block);
 			break;
 
 		case AST_FOR_EXPR:
 			if (ast->node.for_expr.style == FOR_STYLE_C)
 			{
-				free_token_tree_token(ast->node.for_expr.c_style.init);
-				free_token_tree_token(ast->node.for_expr.c_style.condition);
-				free_token_tree_token(ast->node.for_expr.c_style.increment);
+				free_token_tree_token(&ast->node.for_expr.c_style.init);
+				free_token_tree_token(&ast->node.for_expr.c_style.condition);
+				free_token_tree_token(&ast->node.for_expr.c_style.increment);
 			}
 			else if (ast->node.for_expr.style == FOR_STYLE_RUST)
 			{
 				free_var_def(&ast->node.for_expr.rust_style.var_def);
-				free_token_tree_token(ast->node.for_expr.rust_style.iterable);
+				free_token_tree_token(&ast->node.for_expr.rust_style.iterable);
 			}
-			free_token_tree_token(ast->node.for_expr.body);
+			free_token_tree_token(&ast->node.for_expr.body);
 			break;
 
 		case AST_RETURN_STMT:
-			free_token_tree_token(ast->node.return_stmt.return_stmt);
+			free_token_tree_token(&ast->node.return_stmt.return_stmt);
 			break;
 
 		case AST_BREAK_STMT:
@@ -2299,10 +2413,12 @@ void free_token_tree_token(ASTToken* ast)
 				case msg_use:
 				case msg_include:
 				case msg_include_str:
-					free((void*)ast->node.message.import.import);
+					free_set_nullptr(ast->node.message.import.import);
+					ast->node.message.import.import = nullptr;
 					break;
 				case msg_c_type:
-					free((void*)ast->node.message.c_type.type);
+					free_set_nullptr(ast->node.message.c_type.type);
+					ast->node.message.c_type.type = nullptr;
 					break;
 				case msg_invalid:
 				default:
@@ -2311,117 +2427,44 @@ void free_token_tree_token(ASTToken* ast)
 			break;
 
 		case AST_RANGE_EXPR:
-			free_token_tree_token(ast->node.range_expr.start);
-			free_token_tree_token(ast->node.range_expr.end);
+			free_token_tree_token(&ast->node.range_expr.start);
+			free_token_tree_token(&ast->node.range_expr.end);
 			break;
 		case AST_UNARY:
-			free_token_tree_token(ast->node.unary_expr.rhs);
+			free_token_tree_token(&ast->node.unary_expr.rhs);
 			break;
 		case AST_ARRAY_INIT:
-			free_token_tree_token(ast->node.array_init.size_expr);
-			for (usize i = 0; i < ast->node.array_init.element_count; i++) // NOLINT
+			free_token_tree_token(&ast->node.array_init.size_expr);
+			for (usize i = 0; i < ast->node.array_init.element_count; i++)
 			{
-				free_token_tree_token(ast->node.array_init.elements[i]);
+				free_token_tree_token(&ast->node.array_init.elements[i]);
 			}
-			free((void*)ast->node.array_init.elements);
+			free_set_nullptr(ast->node.array_init.elements);
+			ast->node.array_init.elements = nullptr;
 			break;
 		case AST_STRUCT_INIT:
-			free((void*)ast->node.struct_init.struct_name);
+			free_set_nullptr(ast->node.struct_init.struct_name);
+			ast->node.struct_init.struct_name = nullptr;
 			if (ast->node.struct_init.fields != nullptr)
 			{
-				for (usize i = 0; i < ast->node.struct_init.field_count; i++) // NOLINT
+				for (usize i = 0; i < ast->node.struct_init.field_count; i++)
 				{
-					free_token_tree_token(ast->node.struct_init.fields[i].value);
-					free((void*)ast->node.struct_init.fields[i].field_name);
+					free_token_tree_token(&ast->node.struct_init.fields[i].value);
+					free_set_nullptr(ast->node.struct_init.fields[i].field_name);
+					ast->node.struct_init.fields[i].field_name = nullptr;
 				}
-				free((void*)ast->node.struct_init.fields);
+				free_set_nullptr(ast->node.struct_init.fields);
+				ast->node.struct_init.fields = nullptr;
 			}
 			break;
 		case AST_CAST_EXPR:
 			free_var_def(&ast->node.cast_expr.target_type);
-			free_token_tree_token(ast->node.cast_expr.expr);
+			free_token_tree_token(&ast->node.cast_expr.expr);
 			break;
 	}
 
-	free((void*)ast);
-}
-
-static void free_var_type(VarType* type)
-{
-	if (!type)
-	{
-		return;
-	}
-	free(type->name);
-	free(type->pointer_types);
-
-	if (type->array_sizes)
-	{
-		for (usize i = 0; i < type->array_count; i++) // NOLINT
-		{
-			free_token_tree_token(type->array_sizes[i]);
-		}
-		free((void*)type->array_sizes);
-	}
-}
-
-static void free_enum_type(EnumType* enum_type)
-{
-	if (!enum_type)
-	{
-		return;
-	}
-	free((void*)enum_type->name);
-}
-
-static void free_var_def(VarDef* def)
-{
-	if (!def)
-	{
-		return;
-	}
-
-	if (def->name != nullptr)
-	{
-		free((void*)def->name);
-	}
-	if (def->modifiers != nullptr)
-	{
-		free((void*)def->modifiers);
-	}
-	free_var_type(&def->type);
-	free_token_tree_token(def->equals);
-}
-
-static void free_func_def(FuncDef* func)
-{
-	if (!func)
-	{
-		return;
-	}
-
-	free((void*)func->name);
-	free((void*)func->modifiers);
-
-	if (func->template_types)
-	{
-		for (usize i = 0; i < func->template_count; i++) // NOLINT
-		{
-			free_token_tree_token(func->template_types[i]);
-		}
-		free((void*)func->template_types);
-	}
-
-	if (func->params)
-	{
-		for (usize i = 0; i < func->param_count; i++) // NOLINT
-		{
-			free_token_tree_token(func->params[i]);
-		}
-		free((void*)func->params);
-	}
-	free_var_def(&func->return_type);
-	free_token_tree_token(func->body);
+	free_set_nullptr(ast);
+	*ast_ptr = nullptr;
 }
 
 void parse_print(const AST ast)
