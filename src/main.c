@@ -33,7 +33,7 @@ int main(int argc, char** argv)
 	Token* lexed = lex(file);
 	free((void*)file);
 
-	AST* parsed = parse(lexed);
+	AST parsed = parse(lexed);
 
 	lex_free(lexed);
 

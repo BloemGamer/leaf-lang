@@ -27,7 +27,7 @@
 static NewFiles generate_code_from_input(const char* input, const char* filename) // NOLINT
 {
 	Token* tokens = lex(input);
-	AST* ast = parse(tokens);
+	AST ast = parse(tokens);
 	CodeGen code_gen = generate_code(ast, filename);
 	NewFiles files = code_gen_to_files(&code_gen, "test");
 

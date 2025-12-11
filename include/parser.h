@@ -3,7 +3,7 @@
 #include "basic_types.h"
 #include "tokens.h"
 
-typedef struct AbstractSyntaxTree AST;
+typedef struct AbstractSyntaxTree ASTToken;
 
 typedef enum
 {
@@ -17,7 +17,7 @@ typedef struct
 	char* name;
 	PointerType* pointer_types;
 	usize pointer_count;
-	AST** array_sizes;
+	ASTToken** array_sizes;
 	usize array_count;
 } VarType;
 
@@ -36,7 +36,7 @@ typedef struct
 	VarType type;
 	Token* modifiers;
 	usize modifier_count;
-	AST* equals;
+	ASTToken* equals;
 } VarDef;
 
 typedef struct
@@ -44,12 +44,12 @@ typedef struct
 	char* name;
 	Token* modifiers;
 	usize modifier_count;
-	AST** template_types;
+	ASTToken** template_types;
 	usize template_count;
-	AST** params;
+	ASTToken** params;
 	usize param_count;
 	VarDef return_type;
-	AST* body;
+	ASTToken* body;
 } FuncDef;
 
 typedef struct
@@ -57,7 +57,7 @@ typedef struct
 	char* name;
 	Token* modifiers;
 	usize modifier_count;
-	AST** members;
+	ASTToken** members;
 	usize member_count;
 } StructDef;
 
@@ -66,7 +66,7 @@ typedef struct
 	char* name;
 	Token* modifiers;
 	usize modifier_count;
-	AST** members;
+	ASTToken** members;
 	usize member_count;
 } UnionDef;
 
@@ -82,29 +82,29 @@ typedef struct
 
 typedef struct
 {
-	AST* callee;
-	AST** args;
+	ASTToken* callee;
+	ASTToken** args;
 	usize arg_count;
 } FuncCall;
 
 typedef struct
 {
-	AST* left;
-	AST* right;
+	ASTToken* left;
+	ASTToken* right;
 	bool direct; // true means with a . false with a ->
 } MemberAccess;
 
 typedef struct
 {
 	Token op;
-	AST* left;
-	AST* right;
+	ASTToken* left;
+	ASTToken* right;
 } BinaryExpr;
 
 typedef struct
 {
-	AST* left;
-	AST* index;
+	ASTToken* left;
+	ASTToken* index;
 } IndexExpr;
 
 typedef struct
@@ -112,7 +112,6 @@ typedef struct
 	Token literal;
 } Literal;
 
-/// wil also be used for messages
 typedef struct
 {
 	Token identifier;
@@ -121,23 +120,23 @@ typedef struct
 /// At least for now also used for the global scope
 typedef struct
 {
-	AST** statements;
+	ASTToken** statements;
 	usize statement_count;
-	AST* trailing_expr;
+	ASTToken* trailing_expr;
 	bool global;
 } Block;
 
 typedef struct // NOLINT
 {
-	AST* condition;
-	AST* then_block;
-	AST* else_block;
+	ASTToken* condition;
+	ASTToken* then_block;
+	ASTToken* else_block;
 } IfExpr;
 
 typedef struct // NOLINT
 {
-	AST* condition;
-	AST* then_block;
+	ASTToken* condition;
+	ASTToken* then_block;
 } WhileExpr;
 
 typedef struct // NOLINT
@@ -152,50 +151,50 @@ typedef struct // NOLINT
 	struct
 	{
 		VarDef var_def;
-		AST* iterable;
+		ASTToken* iterable;
 	} rust_style;
 
 	// C-style: for (init; cond; incr)
 	struct
 	{
-		AST* init;
-		AST* condition;
-		AST* increment;
+		ASTToken* init;
+		ASTToken* condition;
+		ASTToken* increment;
 	} c_style;
 
-	AST* body;
+	ASTToken* body;
 } ForExpr;
 
 typedef struct
 {
-	AST* start;
-	AST* end;
+	ASTToken* start;
+	ASTToken* end;
 	bool inclusive;
 } RangeExpr;
 
 typedef struct
 {
 	Token op;
-	AST* rhs;
+	ASTToken* rhs;
 } UnaryExpr;
 
 typedef struct // NOLINT
 {
-	AST* return_stmt;
+	ASTToken* return_stmt;
 } ReturnStmt;
 
 typedef struct
 {
-	AST** elements;
+	ASTToken** elements;
 	usize element_count;
-	AST* size_expr; // For [type; size] syntax
+	ASTToken* size_expr; // For [type; size] syntax
 	bool is_sized;
 } ArrayInit;
 
 typedef struct
 {
 	char* field_name;
-	AST* value;
+	ASTToken* value;
 } StructFieldInit;
 
 typedef struct
@@ -209,7 +208,7 @@ typedef struct
 typedef struct
 {
 	VarDef target_type;
-	AST* expr;
+	ASTToken* expr;
 } CastExpr;
 
 typedef struct // NOLINT
@@ -303,14 +302,21 @@ typedef struct AbstractSyntaxTree
 		Message message;
 	} node;
 	Pos pos;
+} ASTToken;
+
+typedef struct
+{
+	ASTToken* ast;
+	usize warnings;
+	usize errors;
 } AST;
 
 /// parses the Token array given by the lexer
 /// the TokenTree should be freed with free_token_tree
 [[gnu::warn_unused_result]]
-AST* parse(const Token* tokens);
+AST parse(const Token* tokens);
 
-/// will be implemented when the parser is done
-void free_token_tree(AST* ast);
+void free_token_tree_token(ASTToken* ast);
+void free_token_tree(AST ast);
 
-void parse_print(const AST* ast);
+void parse_print(AST ast);

@@ -21,10 +21,10 @@
 #define ASSERT_NOT_NULL(ptr, message) ASSERT((ptr) != nullptr, message)
 
 // Helper function to parse input
-static AST* parse_input(const char* input)
+static AST parse_input(const char* input)
 {
 	Token* tokens = lex(input);
-	AST* ast = parse(tokens);
+	AST ast = parse(tokens);
 	lex_free(tokens);
 	return ast;
 }
@@ -32,10 +32,10 @@ static AST* parse_input(const char* input)
 // Test: Empty input
 int test_empty_input(void)
 {
-	AST* ast = parse_input("");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
-	ASSERT_EQ(ast->type, AST_BLOCK, "Should be a block");
-	ASSERT_EQ(ast->node.block.statement_count, 0, "Should have no statements");
+	AST ast = parse_input("");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
+	ASSERT_EQ(ast.ast->type, AST_BLOCK, "Should be a block");
+	ASSERT_EQ(ast.ast->node.block.statement_count, 0, "Should have no statements");
 	free_token_tree(ast);
 	return 0;
 }
@@ -43,12 +43,12 @@ int test_empty_input(void)
 // Test: Simple variable declaration
 int test_simple_var_decl(void)
 {
-	AST* ast = parse_input("i32 x = 42;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
-	ASSERT_EQ(ast->type, AST_BLOCK, "Should be a block");
-	ASSERT_EQ(ast->node.block.statement_count, 1, "Should have one statement");
+	AST ast = parse_input("i32 x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
+	ASSERT_EQ(ast.ast->type, AST_BLOCK, "Should be a block");
+	ASSERT_EQ(ast.ast->node.block.statement_count, 1, "Should have one statement");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->type, AST_VAR_DEF, "Should be a variable definition");
 	ASSERT_STR_EQ(var_def->node.var_def.name, "x", "Variable name should be x");
 	ASSERT_STR_EQ(var_def->node.var_def.type.name, "i32", "Type should be i32");
@@ -61,10 +61,10 @@ int test_simple_var_decl(void)
 // Test: Variable with pointer
 int test_var_with_pointer(void)
 {
-	AST* ast = parse_input("i32* ptr = 0;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32* ptr = 0;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->type, AST_VAR_DEF, "Should be a variable definition");
 	ASSERT_EQ(var_def->node.var_def.type.pointer_count, 1, "Should have one pointer level");
 	ASSERT_EQ(var_def->node.var_def.type.pointer_types[0], pointer_type_mut, "Should be mutable pointer");
@@ -76,10 +76,10 @@ int test_var_with_pointer(void)
 // Test: Variable with const reference
 int test_var_with_const_ref(void)
 {
-	AST* ast = parse_input("i32& ref = x;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32& ref = x;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->type, AST_VAR_DEF, "Should be a variable definition");
 	ASSERT_EQ(var_def->node.var_def.type.pointer_count, 1, "Should have one reference level");
 	ASSERT_EQ(var_def->node.var_def.type.pointer_types[0], pointer_type_const, "Should be const reference");
@@ -91,10 +91,10 @@ int test_var_with_const_ref(void)
 // Test: Array declaration
 int test_array_decl(void)
 {
-	AST* ast = parse_input("i32 arr[10] = 0;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 arr[10] = 0;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->type, AST_VAR_DEF, "Should be a variable definition");
 	ASSERT_EQ(var_def->node.var_def.type.array_count, 1, "Should have one array dimension");
 	ASSERT_NOT_NULL(var_def->node.var_def.type.array_sizes[0], "Should have array size");
@@ -106,10 +106,10 @@ int test_array_decl(void)
 // Test: Simple function definition
 int test_simple_func_def(void)
 {
-	AST* ast = parse_input("fn add(i32 a, i32 b) -> i32 { return a + b; }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("fn add(i32 a, i32 b) -> i32 { return a + b; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* func_def = ast->node.block.statements[0];
+	ASTToken* func_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(func_def->type, AST_FUNC_DEF, "Should be a function definition");
 	ASSERT_STR_EQ(func_def->node.func_def.name, "add", "Function name should be add");
 	ASSERT_EQ(func_def->node.func_def.param_count, 2, "Should have two parameters");
@@ -123,10 +123,10 @@ int test_simple_func_def(void)
 // Test: Function with no parameters
 int test_func_no_params(void)
 {
-	AST* ast = parse_input("fn main() -> i32 { return 0; }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("fn main() -> i32 { return 0; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* func_def = ast->node.block.statements[0];
+	ASTToken* func_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(func_def->type, AST_FUNC_DEF, "Should be a function definition");
 	ASSERT_EQ(func_def->node.func_def.param_count, 0, "Should have no parameters");
 
@@ -137,10 +137,10 @@ int test_func_no_params(void)
 // Test: Function with void return (no arrow)
 int test_func_void_return(void)
 {
-	AST* ast = parse_input("fn print() { }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("fn print() { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* func_def = ast->node.block.statements[0];
+	ASTToken* func_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(func_def->type, AST_FUNC_DEF, "Should be a function definition");
 	ASSERT_NOT_NULL(func_def->node.func_def.body, "Should have a body");
 
@@ -151,10 +151,10 @@ int test_func_void_return(void)
 // Test: Struct definition
 int test_struct_def(void)
 {
-	AST* ast = parse_input("struct Point { i32 x, i32 y }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("struct Point { i32 x, i32 y }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* struct_def = ast->node.block.statements[0];
+	ASTToken* struct_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(struct_def->type, AST_STRUCT_DEF, "Should be a struct definition");
 	ASSERT_STR_EQ(struct_def->node.struct_def.name, "Point", "Struct name should be Point");
 	ASSERT_EQ(struct_def->node.struct_def.member_count, 2, "Should have two members");
@@ -166,10 +166,10 @@ int test_struct_def(void)
 // Test: Union definition
 int test_union_def(void)
 {
-	AST* ast = parse_input("union Value { i32 i, f32 f }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("union Value { i32 i, f32 f }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* union_def = ast->node.block.statements[0];
+	ASTToken* union_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(union_def->type, AST_UNION_DEF, "Should be a union definition");
 	ASSERT_STR_EQ(union_def->node.union_def.name, "Value", "Union name should be Value");
 	ASSERT_EQ(union_def->node.union_def.member_count, 2, "Should have two members");
@@ -181,10 +181,10 @@ int test_union_def(void)
 // Test: Enum definition
 int test_enum_def(void)
 {
-	AST* ast = parse_input("enum Color { Red, Green, Blue }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("enum Color { Red, Green, Blue }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* enum_def = ast->node.block.statements[0];
+	ASTToken* enum_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(enum_def->type, AST_ENUM_DEF, "Should be an enum definition");
 	ASSERT_STR_EQ(enum_def->node.enum_def.name, "Color", "Enum name should be Color");
 	ASSERT_EQ(enum_def->node.enum_def.member_count, 3, "Should have three members");
@@ -196,10 +196,10 @@ int test_enum_def(void)
 // Test: Enum with explicit values
 int test_enum_with_values(void)
 {
-	AST* ast = parse_input("enum Status { Ok = 0, Error = 1 }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("enum Status { Ok = 0, Error = 1 }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* enum_def = ast->node.block.statements[0];
+	ASTToken* enum_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(enum_def->type, AST_ENUM_DEF, "Should be an enum definition");
 	ASSERT_EQ(enum_def->node.enum_def.member_count, 2, "Should have two members");
 	ASSERT(enum_def->node.enum_def.members[0].has_value, "First member should have value");
@@ -212,10 +212,10 @@ int test_enum_with_values(void)
 // Test: Enum with type
 int test_enum_with_type(void)
 {
-	AST* ast = parse_input("enum Status : u8 { Ok, Error }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("enum Status : u8 { Ok, Error }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* enum_def = ast->node.block.statements[0];
+	ASTToken* enum_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(enum_def->type, AST_ENUM_DEF, "Should be an enum definition");
 	ASSERT_NOT_NULL(enum_def->node.enum_def.type, "Should have explicit type");
 	ASSERT_STR_EQ(enum_def->node.enum_def.type, "u8", "Type should be u8");
@@ -227,10 +227,10 @@ int test_enum_with_type(void)
 // Test: Binary expression
 int test_binary_expr(void)
 {
-	AST* ast = parse_input("i32 x = 1 + 2;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = 1 + 2;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_NOT_NULL(var_def->node.var_def.equals, "Should have initializer");
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_BINARY_EXPR, "Should be binary expression");
 	ASSERT_EQ(var_def->node.var_def.equals->node.binary_expr.op.token_type, token_type_plus, "Should be addition");
@@ -242,10 +242,10 @@ int test_binary_expr(void)
 // Test: Function call
 int test_func_call(void)
 {
-	AST* ast = parse_input("print(42);");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("print(42);");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* expr = ast->node.block.statements[0];
+	ASTToken* expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(expr->type, AST_FUNC_CALL, "Should be function call");
 	ASSERT_EQ(expr->node.func_call.arg_count, 1, "Should have one argument");
 
@@ -256,10 +256,10 @@ int test_func_call(void)
 // Test: Function call with multiple arguments
 int test_func_call_multi_args(void)
 {
-	AST* ast = parse_input("add(1, 2, 3);");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("add(1, 2, 3);");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* expr = ast->node.block.statements[0];
+	ASTToken* expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(expr->type, AST_FUNC_CALL, "Should be function call");
 	ASSERT_EQ(expr->node.func_call.arg_count, 3, "Should have three arguments");
 
@@ -270,10 +270,10 @@ int test_func_call_multi_args(void)
 // Test: Member access (dot)
 int test_member_access_dot(void)
 {
-	AST* ast = parse_input("point.x;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("point.x;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* expr = ast->node.block.statements[0];
+	ASTToken* expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(expr->type, AST_MEMBER_ACCESS, "Should be member access");
 	ASSERT(expr->node.member_access.direct, "Should be direct access (dot)");
 
@@ -284,10 +284,10 @@ int test_member_access_dot(void)
 // Test: Member access (arrow)
 int test_member_access_arrow(void)
 {
-	AST* ast = parse_input("ptr->x;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("ptr->x;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* expr = ast->node.block.statements[0];
+	ASTToken* expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(expr->type, AST_MEMBER_ACCESS, "Should be member access");
 	ASSERT(!expr->node.member_access.direct, "Should be indirect access (arrow)");
 
@@ -298,10 +298,10 @@ int test_member_access_arrow(void)
 // Test: Array indexing
 int test_array_index(void)
 {
-	AST* ast = parse_input("arr[0];");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("arr[0];");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* expr = ast->node.block.statements[0];
+	ASTToken* expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(expr->type, AST_INDEX_EXPR, "Should be index expression");
 	ASSERT_NOT_NULL(expr->node.index_expr.left, "Should have array");
 	ASSERT_NOT_NULL(expr->node.index_expr.index, "Should have index");
@@ -313,10 +313,10 @@ int test_array_index(void)
 // Test: If statement
 int test_if_stmt(void)
 {
-	AST* ast = parse_input("if x > 0 { return x; }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("if x > 0 { return x; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* if_expr = ast->node.block.statements[0];
+	ASTToken* if_expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(if_expr->type, AST_IF_EXPR, "Should be if expression");
 	ASSERT_NOT_NULL(if_expr->node.if_expr.condition, "Should have condition");
 	ASSERT_NOT_NULL(if_expr->node.if_expr.then_block, "Should have then block");
@@ -328,10 +328,10 @@ int test_if_stmt(void)
 // Test: If-else statement
 int test_if_else_stmt(void)
 {
-	AST* ast = parse_input("if x > 0 { return x; } else { return 0; }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("if x > 0 { return x; } else { return 0; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* if_expr = ast->node.block.statements[0];
+	ASTToken* if_expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(if_expr->type, AST_IF_EXPR, "Should be if expression");
 	ASSERT_NOT_NULL(if_expr->node.if_expr.else_block, "Should have else block");
 
@@ -342,10 +342,10 @@ int test_if_else_stmt(void)
 // Test: While loop
 int test_while_loop(void)
 {
-	AST* ast = parse_input("while x < 10 { x = x + 1; }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("while x < 10 { x = x + 1; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* while_expr = ast->node.block.statements[0];
+	ASTToken* while_expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(while_expr->type, AST_WHILE_EXPR, "Should be while expression");
 	ASSERT_NOT_NULL(while_expr->node.while_expr.condition, "Should have condition");
 	ASSERT_NOT_NULL(while_expr->node.while_expr.then_block, "Should have body");
@@ -357,10 +357,10 @@ int test_while_loop(void)
 // Test: C-style for loop
 int test_for_loop_c_style(void)
 {
-	AST* ast = parse_input("for (i32 i = 0; i < 10; i = i + 1) { }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("for (i32 i = 0; i < 10; i = i + 1) { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* for_expr = ast->node.block.statements[0];
+	ASTToken* for_expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(for_expr->type, AST_FOR_EXPR, "Should be for expression");
 	ASSERT_EQ(for_expr->node.for_expr.style, FOR_STYLE_C, "Should be C-style");
 	ASSERT_NOT_NULL(for_expr->node.for_expr.c_style.init, "Should have init");
@@ -374,10 +374,10 @@ int test_for_loop_c_style(void)
 // Test: Rust-style for loop
 int test_for_loop_rust_style(void)
 {
-	AST* ast = parse_input("for i32 i in 0..10 { }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("for i32 i in 0..10 { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* for_expr = ast->node.block.statements[0];
+	ASTToken* for_expr = ast.ast->node.block.statements[0];
 	ASSERT_EQ(for_expr->type, AST_FOR_EXPR, "Should be for expression");
 	ASSERT_EQ(for_expr->node.for_expr.style, FOR_STYLE_RUST, "Should be Rust-style");
 	ASSERT_NOT_NULL(for_expr->node.for_expr.rust_style.iterable, "Should have iterable");
@@ -389,10 +389,10 @@ int test_for_loop_rust_style(void)
 // Test: Return statement
 int test_return_stmt(void)
 {
-	AST* ast = parse_input("return 42;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("return 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* ret_stmt = ast->node.block.statements[0];
+	ASTToken* ret_stmt = ast.ast->node.block.statements[0];
 	ASSERT_EQ(ret_stmt->type, AST_RETURN_STMT, "Should be return statement");
 	ASSERT_NOT_NULL(ret_stmt->node.return_stmt.return_stmt, "Should have return value");
 
@@ -403,10 +403,10 @@ int test_return_stmt(void)
 // Test: Break statement
 int test_break_stmt(void)
 {
-	AST* ast = parse_input("break;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("break;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* break_stmt = ast->node.block.statements[0];
+	ASTToken* break_stmt = ast.ast->node.block.statements[0];
 	ASSERT_EQ(break_stmt->type, AST_BREAK_STMT, "Should be break statement");
 
 	free_token_tree(ast);
@@ -416,10 +416,10 @@ int test_break_stmt(void)
 // Test: Continue statement
 int test_continue_stmt(void)
 {
-	AST* ast = parse_input("continue;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("continue;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* cont_stmt = ast->node.block.statements[0];
+	ASTToken* cont_stmt = ast.ast->node.block.statements[0];
 	ASSERT_EQ(cont_stmt->type, AST_CONTINUE_STMT, "Should be continue statement");
 
 	free_token_tree(ast);
@@ -429,10 +429,10 @@ int test_continue_stmt(void)
 // Test: Range expression
 int test_range_expr(void)
 {
-	AST* ast = parse_input("i32 x = 0..10;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = 0..10;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_RANGE_EXPR, "Should be range expression");
 	ASSERT(!var_def->node.var_def.equals->node.range_expr.inclusive, "Should be exclusive");
 
@@ -443,10 +443,10 @@ int test_range_expr(void)
 // Test: Inclusive range expression
 int test_range_expr_inclusive(void)
 {
-	AST* ast = parse_input("i32 x = 0..=10;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = 0..=10;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_RANGE_EXPR, "Should be range expression");
 	ASSERT(var_def->node.var_def.equals->node.range_expr.inclusive, "Should be inclusive");
 
@@ -457,10 +457,10 @@ int test_range_expr_inclusive(void)
 // Test: Array initialization
 int test_array_init(void)
 {
-	AST* ast = parse_input("i32 x = [1, 2, 3];");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = [1, 2, 3];");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_ARRAY_INIT, "Should be array init");
 	ASSERT_EQ(var_def->node.var_def.equals->node.array_init.element_count, 3, "Should have 3 elements");
 
@@ -471,10 +471,10 @@ int test_array_init(void)
 // Test: Sized array initialization
 int test_array_init_sized(void)
 {
-	AST* ast = parse_input("i32 x = [0; 10];");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = [0; 10];");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_ARRAY_INIT, "Should be array init");
 	ASSERT(var_def->node.var_def.equals->node.array_init.is_sized, "Should be sized");
 	ASSERT_NOT_NULL(var_def->node.var_def.equals->node.array_init.size_expr, "Should have size");
@@ -486,10 +486,10 @@ int test_array_init_sized(void)
 // Test: Struct initialization
 int test_struct_init(void)
 {
-	AST* ast = parse_input("@c_type Point\nPoint p = (Point){ .x = 1, .y = 2 };");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("@c_type Point\nPoint p = (Point){ .x = 1, .y = 2 };");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[1];
+	ASTToken* var_def = ast.ast->node.block.statements[1];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_STRUCT_INIT, "Should be struct init");
 	ASSERT_EQ(var_def->node.var_def.equals->node.struct_init.field_count, 2, "Should have 2 fields");
 
@@ -497,14 +497,14 @@ int test_struct_init(void)
 	return 0;
 }
 
-// Test: Cast expression
+// Test: Cast.ast expression
 int test_cast_expr(void)
 {
-	AST* ast = parse_input("i32 x = (i32)42.5;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = (i32)42.5;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
-	ASSERT_EQ(var_def->node.var_def.equals->type, AST_CAST_EXPR, "Should be cast expression");
+	ASTToken* var_def = ast.ast->node.block.statements[0];
+	ASSERT_EQ(var_def->node.var_def.equals->type, AST_CAST_EXPR, "Should be cast.ast expression");
 	ASSERT_STR_EQ(var_def->node.var_def.equals->node.cast_expr.target_type.type.name, "i32", "Cast type should be i32");
 
 	free_token_tree(ast);
@@ -514,10 +514,10 @@ int test_cast_expr(void)
 // Test: Unary expression (dereference)
 int test_unary_deref(void)
 {
-	AST* ast = parse_input("i32 x = *ptr;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = *ptr;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_UNARY, "Should be unary expression");
 	ASSERT_EQ(var_def->node.var_def.equals->node.unary_expr.op.token_type, token_type_star, "Should be dereference");
 
@@ -528,10 +528,10 @@ int test_unary_deref(void)
 // Test: Unary expression (address-of)
 int test_unary_address_of(void)
 {
-	AST* ast = parse_input("i32* ptr = &x;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32* ptr = &x;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.equals->type, AST_UNARY, "Should be unary expression");
 	ASSERT_EQ(var_def->node.var_def.equals->node.unary_expr.op.token_type, token_type_ampersand,
 			  "Should be address-of");
@@ -543,10 +543,10 @@ int test_unary_address_of(void)
 // Test: Import message
 int test_import_message(void)
 {
-	AST* ast = parse_input("@import \"file.h\"");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("@import \"file.h\"");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* msg = ast->node.block.statements[0];
+	ASTToken* msg = ast.ast->node.block.statements[0];
 	ASSERT_EQ(msg->type, AST_MESSAGE, "Should be message");
 	ASSERT_EQ(msg->node.message.msg, msg_import, "Should be import message");
 	ASSERT_STR_EQ(msg->node.message.import.import, "file.h", "Import path should match");
@@ -558,10 +558,10 @@ int test_import_message(void)
 // Test: C type message
 int test_c_type_message(void)
 {
-	AST* ast = parse_input("@c_type FILE");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("@c_type FILE");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* msg = ast->node.block.statements[0];
+	ASTToken* msg = ast.ast->node.block.statements[0];
 	ASSERT_EQ(msg->type, AST_MESSAGE, "Should be message");
 	ASSERT_EQ(msg->node.message.msg, msg_c_type, "Should be c_type message");
 	ASSERT_STR_EQ(msg->node.message.c_type.type, "FILE", "Type should be FILE");
@@ -573,10 +573,10 @@ int test_c_type_message(void)
 // Test: Block with trailing expression
 int test_block_trailing_expr(void)
 {
-	AST* ast = parse_input("{ 42 }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("{ 42 }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* block = ast->node.block.statements[0];
+	ASTToken* block = ast.ast->node.block.statements[0];
 	ASSERT_EQ(block->type, AST_BLOCK, "Should be block");
 	ASSERT_NOT_NULL(block->node.block.trailing_expr, "Should have trailing expression");
 
@@ -587,15 +587,15 @@ int test_block_trailing_expr(void)
 // Test: Nested blocks
 int test_nested_blocks(void)
 {
-	AST* ast = parse_input("{ { 42; } }");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("{ { 42; } }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* outer = ast->node.block.statements[0];
+	ASTToken* outer = ast.ast->node.block.statements[0];
 	ASSERT_EQ(outer->type, AST_BLOCK, "Should be block");
 	ASSERT_EQ(outer->node.block.statement_count, 0,
 			  "Should have 0 statements, because it will be parsed as trailing statement");
 
-	AST* inner = outer->node.block.trailing_expr;
+	ASTToken* inner = outer->node.block.trailing_expr;
 	ASSERT_EQ(inner->type, AST_BLOCK, "Inner should be block");
 
 	free_token_tree(ast);
@@ -605,11 +605,11 @@ int test_nested_blocks(void)
 // Test: Complex expression with precedence
 int test_precedence(void)
 {
-	AST* ast = parse_input("i32 x = 1 + 2 * 3;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("i32 x = 1 + 2 * 3;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
-	AST* expr = var_def->node.var_def.equals;
+	ASTToken* var_def = ast.ast->node.block.statements[0];
+	ASTToken* expr = var_def->node.var_def.equals;
 	ASSERT_EQ(expr->type, AST_BINARY_EXPR, "Should be binary expression");
 	ASSERT_EQ(expr->node.binary_expr.op.token_type, token_type_plus, "Top level should be addition");
 	ASSERT_EQ(expr->node.binary_expr.right->type, AST_BINARY_EXPR, "Right should be binary expr");
@@ -623,12 +623,332 @@ int test_precedence(void)
 // Test: Modifiers
 int test_modifiers(void)
 {
-	AST* ast = parse_input("pub const i32 x = 42;");
-	ASSERT_NOT_NULL(ast, "AST should not be nullptr");
+	AST ast = parse_input("pub const i32 x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr");
 
-	AST* var_def = ast->node.block.statements[0];
+	ASTToken* var_def = ast.ast->node.block.statements[0];
 	ASSERT_EQ(var_def->node.var_def.modifier_count, 2, "Should have two modifiers");
 
+	free_token_tree(ast);
+	return 0;
+}
+
+// Test: Missing semicolon
+int test_error_missing_semicolon(void)
+{
+	AST ast = parse_input("i32 x = 42");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing closing brace
+int test_error_missing_closing_brace(void)
+{
+	AST ast = parse_input("fn test() { i32 x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing opening brace
+int test_error_missing_opening_brace(void)
+{
+	AST ast = parse_input("fn test() i32 x = 42; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing function parameter closing paren
+int test_error_missing_rparen_params(void)
+{
+	AST ast = parse_input("fn test(i32 x { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid function parameter separator
+int test_error_invalid_param_separator(void)
+{
+	AST ast = parse_input("fn test(i32 x; i32 y) { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing variable type
+int test_error_missing_var_type(void)
+{
+	AST ast = parse_input("x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Unknown type name
+int test_error_unknown_type(void)
+{
+	AST ast = parse_input("UnknownType x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing array closing bracket
+int test_error_missing_array_bracket(void)
+{
+	AST ast = parse_input("i32 arr[10 = 0;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing struct name
+int test_error_missing_struct_name(void)
+{
+	AST ast = parse_input("struct { i32 x }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid struct member separator
+int test_error_invalid_struct_separator(void)
+{
+	AST ast = parse_input("struct Point { i32 x; i32 y }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing enum name
+int test_error_missing_enum_name(void)
+{
+	AST ast = parse_input("enum { Red, Green, Blue }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid enum value type
+int test_error_invalid_enum_value(void)
+{
+	AST ast = parse_input("enum Color { Red = asfasdf }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing if condition
+int test_error_missing_if_condition(void)
+{
+	AST ast = parse_input("if { return 42; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing if body
+int test_error_missing_if_body(void)
+{
+	AST ast = parse_input("if x > 0");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid else without block or if
+int test_error_invalid_else(void)
+{
+	AST ast = parse_input("if x > 0 { } else return 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing while body
+int test_error_missing_while_body(void)
+{
+	AST ast = parse_input("while x < 10");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing for loop semicolons
+int test_error_missing_for_semicolons(void)
+{
+	AST ast = parse_input("for (i32 i = 0 i < 10 i = i + 1) { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing for loop closing paren
+int test_error_missing_for_rparen(void)
+{
+	AST ast = parse_input("for (i32 i = 0; i < 10; i = i + 1 { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing 'in' keyword in for-in loop
+int test_error_missing_in_keyword(void)
+{
+	AST ast = parse_input("for i32 i 0..10 { }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing function call closing paren
+int test_error_missing_call_rparen(void)
+{
+	AST ast = parse_input("print(42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing member name after dot
+int test_error_missing_member_name(void)
+{
+	AST ast = parse_input("point.;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing array index closing bracket
+int test_error_missing_index_bracket(void)
+{
+	AST ast = parse_input("arr[0;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing return value
+int test_error_missing_return_value(void)
+{
+	AST ast = parse_input("return;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid expression in statement position
+int test_error_invalid_expression(void)
+{
+	AST ast = parse_input("+ 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing array init closing bracket
+int test_error_missing_array_init_bracket(void)
+{
+	AST ast = parse_input("i32 x = [1, 2, 3;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing cast.ast closing paren
+int test_error_missing_cast_rparen(void)
+{
+	AST ast = parse_input("i32 x = (i32 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid struct init - missing dot
+int test_error_struct_init_missing_dot(void)
+{
+	AST ast = parse_input("@c_type Point\nPoint p = (Point){ x = 1 };");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid struct init - missing equals
+int test_error_struct_init_missing_equals(void)
+{
+	AST ast = parse_input("@c_type Point\nPoint p = (Point){ .x 1 };");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing struct init closing brace
+int test_error_struct_init_missing_brace(void)
+{
+	AST ast = parse_input("@c_type Point\nPoint p = (Point){ .x = 1;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid import syntax - missing quotes/brackets
+int test_error_invalid_import(void)
+{
+	AST ast = parse_input("@import file.h");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid import - missing closing angle bracket
+int test_error_import_missing_bracket(void)
+{
+	AST ast = parse_input("@import <stdio.h");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Unknown compiler message
+int test_error_unknown_message(void)
+{
+	AST ast = parse_input("@unknown_directive");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing c_type argument
+int test_error_missing_c_type_arg(void)
+{
+	AST ast = parse_input("@c_type");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Unexpected token in declaration
+int test_error_unexpected_token_in_decl(void)
+{
+	AST ast = parse_input("pub const + i32 x = 42;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Missing function return type arrow
+int test_error_missing_arrow(void)
+{
+	AST ast = parse_input("fn test() i32 { return 42; }");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Mismatched parentheses
+int test_error_mismatched_parens(void)
+{
+	AST ast = parse_input("i32 x = (1 + 2;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Multiple errors in one input
+int test_error_multiple_errors(void)
+{
+	AST ast = parse_input("fn test( { i32 x = ");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Incomplete expression
+int test_error_incomplete_expression(void)
+{
+	AST ast = parse_input("i32 x = 1 +;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: Invalid token in expression
+int test_error_invalid_token_in_expr(void)
+{
+	AST ast = parse_input("i32 x = struct;");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
+	free_token_tree(ast);
+	return 0;
+}
+// Test: EOF in middle of statement
+int test_error_eof_in_statement(void)
+{
+	AST ast = parse_input("fn test() {");
+	ASSERT_NOT_NULL(ast.ast, "AST should not be nullptr even with errors");
 	free_token_tree(ast);
 	return 0;
 }
@@ -696,6 +1016,48 @@ int main(void)
 	RUN_TEST(test_nested_blocks);
 	RUN_TEST(test_precedence);
 	RUN_TEST(test_modifiers);
+
+	// RUN_TEST(test_error_missing_semicolon);
+	// RUN_TEST(test_error_missing_closing_brace);
+	// RUN_TEST(test_error_missing_opening_brace);
+	// RUN_TEST(test_error_missing_rparen_params);
+	// RUN_TEST(test_error_invalid_param_separator);
+	// RUN_TEST(test_error_missing_var_type);
+	// RUN_TEST(test_error_unknown_type);
+	// RUN_TEST(test_error_missing_array_bracket);
+	// RUN_TEST(test_error_missing_struct_name);
+	// RUN_TEST(test_error_invalid_struct_separator);
+	// RUN_TEST(test_error_missing_enum_name);
+	// RUN_TEST(test_error_invalid_enum_value);
+	// RUN_TEST(test_error_missing_if_condition);
+	// RUN_TEST(test_error_missing_if_body);
+	// RUN_TEST(test_error_invalid_else);
+	// RUN_TEST(test_error_missing_while_body);
+	// RUN_TEST(test_error_missing_for_semicolons);
+	// RUN_TEST(test_error_missing_for_rparen);
+	// RUN_TEST(test_error_missing_in_keyword);
+	// RUN_TEST(test_error_missing_call_rparen);
+	// RUN_TEST(test_error_missing_member_name);
+	// RUN_TEST(test_error_missing_index_bracket);
+	// RUN_TEST(test_error_missing_return_value);
+	// RUN_TEST(test_error_invalid_expression);
+	// RUN_TEST(test_error_missing_array_init_bracket);
+	// RUN_TEST(test_error_missing_cast.ast_rparen);
+	// RUN_TEST(test_error_struct_init_missing_dot);
+	// RUN_TEST(test_error_struct_init_missing_equals);
+	// RUN_TEST(test_error_struct_init_missing_brace);
+	// RUN_TEST(test_error_invalid_import);
+	// RUN_TEST(test_error_import_missing_bracket);
+	// RUN_TEST(test_error_unknown_message);
+	// RUN_TEST(test_error_missing_c_type_arg);
+	// RUN_TEST(test_error_unexpected_token_in_decl);
+	// RUN_TEST(test_error_missing_arrow);
+	// RUN_TEST(test_error_mismatched_parens);
+	// RUN_TEST(test_error_multiple_errors);
+	// RUN_TEST(test_error_incomplete_expression);
+	// RUN_TEST(test_error_invalid_token_in_expr);
+	// RUN_TEST(test_error_eof_in_statement);
+
 	printf("\n========================================\n");
 	printf("Tests run: %d\n", total);
 	printf("Tests passed: %d\n", total - failed);

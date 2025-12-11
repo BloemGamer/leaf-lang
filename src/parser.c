@@ -46,28 +46,28 @@ typedef struct // NOLINT
 	usize count;
 } TokenArray;
 
-static AST* parse_decl(ParserState* parser_state);
-static AST* parse_fn(ParserState* parser_state);
-static AST* parse_var(ParserState* parser_state);
-static AST* parse_struct(ParserState* parser_state); // also used for union
-static AST* parse_enum(ParserState* parser_state);
-static AST* parse_expr(ParserState* parser_state);
-static AST* parse_block(ParserState* parser_state);
-static AST* parse_statement(ParserState* parser_state);
-static AST* parse_message(ParserState* parser_state);
-static AST* parse_if_expr(ParserState* parser_state);
-static AST* parse_while_expr(ParserState* parser_state);
-static AST* parse_for_expr(ParserState* parser_state);
-static AST* parse_return_expr(ParserState* parser_state);
-static AST* parse_break_expr(ParserState* parser_state);
-static AST* parse_continue_expr(ParserState* parser_state);
-static AST* parse_array_init(ParserState* parser_state);
-static AST* parse_compound_literal(ParserState* parser_state);
+static ASTToken* parse_decl(ParserState* parser_state);
+static ASTToken* parse_fn(ParserState* parser_state);
+static ASTToken* parse_var(ParserState* parser_state);
+static ASTToken* parse_struct(ParserState* parser_state); // also used for union
+static ASTToken* parse_enum(ParserState* parser_state);
+static ASTToken* parse_expr(ParserState* parser_state);
+static ASTToken* parse_block(ParserState* parser_state);
+static ASTToken* parse_statement(ParserState* parser_state);
+static ASTToken* parse_message(ParserState* parser_state);
+static ASTToken* parse_if_expr(ParserState* parser_state);
+static ASTToken* parse_while_expr(ParserState* parser_state);
+static ASTToken* parse_for_expr(ParserState* parser_state);
+static ASTToken* parse_return_expr(ParserState* parser_state);
+static ASTToken* parse_break_expr(ParserState* parser_state);
+static ASTToken* parse_continue_expr(ParserState* parser_state);
+static ASTToken* parse_array_init(ParserState* parser_state);
+static ASTToken* parse_compound_literal(ParserState* parser_state);
 // static AST* parse_cast_or_compound(ParserState* parser_state);
 
-static AST* parse_precedence(ParserState* parser_state, i32 min_precence);
-static AST* parse_prefix(ParserState* parser_state);
-static AST* parse_postfix(ParserState* parser_state, AST* left);
+static ASTToken* parse_precedence(ParserState* parser_state, i32 min_precence);
+static ASTToken* parse_prefix(ParserState* parser_state);
+static ASTToken* parse_postfix(ParserState* parser_state, ASTToken* left);
 
 static const Token* peek(ParserState* parser_state);
 // static const Token* peek_count(ParserState* parser_state, i64 count);
@@ -81,12 +81,12 @@ static TokenArray get_modifiers(ParserState* parser_state);
 static i32 precedence(TokenType token_type);
 static VarDef parse_var_def(ParserState* parser_state);
 
-static AST* make_literal(const Token* token);
-static AST* make_identifier(const Token* token);
-static AST* make_binary(const Token* op, AST* left, AST* right); // NOLINT
-static AST* make_call(AST* callee, AST** args, usize arg_count);
-static AST* make_member_access(AST* left, AST* right, bool direct);
-static AST* make_index(AST* left, AST* index);
+static ASTToken* make_literal(const Token* token);
+static ASTToken* make_identifier(const Token* token);
+static ASTToken* make_binary(const Token* op, ASTToken* left, ASTToken* right); // NOLINT
+static ASTToken* make_call(ASTToken* callee, ASTToken** args, usize arg_count);
+static ASTToken* make_member_access(ASTToken* left, ASTToken* right, bool direct);
+static ASTToken* make_index(ASTToken* left, ASTToken* index);
 
 static char* make_string(const Token* token);
 static usize unescape(const char* input, char* output, usize output_size, Pos pos);
@@ -101,7 +101,7 @@ static void free_enum_type(EnumType* enum_type);
 static void free_var_def(VarDef* def);
 static void free_func_def(FuncDef* func);
 
-static void parse_print_impl(const AST* ast, usize depth);
+static void parse_print_impl(const ASTToken* ast, usize depth);
 static void print_indent(usize depth);
 static void print_pointer_types(const PointerType* pointer_types, usize count);
 static void print_var_type(const VarType* var_types, usize depth);
@@ -136,7 +136,7 @@ static void parser_error(ParserState* parser_state, Pos pos, const char* fmt, ..
 static bool expect_token(ParserState* parser_state, TokenType expected, const char* context);
 static void synchronize(ParserState* parser_state);
 
-AST* parse(const Token* tokens)
+AST parse(const Token* tokens)
 {
 	usize count = 0;
 	while (tokens[count++].token_type != token_type_eof) // NOLINT
@@ -148,7 +148,7 @@ AST* parse(const Token* tokens)
 	// {
 	// 	consume(&parser_state);
 	// }
-	AST* ret = parse_block(&parser_state);
+	ASTToken* ret = parse_block(&parser_state);
 	hash_str_free(&parser_state.known_types);
 	if (parser_state.errors > 0)
 	{
@@ -159,10 +159,10 @@ AST* parse(const Token* tokens)
 	{
 		(void)errprintf("\nParsing completed with %zu warning(s)\n", parser_state.warnings);
 	}
-	return ret;
+	return (AST){.ast = ret, .warnings = parser_state.warnings, .errors = parser_state.errors};
 }
 
-static AST* parse_decl(ParserState* parser_state) // NOLINT
+static ASTToken* parse_decl(ParserState* parser_state) // NOLINT
 {
 	const TokenType stop[] = {token_type_fn,	token_type_equal,	  token_type_enum,	 token_type_struct,
 							  token_type_union, token_type_semicolon, token_type_message};
@@ -192,9 +192,9 @@ static AST* parse_decl(ParserState* parser_state) // NOLINT
 	}
 }
 
-static AST* parse_fn(ParserState* parser_state) // NOLINT
+static ASTToken* parse_fn(ParserState* parser_state) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_FUNC_DEF;
@@ -230,10 +230,10 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		if ((token = *peek(parser_state)).token_type == token_type_identifier || // NOLINT
 			is_modifier(token.token_type))										 // NOLINT
 		{
-			varray_make(AST**, params);
+			varray_make(ASTToken**, params);
 			while (true) // NOLINT
 			{
-				AST* tmp = parse_var(parser_state);
+				ASTToken* tmp = parse_var(parser_state);
 				varray_push(params, tmp); // NOLINT
 				if (peek(parser_state)->token_type == token_type_comma)
 				{
@@ -253,7 +253,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 								 token_to_string(peek(parser_state)->token_type));
 					for (usize i = 0; i < params_len; i++)
 					{
-						free_token_tree(params[i]);
+						free_token_tree_token(params[i]);
 					}
 					free((void*)params);
 					free((void*)node->node.func_def.name);
@@ -272,7 +272,7 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 		{
 			for (usize i = 0; i < node->node.func_def.param_count; i++)
 			{
-				free_token_tree(node->node.func_def.params[i]);
+				free_token_tree_token(node->node.func_def.params[i]);
 			}
 			free((void*)node->node.func_def.params);
 		}
@@ -306,9 +306,9 @@ static AST* parse_fn(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_var(ParserState* parser_state) // NOLINT
+static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	const Token* start_token = peek(parser_state);
@@ -340,7 +340,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	}
 
 	{
-		varray_make(AST**, array_sizes);
+		varray_make(ASTToken**, array_sizes);
 		while (match(parser_state, token_type_lsqbracket)) // NOLINT
 		{
 
@@ -356,7 +356,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 			{
 				for (usize i = 0; i < array_sizes_len; i++)
 				{
-					free_token_tree(array_sizes[i]);
+					free_token_tree_token(array_sizes[i]);
 				}
 				free((void*)array_sizes);
 				free(node->node.var_def.name);
@@ -384,7 +384,7 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 
 	if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
 	{
-		free_token_tree(node->node.var_def.equals);
+		free_token_tree_token(node->node.var_def.equals);
 		free_var_def(&node->node.var_def);
 		free(node);
 		return nullptr;
@@ -392,9 +392,9 @@ static AST* parse_var(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_struct(ParserState* parser_state) // NOLINT
+static ASTToken* parse_struct(ParserState* parser_state) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	TokenArray mod_arr = get_modifiers(parser_state);
 	switch (consume(parser_state)->token_type)
@@ -437,7 +437,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 			free(node);                                                                                             \
 			return nullptr;                                                                                         \
 		}                                                                                                           \
-		varray_make(AST**, members);                                                                                \
+		varray_make(ASTToken**, members);                                                                           \
 		while (true) /* NOLINT */                                                                                   \
 		{                                                                                                           \
 			if (peek(parser_state)->token_type == token_type_rbrace) /* NOLINT*/                                    \
@@ -448,7 +448,7 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 				break;                                                                                              \
 			}                                                                                                       \
 			assert(peek(parser_state)->token_type == token_type_identifier);                                        \
-			AST* tmp = parse_var(parser_state);                                                                     \
+			ASTToken* tmp = parse_var(parser_state);                                                                \
 			varray_push(members, tmp); /* NOLINT */                                                                 \
 			if (peek(parser_state)->token_type == token_type_comma)                                                 \
 			{                                                                                                       \
@@ -486,9 +486,9 @@ static AST* parse_struct(ParserState* parser_state) // NOLINT
 #undef PARSE
 }
 
-static AST* parse_enum(ParserState* parser_state)
+static ASTToken* parse_enum(ParserState* parser_state)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_ENUM_DEF;
 	TokenArray mod_arr = get_modifiers(parser_state);
@@ -596,12 +596,12 @@ static AST* parse_enum(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_expr(ParserState* parser_state) // NOLINT
+static ASTToken* parse_expr(ParserState* parser_state) // NOLINT
 {
 	return parse_precedence(parser_state, 1);
 }
 
-static AST* parse_block(ParserState* parser_state) // NOLINT
+static ASTToken* parse_block(ParserState* parser_state) // NOLINT
 {
 	bool global_block = true;
 	TokenType end_token = token_type_eof;
@@ -617,12 +617,12 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		assert(consume(parser_state)->token_type == token_type_sof);
 	}
 
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_BLOCK;
 	node->node.block.global = global_block;
 
-	varray_make(AST**, statements);
+	varray_make(ASTToken**, statements);
 
 	while (true) // NOLINT
 	{
@@ -638,14 +638,14 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 		}
 		{
 			// usize saved_pos = parser_state->pos;
-			AST* tmp = parse_statement(parser_state);
+			ASTToken* tmp = parse_statement(parser_state);
 
 			if (tmp == nullptr)
 			{
-				free_token_tree(node);
+				free_token_tree_token(node);
 				for (usize i = 0; i < statements_len; i++)
 				{
-					free_token_tree(statements[i]);
+					free_token_tree_token(statements[i]);
 				}
 				free((void*)statements);
 				return nullptr;
@@ -672,7 +672,7 @@ static AST* parse_block(ParserState* parser_state) // NOLINT
 
 	return node;
 }
-static AST* parse_statement(ParserState* parser_state) // NOLINT
+static ASTToken* parse_statement(ParserState* parser_state) // NOLINT
 {
 	Token token = *peek(parser_state);
 	switch (token.token_type)
@@ -731,12 +731,12 @@ static AST* parse_statement(ParserState* parser_state) // NOLINT
 	}
 }
 
-static AST* parse_message(ParserState* parser_state)
+static ASTToken* parse_message(ParserState* parser_state)
 {
 	const Token token_g = *consume(parser_state);
 	if (strcmp(token_g.str_val, "@import") == 0)
 	{
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->type = AST_MESSAGE;
 		node->pos = token_g.pos;
@@ -774,7 +774,7 @@ static AST* parse_message(ParserState* parser_state)
 	}
 	if (strcmp(token_g.str_val, "@c_type") == 0)
 	{
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->pos = token_g.pos;
 		node->type = AST_MESSAGE;
@@ -793,9 +793,9 @@ static AST* parse_message(ParserState* parser_state)
 	return nullptr;
 }
 
-static AST* parse_if_expr(ParserState* parser_state)
+static ASTToken* parse_if_expr(ParserState* parser_state)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_IF_EXPR;
 	Token token = *consume(parser_state);
@@ -812,7 +812,7 @@ static AST* parse_if_expr(ParserState* parser_state)
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after if condition");
-		free_token_tree(node->node.if_expr.condition);
+		free_token_tree_token(node->node.if_expr.condition);
 		free(node);
 		return nullptr;
 	}
@@ -831,8 +831,8 @@ static AST* parse_if_expr(ParserState* parser_state)
 		else
 		{
 			parser_error(parser_state, peek(parser_state)->pos, "Expected '{' or 'if' after 'else'");
-			free_token_tree(node->node.if_expr.condition);
-			free_token_tree(node->node.if_expr.then_block);
+			free_token_tree_token(node->node.if_expr.condition);
+			free_token_tree_token(node->node.if_expr.then_block);
 			free(node);
 			return nullptr;
 		}
@@ -845,9 +845,9 @@ static AST* parse_if_expr(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_while_expr(ParserState* parser_state) // NOLINT
+static ASTToken* parse_while_expr(ParserState* parser_state) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_WHILE_EXPR;
 	Token token = *consume(parser_state);
@@ -864,7 +864,7 @@ static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' after while condition");
-		free_token_tree(node->node.while_expr.condition);
+		free_token_tree_token(node->node.while_expr.condition);
 		free(node);
 		return nullptr;
 	}
@@ -873,9 +873,9 @@ static AST* parse_while_expr(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_for_expr(ParserState* parser_state)
+static ASTToken* parse_for_expr(ParserState* parser_state)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_FOR_EXPR;
 
@@ -913,7 +913,7 @@ static AST* parse_for_expr(ParserState* parser_state)
 				node->node.for_expr.c_style.init = parse_expr(parser_state);
 				if (!expect_token(parser_state, token_type_semicolon, "for loop condition"))
 				{
-					free_token_tree(node->node.for_expr.c_style.init);
+					free_token_tree_token(node->node.for_expr.c_style.init);
 					free(node);
 					return nullptr;
 				}
@@ -931,8 +931,8 @@ static AST* parse_for_expr(ParserState* parser_state)
 
 		if (!expect_token(parser_state, token_type_semicolon, "for loop"))
 		{
-			free_token_tree(node->node.for_expr.c_style.init);
-			free_token_tree(node->node.for_expr.c_style.condition);
+			free_token_tree_token(node->node.for_expr.c_style.init);
+			free_token_tree_token(node->node.for_expr.c_style.condition);
 			free(node);
 			return nullptr;
 		}
@@ -948,9 +948,9 @@ static AST* parse_for_expr(ParserState* parser_state)
 
 		if (!expect_token(parser_state, token_type_rparen, "for loop"))
 		{
-			free_token_tree(node->node.for_expr.c_style.init);
-			free_token_tree(node->node.for_expr.c_style.condition);
-			free_token_tree(node->node.for_expr.c_style.increment);
+			free_token_tree_token(node->node.for_expr.c_style.init);
+			free_token_tree_token(node->node.for_expr.c_style.condition);
+			free_token_tree_token(node->node.for_expr.c_style.increment);
 			free(node);
 			return nullptr;
 		}
@@ -983,14 +983,14 @@ static AST* parse_for_expr(ParserState* parser_state)
 		parser_error(parser_state, peek(parser_state)->pos, "Expected '{' for for loop body");
 		if (node->node.for_expr.style == FOR_STYLE_C)
 		{
-			free_token_tree(node->node.for_expr.c_style.init);
-			free_token_tree(node->node.for_expr.c_style.condition);
-			free_token_tree(node->node.for_expr.c_style.increment);
+			free_token_tree_token(node->node.for_expr.c_style.init);
+			free_token_tree_token(node->node.for_expr.c_style.condition);
+			free_token_tree_token(node->node.for_expr.c_style.increment);
 		}
 		else
 		{
 			free_var_def(&node->node.for_expr.rust_style.var_def);
-			free_token_tree(node->node.for_expr.rust_style.iterable);
+			free_token_tree_token(node->node.for_expr.rust_style.iterable);
 		}
 		free(node);
 		return nullptr;
@@ -1000,9 +1000,9 @@ static AST* parse_for_expr(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_return_expr(ParserState* parser_state) // NOLINT
+static ASTToken* parse_return_expr(ParserState* parser_state) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_RETURN_STMT;
@@ -1019,9 +1019,9 @@ static AST* parse_return_expr(ParserState* parser_state) // NOLINT
 	return node;
 }
 
-static AST* parse_break_expr(ParserState* parser_state)
+static ASTToken* parse_break_expr(ParserState* parser_state)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_BREAK_STMT;
@@ -1037,9 +1037,9 @@ static AST* parse_break_expr(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_continue_expr(ParserState* parser_state)
+static ASTToken* parse_continue_expr(ParserState* parser_state)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_CONTINUE_STMT;
@@ -1055,7 +1055,7 @@ static AST* parse_continue_expr(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_array_init(ParserState* parser_state)
+static ASTToken* parse_array_init(ParserState* parser_state)
 {
 	Token token = *consume(parser_state); // '['
 	if (token.token_type != token_type_lsqbracket)
@@ -1064,7 +1064,7 @@ static AST* parse_array_init(ParserState* parser_state)
 		return nullptr;
 	}
 
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	node->type = AST_ARRAY_INIT;
 	node->pos = token.pos;
@@ -1076,9 +1076,9 @@ static AST* parse_array_init(ParserState* parser_state)
 		return node;
 	}
 
-	varray_make(AST**, elements);
+	varray_make(ASTToken**, elements);
 
-	AST* first = parse_expr(parser_state);
+	ASTToken* first = parse_expr(parser_state);
 	varray_push(elements, first); // NOLINT
 
 	if (match(parser_state, token_type_semicolon))
@@ -1103,12 +1103,12 @@ static AST* parse_array_init(ParserState* parser_state)
 	{
 		for (usize i = 0; i < elements_len; i++)
 		{
-			free_token_tree(elements[i]);
+			free_token_tree_token(elements[i]);
 		}
 		free((void*)elements);
 		if (node->node.array_init.is_sized)
 		{
-			free_token_tree(node->node.array_init.size_expr);
+			free_token_tree_token(node->node.array_init.size_expr);
 		}
 		free(node);
 		return nullptr;
@@ -1116,7 +1116,7 @@ static AST* parse_array_init(ParserState* parser_state)
 	return node;
 }
 
-static AST* parse_compound_literal(ParserState* parser_state)
+static ASTToken* parse_compound_literal(ParserState* parser_state)
 {
 	if (!expect_token(parser_state, token_type_lparen, "compound literal"))
 	{
@@ -1131,7 +1131,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 
 	if (peek(parser_state)->token_type != token_type_lbrace)
 	{
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->type = AST_CAST_EXPR;
 		node->node.cast_expr.target_type = type_def;
@@ -1147,7 +1147,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 
 	if (match(parser_state, token_type_rbrace))
 	{
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->type = AST_STRUCT_INIT;
 		node->node.struct_init.struct_name = type_def.type.name;
@@ -1159,7 +1159,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 
 	if (peek(parser_state)->token_type == token_type_dot)
 	{
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->type = AST_STRUCT_INIT;
 		node->node.struct_init.struct_name = type_def.type.name;
@@ -1173,7 +1173,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 				for (usize i = 0; i < fields_len; i++)
 				{
 					free(fields[i].field_name);
-					free_token_tree(fields[i].value);
+					free_token_tree_token(fields[i].value);
 				}
 				free(fields);
 				free_var_def(&type_def);
@@ -1188,7 +1188,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 				for (usize i = 0; i < fields_len; i++)
 				{
 					free(fields[i].field_name);
-					free_token_tree(fields[i].value);
+					free_token_tree_token(fields[i].value);
 				}
 				free(fields);
 				free_var_def(&type_def);
@@ -1203,7 +1203,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 				for (usize i = 0; i < fields_len; i++)
 				{
 					free(fields[i].field_name);
-					free_token_tree(fields[i].value);
+					free_token_tree_token(fields[i].value);
 				}
 				free(fields);
 				free_var_def(&type_def);
@@ -1233,7 +1233,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 				for (usize i = 0; i <= fields_len; i++)
 				{
 					free(fields[i].field_name);
-					free_token_tree(fields[i].value);
+					free_token_tree_token(fields[i].value);
 				}
 				free(fields);
 				free_var_def(&type_def);
@@ -1249,7 +1249,7 @@ static AST* parse_compound_literal(ParserState* parser_state)
 	{
 		step_back(parser_state);
 
-		AST* node = calloc(1, sizeof(AST));
+		ASTToken* node = calloc(1, sizeof(ASTToken));
 		assert(node != nullptr);
 		node->type = AST_CAST_EXPR;
 		node->node.cast_expr.target_type = type_def;
@@ -1258,9 +1258,9 @@ static AST* parse_compound_literal(ParserState* parser_state)
 	}
 }
 
-static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
+static ASTToken* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 {
-	AST* left = parse_prefix(parser_state);
+	ASTToken* left = parse_prefix(parser_state);
 
 	left = parse_postfix(parser_state, left);
 
@@ -1280,7 +1280,7 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 
 		consume(parser_state);
 
-		AST* right = parse_precedence(parser_state, prec + 1);
+		ASTToken* right = parse_precedence(parser_state, prec + 1);
 
 		left = make_binary(op, left, right);
 
@@ -1290,9 +1290,9 @@ static AST* parse_precedence(ParserState* parser_state, i32 min_prec) // NOLINT
 	return left;
 }
 
-static AST* make_unary(const Token* op, AST* rhs) // NOLINT
+static ASTToken* make_unary(const Token* op, ASTToken* rhs) // NOLINT
 {
-	AST* node = (AST*)calloc(1, sizeof(AST));
+	ASTToken* node = (ASTToken*)calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_UNARY;
@@ -1303,7 +1303,7 @@ static AST* make_unary(const Token* op, AST* rhs) // NOLINT
 	return node;
 }
 
-static AST* parse_prefix(ParserState* parser_state)
+static ASTToken* parse_prefix(ParserState* parser_state)
 {
 	const Token* token = consume(parser_state);
 	if (!token)
@@ -1316,7 +1316,7 @@ static AST* parse_prefix(ParserState* parser_state)
 		case token_type_star:
 		case token_type_ampersand:
 		{
-			AST* rhs = parse_prefix(parser_state);
+			ASTToken* rhs = parse_prefix(parser_state);
 			return make_unary(token, rhs);
 		}
 
@@ -1401,10 +1401,10 @@ static AST* parse_prefix(ParserState* parser_state)
 				parser_state->pos = saved_pos;
 			}
 			consume(parser_state);
-			AST* expr = parse_expr(parser_state);
+			ASTToken* expr = parse_expr(parser_state);
 			if (!expect_token(parser_state, token_type_rparen, "parenthesized expression"))
 			{
-				free_token_tree(expr);
+				free_token_tree_token(expr);
 				return nullptr;
 			}
 			return expr;
@@ -1425,7 +1425,7 @@ static AST* parse_prefix(ParserState* parser_state)
 	}
 }
 
-static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
+static ASTToken* parse_postfix(ParserState* parser_state, ASTToken* left) // NOLINT
 {
 	while (true)
 	{
@@ -1440,14 +1440,14 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 			case token_type_lparen:
 			{
 				consume(parser_state); // '('
-				AST** args = nullptr;
+				ASTToken** args = nullptr;
 				usize arg_count = 0;
 
 				if (!match(parser_state, token_type_rparen))
 				{
 					do // NOLINT
 					{
-						args = (AST**)realloc((void*)args, sizeof(AST*) * (arg_count + 1)); // NOLINT
+						args = (ASTToken**)realloc((void*)args, sizeof(ASTToken*) * (arg_count + 1)); // NOLINT
 						assert(args != nullptr);
 						args[arg_count++] = parse_expr(parser_state);
 					} while (match(parser_state, token_type_comma));
@@ -1456,7 +1456,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 					{
 						for (usize i = 0; i < arg_count; i++)
 						{
-							free_token_tree(args[i]);
+							free_token_tree_token(args[i]);
 						}
 						free((void*)args);
 						return left;
@@ -1485,7 +1485,7 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 				}
 				(void)consume(parser_state);
 
-				AST* ident = make_identifier(id);
+				ASTToken* ident = make_identifier(id);
 
 				left = make_member_access(left, ident, (token->token_type == token_type_dot));
 				break;
@@ -1494,10 +1494,10 @@ static AST* parse_postfix(ParserState* parser_state, AST* left) // NOLINT
 			case token_type_lsqbracket:
 			{
 				consume(parser_state); // '['
-				AST* index_expr = parse_expr(parser_state);
+				ASTToken* index_expr = parse_expr(parser_state);
 				if (!expect_token(parser_state, token_type_rsqbracket, "array index"))
 				{
-					free_token_tree(index_expr);
+					free_token_tree_token(index_expr);
 					return left;
 				}
 
@@ -1720,9 +1720,9 @@ static VarDef parse_var_def(ParserState* parser_state) // NOLINT
 	return var_def;
 }
 
-static AST* make_literal(const Token* token)
+static ASTToken* make_literal(const Token* token)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_LITERAL;
@@ -1764,9 +1764,9 @@ static AST* make_literal(const Token* token)
 	return node;
 }
 
-static AST* make_identifier(const Token* token)
+static ASTToken* make_identifier(const Token* token)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_IDENTIFIER;
@@ -1778,9 +1778,9 @@ static AST* make_identifier(const Token* token)
 	return node;
 }
 
-static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
+static ASTToken* make_binary(const Token* op, ASTToken* left, ASTToken* right) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 	if (op->token_type == token_type_dot_dot || op->token_type == token_type_dot_dot_equal)
 	{
@@ -1805,9 +1805,9 @@ static AST* make_binary(const Token* op, AST* left, AST* right) // NOLINT
 	return node;
 }
 
-static AST* make_call(AST* callee, AST** args, usize arg_count)
+static ASTToken* make_call(ASTToken* callee, ASTToken** args, usize arg_count)
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_FUNC_CALL;
@@ -1819,9 +1819,9 @@ static AST* make_call(AST* callee, AST** args, usize arg_count)
 	return node;
 }
 
-static AST* make_member_access(AST* left, AST* right, bool direct) // NOLINT
+static ASTToken* make_member_access(ASTToken* left, ASTToken* right, bool direct) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_MEMBER_ACCESS;
@@ -1833,9 +1833,9 @@ static AST* make_member_access(AST* left, AST* right, bool direct) // NOLINT
 	return node;
 }
 
-static AST* make_index(AST* left, AST* index) // NOLINT
+static ASTToken* make_index(ASTToken* left, ASTToken* index) // NOLINT
 {
-	AST* node = calloc(1, sizeof(AST));
+	ASTToken* node = calloc(1, sizeof(ASTToken));
 	assert(node != nullptr);
 
 	node->type = AST_INDEX_EXPR;
@@ -2147,7 +2147,11 @@ static void add_basic_types(ParserState* parser_state)
 	}
 }
 
-void free_token_tree(AST* ast)
+void free_token_tree(AST ast)
+{
+	free_token_tree_token(ast.ast);
+}
+void free_token_tree_token(ASTToken* ast)
 {
 	if (!ast)
 	{
@@ -2171,7 +2175,7 @@ void free_token_tree(AST* ast)
 			{
 				for (usize i = 0; i < ast->node.struct_def.member_count; i++) // NOLINT
 				{
-					free_token_tree(ast->node.struct_def.members[i]);
+					free_token_tree_token(ast->node.struct_def.members[i]);
 				}
 				free((void*)ast->node.struct_def.members);
 			}
@@ -2184,7 +2188,7 @@ void free_token_tree(AST* ast)
 			{
 				for (usize i = 0; i < ast->node.union_def.member_count; i++) // NOLINT
 				{
-					free_token_tree(ast->node.union_def.members[i]);
+					free_token_tree_token(ast->node.union_def.members[i]);
 				}
 				free((void*)ast->node.union_def.members);
 			}
@@ -2205,30 +2209,30 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_FUNC_CALL:
-			free_token_tree(ast->node.func_call.callee);
+			free_token_tree_token(ast->node.func_call.callee);
 			if (ast->node.func_call.args)
 			{
 				for (usize i = 0; i < ast->node.func_call.arg_count; i++) // NOLINT
 				{
-					free_token_tree(ast->node.func_call.args[i]);
+					free_token_tree_token(ast->node.func_call.args[i]);
 				}
 				free((void*)ast->node.func_call.args);
 			}
 			break;
 
 		case AST_MEMBER_ACCESS:
-			free_token_tree(ast->node.member_access.left);
-			free_token_tree(ast->node.member_access.right);
+			free_token_tree_token(ast->node.member_access.left);
+			free_token_tree_token(ast->node.member_access.right);
 			break;
 
 		case AST_BINARY_EXPR:
-			free_token_tree(ast->node.binary_expr.left);
-			free_token_tree(ast->node.binary_expr.right);
+			free_token_tree_token(ast->node.binary_expr.left);
+			free_token_tree_token(ast->node.binary_expr.right);
 			break;
 
 		case AST_INDEX_EXPR:
-			free_token_tree(ast->node.index_expr.left);
-			free_token_tree(ast->node.index_expr.index);
+			free_token_tree_token(ast->node.index_expr.left);
+			free_token_tree_token(ast->node.index_expr.index);
 			break;
 
 		case AST_LITERAL:
@@ -2247,41 +2251,41 @@ void free_token_tree(AST* ast)
 			{
 				for (usize i = 0; i < ast->node.block.statement_count; i++) // NOLINT
 				{
-					free_token_tree(ast->node.block.statements[i]);
+					free_token_tree_token(ast->node.block.statements[i]);
 				}
 				free((void*)ast->node.block.statements);
 			}
-			free_token_tree(ast->node.block.trailing_expr);
+			free_token_tree_token(ast->node.block.trailing_expr);
 			break;
 
 		case AST_IF_EXPR:
-			free_token_tree(ast->node.if_expr.condition);
-			free_token_tree(ast->node.if_expr.then_block);
-			free_token_tree(ast->node.if_expr.else_block);
+			free_token_tree_token(ast->node.if_expr.condition);
+			free_token_tree_token(ast->node.if_expr.then_block);
+			free_token_tree_token(ast->node.if_expr.else_block);
 			break;
 
 		case AST_WHILE_EXPR:
-			free_token_tree(ast->node.while_expr.condition);
-			free_token_tree(ast->node.while_expr.then_block);
+			free_token_tree_token(ast->node.while_expr.condition);
+			free_token_tree_token(ast->node.while_expr.then_block);
 			break;
 
 		case AST_FOR_EXPR:
 			if (ast->node.for_expr.style == FOR_STYLE_C)
 			{
-				free_token_tree(ast->node.for_expr.c_style.init);
-				free_token_tree(ast->node.for_expr.c_style.condition);
-				free_token_tree(ast->node.for_expr.c_style.increment);
+				free_token_tree_token(ast->node.for_expr.c_style.init);
+				free_token_tree_token(ast->node.for_expr.c_style.condition);
+				free_token_tree_token(ast->node.for_expr.c_style.increment);
 			}
 			else if (ast->node.for_expr.style == FOR_STYLE_RUST)
 			{
 				free_var_def(&ast->node.for_expr.rust_style.var_def);
-				free_token_tree(ast->node.for_expr.rust_style.iterable);
+				free_token_tree_token(ast->node.for_expr.rust_style.iterable);
 			}
-			free_token_tree(ast->node.for_expr.body);
+			free_token_tree_token(ast->node.for_expr.body);
 			break;
 
 		case AST_RETURN_STMT:
-			free_token_tree(ast->node.return_stmt.return_stmt);
+			free_token_tree_token(ast->node.return_stmt.return_stmt);
 			break;
 
 		case AST_BREAK_STMT:
@@ -2307,17 +2311,17 @@ void free_token_tree(AST* ast)
 			break;
 
 		case AST_RANGE_EXPR:
-			free_token_tree(ast->node.range_expr.start);
-			free_token_tree(ast->node.range_expr.end);
+			free_token_tree_token(ast->node.range_expr.start);
+			free_token_tree_token(ast->node.range_expr.end);
 			break;
 		case AST_UNARY:
-			free_token_tree(ast->node.unary_expr.rhs);
+			free_token_tree_token(ast->node.unary_expr.rhs);
 			break;
 		case AST_ARRAY_INIT:
-			free_token_tree(ast->node.array_init.size_expr);
+			free_token_tree_token(ast->node.array_init.size_expr);
 			for (usize i = 0; i < ast->node.array_init.element_count; i++) // NOLINT
 			{
-				free_token_tree(ast->node.array_init.elements[i]);
+				free_token_tree_token(ast->node.array_init.elements[i]);
 			}
 			free((void*)ast->node.array_init.elements);
 			break;
@@ -2327,7 +2331,7 @@ void free_token_tree(AST* ast)
 			{
 				for (usize i = 0; i < ast->node.struct_init.field_count; i++) // NOLINT
 				{
-					free_token_tree(ast->node.struct_init.fields[i].value);
+					free_token_tree_token(ast->node.struct_init.fields[i].value);
 					free((void*)ast->node.struct_init.fields[i].field_name);
 				}
 				free((void*)ast->node.struct_init.fields);
@@ -2335,7 +2339,7 @@ void free_token_tree(AST* ast)
 			break;
 		case AST_CAST_EXPR:
 			free_var_def(&ast->node.cast_expr.target_type);
-			free_token_tree(ast->node.cast_expr.expr);
+			free_token_tree_token(ast->node.cast_expr.expr);
 			break;
 	}
 
@@ -2355,7 +2359,7 @@ static void free_var_type(VarType* type)
 	{
 		for (usize i = 0; i < type->array_count; i++) // NOLINT
 		{
-			free_token_tree(type->array_sizes[i]);
+			free_token_tree_token(type->array_sizes[i]);
 		}
 		free((void*)type->array_sizes);
 	}
@@ -2386,7 +2390,7 @@ static void free_var_def(VarDef* def)
 		free((void*)def->modifiers);
 	}
 	free_var_type(&def->type);
-	free_token_tree(def->equals);
+	free_token_tree_token(def->equals);
 }
 
 static void free_func_def(FuncDef* func)
@@ -2403,7 +2407,7 @@ static void free_func_def(FuncDef* func)
 	{
 		for (usize i = 0; i < func->template_count; i++) // NOLINT
 		{
-			free_token_tree(func->template_types[i]);
+			free_token_tree_token(func->template_types[i]);
 		}
 		free((void*)func->template_types);
 	}
@@ -2412,20 +2416,20 @@ static void free_func_def(FuncDef* func)
 	{
 		for (usize i = 0; i < func->param_count; i++) // NOLINT
 		{
-			free_token_tree(func->params[i]);
+			free_token_tree_token(func->params[i]);
 		}
 		free((void*)func->params);
 	}
 	free_var_def(&func->return_type);
-	free_token_tree(func->body);
+	free_token_tree_token(func->body);
 }
 
-void parse_print(const AST* ast)
+void parse_print(const AST ast)
 {
-	parse_print_impl(ast, 0);
+	parse_print_impl(ast.ast, 0);
 }
 
-static void parse_print_impl(const AST* ast, const usize depth) // NOLINT
+static void parse_print_impl(const ASTToken* ast, const usize depth) // NOLINT
 {
 	if (!ast)
 	{

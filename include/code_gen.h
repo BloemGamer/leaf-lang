@@ -55,7 +55,7 @@ typedef struct
 	char* h_file;
 } NewFiles;
 
-extern CodeGen generate_code(AST* ast, const char* filename);
+extern CodeGen generate_code(AST ast, const char* filename);
 
 extern NewFiles code_gen_to_files(const CodeGen* code_gen, const char* file_name);
 extern void code_gen_free_code_gen(CodeGen code_gen);

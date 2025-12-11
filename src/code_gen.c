@@ -15,7 +15,7 @@ static constexpr i64 MAX_BUFFER_SIZE = 64;
 
 static constexpr bool GEN_LINE = true;
 
-static void gen_code(CodeGen* code_gen, AST* ast);
+static void gen_code(CodeGen* code_gen, ASTToken* ast);
 
 static void gen_ast_block(CodeGen code_gen[static 1], Block block, const char* add_before_trailing_expr);
 static void gen_ast_func_def(CodeGen code_gen[static 1], FuncDef func_def);
@@ -59,18 +59,18 @@ static void emit_line_directive(CodeGen* code_gen, Pos pos);
 static void code_gen_error(CodeGen* code_gen, const char* fmt, ...);
 static void code_gen_warn(CodeGen* code_gen, const char* fmt, ...);
 
-CodeGen generate_code(AST* ast, const char* filename)
+CodeGen generate_code(AST ast, const char* filename)
 {
 	CodeGen code_gen = {.current_block = CODE_BLOCK_NONE, .source_filename = filename};
 
 	str_cat(&code_gen.includes, "#include <assert.h>\n");
 	str_cat(&code_gen.includes, "#include <basic_types.h>\n");
-	gen_code(&code_gen, ast);
+	gen_code(&code_gen, ast.ast);
 
 	return code_gen;
 }
 
-static void gen_code(CodeGen* code_gen, AST* ast)
+static void gen_code(CodeGen* code_gen, ASTToken* ast)
 {
 	if (ast == nullptr)
 	{
@@ -853,7 +853,7 @@ static void gen_ast_cast_block(CodeGen code_gen[static 1], CastExpr cast_expr, c
 
 	code_gen->close_paren_count = paren_count;
 
-	AST* deepest_expr = cast_expr.expr;
+	ASTToken* deepest_expr = cast_expr.expr;
 	while (deepest_expr->type == AST_CAST_EXPR)
 	{
 		deepest_expr = deepest_expr->node.cast_expr.expr;
