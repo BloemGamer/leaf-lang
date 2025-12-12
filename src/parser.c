@@ -389,13 +389,13 @@ static ASTToken* parse_var(ParserState* parser_state) // NOLINT
 	}
 	node->node.var_def.equals = parse_expr(parser_state);
 
-	if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
-	{
-		free_token_tree_token(&node->node.var_def.equals);
-		free_var_def(&node->node.var_def);
-		free_set_nullptr(node);
-		return nullptr;
-	}
+	// if (!expect_token(parser_state, token_type_semicolon, "variable declaration"))
+	// {
+	// 	free_token_tree_token(&node->node.var_def.equals);
+	// 	free_var_def(&node->node.var_def);
+	// 	free_set_nullptr(node);
+	// 	return nullptr;
+	// }
 	return node;
 }
 
@@ -612,9 +612,7 @@ static ASTToken* parse_block(ParserState* parser_state) // NOLINT
 {
 	bool global_block = true;
 	TokenType end_token = token_type_eof;
-	if (match(parser_state,
-			  token_type_lbrace)) // add token_type_sof later, but for how the tokens is started, this is for now not
-								  // possible
+	if (match(parser_state, token_type_lbrace))
 	{
 		global_block = false;
 		end_token = token_type_rbrace;
@@ -643,37 +641,77 @@ static ASTToken* parse_block(ParserState* parser_state) // NOLINT
 			node->node.block.trailing_expr = nullptr;
 			break;
 		}
+
+		ASTToken* tmp = parse_statement(parser_state);
+
+		if (tmp == nullptr)
 		{
-			// usize saved_pos = parser_state->pos;
-			ASTToken* tmp = parse_statement(parser_state);
-
-			if (tmp == nullptr)
+			free_token_tree_token(&node);
+			for (usize i = 0; i < statements_len; i++)
 			{
-				free_token_tree_token(&node);
-				for (usize i = 0; i < statements_len; i++)
-				{
-					free_token_tree_token(&statements[i]);
-				}
-				free_set_nullptr(statements);
-				return nullptr;
+				free_token_tree_token(&statements[i]);
 			}
+			free_set_nullptr(statements);
+			return nullptr;
+		}
 
-			// Check if next token is closing brace
-			if (!global_block && peek(parser_state)->token_type == end_token)
+		if (!global_block && peek(parser_state)->token_type == end_token)
+		{
+			if (parser_state->pos > 0 && parser_state->tokens[parser_state->pos - 1].token_type != token_type_semicolon)
 			{
-				// Look back to see if we just consumed a semicolon
-				// If there was a semicolon, this is NOT a trailing expression
-				if (parser_state->pos > 0 &&
-					parser_state->tokens[parser_state->pos - 1].token_type != token_type_semicolon)
-				{
-					(void)consume(parser_state);
-					node->node.block.statements = statements;
-					node->node.block.statement_count = statements_len;
-					node->node.block.trailing_expr = tmp;
-					break;
-				}
+				(void)consume(parser_state);
+				node->node.block.statements = statements;
+				node->node.block.statement_count = statements_len;
+				node->node.block.trailing_expr = tmp;
+				break;
 			}
-			varray_push(statements, tmp); // NOLINT
+		}
+
+		varray_push(statements, tmp); // NOLINT
+
+		bool needs_semicolon = false;
+		switch (tmp->type)
+		{
+			case AST_IF_EXPR:
+			case AST_WHILE_EXPR:
+			case AST_FOR_EXPR:
+			case AST_BLOCK:
+			case AST_FUNC_DEF:
+			case AST_STRUCT_DEF:
+			case AST_UNION_DEF:
+			case AST_ENUM_DEF:
+			case AST_MESSAGE:
+				needs_semicolon = false;
+				break;
+			case AST_BREAK_STMT:
+			case AST_RETURN_STMT:
+			case AST_CONTINUE_STMT:
+			case AST_ARRAY_INIT:
+			case AST_VAR_DEF:
+			case AST_FUNC_CALL:
+			case AST_BINARY_EXPR:
+			case AST_MEMBER_ACCESS:
+			case AST_INDEX_EXPR:
+			case AST_IDENTIFIER:
+			case AST_CAST_EXPR:
+			case AST_RANGE_EXPR:
+			case AST_LITERAL:
+			case AST_STRUCT_INIT:
+			case AST_UNARY:
+				// default:
+				needs_semicolon = true;
+				break;
+		}
+
+		if (needs_semicolon)
+		{
+			const Token* next = peek(parser_state);
+			if (next->token_type != token_type_semicolon && next->token_type != end_token)
+			{
+				parser_error(parser_state, next->pos, "Expected ';' after statement, got '%s'",
+							 token_to_string(next->token_type));
+				synchronize(parser_state);
+			}
 		}
 	}
 
@@ -923,12 +961,12 @@ static ASTToken* parse_for_expr(ParserState* parser_state)
 			else
 			{
 				node->node.for_expr.c_style.init = parse_expr(parser_state);
-				if (!expect_token(parser_state, token_type_semicolon, "for loop condition"))
-				{
-					free_token_tree_token(&node->node.for_expr.c_style.init);
-					free_set_nullptr(node);
-					return nullptr;
-				}
+			}
+			if (!expect_token(parser_state, token_type_semicolon, "for loop condition"))
+			{
+				free_token_tree_token(&node->node.for_expr.c_style.init);
+				free_set_nullptr(node);
+				return nullptr;
 			}
 		}
 
@@ -3127,7 +3165,7 @@ static void synchronize(ParserState* parser_state)
 
 		if (token->token_type == token_type_semicolon)
 		{
-			consume(parser_state);
+			// consume(parser_state);
 			return;
 		}
 
