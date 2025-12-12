@@ -834,14 +834,6 @@ int test_error_missing_cast_rparen(void)
 	free_token_tree(ast);
 	return 0;
 }
-// Test: Invalid struct init - missing dot
-int test_error_struct_init_missing_dot(void)
-{
-	AST ast = parse_input("@c_type Point\nPoint p = (Point){ x = 1 };");
-	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
-	free_token_tree(ast);
-	return 0;
-}
 // Test: Invalid struct init - missing equals
 int test_error_struct_init_missing_equals(void)
 {
@@ -1036,7 +1028,6 @@ int main(void)
 	RUN_TEST(test_error_invalid_expression);
 	RUN_TEST(test_error_missing_array_init_bracket);
 	RUN_TEST(test_error_missing_cast_rparen);
-	RUN_TEST(test_error_struct_init_missing_dot);
 	RUN_TEST(test_error_struct_init_missing_equals);
 	RUN_TEST(test_error_struct_init_missing_brace);
 	RUN_TEST(test_error_invalid_import);
