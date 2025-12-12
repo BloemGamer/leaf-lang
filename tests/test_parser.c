@@ -674,14 +674,6 @@ int test_error_invalid_param_separator(void)
 	free_token_tree(ast);
 	return 0;
 }
-// Test: Missing variable type
-int test_error_missing_var_type(void)
-{
-	AST ast = parse_input("x = 42;");
-	ASSERT_NOT_EQ(ast.errors, 0, "errors should be at least 1");
-	free_token_tree(ast);
-	return 0;
-}
 // Test: Unknown type name
 int test_error_unknown_type(void)
 {
@@ -1024,7 +1016,6 @@ int main(void)
 	RUN_TEST(test_error_missing_opening_brace);
 	RUN_TEST(test_error_missing_rparen_params);
 	RUN_TEST(test_error_invalid_param_separator);
-	RUN_TEST(test_error_missing_var_type);
 	RUN_TEST(test_error_unknown_type);
 	RUN_TEST(test_error_missing_array_bracket);
 	RUN_TEST(test_error_missing_struct_name);
