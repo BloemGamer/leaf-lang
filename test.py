@@ -42,7 +42,9 @@ def test_ctest(compiler: str, mode: str):
 	result = subprocess.run(
 			["ctest", "--verbose", "--test-dir", f"build/{compiler}/{mode}"],
 			capture_output=True,
-			text=True
+			text=True,
+			encoding='utf-8',
+			errors='replace'
 			)
 
 	os.makedirs(f"test_output/{compiler}/{mode}", exist_ok=True)
