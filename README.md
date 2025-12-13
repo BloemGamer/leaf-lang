@@ -114,13 +114,13 @@ Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/S-
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[forks-shield]: https://img.shields.io/github/forks/BloemGamer/S-lang.svg?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/BloemGamer/S-lang.svg?style=flat
 [forks-url]: https://github.com/BloemGamer/S-lang/network/members
-[stars-shield]: https://img.shields.io/github/stars/BloemGamer/S-lang.svg?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/BloemGamer/S-lang.svg?style=flat
 [stars-url]: https://github.com/BloemGamer/S-lang/stargazers
-[issues-shield]: https://img.shields.io/github/issues/BloemGamer/S-lang.svg?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/BloemGamer/S-lang.svg?style=flat
 [issues-url]: https://github.com/BloemGamer/S-lang/issues
-[license-shield]: https://img.shields.io/github/license/BloemGamer/S-lang.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/BloemGamer/S-lang.svg?style=flat
 [license-url]: https://github.com/BloemGamer/S-lang/blob/main/LICENSE
 
 [Linux-Mint-shield]: https://img.shields.io/badge/Linux%20Mint-87CF3E?logo=linuxmint&logoColor=fff
