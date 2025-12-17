@@ -10,47 +10,44 @@ A C-based language with modern features and a platform to learn compiler design.
 > It is still under construction and cannot be used yet.
 
 ## Why S-lang?
-* **Compatibility:** The language is designed to be compatible with C.
-* **Clearer syntax:** The language tries to change some of the syntax to make the language more readable.
-* **Extra features:** More features to make development easier.
+- **Explicit systems programming:** Memory, mutability, ownership, and unsafe operations are always visible — nothing happens implicitly.
+
+- **Move-by-default semantics:** Values are moved on assignment and function calls unless explicitly borrowed, eliminating accidental copies and making performance predictable.
+
+- **Automatic memory management without a garbage collector:** Resources are freed deterministically at scope end, with no runtime, no GC, and no hidden reference counting.
+
+- **Lightweight borrow checking:** Borrows are tracked for correctness of intent, not proven with complex lifetime analysis. Multiple mutable borrows and cross-function borrows are allowed by design.
+
+- **Trust-based safety model:** The compiler prevents common errors like use-after-move and invalid access while borrowed, while trusting the programmer to manage borrow lifetimes responsibly.
+
+- **First-class C integration:** Directly import C headers, share ABI-compatible data layouts, and call C code with zero overhead.
+
+- **Unsafe is explicit and contained:** Low-level operations such as raw pointers, manual allocation, and inline assembly are available in unsafe blocks only.
+
+- **Predictable, high performance:** Ahead-of-time compilation, no mandatory runtime, fast compile times, and clear cost models make it suitable for systems and performance-critical code.
+
+- **Power without artificial limits:** The language does not restrict what you can do — it makes powerful operations explicit instead of forbidden.
+
+- **Designed to be understood:** A small, learnable core language that prioritizes clarity over cleverness.
 
 
 ## Code previeuw
 ```rs
-@import "stdio.h" 							// #include <stdio.h> in C
-
-fn main(i64 argc, char&& argc) -> int
+fn main()
 {
-	i64 a = 10;
-	i64& b = i64&::give_clean_array(10);	// now you can use references, next to pointers
-	mut i64 c = 0;
-	c = { a + b[0] };
-	print("{}\n", c);						// print got a new format version
-}
-
-pub fn i64&::give_clean_array(usize size) -> i64&
-{
-	return (i64&)calloc(size, sizeof(i64));	// you can still use every C function you want
+	i64 a = 0;
+	print("{}", a);
 }
 ```
 
 
 ## Roadmap
 ### Now busy with
-- [x] Adding tests
-- [ ] Making error messages instead of just assertion
+- [ ] Writing the lexer
+- [ ] Refining the syntax
 
 ### Short-term
 - [ ] Finish first compiler version
-- [ ] Adding the namespace like syntax
-- [ ] Add the ability to use documenting comments
-- [ ] Add tests
-- [ ] Write documentation
-- [x] Make the lexer threadsafe
-- [ ] Add error handeling in the lexer
-- [ ] Add error handeling in the parser
-- [ ] Add error handeling in the code generation
-- [ ] Add a switch or match statement
 
 ### Long-term
 - [ ] Adding templates
@@ -60,11 +57,11 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 
 ## Progress of the stages of the compiler
 - [ ] Preprocessor (Low priority)
-- [x] Lexing -> lex
-- [x] Parsing -> parse
+- [ ] Lexing
+- [ ] Parsing
 - [ ] Semantic analyser
 - [ ] Optimisations (Low priority)
-- [x] Code generator
+- [ ] Code generator
 - [ ] Calling C compiler
 
 
@@ -72,9 +69,11 @@ pub fn i64&::give_clean_array(usize size) -> i64&
 ## Installation
 
 ### Prerequisites
-- **CMake** >= 3.10
-- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
-- **Python** >= 3.10 (required for building and testing; you can also set up CMake manually)
+- Compiler
+	- Cargo that supports the newest rust version
+- Generated C code
+	- **CMake** >= 3.10
+	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
 
 S-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
@@ -89,20 +88,14 @@ cd S-lang
 
 ### Building the Project
 
-Run the build script using Python:
-
 ```sh
-# Linux
-python3 build.py
-
-# Windows
-python build.py
+cargo build --release
 ```
 
 ### Running the Compiler
 
 ```sh
-./s-lang <file>   # Compile and run a source file
+cargo run --release
 ```
 
 
