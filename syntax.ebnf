@@ -1,0 +1,431 @@
+// ============================================================================
+// IMPROVED GRAMMAR SPECIFICATION
+// ============================================================================
+// Changes:
+// - Added range expressions (.. and ..=)
+// - Added trailing expressions in blocks (Rust-style implicit returns)
+// - Removed c_array_literal
+// - Clarified cast syntax to avoid ambiguity
+// - Improved type syntax with better structure
+// - Added consistent trailing comma support
+// - Clarified match arm syntax
+// - Added tuple types and tuple expressions
+// - Improved constraint syntax
+// ============================================================================
+
+// --- Comments ---
+comment = "//" , { character - "\n" } , "\n"
+        | "/*" , { character } , "*/" ;
+
+// --- Basic lexical elements ---
+letter     = "A"…"Z" | "a"…"z" ;
+digit      = "0"…"9" ;
+character  = ? any Unicode character ? ;
+
+// --- Operators ---
+equal_type = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+           | "&=" | "|=" | "^=" | "~=" | ">>=" | "<<=" ;
+
+// --- Identifiers ---
+identifier = letter , { letter | digit | "_" } ;
+namespaced_identifier = identifier , { "::" , identifier } ;
+
+// --- Literals ---
+integer_literal = [ "0x" | "0b" | "0o" ] , digit , { digit | "_" } ;
+float_literal   = digit , { digit | "_" } , "." , digit , { digit | "_" } ;
+string_literal  = "\"" , { character - "\"" | "\\" , character } , "\"" ;
+char_literal    = "'" , ( character - "'" | "\\" , character ) , "'" ;
+boolean_literal = "true" | "false" ;
+
+// Array literal: [1, 2, 3] or [value; count] or []
+array_literal = "[" , [ array_elements ] , "]" ;
+array_elements = expression , ( ";" , expression
+                              | { "," , expression } , [ "," ] ) ;
+
+// Tuple literal: (1, 2, 3) or () - must have comma for single element (x,)
+tuple_literal = "(" , [ expression , "," , [ expression , { "," , expression } , [ "," ] ] ] , ")" ;
+
+// Struct literal: Point { x = 10, y = 20 } or Point { x = 10, y = 20, }
+struct_literal = namespaced_identifier , "{" , [ field_init_list ] , "}" ;
+field_init_list = field_init , { "," , field_init } , [ "," ] ;
+field_init = identifier , "=" , expression ;
+
+literal = integer_literal
+        | float_literal
+        | string_literal
+        | char_literal
+        | boolean_literal
+        | array_literal
+        | struct_literal ;
+
+// ============================================================================
+// EXPRESSIONS (with precedence from lowest to highest)
+// ============================================================================
+
+// --- Main expression entry point ---
+expression = logical_or ;
+
+// --- Precedence levels (lowest to highest) ---
+
+// Level 1: Logical OR
+logical_or = logical_and , { "||" , logical_and } ;
+
+// Level 2: Logical AND
+logical_and = equality , { "&&" , equality } ;
+
+// Level 3: Equality
+equality = relational , { ( "==" | "!=" ) , relational } ;
+
+// Level 4: Relational/Comparison
+relational = range , { ( "<" | ">" | "<=" | ">=" ) , range } ;
+
+// Level 5: Range expressions (.. and ..=)
+range = bitwise , [ ( ".." | "..=" ) , bitwise ] ;
+
+// Level 6: Bitwise operations
+bitwise = additive , { ( "&" | "|" | "^" | ">>" | "<<" ) , additive } ;
+
+// Level 7: Addition and Subtraction
+additive = multiplicative , { ( "+" | "-" ) , multiplicative } ;
+
+// Level 8: Multiplication, Division, Modulo
+multiplicative = cast , { ( "*" | "/" | "%" ) , cast } ;
+
+// Level 9: Cast expressions
+// Cast: (type)expr - must have explicit grouping to avoid ambiguity
+cast = "(" , type , ")" , cast
+     | unary ;
+
+// Level 10: Unary operators
+unary = ( "!" | "-" | "*" | "&" [ "mut" ] ) , unary
+      | postfix ;
+
+// Level 11: Postfix operations (field access, indexing, calls)
+postfix = primary , { postfix_op } ;
+
+postfix_op = "." , identifier                    // field access
+           | "[" , expression , "]"              // array indexing
+           | "(" , [ argument_list ] , ")" ;     // function call
+
+// Level 12: Primary expressions (highest precedence)
+primary = namespaced_identifier
+        | literal
+        | tuple_literal
+        | "(" , expression , ")" ;
+
+argument_list = expression , { "," , expression } , [ "," ] ;
+
+// ============================================================================
+// L-VALUES (Assignable expressions)
+// ============================================================================
+
+lvalue = unary_lvalue
+       | postfix_lvalue ;
+
+unary_lvalue = "*" , lvalue ;  // dereference
+
+postfix_lvalue = primary_lvalue , { postfix_lvalue_op } ;
+
+postfix_lvalue_op = "." , identifier           // field access
+                  | "[" , expression , "]" ;   // array indexing
+
+primary_lvalue = namespaced_identifier
+               | "(" , lvalue , ")" ;
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+type = [ type_modifiers ] , type_core ;
+
+// Core type structure: reference/pointer modifiers, base type, suffixes
+type_core = [ reference_modifier ] , type_base , { type_suffix } ;
+
+// Reference modifier: & or &mut (only one, at the start)
+reference_modifier = "&" , [ "mut" ] ;
+
+// Base type: name with optional generic parameters
+type_base = namespaced_identifier , [ generic_args ] ;
+
+// Type suffixes: pointers and arrays (applied left-to-right)
+type_suffix = "*"                          // pointer: int* or int**
+            | "[" , expression , "]" ;     // array: int[10] or int[10][20]
+
+// Generic arguments: <T, U, V>
+generic_args = "<" , type , { "," , type } , [ "," ] , ">" ;
+
+// Tuple type: (int, bool) or () or (int,)
+tuple_type = "(" , [ type , { "," , type } , [ "," ] ] , ")" ;
+
+// Type modifiers (e.g., volatile)
+type_modifiers = type_modifier , { type_modifier } ;
+type_modifier = "volatile" ;
+
+// ============================================================================
+// DIRECTIVES
+// ============================================================================
+
+directive = import_directive
+          | use_directive
+          | custom_directive ;
+
+import_directive = "@import" , string_literal , ";" ;
+
+use_directive = "@use" , namespaced_identifier , ";" ;
+
+custom_directive = "@" , identifier ,
+                   [ "(" , [ expression , { "," , expression } , [ "," ] ] , ")" ] ,
+                   [ block ] ,
+                   ;
+
+// ============================================================================
+// MODIFIERS
+// ============================================================================
+
+modifiers = modifier , { modifier } ;
+modifier = "pub" | "unsafe" | "static" | "inline" | directive ;
+
+// ============================================================================
+// STATEMENTS
+// ============================================================================
+
+statement = [ directive ] ,
+            ( variable_decl
+            | assignment
+            | return_stmt
+            | expression_stmt
+            | block
+            | if_stmt
+            | while_stmt
+            | for_stmt
+            | match_stmt
+            | unsafe_block
+            | break_stmt
+            | continue_stmt
+            ) ;
+
+variable_decl = [ modifiers ] , type , identifier , [ "=" , expression ] , ";" ;
+
+assignment = lvalue , equal_type , expression , ";" ;
+
+return_stmt = "return" , [ expression ] , ";" ;
+
+expression_stmt = expression , ";" ;
+
+break_stmt = "break" , ";" ;
+
+continue_stmt = "continue" , ";" ;
+
+// --- Control flow statements ---
+
+if_stmt = "if" , expression , block , [ "else" , ( block | if_stmt ) ] ;
+
+while_stmt = "while" , expression , block ;
+
+for_stmt = "for" , identifier , "in" , expression , block ;
+
+unsafe_block = "unsafe" , block ;
+
+// --- Match statement ---
+// Match: match expr { Pattern => expr, Pattern => { ... }, }
+match_stmt = "match" , expression , "{" , { match_arm } , "}" ;
+
+match_arm = pattern , "=>" , match_arm_body ;
+
+// Match arm body: either an expression with comma, or a block (no comma)
+match_arm_body = expression , ","
+               | block ;
+
+// Patterns for matching
+pattern = pattern_variant
+        | pattern_literal
+        | pattern_wildcard ;
+
+pattern_variant = namespaced_identifier , [ "(" , [ pattern_list ] , ")" ] ;
+pattern_literal = literal ;
+pattern_wildcard = "_" ;
+
+pattern_list = pattern , { "," , pattern } , [ "," ] ;
+
+// ============================================================================
+// BLOCKS (with optional trailing expression)
+// ============================================================================
+
+// Block can have:
+// - Multiple statements ending with semicolons
+// - Optional trailing expression (no semicolon) that becomes the block's value
+block = "{" , { statement } , [ expression ] , "}" ;
+
+// ============================================================================
+// FUNCTIONS
+// ============================================================================
+
+function_decl = [ modifiers ] ,
+                "fn" ,
+                identifier ,
+                [ generic_params ] ,
+                "(" , [ parameter_list ] , ")" ,
+                [ "->" , type ] ,
+                [ where_clause ] ,
+                block ;
+
+// Generic parameters: <T, U, V>
+generic_params = "<" , identifier , { "," , identifier } , [ "," ] , ">" ;
+
+// Parameters: (int x, bool y, &mut Self)
+parameter_list = parameter , { "," , parameter } , [ "," ] ;
+
+parameter = type , identifier
+          | [ "&" , [ "mut" ] ] , "Self" ;
+
+// Where clause: where T: Trait, U: Trait1 + Trait2
+where_clause = "where" , constraint , { "," , constraint } , [ "," ] ;
+
+constraint = identifier , ":" , trait_bound_list ;
+
+trait_bound_list = trait_bound , { "+" , trait_bound } ;
+
+trait_bound = namespaced_identifier ;
+
+// --- Function signature (for traits) ---
+function_signature = "fn" ,
+                     identifier ,
+                     [ generic_params ] ,
+                     "(" , [ parameter_list ] , ")" ,
+                     [ "->" , type ] ,
+                     [ where_clause ] ;
+
+// ============================================================================
+// STRUCTS, ENUMS, UNIONS
+// ============================================================================
+
+struct_decl = [ modifiers ] ,
+              "struct" ,
+              identifier ,
+              "{" , [ field_decl_list ] , "}" ;
+
+field_decl_list = field_decl , { "," , field_decl } , [ "," ] ;
+
+field_decl = type , identifier ;
+
+// --- Union (C-style union) ---
+union_decl = [ modifiers ] ,
+             "union" ,
+             identifier ,
+             "{" , [ field_decl_list ] , "}" ;
+
+// --- Tagged union (Rust-style enum with data) ---
+taggedunion_decl = [ modifiers ] ,
+                   "taggedunion" ,
+                   identifier ,
+                   "{" , variant_list , "}" ;
+
+variant_list = variant , { "," , variant } , [ "," ] ;
+
+variant = identifier , "(" , [ type_list ] , ")" ;
+
+type_list = type , { "," , type } , [ "," ] ;
+
+// --- Enum (C-style enum) ---
+enum_decl = [ modifiers ] ,
+            "enum" ,
+            identifier ,
+            "{" , identifier_list , "}" ;
+
+identifier_list = identifier , { "," , identifier } , [ "," ] ;
+
+// ============================================================================
+// TYPE ALIASES
+// ============================================================================
+
+type_alias_decl = [ modifiers ] ,
+                  "type" ,
+                  identifier ,
+                  "=" ,
+                  type ,
+                  ";" ;
+
+// ============================================================================
+// TRAITS
+// ============================================================================
+
+trait_decl = [ modifiers ] ,
+             "trait" ,
+             identifier ,
+             [ generic_params ] ,
+             "{" , { trait_item } , "}" ;
+
+trait_item = function_signature , ";" ;
+
+// ============================================================================
+// NAMESPACES AND IMPLEMENTATIONS
+// ============================================================================
+
+namespace_decl = [ modifiers ] ,
+                 "namespace" ,
+                 identifier ,
+                 block ;
+
+impl_decl = [ modifiers ] ,
+            "impl" ,
+            [ generic_params ] ,
+            namespaced_identifier ,
+            [ "for" , namespaced_identifier ] ,
+            [ where_clause ] ,
+            block ;
+
+// ============================================================================
+// TOP-LEVEL DECLARATIONS
+// ============================================================================
+
+top_level_decl = directive
+               | function_decl
+               | struct_decl
+               | enum_decl
+               | union_decl
+               | taggedunion_decl
+               | type_alias_decl
+               | trait_decl
+               | namespace_decl
+               | impl_decl ;
+
+// ============================================================================
+// PROGRAM (entry point)
+// ============================================================================
+
+program = { top_level_decl } ;
+
+// ============================================================================
+// NOTES ON PRECEDENCE AND PARSING
+// ============================================================================
+//
+// Operator precedence (lowest to highest):
+//   1. || (logical OR)
+//   2. && (logical AND)
+//   3. == != (equality)
+//   4. < > <= >= (comparison)
+//   5. .. ..= (range)
+//   6. & | ^ >> << (bitwise)
+//   7. + - (additive)
+//   8. * / % (multiplicative)
+//   9. (type) (cast)
+//  10. ! - * & (unary)
+//  11. . [] () (postfix)
+//  12. literals, identifiers, parentheses (primary)
+//
+// Type structure:
+//   [modifiers] [&[mut]] BaseType [generic_args] [*...] [[expr]...]
+//   Examples:
+//     - int
+//     - &mut Vec<int>
+//     - int*
+//     - int[10][20]
+//     - &String*[5]
+//
+// Blocks with trailing expressions:
+//   {
+//     let x = 5;
+//     x + 1  // <-- No semicolon: this becomes the block's value
+//   }
+//
+// ============================================================================
