@@ -4,7 +4,7 @@
 [![Project_license][license-shield]][license-url]
 
 # S-lang
-A C-based language with modern features and a platform to learn compiler design.
+A language that is designed to be used with C, with modern features and a platform to learn compiler design.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet.
