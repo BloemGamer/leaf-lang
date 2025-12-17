@@ -21,13 +21,13 @@ enable_testing()
 # Main executable
 # -------------------------------------------------------
 add_executable(s-lang
-	src/main.c
-	src/tokens.c
-	src/lexer.c
-	src/parser.c
-	src/code_gen.c
+	csrc/main.c
+	csrc/tokens.c
+	csrc/lexer.c
+	csrc/parser.c
+	csrc/code_gen.c
 
-	src/utils/hash.c
+	csrc/utils/hash.c
 )
 
 target_include_directories(s-lang PRIVATE include)

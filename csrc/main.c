@@ -38,6 +38,7 @@ int main(int argc, char** argv)
 	lex_free(lexed);
 
 	CodeGen code = generate_code(parsed, "slang-test/main.sl");
+	parse_print(parsed);
 
 	free_token_tree(parsed);
 

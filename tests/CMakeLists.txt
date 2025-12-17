@@ -2,7 +2,7 @@
 # Hash Tests
 # -------------------------------------------------------
 add_executable(test_hash test_hash.c
-	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	${CMAKE_SOURCE_DIR}/csrc/utils/hash.c
 )
 target_include_directories(test_hash PRIVATE
 	${CMAKE_SOURCE_DIR}/include
@@ -18,9 +18,9 @@ add_test(NAME HashTableTests COMMAND test_hash)
 # Lexer Tests
 # -------------------------------------------------------
 add_executable(test_lexer test_lexer.c
-	${CMAKE_SOURCE_DIR}/src/lexer.c
-	${CMAKE_SOURCE_DIR}/src/tokens.c
-	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	${CMAKE_SOURCE_DIR}/csrc/lexer.c
+	${CMAKE_SOURCE_DIR}/csrc/tokens.c
+	${CMAKE_SOURCE_DIR}/csrc/utils/hash.c
 	# Add any other dependencies that lexer.c needs
 )
 target_include_directories(test_lexer PRIVATE
@@ -40,10 +40,10 @@ set_tests_properties(LexerTests PROPERTIES
 # Parser Tests
 # -------------------------------------------------------
 add_executable(test_parser test_parser.c
-	${CMAKE_SOURCE_DIR}/src/lexer.c
-	${CMAKE_SOURCE_DIR}/src/tokens.c
-	${CMAKE_SOURCE_DIR}/src/parser.c
-	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	${CMAKE_SOURCE_DIR}/csrc/lexer.c
+	${CMAKE_SOURCE_DIR}/csrc/tokens.c
+	${CMAKE_SOURCE_DIR}/csrc/parser.c
+	${CMAKE_SOURCE_DIR}/csrc/utils/hash.c
 	# Add any other dependencies that parser.c needs
 )
 
@@ -64,11 +64,11 @@ set_tests_properties(ParserTests PROPERTIES
 # Code Gen Tests
 # -------------------------------------------------------
 add_executable(test_code_gen test_code_gen.c
-	${CMAKE_SOURCE_DIR}/src/lexer.c
-	${CMAKE_SOURCE_DIR}/src/tokens.c
-	${CMAKE_SOURCE_DIR}/src/parser.c
-	${CMAKE_SOURCE_DIR}/src/code_gen.c
-	${CMAKE_SOURCE_DIR}/src/utils/hash.c
+	${CMAKE_SOURCE_DIR}/csrc/lexer.c
+	${CMAKE_SOURCE_DIR}/csrc/tokens.c
+	${CMAKE_SOURCE_DIR}/csrc/parser.c
+	${CMAKE_SOURCE_DIR}/csrc/code_gen.c
+	${CMAKE_SOURCE_DIR}/csrc/utils/hash.c
 	# Add any other dependencies that code_gen.c needs
 )
 
