@@ -56,13 +56,20 @@ fn main()
 - [ ] C parser integration
 
 ## Progress of the stages of the compiler
-- [ ] Preprocessor (Low priority)
+- [ ] Frontend
 - [ ] Lexing
-- [ ] Parsing
-- [ ] Semantic analyser
-- [ ] Optimisations (Low priority)
-- [ ] Code generator
-- [ ] Calling C compiler
+- [ ] Preprocessor (lower priority)
+- [ ] Parsing → AST
+- [ ] Semantic Analysis
+    - [ ] Desugaring / Lowering
+    - [ ] Symbol Collection
+    - [ ] Name Resolution + Type Analysis
+    - [ ] Lifetime Analysis & Destructor Insertion
+- [ ] Optimizations (optional)
+
+Backend
+- Code Generator (to C)
+- Invoke C Compiler
 
 
 
