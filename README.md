@@ -10,7 +10,7 @@ A language that is designed to be used with C, with modern features and a platfo
 > It is still under construction and cannot be used yet.
 
 ## Why S-lang?
-- **Explicit systems programming:** Memory, mutability, ownership, and unsafe operations are always visible — nothing happens implicitly.
+- **Explicit systems programming:** Memory, mutability, ownership, and unsafe operations are always visible, nothing happens implicitly.
 
 - **Move-by-default semantics:** Values are moved on assignment and function calls unless explicitly borrowed, eliminating accidental copies and making performance predictable.
 
@@ -24,9 +24,9 @@ A language that is designed to be used with C, with modern features and a platfo
 
 - **Unsafe is explicit and contained:** Low-level operations such as raw pointers, manual allocation, and inline assembly are available in unsafe blocks only.
 
-- **Predictable, high performance:** Ahead-of-time compilation, no mandatory runtime, fast compile times, and clear cost models make it suitable for systems and performance-critical code.
+- **Predictable, high performance:** Clear cost models make it suitable for systems and performance-critical code.
 
-- **Power without artificial limits:** The language does not restrict what you can do — it makes powerful operations explicit instead of forbidden.
+- **Power without artificial limits:** The language does not restrict what you can do, it makes powerful operations explicit instead of forbidden.
 
 - **Designed to be understood:** A small, learnable core language that prioritizes clarity over cleverness.
 
