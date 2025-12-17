@@ -70,7 +70,7 @@ fn main()
 
 ### Prerequisites
 - Compiler
-	- Cargo that supports the newest rust version
+	- **Cargo** that supports the newest rust version
 - Generated C code
 	- **CMake** >= 3.10
 	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
