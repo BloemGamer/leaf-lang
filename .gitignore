@@ -5,16 +5,20 @@
 
 *.sh
 
-build*
-cmake-build*
-slang-test
-.cache
-test_output
-Testing
-.idea
+/__pycache__
+/build*
+/cmake-build*
+/slang-test
+/.cache
+/test_output
+/Testing
+/.idea
+/target
 
 .clangd
 .clang-format
 .clang-tidy
 .nvim.lua
 name_ideas.txt
+
+Cargo.lock
