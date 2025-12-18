@@ -121,129 +121,220 @@ pub struct Span
 pub enum TokenKind
 {
 	// ===== Literals =====
-	IntLiteral(i64),       // Integer literal: 42, -10, 0xFF
-	FloatLiteral(f64),     // Floating point literal: 3.14, -0.5, 1e10
-	CharLiteral(char),     // Character literal: 'a', '\n', '\0'
-	StringLiteral(String), // String literal: "hello", "world\n"
-	True,                  // Boolean literal: true
-	False,                 // Boolean literal: false
+	/// Integer literal: `42`, `-10`, `0xFF`
+	IntLiteral(i64),
+	/// Floating point literal: `3.14`, `-0.5`, `1e10`
+	FloatLiteral(f64),
+	/// Character literal: `'a'`, `'\n'`, `'\0'`
+	CharLiteral(char),
+	/// String literal: `"hello"`, `"world\n"`
+	StringLiteral(String),
+	/// Boolean literal: `true`
+	True,
+	/// Boolean literal: `false`
+	False,
 
 	// ===== Identifiers =====
-	Identifier(String), // Variable/function names: foo, bar, my_var
-	Underscore,         // Wildcard pattern: _
+	/// Variable/function names: `foo`, `bar`, `my_var`
+	Identifier(String),
+	/// Wildcard pattern: `_`
+	Underscore,
 
 	// ===== Keywords - Control Flow =====
-	If,       // Conditional: if
-	Else,     // Conditional alternative: else
-	While,    // Loop: while
-	For,      // Iterator loop: for
-	Match,    // Pattern matching: match
-	Return,   // Return from function: return
-	Break,    // Exit loop: break
-	Continue, // Skip to next iteration: continue
+	/// Conditional: `if`
+	If,
+	/// Conditional alternative: `else`
+	Else,
+	/// Loop: `while`
+	While,
+	/// Iterator loop: `for`
+	For,
+	/// Pattern matching: `match`
+	Match,
+	/// Return from function: `return`
+	Return,
+	/// Exit loop: `break`
+	Break,
+	/// Skip to next iteration: `continue`
+	Continue,
 
 	// ===== Keywords - Declarations =====
-	FuncDef,     // Function definition: fn
-	Const,       // Constant declaration: const
-	Static,      // Static variable: static
-	Struct,      // Structure definition: struct
-	Union,       // Untagged union: union
-	TaggedUnion, // Tagged union: tagged_union
-	Enum,        // Enumeration definition: enum
-	Impl,        // Implementation block: impl
-	MacroDef,    // Macro definition: macro
+	/// Function definition: `fn`
+	FuncDef,
+	/// Constant declaration: `const`
+	Const,
+	/// Static variable: `static`
+	Static,
+	/// Structure definition: `struct`
+	Struct,
+	/// Untagged union: `union`
+	Union,
+	/// Tagged union: `tagged_union`
+	TaggedUnion,
+	/// Enumeration definition: `enum`
+	Enum,
+	/// Implementation block: `impl`
+	Impl,
+	/// Macro definition: `macro`
+	MacroDef,
 
 	// ===== Keywords - Modifiers =====
-	Pub, // Public visibility: pub
-	Mut, // Mutable binding: mut
+	/// Public visibility: `pub`
+	Pub,
+	/// Mutable binding: `mut`
+	Mut,
 	#[allow(unused)]
-	MutRef, // Mutable reference: mut or &mut
+	/// Mutable reference: `mut` or `&mut`
+	MutRef,
 	#[allow(unused)]
-	Ref, // Immutable reference: ref
-	Unsafe, // Unsafe block/function: unsafe
-	Volatile, // Volatile memory access: volatile
+	/// Immutable reference: `ref`
+	Ref,
+	/// Unsafe block/function: `unsafe`
+	Unsafe,
+	/// Volatile memory access: `volatile`
+	Volatile,
 
 	// ===== Keywords - Other =====
-	In,    // Iterator source: in (for x in iter)
-	As,    // Type casting: as
-	Where, // Generic constraints: where
+	/// Iterator source: `in` (for x in iter)
+	In,
+	/// Type casting: `as`
+	As,
+	/// Generic constraints: `where`
+	Where,
 
 	// ===== Arithmetic Operators =====
-	Plus,  // Addition: +
-	Minus, // Subtraction or negation: -
-	Star,  // Multiplication or dereference: *
-	Slash, // Division: /
-	Mod,   // Modulo/remainder: %
+	/// Addition: `+`
+	Plus,
+	/// Subtraction or negation: `-`
+	Minus,
+	/// Multiplication or dereference: `*`
+	Star,
+	/// Division: `/`
+	Slash,
+	/// Modulo/remainder: `%`
+	Mod,
 
 	// ===== Bitwise Operators =====
-	Pipe,      // Bitwise OR: |
-	Ampersand, // Bitwise AND or reference: &
-	Caret,     // Bitwise XOR: ^
-	Tilde,     // Bitwise NOT: ~
-	LShift,    // Left shift: <<
-	RShift,    // Right shift: >>
+	/// Bitwise OR: `|`
+	Pipe,
+	/// Bitwise AND or reference: `&`
+	Ampersand,
+	/// Bitwise XOR: `^`
+	Caret,
+	/// Bitwise NOT: `~`
+	Tilde,
+	/// Left shift: `<<`
+	LShift,
+	/// Right shift: `>>`
+	RShift,
 
 	// ===== Logical Operators =====
-	Bang, // Logical NOT: !
-	And,  // Logical AND: &&
-	Or,   // Logical OR: ||
+	/// Logical NOT: `!`
+	Bang,
+	/// Logical AND: `&&`
+	And,
+	/// Logical OR: `||`
+	Or,
 
 	// ===== Comparison Operators =====
-	LessThan,      // Less than: <
-	GreaterThan,   // Greater than: >
-	LessEquals,    // Less than or equal: <=
-	GreaterEquals, // Greater than or equal: >=
-	EqualsEquals,  // Equality: ==
-	BangEquals,    // Inequality: !=
+	/// Less than: `<`
+	LessThan,
+	/// Greater than: `>`
+	GreaterThan,
+	/// Less than or equal: `<=`
+	LessEquals,
+	/// Greater than or equal: `>=`
+	GreaterEquals,
+	/// Equality: `==`
+	EqualsEquals,
+	/// Inequality: `!=`
+	BangEquals,
 
 	// ===== Assignment Operators =====
-	Equals,          // Assignment: =
-	PlusEquals,      // Add and assign: +=
-	MinusEquals,     // Subtract and assign: -=
-	StarEquals,      // Multiply and assign: *=
-	SlashEquals,     // Divide and assign: /=
-	ModEquals,       // Modulo and assign: %=
-	PipeEquals,      // Bitwise OR and assign: |=
-	AmpersandEquals, // Bitwise AND and assign: &=
-	CaretEquals,     // Bitwise XOR and assign: ^=
-	TildeEquals,     // Bitwise NOT and assign: ~=
-	LShiftEquals,    // Left shift and assign: <<=
-	RShiftEquals,    // Right shift and assign: >>=
+	/// Assignment: `=`
+	Equals,
+	/// Add and assign: `+=`
+	PlusEquals,
+	/// Subtract and assign: `-=`
+	MinusEquals,
+	/// Multiply and assign: `*=`
+	StarEquals,
+	/// Divide and assign: `/=`
+	SlashEquals,
+	/// Modulo and assign: `%=`
+	ModEquals,
+	/// Bitwise OR and assign: `|=`
+	PipeEquals,
+	/// Bitwise AND and assign: `&=`
+	AmpersandEquals,
+	/// Bitwise XOR and assign: `^=`
+	CaretEquals,
+	/// Bitwise NOT and assign: `~=`
+	TildeEquals,
+	/// Left shift and assign: `<<=`
+	LShiftEquals,
+	/// Right shift and assign: `>>=`
+	RShiftEquals,
 
 	// ===== Delimiters =====
-	LeftParen,    // Opening parenthesis: (
-	RightParen,   // Closing parenthesis: )
-	LeftBrace,    // Opening brace: {
-	RightBrace,   // Closing brace: }
-	LeftBracket,  // Opening bracket: [
-	RightBracket, // Closing bracket: ]
+	/// Opening parenthesis: `(`
+	LeftParen,
+	/// Closing parenthesis: `)`
+	RightParen,
+	/// Opening brace: `{`
+	LeftBrace,
+	/// Closing brace: `}`
+	RightBrace,
+	/// Opening bracket: `[`
+	LeftBracket,
+	/// Closing bracket: `]`
+	RightBracket,
 
 	// ===== Punctuation =====
-	Semicolon,    // Statement terminator: ;
-	Colon,        // To be determined: :
-	DoubleColon,  // Path separator/namespaces: ::
-	Comma,        // List separator: ,
-	Dot,          // Member access: .
-	DotDot,       // Range: ..
-	Ellipsis,     // Variadic: ...
-	Arrow,        // Function return type: ->
-	FatArrow,     // Match arm: =>
-	QuestionMark, // Optional/error propagation: ?
-	Hash,         // To be determined: #
-	Backslash,    // Escape character: \
+	/// Statement terminator: `;`
+	Semicolon,
+	/// To be determined: `:`
+	Colon,
+	/// Path separator/namespaces: `::`
+	DoubleColon,
+	/// List separator: `,`
+	Comma,
+	/// Member access: `.`
+	Dot,
+	/// Range: `..`
+	DotDot,
+	/// Variadic: `...`
+	Ellipsis,
+	/// Function return type: `->`
+	Arrow,
+	/// Match arm: `=>`
+	FatArrow,
+	/// Optional/error propagation: `?`
+	QuestionMark,
+	/// To be determined: `#`
+	Hash,
+	/// Escape character: `\`
+	Backslash,
 
 	// ===== Special Tokens =====
-	Macro(String),        // Macro invocation: $identifier
-	Directive(Directive), // Compiler directive: @identifier
+	/// Macro invocation: `$identifier`
+	Macro(String),
+	/// Compiler directive: `@identifier`
+	Directive(Directive),
 
 	// ===== Comments =====
-	LineComment(String),  // Single-line comment: // comment
-	BlockComment(String), // Multi-line comment: /* comment */
-	DocsComment(String),  // Documentation comment: /// or /**
+	/// Single-line comment: `// comment`
+	LineComment(String),
+	/// Multi-line comment: `/* comment */`
+	BlockComment(String),
+	/// Documentation comment: `///` or `/**`
+	DocsComment(String),
 
 	// ===== End/Error =====
-	Eof,     // End of file
-	Invalid, // Invalid/unrecognized token
+	/// End of file
+	Eof,
+	/// Invalid/unrecognized token
+	Invalid,
 }
 
 /// Compiler directive types.
