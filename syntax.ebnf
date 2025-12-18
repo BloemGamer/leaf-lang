@@ -1,16 +1,5 @@
 // ============================================================================
-// IMPROVED GRAMMAR SPECIFICATION
-// ============================================================================
-// Changes:
-// - Added range expressions (.. and ..=)
-// - Added trailing expressions in blocks (Rust-style implicit returns)
-// - Removed c_array_literal
-// - Clarified cast syntax to avoid ambiguity
-// - Improved type syntax with better structure
-// - Added consistent trailing comma support
-// - Clarified match arm syntax
-// - Added tuple types and tuple expressions
-// - Improved constraint syntax
+// GRAMMAR SPECIFICATION
 // ============================================================================
 
 // --- Comments ---
