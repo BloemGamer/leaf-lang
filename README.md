@@ -31,7 +31,7 @@ A language that is designed to be used with C, with modern features and a platfo
 - **Designed to be understood:** A small, learnable core language that prioritizes clarity over cleverness.
 
 
-## Code previeuw
+## Code preview
 ```rs
 fn main()
 {
