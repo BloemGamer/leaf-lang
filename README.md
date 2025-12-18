@@ -43,7 +43,8 @@ fn main()
 
 ## Roadmap
 ### Now busy with
-- [ ] Writing the lexer
+- [x] Writing the lexer
+- [x] Writing the parser
 - [ ] Refining the syntax
 
 ### Short-term
@@ -57,7 +58,7 @@ fn main()
 
 ## Progress of the stages of the compiler
 ### Frontend
-- [ ] Lexing
+- [x] Lexing
 - [ ] Preprocessor (lower priority)
 - [ ] Parsing → AST
 - [ ] Semantic Analysis
