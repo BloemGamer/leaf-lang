@@ -20,7 +20,7 @@ A C-based language with modern features and a platform to learn compiler design.
 * **Extra features:** More features to make development easier.
 
 
-## Code previeuw
+## Code preview
 ```rs
 @import "stdio.h" 							// #include <stdio.h> in C
 
