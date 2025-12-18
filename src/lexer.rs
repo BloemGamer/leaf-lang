@@ -54,13 +54,12 @@ pub enum TokenKind
 	TaggedUnion, // Tagged union: tagged_union
 	Enum,        // Enumeration definition: enum
 	Impl,        // Implementation block: impl
-	Type,        // Type alias: type
 	MacroDef,    // Macro definition: macro
 
 	// ===== Keywords - Modifiers =====
 	Pub,      // Public visibility: pub
 	Mut,      // Mutable binding: mut
-	MutRef,   // Mutable reference: mut_ref or &mut
+	MutRef,   // Mutable reference: mut or &mut
 	Ref,      // Immutable reference: ref
 	Unsafe,   // Unsafe block/function: unsafe
 	Volatile, // Volatile memory access: volatile
@@ -82,7 +81,7 @@ pub enum TokenKind
 	Ampersand, // Bitwise AND or reference: &
 	Caret,     // Bitwise XOR: ^
 	Tilde,     // Bitwise NOT: ~
-	LShift,    // Left shift:
+	LShift,    // Left shift: <<
 	RShift,    // Right shift: >>
 
 	// ===== Logical Operators =====
@@ -122,15 +121,16 @@ pub enum TokenKind
 
 	// ===== Punctuation =====
 	Semicolon,    // Statement terminator: ;
-	Colon,        // Type annotation separator: :
-	DoubleColon,  // Path separator: ::
+	Colon,        // To be determend: :
+	DoubleColon,  // Path separator/namespaces: ::
 	Comma,        // List separator: ,
 	Dot,          // Member access: .
-	Ellipsis,     // Range or variadic: ...
+	DotDot,       // Range: ..
+	Ellipsis,     // Variadic: ...
 	Arrow,        // Function return type: ->
-	FatArrow,     // Match arm or closure: =>
+	FatArrow,     // Match arm: =>
 	QuestionMark, // Optional/error propagation: ?
-	Hash,         // Attribute prefix: #
+	Hash,         // To be determend: #
 	Backslash,    // Escape character: \
 
 	// ===== Special Tokens =====
