@@ -1,5 +1,32 @@
 use crate::Config;
 
+impl<'source, 'config> Lexer<'source, 'config>
+{
+	/// Consumes the lexer and extracts its configuration reference.
+	///
+	/// This method is primarily used when converting a lexer into a parser,
+	/// allowing the parser to store both the configuration reference and the
+	/// lexer itself without violating Rust's borrowing rules.
+	///
+	/// # Returns
+	/// A tuple containing:
+	/// * `&'config Config` - Reference to the configuration object
+	/// * `Lexer<'source, 'config>` - The lexer itself, moved out and ready to be consumed
+	///
+	/// # Example
+	/// ```
+	/// let config = Config::default();
+	/// let lexer = Lexer::new(&config, "fn main() {}");
+	/// let (config_ref, lexer) = lexer.into_parts();
+	/// // Now both config_ref and lexer can be used independently
+	/// ```
+	pub fn into_parts(self) -> (&'config Config, Lexer<'source, 'config>)
+	{
+		let config = self.config;
+		(config, self)
+	}
+}
+
 /// Lexical analyzer for tokenizing source code.
 ///
 /// The lexer performs lexical analysis by scanning through source code character by character

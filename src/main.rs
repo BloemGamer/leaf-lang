@@ -1,7 +1,11 @@
-use std::fs;
-use std::process::exit;
+#![allow(clippy::needless_return)]
+
+use std::{fs, process::exit};
+
+use self::parser::Parser;
 
 mod lexer;
+mod parser;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Config {}
@@ -16,5 +20,6 @@ fn main()
 		exit(1)
 	};
 	let lexed = lexer::Lexer::new(&config, &file);
-	println!("{:#?}", lexed.into_iter().collect::<Vec<_>>());
+	println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	let parsed: Parser = lexed.into();
 }
