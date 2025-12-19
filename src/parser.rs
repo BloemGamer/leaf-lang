@@ -21,7 +21,7 @@ impl<'source, 'config> Parser<'source, 'config>
 {
 	pub fn new(lexer: Lexer<'source, 'config>) -> Self
 	{
-		let (config, lexer) = lexer.into_parser();
+		let (config, lexer) = lexer.into_parts();
 
 		Self {
 			config,
