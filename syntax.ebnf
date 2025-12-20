@@ -205,6 +205,14 @@ break_stmt = "break" , ";" ;
 
 continue_stmt = "continue" , ";" ;
 
+// delete var
+delete_stmt = "delete" , namespace_identefier ;
+
+// type var = new type
+new_stmt = "new" , type ;
+
+
+
 // --- Control flow statements ---
 
 if_stmt = "if" , expression , block , [ "else" , ( block | if_stmt ) ] ;

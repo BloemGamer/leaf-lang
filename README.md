@@ -60,7 +60,7 @@ fn main()
 ### Frontend
 - [x] Lexing
 - [ ] Preprocessor (lower priority)
-- [ ] Parsing → AST
+- [ ] Parsing -> AST
 - [ ] Semantic Analysis
 	- [ ] Desugaring / Lowering
 	- [ ] Symbol Collection
