@@ -184,6 +184,10 @@ pub enum TokenKind
 	Break,
 	/// Skip to next iteration: `continue`
 	Continue,
+	/// Call the constructor for a type: `new`
+	New,
+	/// Call the destructor for a type: `delete`
+	Delete,
 
 	// ===== Keywords - Declarations =====
 	/// Function definition: `fn`
@@ -991,6 +995,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"where" => TokenKind::Where,
 			"true" => TokenKind::True,
 			"false" => TokenKind::False,
+			"new" => TokenKind::New,
+			"delete" => TokenKind::Delete,
 			_ => TokenKind::Identifier(ident),
 		}
 	}
