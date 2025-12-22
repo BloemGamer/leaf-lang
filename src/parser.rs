@@ -612,4 +612,44 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 	}
+	fn parse_type(&mut self) -> Result<Type, ParseError>
+	{
+		let modifiers: Vec<TypeModifier> = self.parse_type_modifiers()?;
+		return Ok(Type {
+			modifiers,
+			core: Box::new(self.parse_type_core()?),
+		});
+	}
+
+	fn parse_type_core(&mut self) -> Result<TypeCore, ParseError>
+	{
+		let tok: Token = self.next();
+		match &tok.kind {
+			TokenKind::Ampersand => {
+				let mutable = self.at(&TokenKind::Mut);
+				if mutable {
+					self.next();
+				}
+				return Ok(TypeCore::Reference {
+					mutable,
+					inner: Box::new(self.parse_type_core()?),
+				});
+			}
+			_ => todo!(),
+		}
+	}
+
+	fn parse_type_modifiers(&mut self) -> Result<Vec<TypeModifier>, ParseError>
+	{
+		let tok: Token = self.next();
+		let mut ret: Vec<TypeModifier> = Vec::new();
+
+		loop {
+			match &tok.kind {
+				TokenKind::Volatile => ret.push(TypeModifier::Volatile),
+				TokenKind::Directive(d) => ret.push(TypeModifier::Directive(self.parse_directive()?.node)),
+				_ => return Ok(ret),
+			}
+		}
+	}
 }
