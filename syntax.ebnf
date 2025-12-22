@@ -125,7 +125,7 @@ primary_lvalue = namespaced_identifier
 // TYPES
 // ============================================================================
 
-type = "let" , [ type_modifiers ] , type_core ;
+type = ( "let" | "const" ) , [ type_modifiers ] , type_core ;
 
 // Core type structure: reference/pointer modifiers, base type, suffixes
 type_core = type_base , [ reference_modifier ] , { type_suffix } ;
@@ -219,7 +219,7 @@ if_stmt = "if" , expression , block , [ "else" , ( block | if_stmt ) ] ;
 
 while_stmt = "while" , expression , block ;
 
-for_stmt = "for" , identifier , "in" , expression , block ;
+for_stmt = "for" , ( "_" | ( identifier , ":" , type ) ), "in" , expression , block ;
 
 unsafe_block = "unsafe" , block ;
 
@@ -423,7 +423,7 @@ program = { top_level_decl } ;
 //
 // Blocks with trailing expressions:
 //   {
-//     let x = 5;
+//     let x: i64 = 5;
 //     x + 1  // <-- No semicolon: this becomes the block's value
 //   }
 //
