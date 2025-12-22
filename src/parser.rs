@@ -108,6 +108,7 @@ pub struct Type
 pub enum TypeModifier
 {
 	Volatile,
+	Directive(Directive),
 }
 
 #[derive(Debug, Clone)]
