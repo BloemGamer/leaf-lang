@@ -622,7 +622,12 @@ impl<'s, 'c> Parser<'s, 'c>
 					inner: Box::new(self.parse_type_core()?),
 				});
 			}
-			_ => todo!(),
+			_ => {
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, "Expected a ampersand, mut or identefier"),
+				});
+			}
 		}
 	}
 
