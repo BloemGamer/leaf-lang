@@ -20,10 +20,11 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// let (config_ref, lexer) = lexer.into_parts();
 	/// // Now both config_ref and lexer can be used independently
 	/// ```
-	pub fn into_parts(self) -> (&'config Config, Lexer<'source, 'config>)
+	pub fn into_parts(self) -> (&'config Config, &'source str, Lexer<'source, 'config>)
 	{
 		let config = self.config;
-		(config, self)
+		let source = self.source;
+		(config, source, self)
 	}
 }
 
