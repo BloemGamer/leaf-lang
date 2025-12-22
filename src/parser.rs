@@ -473,7 +473,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// Consume and return the next token
 	fn next(&mut self) -> Token
 	{
-		let tok = self.lexer.next().expect("lexer exhausted unexpectedly");
+		let tok: Token = self.lexer.next().expect("lexer exhausted unexpectedly");
 		self.last_span = tok.span;
 		tok
 	}
@@ -503,7 +503,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError>
 	{
-		let tok = self.peek();
+		let tok: &Token = self.peek();
 
 		if &tok.kind == expected {
 			Ok(self.next())
@@ -517,7 +517,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	pub fn parse_program(&mut self) -> Result<Program, ParseError>
 	{
-		let mut items = Vec::new();
+		let mut items: Vec<Spanned<TopLevelDecl>> = Vec::new();
 
 		while !matches!(self.peek().kind, TokenKind::Eof) {
 			let decl = self.parse_top_level_decl()?;
@@ -533,7 +533,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		match &token.kind {
 			TokenKind::Directive(_) => {
-				let directive = self.parse_directive()?;
+				let directive: Spanned<Directive> = self.parse_directive()?;
 
 				Ok(Spanned {
 					span: directive.span,
@@ -575,7 +575,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			lexer::Directive::Use => {
 				let mut path: Vec<Ident> = Vec::new();
 				loop {
-					let tok = self.next();
+					let tok: Token = self.next();
 					match &tok.kind {
 						TokenKind::Identifier(s) => path.push(s.to_string()),
 						_ => {
