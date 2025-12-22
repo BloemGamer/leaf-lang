@@ -57,6 +57,7 @@ pub struct Lexer<'source, 'config>
 	current_char: Option<char>,
 	line: usize,
 	column: usize,
+	eof_returned: bool,
 }
 
 /// A token produced by the lexer.
@@ -430,11 +431,16 @@ impl<'source, 'config> Iterator for Lexer<'source, 'config>
 	{
 		let token = self.next_token();
 
-		if token.kind == TokenKind::Eof {
-			None
+		return if token.kind == TokenKind::Eof {
+			if self.eof_returned {
+				None
+			} else {
+				self.eof_returned = true;
+				Some(token)
+			}
 		} else {
 			Some(token)
-		}
+		};
 	}
 }
 
@@ -468,6 +474,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			current_char: None,
 			line: 1,
 			column: 1,
+			eof_returned: false,
 		};
 		lexer.current_char = lexer.source.chars().next();
 		lexer
