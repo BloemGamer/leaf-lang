@@ -138,7 +138,7 @@ pub enum TypeCore
 }
 
 #[derive(Debug, Clone)]
-struct RangeExpr
+pub struct RangeExpr
 {
 	start: Option<Box<Expr>>,
 	end: Option<Box<Expr>>,
@@ -302,7 +302,7 @@ pub enum Stmt
 
 	Return(Option<Expr>),
 
-	ExprStmt(Expr),
+	Expr(Expr),
 
 	Break, // Maybe later it will have a value, to break a named loop
 	Continue,
@@ -521,5 +521,21 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		Ok(Program { items })
+	}
+
+	fn parse_top_level_decl(&mut self) -> Result<Spanned<TopLevelDecl>, ParseError>
+	{
+		let token = self.peek();
+		let start_span = token.span;
+
+		match &token.kind {
+			// TokenKind::Directive() => {}
+			other => {
+				return Err(ParseError {
+					span: token.span,
+					message: format!("unexplected token at top level: {:?}", other),
+				});
+			}
+		}
 	}
 }
