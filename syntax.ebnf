@@ -148,7 +148,7 @@ tuple_type = "(" , [ type , { "," , type } , [ "," ] ] , ")" ;
 
 // Type modifiers (e.g., volatile)
 type_modifiers = type_modifier , { type_modifier } ;
-type_modifier = "volatile" ;
+type_modifier = "volatile" | directive ;
 
 // ============================================================================
 // DIRECTIVES
@@ -193,7 +193,7 @@ statement = [ directive ] ,
             | continue_stmt
             ) ;
 
-variable_decl = [ modifiers ] , type , identifier , [ "=" , expression ] , ";" ;
+variable_decl = [ type_modifiers ] , type , identifier , [ "=" , expression ] , ";" ;
 
 assignment = lvalue , equal_type , expression , ";" ;
 
