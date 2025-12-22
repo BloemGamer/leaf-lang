@@ -123,6 +123,35 @@ pub struct Span
 	pub end_col: usize,
 }
 
+impl Span
+{
+	/// Merges to Spans together
+	///
+	/// # Arguments
+	/// * `self` - Self
+	/// * `other` - Other Span
+	///
+	/// # Returns
+	/// A new Span ranging from the start of the first span, and the end of the second one
+	///
+	///
+	/// # Example
+	/// ```
+	/// let new_span: Span = old_span1.merge(old_span2);
+	/// ```
+	pub fn merge(&self, other: &Span) -> Self
+	{
+		Self {
+			start: self.start.min(other.start),
+			end: self.end.max(other.end),
+			start_line: self.start_line.min(other.start_line),
+			start_col: self.start_col.min(other.start_col),
+			end_line: self.end_line.max(other.end_line),
+			end_col: self.end_col.max(other.end_col),
+		}
+	}
+}
+
 /// The semantic type and value of a token.
 ///
 /// This enum represents all possible token types that can be produced by the lexer,
