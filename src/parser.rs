@@ -608,8 +608,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type_core(&mut self) -> Result<TypeCore, ParseError>
 	{
-		let tok: Token = self.peek().clone();
-		// println!("{:#?}", tok);
+		let tok: &Token = self.peek();
 		match &tok.kind {
 			TokenKind::Identifier(str) => {
 				return Ok(TypeCore::Base {
@@ -629,6 +628,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 			_ => {
+				let tok = tok.clone();
 				return Err(ParseError {
 					span: tok.span,
 					message: tok.format_error(self.source, "Expected a ampersand, mut or identefier"),
@@ -642,7 +642,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut ret: Vec<TypeModifier> = Vec::new();
 
 		loop {
-			let tok: Token = self.peek().clone();
+			let tok: &Token = self.peek();
 			match &tok.kind {
 				TokenKind::Volatile => ret.push(TypeModifier::Volatile),
 				TokenKind::Directive(d) => ret.push(TypeModifier::Directive(self.parse_directive()?.node)),
