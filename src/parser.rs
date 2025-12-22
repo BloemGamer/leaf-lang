@@ -574,26 +574,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		match direct {
 			lexer::Directive::Use => {
-				let mut path: Vec<Ident> = Vec::new();
-				loop {
-					let tok: Token = self.next();
-					match &tok.kind {
-						TokenKind::Identifier(s) => path.push(s.to_string()),
-						_ => {
-							return Err(ParseError {
-								span: tok.span,
-								message: tok.format_error(self.source, "expected identifier in @use path"),
-							});
-						}
-					}
-
-					if self.peek().kind != TokenKind::DoubleColon {
-						break;
-					}
-
-					self.next();
-				}
-				return Ok(Directive::Use(path));
+				return Ok(Directive::Use(self.get_path()?));
 			}
 			lexer::Directive::Import => {
 				let incl: Token = self.next();
@@ -607,7 +588,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 				}
 			}
-			lexer::Directive::Custom(name) => {
+			lexer::Directive::Custom(_name) => {
 				todo!() // I have not yet decided how I want to do this one
 			}
 		}
@@ -625,6 +606,12 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let tok: Token = self.next();
 		match &tok.kind {
+			TokenKind::Identifier(str) => {
+				return Ok(TypeCore::Base {
+					path: self.get_path()?,
+					generics: Vec::new(),
+				});
+			}
 			TokenKind::Ampersand => {
 				let mutable = self.at(&TokenKind::Mut);
 				if mutable {
@@ -674,5 +661,15 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			self.next();
 		}
+	}
+
+	fn get_generics(&mut self) -> Result<Vec<Type>, ParseError>
+	{
+		assert_eq!(
+			*self.peek_kind(),
+			TokenKind::LessThan,
+			"Generics are not yet implemented"
+		);
+		return Ok(Vec::new());
 	}
 }
