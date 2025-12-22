@@ -652,4 +652,27 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 	}
+
+	fn get_path(&mut self) -> Result<Vec<Ident>, ParseError>
+	{
+		let mut path: Vec<Ident> = Vec::new();
+		loop {
+			let tok: Token = self.next();
+			match &tok.kind {
+				TokenKind::Identifier(s) => path.push(s.to_string()),
+				_ => {
+					return Err(ParseError {
+						span: tok.span,
+						message: tok.format_error(self.source, "expected identifier in @use path"),
+					});
+				}
+			}
+
+			if self.peek().kind != TokenKind::DoubleColon {
+				return Ok(path);
+			}
+
+			self.next();
+		}
+	}
 }
