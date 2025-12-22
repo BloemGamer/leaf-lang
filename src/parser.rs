@@ -575,9 +575,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			lexer::Directive::Use => {}
 			lexer::Directive::Import => {
 				let incl: Token = self.next();
-				match incl.kind {
+				match &incl.kind {
 					TokenKind::StringLiteral(str) => return Ok(Directive::Import(str.to_string())),
-					otherwise => todo!(),
+					otherwise => {
+						return Err(ParseError {
+							span: incl.span,
+							message: incl.format_error(self.source, "expected a string to import"),
+						});
+					}
 				}
 			}
 			lexer::Directive::Custom(name) => {}
