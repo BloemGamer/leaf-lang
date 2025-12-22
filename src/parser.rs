@@ -3,6 +3,7 @@ use std::iter::Peekable;
 use crate::Config;
 use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 
+#[derive(Debug, Clone)]
 pub struct Parser<'source, 'config>
 {
 	config: &'config Config,
@@ -593,18 +594,22 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 	}
+
 	fn parse_type(&mut self) -> Result<Type, ParseError>
 	{
 		let modifiers: Vec<TypeModifier> = self.parse_type_modifiers()?;
+		println!("{:#?}", self.peek());
+		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
 			modifiers,
-			core: Box::new(self.parse_type_core()?),
+			core: Box::new(self.parse_type_suffix(core)?),
 		});
 	}
 
 	fn parse_type_core(&mut self) -> Result<TypeCore, ParseError>
 	{
-		let tok: Token = self.next();
+		let tok: Token = self.peek().clone();
+		// println!("{:#?}", tok);
 		match &tok.kind {
 			TokenKind::Identifier(str) => {
 				return Ok(TypeCore::Base {
@@ -613,7 +618,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 			TokenKind::Ampersand => {
-				let mutable = self.at(&TokenKind::Mut);
+				self.next();
+				let mutable: bool = self.at(&TokenKind::Mut);
 				if mutable {
 					self.next();
 				}
@@ -633,16 +639,43 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type_modifiers(&mut self) -> Result<Vec<TypeModifier>, ParseError>
 	{
-		let tok: Token = self.next();
 		let mut ret: Vec<TypeModifier> = Vec::new();
 
 		loop {
+			let tok: Token = self.peek().clone();
 			match &tok.kind {
 				TokenKind::Volatile => ret.push(TypeModifier::Volatile),
 				TokenKind::Directive(d) => ret.push(TypeModifier::Directive(self.parse_directive()?.node)),
 				_ => return Ok(ret),
 			}
+			self.next();
 		}
+	}
+
+	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, ParseError>
+	{
+		loop {
+			match self.peek_kind() {
+				TokenKind::Star => {
+					self.next(); // consume '*'
+					base = TypeCore::Pointer { inner: Box::new(base) };
+				}
+				TokenKind::LeftBracket => {
+					self.next(); // consume '['
+					// let size_expr = self.parse_expr()?; // TODO: Implement parse_expr
+					self.expect(&TokenKind::RightBracket)?; // consume ']'
+					// base = TypeCore::Array {
+					// 	inner: Box::new(base),
+					// 	size: Box::new(size_expr),
+					// };
+				}
+				TokenKind::Comma | TokenKind::RightParen => {
+					break;
+				}
+				_ => break,
+			}
+		}
+		Ok(base)
 	}
 
 	fn get_path(&mut self) -> Result<Vec<Ident>, ParseError>
