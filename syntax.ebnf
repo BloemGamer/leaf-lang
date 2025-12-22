@@ -125,10 +125,10 @@ primary_lvalue = namespaced_identifier
 // TYPES
 // ============================================================================
 
-type = ( "let" | "const" ) , [ type_modifiers ] , [ reference_modifier ] , type_core ;
+type = ( "let" | "const" ) , [ type_modifiers ] , type_core ;
 
 // Core type structure: reference/pointer modifiers, base type, suffixes
-type_core = type_base  , { type_suffix } ;
+type_core = type_base , [ reference_modifier ] , { type_suffix } ;
 
 // Reference modifier: & or &mut (only one, at the start)
 reference_modifier = "&" , [ "mut" ] ;
