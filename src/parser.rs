@@ -6,6 +6,7 @@ use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 pub struct Parser<'source, 'config>
 {
 	config: &'config Config,
+	source: &'source str,
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
 }
@@ -14,9 +15,10 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 {
 	fn from(lexer: Lexer<'s, 'c>) -> Self
 	{
-		let (config, lexer) = lexer.into_parts();
+		let (config, source, lexer) = lexer.into_parts();
 		Self {
 			config,
+			source,
 			lexer: lexer.peekable(),
 			last_span: Span::default(),
 		}
@@ -85,7 +87,7 @@ pub struct FunctionDecl
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
 	pub where_clause: Option<Vec<WhereConstraint>>,
-	pub body: Option<Block>, // Should be none for function prototyes, mostly used for external things
+	pub body: Option<Block>, // Should be none for function prototypes, mostly used for external things
 }
 
 #[derive(Debug, Clone)]
@@ -527,17 +529,59 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<Spanned<TopLevelDecl>, ParseError>
 	{
-		let token = self.peek();
-		let start_span = token.span;
+		let token: &Token = self.peek();
 
 		match &token.kind {
-			// TokenKind::Directive() => {}
+			TokenKind::Directive(_) => {
+				let directive = self.parse_directive()?;
+
+				Ok(Spanned {
+					span: directive.span,
+					node: TopLevelDecl::Directive(directive.node),
+				})
+			}
 			other => {
 				return Err(ParseError {
 					span: token.span,
-					message: format!("unexplected token at top level: {:?}", other),
+					message: format!("unexpected token at top level: {:?}", other),
 				});
 			}
 		}
+	}
+
+	fn parse_directive(&mut self) -> Result<Spanned<Directive>, ParseError>
+	{
+		debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+
+		let tok: Token = self.next();
+		let start: Span = tok.span;
+
+		let node: Directive = match tok.kind {
+			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
+			_ => unreachable!("{}", tok.format_error(self.source, "Bug: Token should be a directive")),
+		};
+
+		let end: Span = self.last_span;
+
+		Ok(Spanned {
+			node,
+			span: start.merge(&end),
+		})
+	}
+
+	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
+	{
+		match direct {
+			lexer::Directive::Use => {}
+			lexer::Directive::Import => {
+				let incl: Token = self.next();
+				match incl.kind {
+					TokenKind::StringLiteral(str) => return Ok(Directive::Import(str.to_string())),
+					otherwise => todo!(),
+				}
+			}
+			lexer::Directive::Custom(name) => {}
+		}
+		todo!()
 	}
 }
