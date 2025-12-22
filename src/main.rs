@@ -2,6 +2,7 @@
 
 use std::{fs, process::exit};
 
+use self::lexer::Lexer;
 use self::parser::Parser;
 
 mod lexer;
@@ -19,7 +20,9 @@ fn main()
 		println!("could not open file");
 		exit(1)
 	};
-	let lexed = lexer::Lexer::new(&config, &file);
-	println!("{:#?}", lexed.clone().collect::<Vec<_>>());
-	let parsed: Parser = lexed.into();
+	let lexed: Lexer = Lexer::new(&config, &file);
+	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	let mut parsed: Parser = lexed.into(); // for now this has to be mute because of the parse program, this function will be replaced in the future
+	let program = parsed.parse_program();
+	println!("{:#?}", program);
 }
