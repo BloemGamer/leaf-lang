@@ -112,7 +112,7 @@ pub struct Token
 ///     end_col: 6,
 /// };
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Span
 {
 	pub start: usize,
