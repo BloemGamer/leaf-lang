@@ -606,8 +606,9 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 				}
 			}
-			lexer::Directive::Custom(name) => {}
+			lexer::Directive::Custom(name) => {
+				todo!() // I have not yet decided how I want to do this one
+			}
 		}
-		todo!()
 	}
 }
