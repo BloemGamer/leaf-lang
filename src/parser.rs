@@ -572,15 +572,36 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
 	{
 		match direct {
-			lexer::Directive::Use => {}
+			lexer::Directive::Use => {
+				let mut path: Vec<Ident> = Vec::new();
+				loop {
+					let tok = self.next();
+					match &tok.kind {
+						TokenKind::Identifier(s) => path.push(s.to_string()),
+						_ => {
+							return Err(ParseError {
+								span: tok.span,
+								message: tok.format_error(self.source, "expected identifier in @use path"),
+							});
+						}
+					}
+
+					if self.peek().kind != TokenKind::DoubleColon {
+						break;
+					}
+
+					self.next();
+				}
+				return Ok(Directive::Use(path));
+			}
 			lexer::Directive::Import => {
 				let incl: Token = self.next();
 				match &incl.kind {
 					TokenKind::StringLiteral(str) => return Ok(Directive::Import(str.to_string())),
-					otherwise => {
+					_ => {
 						return Err(ParseError {
 							span: incl.span,
-							message: incl.format_error(self.source, "expected a string to import"),
+							message: incl.format_error(self.source, "expected a string for @import"),
 						});
 					}
 				}
