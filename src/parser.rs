@@ -1,14 +1,13 @@
 use std::iter::Peekable;
 
-use crate::lexer::Span;
-
 use crate::Config;
-use crate::lexer::{Lexer, Token, TokenKind};
+use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 
 pub struct Parser<'source, 'config>
 {
 	config: &'config Config,
 	lexer: Peekable<Lexer<'source, 'config>>,
+	last_span: Span,
 }
 
 impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
@@ -19,6 +18,7 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 		Self {
 			config,
 			lexer: lexer.peekable(),
+			last_span: Span::default(),
 		}
 	}
 }
@@ -471,7 +471,9 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// Consume and return the next token
 	fn next(&mut self) -> Token
 	{
-		self.lexer.next().expect("lexer exhausted unexpectedly")
+		let tok = self.lexer.next().expect("lexer exhausted unexpectedly");
+		self.last_span = tok.span;
+		tok
 	}
 
 	/// Returns the TokenKind of the next token for convenience
