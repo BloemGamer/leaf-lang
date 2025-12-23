@@ -9,77 +9,69 @@
 > It will be merged into `main` once further along in development.
 
 # S-lang
-A C-based language with modern features and a platform to learn compiler design.
+A language that is designed to be used with C, with modern features and a platform to learn compiler design.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet.
 
-## Why S-lang?
-* **Compatibility:** The language is designed to be compatible with C.
-* **Clearer syntax:** The language tries to change some of the syntax to make the language more readable.
-* **Extra features:** More features to make development easier.
-
-
 ## Code preview
 ```rs
-@import "stdio.h" 							// #include <stdio.h> in C
-
-fn main(i64 argc, char&& argc) -> int
+fn main()
 {
-	i64 a = 10;
-	i64& b = i64&::give_clean_array(10);	// now you can use references, next to pointers
-	mut i64 c = 0;
-	c = { a + b[0] };
-	print("{}\n", c);						// print got a new format version
-}
-
-pub fn i64&::give_clean_array(usize size) -> i64&
-{
-	return (i64&)calloc(size, sizeof(i64));	// you can still use every C function you want
+	let a: i64 = 0;
+	let v: Vec<i64> = Vec::from!([0, 1, 2]);
+	print("{}", a);
 }
 ```
 
+# Features
+- **Simple language**: No hidden control flow. Simple but powerfull preprocessor.
+- **Explicit memory**: No hidden memory allocations, deallocations are predictable.
+- **Fast by design**: No garbage collector. Strong comptime excecution and lazy evaluation.
 
 ## Roadmap
 ### Now busy with
-- [x] Adding tests
-- [ ] Making error messages instead of just assertion
+- [x] Writing the lexer
+- [ ] Writing the parser
+- [ ] Refining the syntax
 
 ### Short-term
 - [ ] Finish first compiler version
-- [ ] Adding the namespace like syntax
-- [ ] Add the ability to use documenting comments
-- [ ] Add tests
-- [ ] Write documentation
-- [x] Make the lexer threadsafe
-- [ ] Add error handeling in the lexer
-- [ ] Add error handeling in the parser
-- [ ] Add error handeling in the code generation
-- [ ] Add a switch or match statement
 
 ### Long-term
 - [ ] Adding templates
-- [ ] Code optimisations
 - [ ] Preprocessor
+- [ ] Code optimisations
 - [ ] C parser integration
+- [ ] Design a build system
+- [ ] Write compile time execution
 
 ## Progress of the stages of the compiler
-- [ ] Preprocessor (Low priority)
-- [x] Lexing -> lex
-- [x] Parsing -> parse
-- [ ] Semantic analyser
-- [ ] Optimisations (Low priority)
-- [x] Code generator
-- [ ] Calling C compiler
+### Frontend
+- [x] Lexing
+- [ ] Preprocessor (lower priority)
+- [ ] Parsing -> AST
+- [ ] Semantic Analysis
+	- [ ] Desugaring / Lowering
+	- [ ] Symbol Collection
+	- [ ] Name Resolution + Type Analysis
+	- [ ] Lifetime Analysis & Destructor Insertion
+- [ ] Optimizations (low priority)
+
+### Backend
+- [ ] Code Generator (to C)
+- [ ] Invoke C Compiler
 
 
 
 ## Installation
 
 ### Prerequisites
-- **CMake** >= 3.10
-- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
-- **Python** >= 3.10 (required for building and testing; you can also set up CMake manually)
+- Compiler
+	- **Cargo** that supports the newest rust version
+- Generated C code
+	- **CMake** >= 3.10
+	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
 
 S-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
@@ -94,20 +86,14 @@ cd S-lang
 
 ### Building the Project
 
-Run the build script using Python:
-
 ```sh
-# Linux
-python3 build.py
-
-# Windows
-python build.py
+cargo build --release
 ```
 
 ### Running the Compiler
 
 ```sh
-./s-lang <file>   # Compile and run a source file
+cargo run --release
 ```
 
 
