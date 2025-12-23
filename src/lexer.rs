@@ -225,6 +225,8 @@ pub enum TokenKind
 	FuncDef,
 	/// Constant declaration: `const`
 	Const,
+	/// Variable declaration: `let`
+	Let,
 	/// Static variable: `static`
 	Static,
 	/// Structure definition: `struct`
@@ -1016,6 +1018,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"continue" => TokenKind::Continue,
 			"fn" => TokenKind::FuncDef,
 			"const" => TokenKind::Const,
+			"let" => TokenKind::Let,
 			"static" => TokenKind::Static,
 			"struct" => TokenKind::Struct,
 			"union" => TokenKind::Union,
