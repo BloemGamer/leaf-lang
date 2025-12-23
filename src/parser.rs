@@ -514,9 +514,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		if &tok.kind == expected {
 			Ok(self.next())
 		} else {
+			let tok: Token = tok.clone();
 			Err(ParseError {
 				span: tok.span,
-				message: format!("expected {:?}, found {:?}", expected, tok.kind),
+				message: tok.format_error(self.source, &format!("expected {:?}, found {:?}", expected, tok.kind)),
 			})
 		}
 	}
