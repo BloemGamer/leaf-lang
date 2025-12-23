@@ -3,6 +3,11 @@
 [![Issues][issues-shield]][issues-url]
 [![Project_license][license-shield]][license-url]
 
+> [!WARNING]
+> A full rewrite is in progress on
+> [`rewrite`](../../tree/rewrite), which is currently the active branch.
+> It will be merged into `main` once further along in development.
+
 # S-lang
 A language that is designed to be used with C, with modern features and a platform to learn compiler design.
 
