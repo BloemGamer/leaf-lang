@@ -5,37 +5,19 @@
 
 # S-lang
 A language that is designed to be used with C, with modern features and a platform to learn compiler design.
+- **Explicit memory**: No hidden memory allocations, deallocations are predictable.
+- **Simple language**: No hidden control flow. Simple but powerfull preprocessor.
+- **Fast by design**: No garbage collector. Strong comptime excecution and lazy evaluation.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet.
-
-## Why S-lang?
-- **Explicit systems programming:** Memory, mutability, ownership, and unsafe operations are always visible, nothing happens implicitly.
-
-- **Move-by-default semantics:** Values are moved on assignment and function calls unless explicitly borrowed, eliminating accidental copies and making performance predictable.
-
-- **Automatic memory management without a garbage collector:** Resources are freed deterministically at scope end, with no runtime, no GC, and no hidden reference counting.
-
-- **Lightweight borrow checking:** Borrows are tracked for correctness of intent, not proven with complex lifetime analysis. Multiple mutable borrows and cross-function borrows are allowed by design.
-
-- **Trust-based safety model:** The compiler prevents common errors like use-after-move and invalid access while borrowed, while trusting the programmer to manage borrow lifetimes responsibly.
-
-- **First-class C integration:** Directly import C headers, share ABI-compatible data layouts, and call C code with zero overhead.
-
-- **Unsafe is explicit and contained:** Low-level operations such as raw pointers, manual allocation, and inline assembly are available in unsafe blocks only.
-
-- **Predictable, high performance:** Clear cost models make it suitable for systems and performance-critical code.
-
-- **Power without artificial limits:** The language does not restrict what you can do, it makes powerful operations explicit instead of forbidden.
-
-- **Designed to be understood:** A small, learnable core language that prioritizes clarity over cleverness.
-
 
 ## Code preview
 ```rs
 fn main()
 {
-	i64 a = 0;
+	let a: i64 = 0;
+	let v: Vec<i64> = Vec::from!([0, 1, 2]);
 	print("{}", a);
 }
 ```
@@ -44,7 +26,7 @@ fn main()
 ## Roadmap
 ### Now busy with
 - [x] Writing the lexer
-- [x] Writing the parser
+- [ ] Writing the parser
 - [ ] Refining the syntax
 
 ### Short-term
@@ -52,9 +34,11 @@ fn main()
 
 ### Long-term
 - [ ] Adding templates
-- [ ] Code optimisations
 - [ ] Preprocessor
+- [ ] Code optimisations
 - [ ] C parser integration
+- [ ] Design a build system
+- [ ] Write compile time execution
 
 ## Progress of the stages of the compiler
 ### Frontend
@@ -66,11 +50,11 @@ fn main()
 	- [ ] Symbol Collection
 	- [ ] Name Resolution + Type Analysis
 	- [ ] Lifetime Analysis & Destructor Insertion
-- [ ] Optimizations (optional)
+- [ ] Optimizations (low priority)
 
 ### Backend
-- Code Generator (to C)
-- Invoke C Compiler
+- [ ] Code Generator (to C)
+- [ ] Invoke C Compiler
 
 
 
