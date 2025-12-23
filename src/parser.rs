@@ -45,6 +45,7 @@ pub struct Program
 pub enum TopLevelDecl
 {
 	Function(FunctionDecl),
+	VariableDecl(VariableDecl),
 	Struct(StructDecl),
 	Union(UnionDecl),
 	Enum(EnumDecl),
@@ -287,15 +288,18 @@ pub enum AssignOp
 }
 
 #[derive(Debug, Clone)]
+struct VariableDecl
+{
+	ty: Type,
+	name: Ident,
+	init: Option<Expr>,
+	comp_const: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum Stmt
 {
-	VariableDecl
-	{
-		modifiers: Vec<Modifier>,
-		ty: Type,
-		name: Ident,
-		init: Option<Expr>,
-	},
+	VariableDecl(VariableDecl),
 
 	Assignment
 	{
@@ -542,6 +546,14 @@ impl<'s, 'c> Parser<'s, 'c>
 					node: TopLevelDecl::Directive(directive.node),
 				})
 			}
+			TokenKind::Let | TokenKind::Const => {
+				let var_decl = self.parse_var_decl()?;
+
+				Ok(Spanned {
+					span: var_decl.span,
+					node: TopLevelDecl::VariableDecl(var_decl.node),
+				})
+			}
 			other => {
 				return Err(ParseError {
 					span: token.span,
@@ -593,6 +605,48 @@ impl<'s, 'c> Parser<'s, 'c>
 				todo!() // I have not yet decided how I want to do this one
 			}
 		}
+	}
+
+	fn parse_var_decl(&mut self) -> Result<Spanned<VariableDecl>, ParseError>
+	{
+		let tok: Token = self.next();
+		let span: Span = tok.span;
+		if !matches!(tok.kind, TokenKind::Const | TokenKind::Let) {
+			unreachable!(
+				"Bug: expected const or let for a variable declaration, got: {:?}",
+				tok.kind
+			);
+		}
+		let comp_const: bool = tok.kind == TokenKind::Const;
+
+		let tok: Token = self.next();
+		let var_name: Ident = if let TokenKind::Identifier(str) = tok.kind {
+			str
+		} else {
+			return Err(ParseError {
+				span: tok.span,
+				message: format!("expected identifier, got: {:?}", tok.kind),
+			});
+		};
+
+		self.expect(&TokenKind::Colon)?;
+
+		let tok: &Token = self.peek();
+		let init: Option<Expr> = if tok.kind == TokenKind::Equals {
+			todo!("Parse expression is not yet implemented") // TODO: self.parse_expression()?
+		} else {
+			None
+		};
+
+		return Ok(Spanned {
+			node: VariableDecl {
+				ty: self.parse_type()?,
+				name: var_name,
+				init,
+				comp_const,
+			},
+			span: self.last_span.merge(&span),
+		});
 	}
 
 	fn parse_type(&mut self) -> Result<Type, ParseError>
