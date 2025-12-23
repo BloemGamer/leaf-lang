@@ -433,7 +433,7 @@ impl<'source, 'config> Iterator for Lexer<'source, 'config>
 	{
 		let token = self.next_token();
 
-		return if token.kind == TokenKind::Eof {
+		return if matches!(token.kind, TokenKind::Eof | TokenKind::Invalid) {
 			if self.eof_returned {
 				None
 			} else {
@@ -1251,21 +1251,21 @@ mod tests
 
 		let tokens: Vec<Token> = lexer.into_iter().collect();
 
-		assert_eq!(tokens.len(), 7);
+		assert_eq!(tokens.len(), 8);
 	}
 
 	#[test]
 	fn test_empty_source()
 	{
 		let kinds = lex_kinds("");
-		assert_eq!(kinds, vec![]);
+		assert_eq!(kinds, vec![TokenKind::Eof]);
 	}
 
 	#[test]
 	fn test_whitespace_only()
 	{
 		let kinds = lex_kinds("   \n\t  \r\n  ");
-		assert_eq!(kinds, vec![]);
+		assert_eq!(kinds, vec![TokenKind::Eof]);
 	}
 
 	// ===== Literal Tests =====
@@ -1281,6 +1281,7 @@ mod tests
 				TokenKind::IntLiteral(42),
 				TokenKind::IntLiteral(123),
 				TokenKind::IntLiteral(1000000),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1296,6 +1297,7 @@ mod tests
 				TokenKind::IntLiteral(255),
 				TokenKind::IntLiteral(0xDEADBEEF),
 				TokenKind::IntLiteral(0x123),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1310,6 +1312,7 @@ mod tests
 				TokenKind::IntLiteral(0),
 				TokenKind::IntLiteral(0b1010),
 				TokenKind::IntLiteral(0b11110000),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1324,6 +1327,7 @@ mod tests
 				TokenKind::IntLiteral(0),
 				TokenKind::IntLiteral(0o777),
 				TokenKind::IntLiteral(0o123),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1339,6 +1343,7 @@ mod tests
 				TokenKind::FloatLiteral(0.5),
 				TokenKind::FloatLiteral(123.456),
 				TokenKind::FloatLiteral(1000.50),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1354,6 +1359,7 @@ mod tests
 				TokenKind::StringLiteral("world".to_string()),
 				TokenKind::StringLiteral("".to_string()),
 				TokenKind::StringLiteral("with spaces".to_string()),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1369,6 +1375,7 @@ mod tests
 				TokenKind::StringLiteral("tab\there".to_string()),
 				TokenKind::StringLiteral("quote\"".to_string()),
 				TokenKind::StringLiteral("backslash\\".to_string()),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1384,6 +1391,7 @@ mod tests
 				TokenKind::CharLiteral('Z'),
 				TokenKind::CharLiteral('0'),
 				TokenKind::CharLiteral(' '),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1401,6 +1409,7 @@ mod tests
 				TokenKind::CharLiteral('\0'),
 				TokenKind::CharLiteral('\\'),
 				TokenKind::CharLiteral('\''),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1409,7 +1418,7 @@ mod tests
 	fn test_boolean_literals()
 	{
 		let kinds = lex_kinds("true false");
-		assert_eq!(kinds, vec![TokenKind::True, TokenKind::False]);
+		assert_eq!(kinds, vec![TokenKind::True, TokenKind::False, TokenKind::Eof]);
 	}
 
 	// ===== Identifier and Keyword Tests =====
@@ -1426,6 +1435,7 @@ mod tests
 				TokenKind::Identifier("my_var".to_string()),
 				TokenKind::Identifier("_private".to_string()),
 				TokenKind::Identifier("MyType".to_string()),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1434,7 +1444,7 @@ mod tests
 	fn test_underscore_wildcard()
 	{
 		let kinds = lex_kinds("_");
-		assert_eq!(kinds, vec![TokenKind::Underscore]);
+		assert_eq!(kinds, vec![TokenKind::Underscore, TokenKind::Eof]);
 	}
 
 	#[test]
@@ -1452,6 +1462,7 @@ mod tests
 				TokenKind::Return,
 				TokenKind::Break,
 				TokenKind::Continue,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1472,6 +1483,7 @@ mod tests
 				TokenKind::Enum,
 				TokenKind::Impl,
 				TokenKind::MacroDef,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1482,7 +1494,13 @@ mod tests
 		let kinds = lex_kinds("pub mut unsafe volatile");
 		assert_eq!(
 			kinds,
-			vec![TokenKind::Pub, TokenKind::Mut, TokenKind::Unsafe, TokenKind::Volatile]
+			vec![
+				TokenKind::Pub,
+				TokenKind::Mut,
+				TokenKind::Unsafe,
+				TokenKind::Volatile,
+				TokenKind::Eof
+			]
 		);
 	}
 
@@ -1490,7 +1508,10 @@ mod tests
 	fn test_other_keywords()
 	{
 		let kinds = lex_kinds("in as where");
-		assert_eq!(kinds, vec![TokenKind::In, TokenKind::As, TokenKind::Where]);
+		assert_eq!(
+			kinds,
+			vec![TokenKind::In, TokenKind::As, TokenKind::Where, TokenKind::Eof]
+		);
 	}
 
 	// ===== Operator Tests =====
@@ -1506,7 +1527,8 @@ mod tests
 				TokenKind::Minus,
 				TokenKind::Star,
 				TokenKind::Slash,
-				TokenKind::Mod
+				TokenKind::Mod,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1524,6 +1546,7 @@ mod tests
 				TokenKind::Tilde,
 				TokenKind::LShift,
 				TokenKind::RShift,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1532,7 +1555,10 @@ mod tests
 	fn test_logical_operators()
 	{
 		let kinds = lex_kinds("! && ||");
-		assert_eq!(kinds, vec![TokenKind::Bang, TokenKind::And, TokenKind::Or]);
+		assert_eq!(
+			kinds,
+			vec![TokenKind::Bang, TokenKind::And, TokenKind::Or, TokenKind::Eof]
+		);
 	}
 
 	#[test]
@@ -1548,6 +1574,7 @@ mod tests
 				TokenKind::GreaterEquals,
 				TokenKind::EqualsEquals,
 				TokenKind::BangEquals,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1571,6 +1598,7 @@ mod tests
 				TokenKind::TildeEquals,
 				TokenKind::LShiftEquals,
 				TokenKind::RShiftEquals,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1579,7 +1607,7 @@ mod tests
 	fn test_arrow_operators()
 	{
 		let kinds = lex_kinds("-> =>");
-		assert_eq!(kinds, vec![TokenKind::Arrow, TokenKind::FatArrow]);
+		assert_eq!(kinds, vec![TokenKind::Arrow, TokenKind::FatArrow, TokenKind::Eof]);
 	}
 
 	// ===== Delimiter and Punctuation Tests =====
@@ -1597,6 +1625,7 @@ mod tests
 				TokenKind::RightBrace,
 				TokenKind::LeftBracket,
 				TokenKind::RightBracket,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1618,6 +1647,7 @@ mod tests
 				TokenKind::QuestionMark,
 				TokenKind::Hash,
 				TokenKind::Backslash,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1632,7 +1662,8 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::LineComment(" this is a comment".to_string()),
-				TokenKind::IntLiteral(42)
+				TokenKind::IntLiteral(42),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1645,7 +1676,8 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::DocsComment(" this is a doc comment".to_string()),
-				TokenKind::IntLiteral(42)
+				TokenKind::IntLiteral(42),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1658,7 +1690,8 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::BlockComment(" block comment ".to_string()),
-				TokenKind::IntLiteral(42)
+				TokenKind::IntLiteral(42),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1671,7 +1704,8 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::DocsComment(" doc block comment ".to_string()),
-				TokenKind::IntLiteral(42)
+				TokenKind::IntLiteral(42),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1684,7 +1718,8 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::BlockComment(" line1\nline2\nline3 ".to_string()),
-				TokenKind::IntLiteral(42)
+				TokenKind::IntLiteral(42),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1701,6 +1736,7 @@ mod tests
 				TokenKind::Macro("foo".to_string()),
 				TokenKind::Macro("bar_baz".to_string()),
 				TokenKind::Macro("MyMacro".to_string()),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1715,6 +1751,7 @@ mod tests
 				TokenKind::Directive(Directive::Use),
 				TokenKind::Directive(Directive::Import),
 				TokenKind::Directive(Directive::Custom("custom".to_string())),
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1824,6 +1861,7 @@ mod tests
 				TokenKind::Plus,
 				TokenKind::Identifier("y".to_string()),
 				TokenKind::RightBrace,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1846,6 +1884,7 @@ mod tests
 				TokenKind::Colon,
 				TokenKind::Identifier("i32".to_string()),
 				TokenKind::RightBrace,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1869,6 +1908,7 @@ mod tests
 				TokenKind::Minus,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::RightBrace,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1888,6 +1928,7 @@ mod tests
 				TokenKind::IntLiteral(10),
 				TokenKind::LeftBrace,
 				TokenKind::RightBrace,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1910,6 +1951,7 @@ mod tests
 				TokenKind::FatArrow,
 				TokenKind::False,
 				TokenKind::RightBrace,
+				TokenKind::Eof,
 			]
 		);
 	}
@@ -1934,6 +1976,7 @@ mod tests
 				TokenKind::Minus,
 				TokenKind::Identifier("b".to_string()),
 				TokenKind::RightParen,
+				TokenKind::Eof,
 			]
 		);
 	}
