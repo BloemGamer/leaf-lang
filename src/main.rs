@@ -21,8 +21,15 @@ fn main()
 		exit(1)
 	};
 	let lexed: Lexer = Lexer::new(&config, &file);
-	println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let mut parsed: Parser = lexed.into(); // for now this has to be mute because of the parse program, this function will be replaced in the future
 	let program: Result<parser::Program, parser::ParseError> = parsed.parse_program();
-	println!("{:#?}", program);
+	match &program {
+		Ok(program) => {
+			println!("{:#?}", program);
+		}
+		Err(e) => {
+			println!("{}", e);
+		}
+	}
 }
