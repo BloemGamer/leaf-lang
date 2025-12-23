@@ -5,9 +5,6 @@
 
 # S-lang
 A language that is designed to be used with C, with modern features and a platform to learn compiler design.
-- **Explicit memory**: No hidden memory allocations, deallocations are predictable.
-- **Simple language**: No hidden control flow. Simple but powerfull preprocessor.
-- **Fast by design**: No garbage collector. Strong comptime excecution and lazy evaluation.
 
 > [!WARNING]
 > It is still under construction and cannot be used yet.
@@ -22,6 +19,10 @@ fn main()
 }
 ```
 
+# Features
+- **Simple language**: No hidden control flow. Simple but powerfull preprocessor.
+- **Explicit memory**: No hidden memory allocations, deallocations are predictable.
+- **Fast by design**: No garbage collector. Strong comptime excecution and lazy evaluation.
 
 ## Roadmap
 ### Now busy with
