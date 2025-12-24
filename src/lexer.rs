@@ -828,13 +828,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 					Some('.') => TokenKind::Ellipsis,
 					Some('=') => TokenKind::DotDotEquals,
 					_ => TokenKind::DotDot,
-				};
-
-				if self.current_char == Some('.') {
-					self.advance();
-					TokenKind::Ellipsis
-				} else {
-					TokenKind::DotDot
 				}
 			}
 			_ => TokenKind::Dot,
