@@ -197,6 +197,8 @@ pub enum TokenKind
 	Identifier(String),
 	/// Wildcard pattern: `_`
 	Underscore,
+	/// Self keyword: `self`
+	SelfKw,
 
 	// ===== Keywords - Control Flow =====
 	/// Conditional: `if`
@@ -1011,6 +1013,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		match ident.as_str() {
 			"_" => TokenKind::Underscore,
+			"self" => TokenKind::SelfKw,
 			"if" => TokenKind::If,
 			"else" => TokenKind::Else,
 			"while" => TokenKind::While,
