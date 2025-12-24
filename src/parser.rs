@@ -538,7 +538,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let token: &Token = self.peek();
 
-		match &token.kind {
+		return match &token.kind {
 			TokenKind::Directive(_) => {
 				let directive: Spanned<Directive> = self.parse_directive()?;
 
@@ -555,13 +555,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					node: TopLevelDecl::VariableDecl(var_decl.node),
 				})
 			}
-			other => {
-				return Err(ParseError {
-					span: token.span,
-					message: format!("unexpected token at top level: {:?}", other),
-				});
-			}
-		}
+			other => Err(ParseError {
+				span: token.span,
+				message: format!("unexpected token at top level: {:?}", other),
+			}),
+		};
 	}
 
 	fn parse_directive(&mut self) -> Result<Spanned<Directive>, ParseError>
