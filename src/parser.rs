@@ -1741,11 +1741,15 @@ impl<'s, 'c> Parser<'s, 'c>
 					name: "self".to_string(),
 				});
 			} else {
-				let name_tok = self.expect(&TokenKind::Identifier(String::new()))?;
-				let name = if let TokenKind::Identifier(n) = name_tok.kind {
-					n
+				let name_tok = self.next();
+				let name = if let TokenKind::Identifier(str) = name_tok.kind {
+					str
 				} else {
-					unreachable!()
+					return Err(ParseError {
+						span: name_tok.span,
+						message: name_tok
+							.format_error(self.source, &format!("expected identefier, got: {:?}", name_tok.kind)),
+					});
 				};
 
 				self.expect(&TokenKind::Colon)?;
