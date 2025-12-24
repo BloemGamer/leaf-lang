@@ -542,6 +542,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Directive(_) => {
 				let directive: Spanned<Directive> = self.parse_directive()?;
 
+				self.expect(&TokenKind::Semicolon)?;
+
 				Ok(Spanned {
 					span: directive.span,
 					node: TopLevelDecl::Directive(directive.node),
@@ -549,6 +551,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::Let | TokenKind::Const => {
 				let var_decl = self.parse_var_decl()?;
+
+				self.expect(&TokenKind::Semicolon)?;
 
 				Ok(Spanned {
 					span: var_decl.span,
@@ -587,7 +591,6 @@ impl<'s, 'c> Parser<'s, 'c>
 		return match direct {
 			lexer::Directive::Use => {
 				let ret: Directive = Directive::Use(self.get_path()?);
-				self.expect(&TokenKind::Semicolon)?;
 				Ok(ret)
 			}
 			lexer::Directive::Import => {
@@ -601,7 +604,6 @@ impl<'s, 'c> Parser<'s, 'c>
 						});
 					}
 				};
-				self.expect(&TokenKind::Semicolon)?;
 				Ok(ret)
 			}
 			lexer::Directive::Custom(_name) => {
