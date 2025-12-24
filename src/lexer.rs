@@ -257,6 +257,8 @@ pub enum TokenKind
 	Unsafe,
 	/// Volatile memory access: `volatile`
 	Volatile,
+	/// Inline function: `inline`
+	Inline,
 
 	// ===== Keywords - Other =====
 	/// Iterator source: `in` (for x in iter)
@@ -1028,6 +1030,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"impl" => TokenKind::Impl,
 			"macro" => TokenKind::MacroDef,
 			"pub" => TokenKind::Pub,
+			"inline" => TokenKind::Inline,
 			"mut" => TokenKind::Mut,
 			"unsafe" => TokenKind::Unsafe,
 			"volatile" => TokenKind::Volatile,

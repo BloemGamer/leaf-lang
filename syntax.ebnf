@@ -148,7 +148,7 @@ tuple_type = "(" , [ type , { "," , type } , [ "," ] ] , ")" ;
 
 // Type modifiers (e.g., volatile)
 type_modifiers = type_modifier , { type_modifier } ;
-type_modifier = "volatile" | directive ;
+type_modifier = "volatile" | "static" | directive ;
 
 // ============================================================================
 // DIRECTIVES
@@ -172,7 +172,7 @@ custom_directive = "@" , identifier ,
 // ============================================================================
 
 modifiers = modifier , { modifier } ;
-modifier = "pub" | "unsafe" | "static" | "inline" | directive ;
+modifier = "pub" | "unsafe" | "inline" | directive ;
 
 // ============================================================================
 // STATEMENTS
