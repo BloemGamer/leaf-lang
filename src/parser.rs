@@ -41,6 +41,8 @@ pub struct Program
 	pub items: Vec<Spanned<TopLevelDecl>>,
 }
 
+pub type TopLevelBlock = Program;
+
 #[derive(Debug, Clone)]
 pub enum TopLevelDecl
 {
@@ -76,7 +78,7 @@ pub enum Directive
 	{
 		name: Ident,
 		args: Vec<Expr>,
-		block: Option<Block>,
+		block: Option<BlockContent>,
 	},
 }
 
@@ -346,6 +348,13 @@ pub struct Block
 }
 
 #[derive(Debug, Clone)]
+pub enum BlockContent
+{
+	Block(Block),
+	TopLevelBlock(TopLevelBlock),
+}
+
+#[derive(Debug, Clone)]
 pub struct MatchArm
 {
 	pub pattern: Pattern,
@@ -425,7 +434,15 @@ pub struct ImplDecl
 	pub target: Vec<Ident>,
 	pub trait_path: Option<Vec<Ident>>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub body: Block,
+	pub body: Vec<Spanned<ImplItem>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ImplItem
+{
+	Function(FunctionDecl),
+	TypeAlias(TypeAliasDecl),
+	Const(VariableDecl),
 }
 
 #[derive(Debug, Clone)]
@@ -465,7 +482,7 @@ pub struct NamespaceDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Ident,
-	pub body: Block,
+	pub body: TopLevelBlock,
 }
 
 impl<'s, 'c> Parser<'s, 'c>
