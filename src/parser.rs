@@ -586,26 +586,30 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
 	{
-		match direct {
+		return match direct {
 			lexer::Directive::Use => {
-				return Ok(Directive::Use(self.get_path()?));
+				let ret: Directive = Directive::Use(self.get_path()?);
+				self.expect(&TokenKind::Semicolon)?;
+				Ok(ret)
 			}
 			lexer::Directive::Import => {
 				let incl: Token = self.next();
-				match &incl.kind {
-					TokenKind::StringLiteral(str) => return Ok(Directive::Import(str.to_string())),
+				let ret: Directive = match &incl.kind {
+					TokenKind::StringLiteral(str) => Directive::Import(str.to_string()),
 					_ => {
 						return Err(ParseError {
 							span: incl.span,
 							message: incl.format_error(self.source, "expected a string for @import"),
 						});
 					}
-				}
+				};
+				self.expect(&TokenKind::Semicolon)?;
+				Ok(ret)
 			}
 			lexer::Directive::Custom(_name) => {
 				todo!() // I have not yet decided how I want to do this one
 			}
-		}
+		};
 	}
 
 	fn parse_var_decl(&mut self) -> Result<Spanned<VariableDecl>, ParseError>
