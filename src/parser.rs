@@ -657,7 +657,6 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_type(&mut self) -> Result<Type, ParseError>
 	{
 		let modifiers: Vec<TypeModifier> = self.parse_type_modifiers()?;
-		println!("{:#?}", self.peek());
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
 			modifiers,
