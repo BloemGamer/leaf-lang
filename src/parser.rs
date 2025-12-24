@@ -669,7 +669,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let tok: &Token = self.peek();
 		match &tok.kind {
-			TokenKind::Identifier(str) => {
+			TokenKind::Identifier(_) => {
 				return Ok(TypeCore::Base {
 					path: self.get_path()?,
 					generics: Vec::new(),
