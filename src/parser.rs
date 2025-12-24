@@ -561,27 +561,27 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		return match &token.kind {
 			TokenKind::Directive(_) => {
-				let directive: Spanned<Directive> = self.parse_directive()?;
+				let (directive, span): (Directive, Span) = self.parse_directive()?.unpack();
 
 				self.expect(&TokenKind::Semicolon)?;
 
 				Ok(Spanned {
-					span: directive.span,
-					node: TopLevelDecl::Directive(directive.node),
+					span,
+					node: TopLevelDecl::Directive(directive),
 				})
 			}
 			TokenKind::Let | TokenKind::Const => {
-				let var_decl = self.parse_var_decl()?;
+				let (var_decl, span): (VariableDecl, Span) = self.parse_var_decl()?.unpack();
 
 				self.expect(&TokenKind::Semicolon)?;
 
 				Ok(Spanned {
-					span: var_decl.span,
-					node: TopLevelDecl::VariableDecl(var_decl.node),
+					span,
+					node: TopLevelDecl::VariableDecl(var_decl),
 				})
 			}
 			TokenKind::FuncDef => {
-				let (func_decl, span) = self.parse_function_decl()?.unpack();
+				let (func_decl, span): (FunctionDecl, Span) = self.parse_function_decl()?.unpack();
 				Ok(Spanned {
 					node: TopLevelDecl::Function(func_decl),
 					span,
