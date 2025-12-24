@@ -35,6 +35,14 @@ pub struct Spanned<T>
 	pub span: Span,
 }
 
+impl<T> Spanned<T>
+{
+	fn unpack(self) -> (T, Span)
+	{
+		return (self.node, self.span);
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Program
 {
@@ -64,7 +72,6 @@ pub enum Modifier
 {
 	Pub,
 	Unsafe,
-	Static,
 	Inline,
 	Directive(Directive),
 }
@@ -85,13 +92,20 @@ pub enum Directive
 #[derive(Debug, Clone)]
 pub struct FunctionDecl
 {
+	pub signature: FunctionSignature,
+	pub body: Option<Block>, // Should be none for function prototypes, mostly used for external things
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionSignature
+{
 	pub modifiers: Vec<Modifier>,
 	pub name: Ident,
 	pub generics: Vec<Ident>,
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
-	pub where_clause: Option<Vec<WhereConstraint>>,
-	pub body: Option<Block>, // Should be none for function prototypes, mostly used for external things
+	pub where_clause: Vec<WhereConstraint>,
+	pub heap_func: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -417,16 +431,6 @@ pub struct TraitDecl
 }
 
 #[derive(Debug, Clone)]
-pub struct FunctionSignature
-{
-	pub name: Ident,
-	pub generics: Vec<Ident>,
-	pub params: Vec<Param>,
-	pub return_type: Option<Type>,
-	pub where_clause: Vec<WhereConstraint>,
-}
-
-#[derive(Debug, Clone)]
 pub struct ImplDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -574,6 +578,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(Spanned {
 					span: var_decl.span,
 					node: TopLevelDecl::VariableDecl(var_decl.node),
+				})
+			}
+			TokenKind::FuncDef => {
+				let (func_decl, span) = self.parse_function_decl()?.unpack();
+				Ok(Spanned {
+					node: TopLevelDecl::Function(func_decl),
+					span,
 				})
 			}
 			other => Err(ParseError {
@@ -779,7 +790,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn get_generics(&mut self) -> Result<Vec<Type>, ParseError>
+	fn get_generics(&mut self) -> Result<Vec<Ident>, ParseError>
 	{
 		assert_eq!(
 			*self.peek_kind(),
@@ -1563,7 +1574,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			} else {
 				let else_block = self.parse_block()?;
 				Some(Box::new(Stmt::If {
-					cond: Expr::Literal(Literal::Bool(true)), // Dummy condition
+					cond: Expr::Literal(Literal::Bool(true)),
 					then_block: else_block,
 					else_branch: None,
 				}))
@@ -1603,5 +1614,174 @@ impl<'s, 'c> Parser<'s, 'c>
 		let body = self.parse_block()?;
 
 		Ok(Stmt::For { name, iter, body })
+	}
+
+	fn parse_function_decl(&mut self) -> Result<Spanned<FunctionDecl>, ParseError>
+	{
+		let (signature, span): (FunctionSignature, Span) = self.parse_function_signature()?.unpack();
+		let body: Option<Block> = if self.at(&TokenKind::Semicolon) {
+			None
+		} else {
+			Some(self.parse_block()?)
+		};
+		let span: Span = span.merge(&self.last_span);
+		return Ok(Spanned {
+			node: FunctionDecl { signature, body },
+			span,
+		});
+	}
+
+	fn parse_function_signature(&mut self) -> Result<Spanned<FunctionSignature>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+
+		self.expect(&TokenKind::FuncDef)?;
+
+		let heap_func = if self.at(&TokenKind::Bang) {
+			self.next(); // !
+			true
+		} else {
+			false
+		};
+
+		let tok: Token = self.next();
+
+		let name: Ident = if let TokenKind::Identifier(str) = tok.kind {
+			str
+		} else {
+			return Err(ParseError {
+				span: tok.span,
+				message: tok.format_error(self.source, &format!("Expected an identefier, got: {:?}", tok.kind)),
+			});
+		};
+
+		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let params: Vec<Param> = self.parse_function_arguments()?;
+
+		let return_type = if self.at(&TokenKind::Arrow) {
+			self.next(); // ->
+			Some(self.parse_type()?)
+		} else {
+			None
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where) {
+			todo!("parse where constraint is not made, this does not work for now")
+		} else {
+			Vec::new()
+		};
+
+		return Ok(Spanned {
+			span: span.merge(&self.last_span),
+			node: FunctionSignature {
+				modifiers,
+				name,
+				generics,
+				params,
+				return_type,
+				where_clause,
+				heap_func,
+			},
+		});
+	}
+
+	fn parse_function_arguments(&mut self) -> Result<Vec<Param>, ParseError>
+	{
+		self.expect(&TokenKind::LeftParen)?;
+
+		let mut params: Vec<Param> = Vec::new();
+
+		if self.at(&TokenKind::RightParen) {
+			self.next();
+			return Ok(params);
+		}
+
+		loop {
+			if self.at(&TokenKind::Ampersand) {
+				self.next(); // &
+
+				let mutable = self.consume(&TokenKind::Mut);
+
+				self.expect(&TokenKind::SelfKw)?;
+
+				let self_type = Type {
+					modifiers: Vec::new(),
+					core: Box::new(TypeCore::Reference {
+						mutable,
+						inner: Box::new(TypeCore::Base {
+							path: vec!["Self".to_string()],
+							generics: Vec::new(),
+						}),
+					}),
+				};
+
+				params.push(Param {
+					ty: self_type,
+					name: "self".to_string(),
+				});
+			} else if self.at(&TokenKind::SelfKw) {
+				self.next(); // self
+
+				let self_type = Type {
+					modifiers: Vec::new(),
+					core: Box::new(TypeCore::Base {
+						path: vec!["Self".to_string()],
+						generics: Vec::new(),
+					}),
+				};
+
+				params.push(Param {
+					ty: self_type,
+					name: "self".to_string(),
+				});
+			} else {
+				let name_tok = self.expect(&TokenKind::Identifier(String::new()))?;
+				let name = if let TokenKind::Identifier(n) = name_tok.kind {
+					n
+				} else {
+					unreachable!()
+				};
+
+				self.expect(&TokenKind::Colon)?;
+
+				let ty = self.parse_type()?;
+
+				params.push(Param { ty, name });
+			}
+
+			if !self.consume(&TokenKind::Comma) {
+				break;
+			}
+
+			if self.at(&TokenKind::RightParen) {
+				break;
+			}
+		}
+
+		self.expect(&TokenKind::RightParen)?;
+		Ok(params)
+	}
+
+	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ParseError>
+	{
+		let mut ret: Vec<Modifier> = Vec::new();
+
+		loop {
+			let tok: &Token = self.peek();
+			match &tok.kind {
+				TokenKind::Directive(_) => ret.push(Modifier::Directive(self.parse_directive()?.node)),
+				TokenKind::Pub => ret.push(Modifier::Pub),
+				TokenKind::Unsafe => ret.push(Modifier::Unsafe),
+				TokenKind::Inline => ret.push(Modifier::Inline),
+				_ => return Ok(ret),
+			}
+			self.next();
+		}
 	}
 }
