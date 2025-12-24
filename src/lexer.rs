@@ -367,6 +367,8 @@ pub enum TokenKind
 	Dot,
 	/// Range: `..`
 	DotDot,
+	/// Range: `..=`
+	DotDotEquals,
 	/// Variadic: `...`
 	Ellipsis,
 	/// Function return type: `->`
@@ -822,6 +824,12 @@ impl<'source, 'config> Lexer<'source, 'config>
 		match self.current_char {
 			Some('.') => {
 				self.advance();
+				match self.current_char {
+					Some('.') => TokenKind::Ellipsis,
+					Some('=') => TokenKind::DotDotEquals,
+					_ => TokenKind::DotDot,
+				};
+
 				if self.current_char == Some('.') {
 					self.advance();
 					TokenKind::Ellipsis
