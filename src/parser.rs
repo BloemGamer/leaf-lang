@@ -67,6 +67,21 @@ pub enum TopLevelDecl
 	Directive(Directive),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DeclKind
+{
+	Function,
+	Struct,
+	Union,
+	Enum,
+	Trait,
+	Impl,
+	TypeAlias,
+	Namespace,
+	Variable,
+	Directive,
+}
+
 #[derive(Debug, Clone)]
 pub enum Modifier
 {
@@ -74,6 +89,7 @@ pub enum Modifier
 	Unsafe,
 	Inline,
 	Directive(Directive),
+	Const,
 }
 
 #[derive(Debug, Clone)]
@@ -557,41 +573,82 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<Spanned<TopLevelDecl>, ParseError>
 	{
-		let token: &Token = self.peek();
+		let start_span = self.peek().span;
 
-		return match &token.kind {
-			TokenKind::Directive(_) => {
-				let (directive, span): (Directive, Span) = self.parse_directive()?.unpack();
+		let decl_kind = self.peek_declaration_kind()?;
 
+		let node = match decl_kind {
+			DeclKind::Function => {
+				let (func_decl, _) = self.parse_function_decl()?.unpack();
+				TopLevelDecl::Function(func_decl)
+			}
+			DeclKind::Variable => {
+				let (var_decl, _) = self.parse_var_decl()?.unpack();
 				self.expect(&TokenKind::Semicolon)?;
-
-				Ok(Spanned {
-					span,
-					node: TopLevelDecl::Directive(directive),
-				})
+				TopLevelDecl::VariableDecl(var_decl)
 			}
-			TokenKind::Let | TokenKind::Const => {
-				let (var_decl, span): (VariableDecl, Span) = self.parse_var_decl()?.unpack();
-
+			DeclKind::Directive => {
+				let (directive, _) = self.parse_directive()?.unpack();
 				self.expect(&TokenKind::Semicolon)?;
-
-				Ok(Spanned {
-					span,
-					node: TopLevelDecl::VariableDecl(var_decl),
-				})
+				TopLevelDecl::Directive(directive)
 			}
-			TokenKind::FuncDef => {
-				let (func_decl, span): (FunctionDecl, Span) = self.parse_function_decl()?.unpack();
-				Ok(Spanned {
-					node: TopLevelDecl::Function(func_decl),
-					span,
-				})
-			}
-			other => Err(ParseError {
-				span: token.span,
-				message: format!("unexpected token at top level: {:?}", other),
-			}),
+			other => todo!("not yet implemented: {:?}", other),
 		};
+
+		Ok(Spanned {
+			node,
+			span: start_span.merge(&self.last_span),
+		})
+	}
+
+	fn peek_declaration_kind(&mut self) -> Result<DeclKind, ParseError>
+	{
+		let checkpoint = self.lexer.clone();
+		let checkpoint_span = self.last_span;
+
+		loop {
+			match self.peek_kind() {
+				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Directive(_) => {
+					self.next();
+				}
+				TokenKind::Const => {
+					self.next();
+					if self.at(&TokenKind::FuncDef) {
+						self.lexer = checkpoint;
+						self.last_span = checkpoint_span;
+						return Ok(DeclKind::Function);
+					} else {
+						self.lexer = checkpoint;
+						self.last_span = checkpoint_span;
+						return Ok(DeclKind::Variable);
+					}
+				}
+				TokenKind::FuncDef => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Function);
+				}
+				TokenKind::Struct => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Struct);
+				}
+				TokenKind::Let => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Variable);
+				}
+				_ => {
+					let tok = self.peek().clone();
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Err(ParseError {
+						span: tok.span,
+						message: format!("unexpected token in declaration: {:?}", tok.kind),
+					});
+				}
+			}
+		}
 	}
 
 	fn parse_directive(&mut self) -> Result<Spanned<Directive>, ParseError>
@@ -1783,6 +1840,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				TokenKind::Pub => ret.push(Modifier::Pub),
 				TokenKind::Unsafe => ret.push(Modifier::Unsafe),
 				TokenKind::Inline => ret.push(Modifier::Inline),
+				TokenKind::Const => ret.push(Modifier::Const),
 				_ => return Ok(ret),
 			}
 			self.next();
