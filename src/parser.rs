@@ -6,6 +6,7 @@ use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 #[derive(Debug, Clone)]
 pub struct Parser<'source, 'config>
 {
+	#[allow(unused)]
 	config: &'config Config,
 	source: &'source str,
 	lexer: Peekable<Lexer<'source, 'config>>,
@@ -1775,60 +1776,64 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		loop {
-			if self.at(&TokenKind::Ampersand) {
-				self.next(); // &
+			match self.peek_kind() {
+				TokenKind::Ampersand => {
+					self.next(); // &
 
-				let mutable = self.consume(&TokenKind::Mut);
+					let mutable = self.consume(&TokenKind::Mut);
 
-				self.expect(&TokenKind::SelfKw)?;
+					self.expect(&TokenKind::SelfKw)?;
 
-				let self_type = Type {
-					modifiers: Vec::new(),
-					core: Box::new(TypeCore::Reference {
-						mutable,
-						inner: Box::new(TypeCore::Base {
+					let self_type = Type {
+						modifiers: Vec::new(),
+						core: Box::new(TypeCore::Reference {
+							mutable,
+							inner: Box::new(TypeCore::Base {
+								path: vec!["Self".to_string()],
+								generics: Vec::new(),
+							}),
+						}),
+					};
+
+					params.push(Param {
+						ty: self_type,
+						name: "self".to_string(),
+					});
+				}
+				TokenKind::SelfKw => {
+					self.next(); // self
+
+					let self_type = Type {
+						modifiers: Vec::new(),
+						core: Box::new(TypeCore::Base {
 							path: vec!["Self".to_string()],
 							generics: Vec::new(),
 						}),
-					}),
-				};
+					};
 
-				params.push(Param {
-					ty: self_type,
-					name: "self".to_string(),
-				});
-			} else if self.at(&TokenKind::SelfKw) {
-				self.next(); // self
-
-				let self_type = Type {
-					modifiers: Vec::new(),
-					core: Box::new(TypeCore::Base {
-						path: vec!["Self".to_string()],
-						generics: Vec::new(),
-					}),
-				};
-
-				params.push(Param {
-					ty: self_type,
-					name: "self".to_string(),
-				});
-			} else {
-				let name_tok = self.next();
-				let name = if let TokenKind::Identifier(str) = name_tok.kind {
-					str
-				} else {
-					return Err(ParseError {
-						span: name_tok.span,
-						message: name_tok
-							.format_error(self.source, &format!("expected identefier, got: {:?}", name_tok.kind)),
+					params.push(Param {
+						ty: self_type,
+						name: "self".to_string(),
 					});
-				};
+				}
+				_ => {
+					let name_tok = self.next();
+					let name = if let TokenKind::Identifier(str) = name_tok.kind {
+						str
+					} else {
+						return Err(ParseError {
+							span: name_tok.span,
+							message: name_tok
+								.format_error(self.source, &format!("expected identefier, got: {:?}", name_tok.kind)),
+						});
+					};
 
-				self.expect(&TokenKind::Colon)?;
+					self.expect(&TokenKind::Colon)?;
 
-				let ty = self.parse_type()?;
+					let ty = self.parse_type()?;
 
-				params.push(Param { ty, name });
+					params.push(Param { ty, name });
+				}
 			}
 
 			if !self.consume(&TokenKind::Comma) {
