@@ -563,7 +563,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let mut items: Vec<Spanned<TopLevelDecl>> = Vec::new();
 
-		while !matches!(self.peek().kind, TokenKind::Eof) {
+		while !matches!(self.peek().kind, TokenKind::Eof | TokenKind::RightBrace) {
 			let decl = self.parse_top_level_decl()?;
 			items.push(decl);
 		}
@@ -648,13 +648,21 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Variable);
 				}
+				TokenKind::Namespace => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Namespace);
+				}
 				_ => {
 					let tok = self.peek().clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Err(ParseError {
 						span: tok.span,
-						message: format!("unexpected token in declaration: {:?}", tok.kind),
+						message: tok.format_error(
+							self.source,
+							&format!("unexpected token in declaration: got {:?}", tok.kind),
+						),
 					});
 				}
 			}
@@ -1927,7 +1935,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers = self.parse_modifiers()?;
 		self.expect(&TokenKind::Namespace)?;
 		let name: Vec<Ident> = self.get_path()?;
+		self.expect(&TokenKind::LeftBrace)?;
 		let body: TopLevelBlock = self.parse_program()?;
+		self.expect(&TokenKind::RightBrace)?;
 		return Ok(Spanned {
 			node: NamespaceDecl { modifiers, name, body },
 			span: span.merge(&self.last_span),
