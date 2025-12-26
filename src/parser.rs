@@ -715,7 +715,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		} else {
 			return Err(ParseError {
 				span: tok.span,
-				message: format!("expected identifier, got: {:?}", tok.kind),
+				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
 			});
 		};
 
