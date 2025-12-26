@@ -501,7 +501,7 @@ pub struct TypeAliasDecl
 pub struct NamespaceDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub body: TopLevelBlock,
 }
 
@@ -591,14 +591,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				(TopLevelDecl::Directive(directive), span)
 			}
 			DeclKind::Struct => {
-				let (struct_decl, span) = self.parse_struct()?.unpack();
+				let (struct_decl, span): (StructDecl, Span) = self.parse_struct()?.unpack();
 
 				(TopLevelDecl::Struct(struct_decl), span)
 			}
 			DeclKind::Union => {
-				let (union_decl, span) = self.parse_union()?.unpack();
+				let (union_decl, span): (UnionDecl, Span) = self.parse_union()?.unpack();
 
 				(TopLevelDecl::Union(union_decl), span)
+			}
+			DeclKind::Namespace => {
+				let (namespace_decl, span): (NamespaceDecl, Span) = self.parse_namespace()?.unpack();
+
+				(TopLevelDecl::Namespace(namespace_decl), span)
 			}
 			other => todo!("not yet implemented: {:?}", other),
 		};
@@ -839,7 +844,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				_ => {
 					return Err(ParseError {
 						span: tok.span,
-						message: tok.format_error(self.source, "expected identifier in @use path"),
+						message: tok.format_error(
+							self.source,
+							&format!("expected identifier in path, got: {:?}", tok.kind),
+						),
 					});
 				}
 			}
@@ -1911,5 +1919,18 @@ impl<'s, 'c> Parser<'s, 'c>
 		let union_decl: Spanned<UnionDecl> = struct_decl;
 
 		return Ok(union_decl);
+	}
+
+	fn parse_namespace(&mut self) -> Result<Spanned<NamespaceDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers = self.parse_modifiers()?;
+		self.expect(&TokenKind::Namespace)?;
+		let name: Vec<Ident> = self.get_path()?;
+		let body: TopLevelBlock = self.parse_program()?;
+		return Ok(Spanned {
+			node: NamespaceDecl { modifiers, name, body },
+			span: span.merge(&self.last_span),
+		});
 	}
 }
