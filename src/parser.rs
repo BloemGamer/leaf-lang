@@ -1547,12 +1547,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
 	{
-		match expr {
-			Expr::Block(_) => false,
-			Expr::Match { .. } => false,
-
-			_ => true,
-		}
+		!matches!(expr, Expr::Block(_) | Expr::Match { .. })
 	}
 
 	fn is_assignment_op(&mut self) -> bool
