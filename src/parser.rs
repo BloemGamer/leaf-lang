@@ -595,6 +595,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Struct(struct_decl), span)
 			}
+			DeclKind::Union => {
+				let (union_decl, span) = self.parse_union()?.unpack();
+
+				(TopLevelDecl::Union(union_decl), span)
+			}
 			other => todo!("not yet implemented: {:?}", other),
 		};
 
@@ -1898,5 +1903,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			},
 			span: span.merge(&self.last_span),
 		});
+	}
+
+	fn parse_union(&mut self) -> Result<Spanned<UnionDecl>, ParseError>
+	{
+		let struct_decl = self.parse_struct()?;
+
+		let union_decl: Spanned<UnionDecl> = struct_decl;
+
+		return Ok(union_decl);
 	}
 }
