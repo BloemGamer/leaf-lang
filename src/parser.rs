@@ -116,7 +116,7 @@ pub struct FunctionDecl
 pub struct FunctionSignature
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub generics: Vec<Ident>,
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
@@ -323,7 +323,7 @@ pub enum AssignOp
 struct VariableDecl
 {
 	ty: Type,
-	name: Ident,
+	name: Vec<Ident>,
 	init: Option<Expr>,
 	comp_const: bool,
 }
@@ -415,7 +415,7 @@ pub enum Pattern
 pub struct StructDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub fields: Vec<(Type, Ident)>,
 }
 
@@ -425,7 +425,7 @@ pub type UnionDecl = StructDecl;
 pub struct EnumDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub variants: Vec<(Ident, Option<Expr>)>,
 }
 
@@ -433,7 +433,7 @@ pub struct EnumDecl
 pub struct TaggedUnionDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub variants: Vec<(Ident, Vec<Type>)>,
 }
 
@@ -714,10 +714,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 		let comp_const: bool = tok.kind == TokenKind::Const;
 
-		let tok: Token = self.next();
-		let var_name: Ident = if let TokenKind::Identifier(str) = tok.kind {
-			str
+		let var_name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
 		} else {
+			let tok: Token = self.next();
 			return Err(ParseError {
 				span: tok.span,
 				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
@@ -1702,11 +1702,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			false
 		};
 
-		let tok: Token = self.next();
-
-		let name: Ident = if let TokenKind::Identifier(str) = tok.kind {
-			str
+		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
 		} else {
+			let tok: Token = self.next();
 			return Err(ParseError {
 				span: tok.span,
 				message: tok.format_error(self.source, &format!("Expected an identefier, got: {:?}", tok.kind)),
@@ -1853,8 +1852,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Struct)?;
 
-		let name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
-			str
+		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
 		} else {
 			let tok: Token = self.next();
 			return Err(ParseError {
