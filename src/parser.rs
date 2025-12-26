@@ -573,32 +573,32 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<Spanned<TopLevelDecl>, ParseError>
 	{
-		let start_span = self.peek().span;
-
 		let decl_kind = self.peek_declaration_kind()?;
 
-		let node = match decl_kind {
+		let (node, span) = match decl_kind {
 			DeclKind::Function => {
-				let (func_decl, _) = self.parse_function_decl()?.unpack();
-				TopLevelDecl::Function(func_decl)
+				let (func_decl, span) = self.parse_function_decl()?.unpack();
+				(TopLevelDecl::Function(func_decl), span)
 			}
 			DeclKind::Variable => {
-				let (var_decl, _) = self.parse_var_decl()?.unpack();
+				let (var_decl, span) = self.parse_var_decl()?.unpack();
 				self.expect(&TokenKind::Semicolon)?;
-				TopLevelDecl::VariableDecl(var_decl)
+				(TopLevelDecl::VariableDecl(var_decl), span)
 			}
 			DeclKind::Directive => {
-				let (directive, _) = self.parse_directive()?.unpack();
+				let (directive, span) = self.parse_directive()?.unpack();
 				self.expect(&TokenKind::Semicolon)?;
-				TopLevelDecl::Directive(directive)
+				(TopLevelDecl::Directive(directive), span)
+			}
+			DeclKind::Struct => {
+				let (struct_decl, span) = self.parse_struct()?.unpack();
+
+				(TopLevelDecl::Struct(struct_decl), span)
 			}
 			other => todo!("not yet implemented: {:?}", other),
 		};
 
-		Ok(Spanned {
-			node,
-			span: start_span.merge(&self.last_span),
-		})
+		Ok(Spanned { node, span })
 	}
 
 	fn peek_declaration_kind(&mut self) -> Result<DeclKind, ParseError>
@@ -1840,5 +1840,63 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			self.next();
 		}
+	}
+
+	fn parse_struct(&mut self) -> Result<Spanned<StructDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Struct)?;
+
+		let name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+			str
+		} else {
+			let tok: Token = self.next();
+			return Err(ParseError {
+				span: tok.span,
+				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+			});
+		};
+
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut fields: Vec<(Type, Ident)> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+				str
+			} else {
+				let tok: Token = self.next();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+				});
+			};
+
+			self.expect(&TokenKind::Colon)?;
+
+			let field_type: Type = self.parse_type()?;
+
+			fields.push((field_type, field_name));
+
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			self.expect(&TokenKind::Comma)?;
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		return Ok(Spanned {
+			node: StructDecl {
+				modifiers,
+				name,
+				fields,
+			},
+			span: span.merge(&self.last_span),
+		});
 	}
 }
