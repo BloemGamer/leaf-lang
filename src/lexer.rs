@@ -243,6 +243,8 @@ pub enum TokenKind
 	Impl,
 	/// Macro definition: `macro`
 	MacroDef,
+	/// Namespace declaration: `namespace`
+	Namespace,
 
 	// ===== Keywords - Modifiers =====
 	/// Public visibility: `pub`
@@ -1022,6 +1024,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"return" => TokenKind::Return,
 			"break" => TokenKind::Break,
 			"continue" => TokenKind::Continue,
+			"namespace" => TokenKind::Namespace,
 			"fn" => TokenKind::FuncDef,
 			"const" => TokenKind::Const,
 			"let" => TokenKind::Let,
