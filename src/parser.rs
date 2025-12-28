@@ -75,6 +75,7 @@ enum DeclKind
 	Struct,
 	Union,
 	Enum,
+	TaggedUnion,
 	Trait,
 	Impl,
 	TypeAlias,
@@ -605,6 +606,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Enum(enum_decl), span)
 			}
+			DeclKind::TaggedUnion => {
+				let (tagged_union_decl, span): (TaggedUnionDecl, Span) = self.parse_taggedunion()?.unpack();
+
+				(TopLevelDecl::TaggedUnion(tagged_union_decl), span)
+			}
 			other => todo!("not yet implemented: {:?}", other),
 		};
 
@@ -652,6 +658,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Enum);
+				}
+				TokenKind::TaggedUnion => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::TaggedUnion);
 				}
 				TokenKind::Let => {
 					self.lexer = checkpoint;
@@ -1998,6 +2009,18 @@ impl<'s, 'c> Parser<'s, 'c>
 				variants: fields,
 			},
 			span: span.merge(&self.last_span),
+		});
+	}
+
+	fn parse_taggedunion(&mut self) -> Result<Spanned<TaggedUnionDecl>, ParseError>
+	{
+		let tok: Token = self.next();
+		return Err(ParseError {
+			span: tok.span,
+			message: tok.format_error(
+				self.source,
+				"taggedunion is not yet implemented, this will be done in a later version",
+			),
 		});
 	}
 }
