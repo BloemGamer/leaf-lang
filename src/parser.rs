@@ -104,7 +104,6 @@ pub enum Directive
 	{
 		name: Ident,
 		args: Vec<Expr>,
-		block: Option<BlockContent>,
 	},
 }
 
@@ -775,8 +774,15 @@ impl<'s, 'c> Parser<'s, 'c>
 				};
 				Ok(ret)
 			}
-			lexer::Directive::Custom(_name) => {
-				todo!() // I have not yet decided how I want to do this one
+			lexer::Directive::Custom(name) => {
+				let args: Vec<Expr> = if self.at(&TokenKind::LeftParen) {
+					let args: Vec<Expr> = self.parse_argument_list()?;
+					self.expect(&TokenKind::RightParen)?;
+					args
+				} else {
+					Vec::new()
+				};
+				Ok(Directive::Custom { name, args })
 			}
 		};
 	}
