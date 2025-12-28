@@ -35,6 +35,7 @@ fn main()
 - [ ] Finish first compiler version
 
 ### Long-term
+- [ ] Adding tagged unions
 - [ ] Adding templates
 - [ ] Preprocessor
 - [ ] Code optimisations
