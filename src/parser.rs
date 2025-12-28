@@ -447,10 +447,17 @@ pub struct ImplDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub generics: Vec<Ident>,
-	pub target: Vec<Ident>,
-	pub trait_path: Option<Vec<Ident>>,
+	pub target: ImplTarget,
+	pub trait_path: Option<ImplTarget>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub body: Vec<Spanned<ImplItem>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImplTarget
+{
+	pub path: Vec<Ident>,
+	pub generics: Vec<Type>,
 }
 
 #[derive(Debug, Clone)]
@@ -601,6 +608,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Namespace(namespace_decl), span)
 			}
+			DeclKind::Impl => {
+				let (impl_decl, span): (ImplDecl, Span) = self.parse_impl()?.unpack();
+
+				(TopLevelDecl::Impl(impl_decl), span)
+			}
 			DeclKind::Enum => {
 				let (enum_decl, span): (EnumDecl, Span) = self.parse_enum()?.unpack();
 
@@ -673,6 +685,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Namespace);
+				}
+				TokenKind::Impl => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Impl);
 				}
 				_ => {
 					let tok = self.peek().clone();
@@ -820,7 +837,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let tok = tok.clone();
 				return Err(ParseError {
 					span: tok.span,
-					message: tok.format_error(self.source, "Expected a ampersand, mut or identefier"),
+					message: tok.format_error(self.source, "Expected an ampersand, mut or identifier"),
 				});
 			}
 		}
@@ -2066,6 +2083,72 @@ impl<'s, 'c> Parser<'s, 'c>
 			),
 		});
 	}
+
+	fn parse_impl(&mut self) -> Result<Spanned<ImplDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Impl)?;
+
+		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let first_target: ImplTarget = self.parse_impl_target()?;
+
+		let (trait_path, target) = if self.consume(&TokenKind::For) {
+			let target = self.parse_impl_target()?;
+			(Some(first_target), target)
+		} else {
+			(None, first_target)
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where) {
+			self.next();
+			self.parse_where_clause()?
+		} else {
+			Vec::new()
+		};
+
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut body: Vec<Spanned<ImplItem>> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			let item = self.parse_impl_item()?;
+			body.push(item);
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		return Ok(Spanned {
+			node: ImplDecl {
+				modifiers,
+				generics,
+				target,
+				trait_path,
+				where_clause,
+				body,
+			},
+			span: span.merge(&self.last_span),
+		});
+	}
+
+	fn parse_impl_target(&mut self) -> Result<ImplTarget, ParseError>
+	{
+		let path: Vec<Ident> = self.get_path()?;
+
+		let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
+			self.parse_type_generics()?
+		} else {
+			Vec::new()
+		};
+
+		Ok(ImplTarget { path, generics })
+	}
+
 	fn parse_type_generics(&mut self) -> Result<Vec<Type>, ParseError>
 	{
 		if !self.consume(&TokenKind::LessThan) {
@@ -2074,16 +2157,13 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut generics: Vec<Type> = Vec::new();
 
-		// Handle empty generics: <>
 		if self.consume(&TokenKind::GreaterThan) {
 			return Ok(generics);
 		}
 
 		loop {
-			// Parse a full type (could be complex like &mut T, T*, etc.)
 			generics.push(self.parse_type()?);
 
-			// Check for comma (more generics) or > (end of generics)
 			if self.consume(&TokenKind::GreaterThan) {
 				break;
 			}
@@ -2096,7 +2176,6 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 
-			// Allow trailing comma: <T, U,>
 			if self.consume(&TokenKind::GreaterThan) {
 				break;
 			}
@@ -2105,13 +2184,47 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(generics)
 	}
 
+	fn parse_impl_item(&mut self) -> Result<Spanned<ImplItem>, ParseError>
+	{
+		let span: Span = self.peek().span;
+
+		let decl_kind = self.peek_declaration_kind()?;
+
+		let (node, end_span) = match decl_kind {
+			DeclKind::Function => {
+				let (func_decl, span) = self.parse_function_decl()?.unpack();
+				(ImplItem::Function(func_decl), span)
+			}
+			DeclKind::TypeAlias => {
+				let (type_alias, span) = self.parse_type_alias()?.unpack();
+				self.expect(&TokenKind::Semicolon)?;
+				(ImplItem::TypeAlias(type_alias), span)
+			}
+			DeclKind::Variable => {
+				let (var_decl, span) = self.parse_var_decl()?.unpack();
+				self.expect(&TokenKind::Semicolon)?;
+				(ImplItem::Const(var_decl), span)
+			}
+			_ => {
+				let tok = self.peek().clone();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("unexpected item in impl block: {:?}", tok.kind)),
+				});
+			}
+		};
+
+		Ok(Spanned {
+			node,
+			span: span.merge(&end_span),
+		})
+	}
 
 	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, ParseError>
 	{
 		let mut constraints: Vec<WhereConstraint> = Vec::new();
 
 		loop {
-			// Parse type parameter name
 			let ty_tok = self.next();
 			let ty = if let TokenKind::Identifier(name) = ty_tok.kind {
 				name
@@ -2127,7 +2240,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			self.expect(&TokenKind::Colon)?;
 
-			// Parse trait bounds
 			let mut bounds: Vec<Vec<Ident>> = Vec::new();
 
 			loop {
@@ -2141,12 +2253,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			constraints.push(WhereConstraint { ty, bounds });
 
-			// Check if there are more constraints
 			if !self.consume(&TokenKind::Comma) {
 				break;
 			}
 
-			// If we hit a brace, we're done with the where clause
 			if self.at(&TokenKind::LeftBrace) {
 				break;
 			}
@@ -2155,4 +2265,31 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(constraints)
 	}
 
+	fn parse_type_alias(&mut self) -> Result<Spanned<TypeAliasDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Type)?;
+
+		let name_tok = self.next();
+		let name = if let TokenKind::Identifier(n) = name_tok.kind {
+			n
+		} else {
+			return Err(ParseError {
+				span: name_tok.span,
+				message: name_tok.format_error(
+					self.source,
+					&format!("expected identifier for type alias name, got: {:?}", name_tok.kind),
+				),
+			});
+		};
+
+		self.expect(&TokenKind::Equals)?;
+		let ty = self.parse_type()?;
+
+		Ok(Spanned {
+			node: TypeAliasDecl { modifiers, name, ty },
+			span: span.merge(&self.last_span),
+		})
+	}
 }

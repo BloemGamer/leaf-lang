@@ -245,6 +245,8 @@ pub enum TokenKind
 	MacroDef,
 	/// Namespace declaration: `namespace`
 	Namespace,
+	/// Type alias: `type`
+	Type,
 
 	// ===== Keywords - Modifiers =====
 	/// Public visibility: `pub`
@@ -1033,6 +1035,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"union" => TokenKind::Union,
 			"tagged_union" => TokenKind::TaggedUnion,
 			"enum" => TokenKind::Enum,
+			"type" => TokenKind::Type,
 			"impl" => TokenKind::Impl,
 			"macro" => TokenKind::MacroDef,
 			"pub" => TokenKind::Pub,
