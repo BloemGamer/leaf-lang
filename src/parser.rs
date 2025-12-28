@@ -796,10 +796,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		let tok: &Token = self.peek();
 		match &tok.kind {
 			TokenKind::Identifier(_) => {
-				return Ok(TypeCore::Base {
-					path: self.get_path()?,
-					generics: Vec::new(),
-				});
+				let path = self.get_path()?;
+				let generics = if self.at(&TokenKind::LessThan) {
+					self.parse_type_generics()?
+				} else {
+					Vec::new()
+				};
+
+				return Ok(TypeCore::Base { path, generics });
 			}
 			TokenKind::Ampersand => {
 				self.next();
@@ -873,12 +877,51 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn get_generics(&mut self) -> Result<Vec<Ident>, ParseError>
 	{
-		assert_eq!(
-			*self.peek_kind(),
-			TokenKind::LessThan,
-			"Generics are not yet implemented"
-		);
-		return Ok(Vec::new());
+		if !self.consume(&TokenKind::LessThan) {
+			return Ok(Vec::new());
+		}
+
+		let mut generics: Vec<Ident> = Vec::new();
+
+		if self.consume(&TokenKind::GreaterThan) {
+			return Ok(generics);
+		}
+
+		loop {
+			let tok = self.next();
+			match tok.kind {
+				TokenKind::Identifier(name) => {
+					generics.push(name);
+				}
+				_ => {
+					return Err(ParseError {
+						span: tok.span,
+						message: tok.format_error(
+							self.source,
+							&format!("expected identifier in generic parameters, got: {:?}", tok.kind),
+						),
+					});
+				}
+			}
+
+			if self.consume(&TokenKind::GreaterThan) {
+				break;
+			}
+
+			if !self.consume(&TokenKind::Comma) {
+				let tok = self.peek().clone();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, "expected ',' or '>' in generic parameters"),
+				});
+			}
+
+			if self.consume(&TokenKind::GreaterThan) {
+				break;
+			}
+		}
+
+		Ok(generics)
 	}
 
 	pub fn parse_expr(&mut self) -> Result<Expr, ParseError>
@@ -2023,4 +2066,93 @@ impl<'s, 'c> Parser<'s, 'c>
 			),
 		});
 	}
+	fn parse_type_generics(&mut self) -> Result<Vec<Type>, ParseError>
+	{
+		if !self.consume(&TokenKind::LessThan) {
+			return Ok(Vec::new());
+		}
+
+		let mut generics: Vec<Type> = Vec::new();
+
+		// Handle empty generics: <>
+		if self.consume(&TokenKind::GreaterThan) {
+			return Ok(generics);
+		}
+
+		loop {
+			// Parse a full type (could be complex like &mut T, T*, etc.)
+			generics.push(self.parse_type()?);
+
+			// Check for comma (more generics) or > (end of generics)
+			if self.consume(&TokenKind::GreaterThan) {
+				break;
+			}
+
+			if !self.consume(&TokenKind::Comma) {
+				let tok = self.peek().clone();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, "expected ',' or '>' in generic arguments"),
+				});
+			}
+
+			// Allow trailing comma: <T, U,>
+			if self.consume(&TokenKind::GreaterThan) {
+				break;
+			}
+		}
+
+		Ok(generics)
+	}
+
+
+	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, ParseError>
+	{
+		let mut constraints: Vec<WhereConstraint> = Vec::new();
+
+		loop {
+			// Parse type parameter name
+			let ty_tok = self.next();
+			let ty = if let TokenKind::Identifier(name) = ty_tok.kind {
+				name
+			} else {
+				return Err(ParseError {
+					span: ty_tok.span,
+					message: ty_tok.format_error(
+						self.source,
+						&format!("expected identifier in where clause, got: {:?}", ty_tok.kind),
+					),
+				});
+			};
+
+			self.expect(&TokenKind::Colon)?;
+
+			// Parse trait bounds
+			let mut bounds: Vec<Vec<Ident>> = Vec::new();
+
+			loop {
+				let bound = self.get_path()?;
+				bounds.push(bound);
+
+				if !self.consume(&TokenKind::Plus) {
+					break;
+				}
+			}
+
+			constraints.push(WhereConstraint { ty, bounds });
+
+			// Check if there are more constraints
+			if !self.consume(&TokenKind::Comma) {
+				break;
+			}
+
+			// If we hit a brace, we're done with the where clause
+			if self.at(&TokenKind::LeftBrace) {
+				break;
+			}
+		}
+
+		Ok(constraints)
+	}
+
 }
