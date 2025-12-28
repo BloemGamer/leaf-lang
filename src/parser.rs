@@ -828,9 +828,6 @@ impl<'s, 'c> Parser<'s, 'c>
 						size: Box::new(size_expr),
 					};
 				}
-				TokenKind::Comma | TokenKind::RightParen => {
-					break;
-				}
 				_ => break,
 			}
 		}
