@@ -1236,11 +1236,15 @@ impl<'s, 'c> Parser<'s, 'c>
 			match self.peek_kind() {
 				TokenKind::Dot => {
 					self.next();
-					let field_tok: Token = self.expect(&TokenKind::Identifier(String::new()))?;
+					let field_tok: Token = self.next();
 					let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 						name
 					} else {
-						unreachable!()
+						return Err(ParseError {
+							span: field_tok.span,
+							message: field_tok
+								.format_error(self.source, &format!("expected identifier, got: {:?}", field_tok.kind)),
+						});
 					};
 					expr = Expr::Field {
 						base: Box::new(expr),
@@ -1445,11 +1449,15 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut fields: Vec<(String, Expr)> = Vec::new();
 
 		loop {
-			let name_tok: Token = self.expect(&TokenKind::Identifier(String::new()))?;
-			let name: Ident = if let TokenKind::Identifier(n) = name_tok.kind {
-				n
+			let name_tok: Token = self.next();
+			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
+				str
 			} else {
-				unreachable!()
+				return Err(ParseError {
+					span: name_tok.span,
+					message: name_tok
+						.format_error(self.source, &format!("expected identifier, got: {:?}", name_tok.kind)),
+				});
 			};
 
 			self.expect(&TokenKind::Equals)?;
