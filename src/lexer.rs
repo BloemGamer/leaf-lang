@@ -241,6 +241,8 @@ pub enum TokenKind
 	Enum,
 	/// Implementation block: `impl`
 	Impl,
+	/// Trait definition: `trait`
+	Trait,
 	/// Macro definition: `macro`
 	MacroDef,
 	/// Namespace declaration: `namespace`
@@ -1037,6 +1039,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"enum" => TokenKind::Enum,
 			"type" => TokenKind::Type,
 			"impl" => TokenKind::Impl,
+			"trait" => TokenKind::Trait,
 			"macro" => TokenKind::MacroDef,
 			"pub" => TokenKind::Pub,
 			"inline" => TokenKind::Inline,

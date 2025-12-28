@@ -439,7 +439,16 @@ pub struct TraitDecl
 	pub modifiers: Vec<Modifier>,
 	pub name: Ident,
 	pub generics: Vec<Ident>,
-	pub items: Vec<FunctionSignature>,
+	pub super_traits: Vec<Vec<Ident>>,
+	pub items: Vec<Spanned<TraitItem>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TraitItem
+{
+	Function(FunctionSignature, Option<Block>),
+	TypeAlias(TypeAliasDecl),
+	Const(VariableDecl),
 }
 
 #[derive(Debug, Clone)]
@@ -618,6 +627,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Impl(impl_decl), span)
 			}
+			DeclKind::Trait => {
+				let (trait_decl, span): (TraitDecl, Span) = self.parse_trait()?.unpack();
+
+				(TopLevelDecl::Trait(trait_decl), span)
+			}
 			DeclKind::Enum => {
 				let (enum_decl, span): (EnumDecl, Span) = self.parse_enum()?.unpack();
 
@@ -627,8 +641,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let (tagged_union_decl, span): (TaggedUnionDecl, Span) = self.parse_taggedunion()?.unpack();
 
 				(TopLevelDecl::TaggedUnion(tagged_union_decl), span)
-			}
-			other => todo!("not yet implemented: {:?}", other),
+			} // other => todo!("not yet implemented: {:?}", other),
 		};
 
 		Ok(Spanned { node, span })
@@ -700,6 +713,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Impl);
+				}
+				TokenKind::Trait => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Trait);
 				}
 				_ => {
 					let tok = self.peek().clone();
@@ -2296,6 +2314,157 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::Equals)?;
 		let ty = self.parse_type()?;
+
+		Ok(Spanned {
+			node: TypeAliasDecl { modifiers, name, ty },
+			span: span.merge(&self.last_span),
+		})
+	}
+
+	fn parse_trait(&mut self) -> Result<Spanned<TraitDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Trait)?;
+
+		let name_tok = self.next();
+		let name = if let TokenKind::Identifier(str) = name_tok.kind {
+			str
+		} else {
+			return Err(ParseError {
+				span: name_tok.span,
+				message: name_tok.format_error(
+					self.source,
+					&format!("expected identifier for trait name, got: {:?}", name_tok.kind),
+				),
+			});
+		};
+
+		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let super_traits: Vec<Vec<Ident>> = if self.consume(&TokenKind::Colon) {
+			self.parse_trait_bounds()?
+		} else {
+			Vec::new()
+		};
+
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut items: Vec<Spanned<TraitItem>> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			let item = self.parse_trait_item()?;
+			items.push(item);
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		Ok(Spanned {
+			node: TraitDecl {
+				modifiers,
+				name,
+				generics,
+				super_traits,
+				items,
+			},
+			span: span.merge(&self.last_span),
+		})
+	}
+
+	fn parse_trait_bounds(&mut self) -> Result<Vec<Vec<Ident>>, ParseError>
+	{
+		let mut bounds: Vec<Vec<Ident>> = Vec::new();
+
+		loop {
+			let bound = self.get_path()?;
+			bounds.push(bound);
+
+			if !self.consume(&TokenKind::Plus) {
+				break;
+			}
+		}
+
+		Ok(bounds)
+	}
+
+	fn parse_trait_item(&mut self) -> Result<Spanned<TraitItem>, ParseError>
+	{
+		let span: Span = self.peek().span;
+
+		let decl_kind = self.peek_declaration_kind()?;
+
+		let (node, end_span) = match decl_kind {
+			DeclKind::Function => {
+				let (sig, sig_span) = self.parse_function_signature()?.unpack();
+
+				let body = if self.at(&TokenKind::LeftBrace) {
+					Some(self.parse_block()?)
+				} else {
+					self.expect(&TokenKind::Semicolon)?;
+					None
+				};
+
+				(TraitItem::Function(sig, body), self.last_span.merge(&sig_span))
+			}
+			DeclKind::TypeAlias => {
+				let (type_alias, span) = self.parse_trait_type_alias()?.unpack();
+				self.expect(&TokenKind::Semicolon)?;
+				(TraitItem::TypeAlias(type_alias), span)
+			}
+			DeclKind::Variable => {
+				let (var_decl, span) = self.parse_var_decl()?.unpack();
+				self.expect(&TokenKind::Semicolon)?;
+				(TraitItem::Const(var_decl), span)
+			}
+			_ => {
+				let tok = self.peek().clone();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("unexpected item in trait block: {:?}", tok.kind)),
+				});
+			}
+		};
+
+		Ok(Spanned {
+			node,
+			span: span.merge(&end_span),
+		})
+	}
+
+	fn parse_trait_type_alias(&mut self) -> Result<Spanned<TypeAliasDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Type)?;
+
+		let name_tok = self.next();
+		let name = if let TokenKind::Identifier(str) = name_tok.kind {
+			str
+		} else {
+			return Err(ParseError {
+				span: name_tok.span,
+				message: name_tok.format_error(
+					self.source,
+					&format!("expected identifier for type alias name, got: {:?}", name_tok.kind),
+				),
+			});
+		};
+
+		let ty = if self.consume(&TokenKind::Equals) {
+			self.parse_type()?
+		} else {
+			Type {
+				modifiers: Vec::new(),
+				core: Box::new(TypeCore::Base {
+					path: vec!["_".to_string()],
+					generics: Vec::new(),
+				}),
+			}
+		};
 
 		Ok(Spanned {
 			node: TypeAliasDecl { modifiers, name, ty },
