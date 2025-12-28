@@ -1301,6 +1301,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				self.next();
 				Ok(Expr::Literal(Literal::Bool(false)))
 			}
+			TokenKind::SelfKw => {
+				self.next();
+				Ok(Expr::Identifier(vec!["self".to_string()]))
+			}
 
 			TokenKind::Identifier(_) => {
 				let path: Vec<String> = self.get_path()?;
