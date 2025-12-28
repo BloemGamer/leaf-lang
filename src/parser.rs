@@ -321,7 +321,7 @@ pub enum AssignOp
 }
 
 #[derive(Debug, Clone)]
-struct VariableDecl
+pub struct VariableDecl
 {
 	ty: Type,
 	name: Vec<Ident>,
@@ -827,12 +827,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::LeftBracket => {
 					self.next(); // consume '['
-					// let size_expr = self.parse_expr()?; // TODO: Implement parse_expr
+					let size_expr = self.parse_expr()?;
 					self.expect(&TokenKind::RightBracket)?; // consume ']'
-					// base = TypeCore::Array {
-					// 	inner: Box::new(base),
-					// 	size: Box::new(size_expr),
-					// };
+					base = TypeCore::Array {
+						inner: Box::new(base),
+						size: Box::new(size_expr),
+					};
 				}
 				TokenKind::Comma | TokenKind::RightParen => {
 					break;
