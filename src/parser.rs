@@ -603,6 +603,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Union(union_decl), span)
 			}
+			DeclKind::TypeAlias => {
+				let (type_alias, span): (TypeAliasDecl, Span) = self.parse_type_alias()?.unpack();
+
+				(TopLevelDecl::TypeAlias(type_alias), span)
+			}
 			DeclKind::Namespace => {
 				let (namespace_decl, span): (NamespaceDecl, Span) = self.parse_namespace()?.unpack();
 
@@ -670,6 +675,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Enum);
+				}
+				TokenKind::Type => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::TypeAlias);
 				}
 				TokenKind::TaggedUnion => {
 					self.lexer = checkpoint;
