@@ -606,6 +606,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				(TopLevelDecl::Namespace(namespace_decl), span)
 			}
+			DeclKind::Enum => {
+				let (enum_decl, span): (EnumDecl, Span) = self.parse_enum()?.unpack();
+
+				(TopLevelDecl::Enum(enum_decl), span)
+			}
 			other => todo!("not yet implemented: {:?}", other),
 		};
 
@@ -643,6 +648,16 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Struct);
+				}
+				TokenKind::Union => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Union);
+				}
+				TokenKind::Enum => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Enum);
 				}
 				TokenKind::Let => {
 					self.lexer = checkpoint;
@@ -1945,6 +1960,67 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.expect(&TokenKind::RightBrace)?;
 		return Ok(Spanned {
 			node: NamespaceDecl { modifiers, name, body },
+			span: span.merge(&self.last_span),
+		});
+	}
+
+	fn parse_enum(&mut self) -> Result<Spanned<EnumDecl>, ParseError>
+	{
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Enum)?;
+
+		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
+		} else {
+			let tok: Token = self.next();
+			return Err(ParseError {
+				span: tok.span,
+				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+			});
+		};
+
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut fields: Vec<(Ident, Option<Expr>)> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+				str
+			} else {
+				let tok: Token = self.next();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+				});
+			};
+
+			let field_type: Option<Expr> = if self.at(&TokenKind::Equals) {
+				self.next();
+				Some(self.parse_expr()?)
+			} else {
+				None
+			};
+
+			fields.push((field_name, field_type));
+
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			self.expect(&TokenKind::Comma)?;
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		return Ok(Spanned {
+			node: EnumDecl {
+				modifiers,
+				name,
+				variants: fields,
+			},
 			span: span.merge(&self.last_span),
 		});
 	}
