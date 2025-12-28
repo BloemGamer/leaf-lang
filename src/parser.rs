@@ -131,7 +131,7 @@ pub struct FunctionSignature
 pub struct Param
 {
 	pub ty: Type,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 }
 
 #[derive(Debug, Clone)]
@@ -358,7 +358,7 @@ pub enum Stmt
 
 	For
 	{
-		name: Ident,
+		name: Vec<Ident>,
 		iter: Expr,
 		body: Block,
 	},
@@ -437,7 +437,7 @@ pub struct TaggedUnionDecl
 pub struct TraitDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub generics: Vec<Ident>,
 	pub super_traits: Vec<Vec<Ident>>,
 	pub items: Vec<Spanned<TraitItem>>,
@@ -480,7 +480,7 @@ pub enum ImplItem
 #[derive(Debug, Clone)]
 pub struct WhereConstraint
 {
-	pub ty: Ident,
+	pub ty: Vec<Ident>,
 	pub bounds: Vec<Vec<Ident>>,
 }
 
@@ -505,7 +505,7 @@ impl std::error::Error for ParseError {}
 pub struct TypeAliasDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Ident,
+	pub name: Vec<Ident>,
 	pub ty: Type,
 }
 
@@ -1766,12 +1766,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		self.expect(&TokenKind::For)?;
 
-		let name_tok = self.expect(&TokenKind::Identifier(String::new()))?;
-		let name = if let TokenKind::Identifier(n) = name_tok.kind {
-			n
-		} else {
-			unreachable!()
-		};
+		let name: Vec<Ident> = self.get_path()?;
 
 		self.expect(&TokenKind::In)?;
 		let iter = self.parse_expr()?;
@@ -1887,7 +1882,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						name: "self".to_string(),
+						name: vec!["self".to_string()],
 					});
 				}
 				TokenKind::SelfKw => {
@@ -1903,20 +1898,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						name: "self".to_string(),
+						name: vec!["self".to_string()],
 					});
 				}
 				_ => {
-					let name_tok = self.next();
-					let name = if let TokenKind::Identifier(str) = name_tok.kind {
-						str
-					} else {
-						return Err(ParseError {
-							span: name_tok.span,
-							message: name_tok
-								.format_error(self.source, &format!("expected identefier, got: {:?}", name_tok.kind)),
-						});
-					};
+					let name = self.get_path()?;
 
 					self.expect(&TokenKind::Colon)?;
 
@@ -2253,18 +2239,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut constraints: Vec<WhereConstraint> = Vec::new();
 
 		loop {
-			let ty_tok = self.next();
-			let ty = if let TokenKind::Identifier(name) = ty_tok.kind {
-				name
-			} else {
-				return Err(ParseError {
-					span: ty_tok.span,
-					message: ty_tok.format_error(
-						self.source,
-						&format!("expected identifier in where clause, got: {:?}", ty_tok.kind),
-					),
-				});
-			};
+			let ty = self.get_path()?;
 
 			self.expect(&TokenKind::Colon)?;
 
@@ -2299,18 +2274,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
-		let name_tok = self.next();
-		let name = if let TokenKind::Identifier(n) = name_tok.kind {
-			n
-		} else {
-			return Err(ParseError {
-				span: name_tok.span,
-				message: name_tok.format_error(
-					self.source,
-					&format!("expected identifier for type alias name, got: {:?}", name_tok.kind),
-				),
-			});
-		};
+		let name = self.get_path()?;
 
 		self.expect(&TokenKind::Equals)?;
 		let ty = self.parse_type()?;
@@ -2327,18 +2291,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Trait)?;
 
-		let name_tok = self.next();
-		let name = if let TokenKind::Identifier(str) = name_tok.kind {
-			str
-		} else {
-			return Err(ParseError {
-				span: name_tok.span,
-				message: name_tok.format_error(
-					self.source,
-					&format!("expected identifier for trait name, got: {:?}", name_tok.kind),
-				),
-			});
-		};
+		let name = self.get_path()?;
 
 		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
 			self.get_generics()?
@@ -2441,18 +2394,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
-		let name_tok = self.next();
-		let name = if let TokenKind::Identifier(str) = name_tok.kind {
-			str
-		} else {
-			return Err(ParseError {
-				span: name_tok.span,
-				message: name_tok.format_error(
-					self.source,
-					&format!("expected identifier for type alias name, got: {:?}", name_tok.kind),
-				),
-			});
-		};
+		let name = self.get_path()?;
 
 		let ty = if self.consume(&TokenKind::Equals) {
 			self.parse_type()?
