@@ -89,8 +89,9 @@ pub enum Modifier
 	Pub,
 	Unsafe,
 	Inline,
+	Const, // for variables this one is not used, for functions it is
+	Volatile,
 	Directive(Directive),
-	Const,
 }
 
 #[derive(Debug, Clone)]
@@ -135,15 +136,8 @@ pub struct Param
 #[derive(Debug, Clone)]
 pub struct Type
 {
-	pub modifiers: Vec<TypeModifier>,
+	pub modifiers: Vec<Modifier>,
 	pub core: Box<TypeCore>,
-}
-
-#[derive(Debug, Clone)]
-pub enum TypeModifier
-{
-	Volatile,
-	Directive(Directive),
 }
 
 #[derive(Debug, Clone)]
@@ -778,7 +772,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type(&mut self) -> Result<Type, ParseError>
 	{
-		let modifiers: Vec<TypeModifier> = self.parse_type_modifiers()?;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
 			modifiers,
@@ -814,21 +808,6 @@ impl<'s, 'c> Parser<'s, 'c>
 					message: tok.format_error(self.source, "Expected a ampersand, mut or identefier"),
 				});
 			}
-		}
-	}
-
-	fn parse_type_modifiers(&mut self) -> Result<Vec<TypeModifier>, ParseError>
-	{
-		let mut ret: Vec<TypeModifier> = Vec::new();
-
-		loop {
-			let tok: &Token = self.peek();
-			match &tok.kind {
-				TokenKind::Volatile => ret.push(TypeModifier::Volatile),
-				TokenKind::Directive(d) => ret.push(TypeModifier::Directive(self.parse_directive()?.node)),
-				_ => return Ok(ret),
-			}
-			self.next();
 		}
 	}
 
