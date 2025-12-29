@@ -835,8 +835,14 @@ impl<'source, 'config> Lexer<'source, 'config>
 			Some('.') => {
 				self.advance();
 				match self.current_char {
-					Some('.') => TokenKind::Ellipsis,
-					Some('=') => TokenKind::DotDotEquals,
+					Some('.') => {
+						self.advance();
+						TokenKind::Ellipsis
+					}
+					Some('=') => {
+						self.advance();
+						TokenKind::DotDotEquals
+					}
 					_ => TokenKind::DotDot,
 				}
 			}
@@ -1486,7 +1492,7 @@ mod tests
 	#[test]
 	fn test_declaration_keywords()
 	{
-		let kinds = lex_kinds("fn const static struct union tagged_union enum impl macro");
+		let kinds = lex_kinds("fn const static struct union variant enum impl macro");
 		assert_eq!(
 			kinds,
 			vec![
