@@ -3,6 +3,24 @@ use std::iter::Peekable;
 use crate::Config;
 use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 
+/// Recursive descent parser for the programming language.
+///
+/// The parser performs syntactic analysis by consuming tokens from a lexer
+/// and building an Abstract Syntax Tree (AST). It uses recursive descent parsing
+/// with operator precedence climbing for expressions.
+///
+/// # Lifetimes
+/// * `'source` - Lifetime of the source code string being parsed
+/// * `'config` - Lifetime of the configuration object
+///
+/// # Example
+/// ```
+/// let config = Config::default();
+/// let source = "fn main() { let x = 42; }";
+/// let lexer = Lexer::new(&config, source);
+/// let mut parser = Parser::from(lexer);
+/// let program = parser.parse_program()?;
+/// ```
 #[derive(Debug, Clone)]
 pub struct Parser<'source, 'config>
 {
@@ -15,6 +33,23 @@ pub struct Parser<'source, 'config>
 
 impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 {
+	/// Creates a parser from a lexer.
+	///
+	/// This is the primary way to construct a parser. It extracts the configuration
+	/// and source from the lexer and wraps the lexer in a peekable iterator for
+	/// lookahead capabilities.
+	///
+	/// # Arguments
+	/// * `lexer` - The lexer to consume tokens from
+	///
+	/// # Returns
+	/// A new `Parser` instance ready to parse the token stream
+	///
+	/// # Example
+	/// ```
+	/// let lexer = Lexer::new(&config, source);
+	/// let mut parser = Parser::from(lexer);
+	/// ```
 	fn from(lexer: Lexer<'s, 'c>) -> Self
 	{
 		let (config, source, lexer) = lexer.into_parts();
@@ -27,8 +62,23 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	}
 }
 
+/// Identifier type alias for clearer code semantics.
+///
+/// Represents variable names, function names, type names, and other identifiers
+/// throughout the AST.
 pub type Ident = String;
 
+/// A node in the AST with its source location information.
+///
+/// Wraps any AST node type with span information for error reporting and
+/// source mapping.
+///
+/// # Type Parameters
+/// * `T` - The type of the AST node being wrapped
+///
+/// # Fields
+/// * `node` - The actual AST node
+/// * `span` - Source location information
 #[derive(Debug, Clone)]
 pub struct Spanned<T>
 {
@@ -38,20 +88,57 @@ pub struct Spanned<T>
 
 impl<T> Spanned<T>
 {
+	/// Unpacks a spanned node into its components.
+	///
+	/// # Returns
+	/// A tuple containing the node and its span
+	///
+	/// # Example
+	/// ```
+	/// let (decl, span) = spanned_decl.unpack();
+	/// ```
 	fn unpack(self) -> (T, Span)
 	{
 		return (self.node, self.span);
 	}
 }
 
+/// The root node of the Abstract Syntax Tree.
+///
+/// Represents a complete program or compilation unit as a sequence of
+/// top-level declarations.
+///
+/// # Fields
+/// * `items` - List of top-level declarations (functions, structs, traits, etc.)
 #[derive(Debug, Clone)]
 pub struct Program
 {
 	pub items: Vec<Spanned<TopLevelDecl>>,
 }
 
+/// Type alias for top-level blocks (same structure as Program).
+///
+/// Used in contexts like namespaces where a block of top-level declarations
+/// is needed.
 pub type TopLevelBlock = Program;
 
+/// Top-level declaration types.
+///
+/// Represents all possible declarations that can appear at the top level
+/// of a source file or within a namespace.
+///
+/// # Variants
+/// * `Function` - Function definition
+/// * `VariableDecl` - Global variable declaration
+/// * `Struct` - Structure type definition
+/// * `Union` - Untagged union definition
+/// * `Enum` - C-style enumeration
+/// * `Variant` - Tagged union (Rust-style enum)
+/// * `TypeAlias` - Type alias declaration
+/// * `Trait` - Trait definition
+/// * `Namespace` - Namespace/module declaration
+/// * `Impl` - Implementation block
+/// * `Directive` - Compiler directive
 #[derive(Debug, Clone)]
 pub enum TopLevelDecl
 {
@@ -68,6 +155,10 @@ pub enum TopLevelDecl
 	Directive(Directive),
 }
 
+/// Internal enum for distinguishing declaration kinds during parsing.
+///
+/// Used by the parser to determine what kind of declaration to parse
+/// based on lookahead tokens.
 #[derive(Debug, Clone, Copy)]
 enum DeclKind
 {
@@ -84,6 +175,18 @@ enum DeclKind
 	Directive,
 }
 
+/// Modifier keywords that can appear on declarations.
+///
+/// Represents visibility, safety, and optimization modifiers that can
+/// be applied to various declarations.
+///
+/// # Variants
+/// * `Pub` - Public visibility
+/// * `Unsafe` - Unsafe code marker
+/// * `Inline` - Inline optimization hint
+/// * `Const` - Constant function (not used for variables)
+/// * `Volatile` - Volatile memory access
+/// * `Directive` - Custom compiler directive
 #[derive(Debug, Clone)]
 pub enum Modifier
 {
@@ -95,6 +198,15 @@ pub enum Modifier
 	Directive(Directive),
 }
 
+/// Compiler directive types.
+///
+/// Represents directives that provide instructions to the compiler,
+/// such as imports and custom attributes.
+///
+/// # Variants
+/// * `Import` - Import a file: `@import "file.rs"`
+/// * `Use` - Use a module path: `@use std::vec`
+/// * `Custom` - Custom directive with name and arguments
 #[derive(Debug, Clone)]
 pub enum Directive
 {
@@ -107,13 +219,33 @@ pub enum Directive
 	},
 }
 
+/// Function declaration.
+///
+/// Represents a complete function including its signature and optional body.
+/// Functions without bodies are prototypes (typically for external functions).
+///
+/// # Fields
+/// * `signature` - Function signature (name, parameters, return type, etc.)
+/// * `body` - Optional function body (None for prototypes)
 #[derive(Debug, Clone)]
 pub struct FunctionDecl
 {
 	pub signature: FunctionSignature,
-	pub body: Option<Block>, // Should be none for function prototypes, mostly used for external things
+	pub body: Option<Block>, // Should be none for function prototypes, used for traits and external things
 }
 
+/// Function signature.
+///
+/// Contains all the metadata about a function except its body.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Qualified function name (can include namespace path)
+/// * `generics` - Generic type parameters
+/// * `params` - Function parameters
+/// * `return_type` - Optional return type (None means void/unit)
+/// * `where_clause` - Generic constraints
+/// * `heap_func` - Whether this is a heap-allocated function (`fn!`)
 #[derive(Debug, Clone)]
 pub struct FunctionSignature
 {
@@ -126,6 +258,13 @@ pub struct FunctionSignature
 	pub heap_func: bool,
 }
 
+/// Function parameter.
+///
+/// Represents a single parameter in a function signature.
+///
+/// # Fields
+/// * `ty` - Parameter type
+/// * `name` - Parameter name (can be qualified path)
 #[derive(Debug, Clone)]
 pub struct Param
 {
@@ -133,6 +272,13 @@ pub struct Param
 	pub name: Vec<Ident>,
 }
 
+/// Type expression.
+///
+/// Represents a type in the type system, including modifiers.
+///
+/// # Fields
+/// * `modifiers` - Type modifiers (const, volatile, etc.)
+/// * `core` - The core type expression
 #[derive(Debug, Clone)]
 pub struct Type
 {
@@ -140,6 +286,16 @@ pub struct Type
 	pub core: Box<TypeCore>,
 }
 
+/// Core type expressions.
+///
+/// Represents the fundamental type constructs in the language.
+///
+/// # Variants
+/// * `Base` - Named type with optional generic arguments
+/// * `Reference` - Reference type (`&T` or `&mut T`)
+/// * `Pointer` - Raw pointer type (`T*`)
+/// * `Array` - Array type (`T[?]`)
+/// * `Tuple` - Tuple type (`(T1, T2, ...)`)
 #[derive(Debug, Clone)]
 pub enum TypeCore
 {
@@ -169,6 +325,14 @@ pub enum TypeCore
 	Tuple(Vec<Type>),
 }
 
+/// Range expression representation.
+///
+/// Represents range literals like `1..10` or `1..=10`.
+///
+/// # Fields
+/// * `start` - Optional start of range
+/// * `end` - Optional end of range
+/// * `inclusive` - Whether the range is inclusive (`..=`) or exclusive (`..`)
 #[derive(Debug, Clone)]
 pub struct RangeExpr
 {
@@ -177,6 +341,26 @@ pub struct RangeExpr
 	inclusive: bool,
 }
 
+/// Expression node.
+///
+/// Represents all possible expression types in the language.
+/// Expressions are constructs that evaluate to a value.
+///
+/// # Variants
+/// * `Identifier` - Variable or constant reference
+/// * `Literal` - Literal value (integer, string, etc.)
+/// * `Unary` - Unary operation (negation, dereference, etc.)
+/// * `Binary` - Binary operation (addition, comparison, etc.)
+/// * `Cast` - Type cast expression
+/// * `Call` - Function call
+/// * `Field` - Field access
+/// * `Index` - Array/slice indexing
+/// * `Range` - Range expression
+/// * `Tuple` - Tuple literal
+/// * `Array` - Array literal
+/// * `StructInit` - Struct initialization
+/// * `Block` - Block expression
+/// * `Match` - Pattern matching expression
 #[derive(Debug, Clone)]
 pub enum Expr
 {
@@ -242,6 +426,16 @@ pub enum Expr
 	},
 }
 
+/// Literal value types.
+///
+/// Represents constant literal values in the source code.
+///
+/// # Variants
+/// * `Int` - Integer literal
+/// * `Float` - Floating-point literal
+/// * `Bool` - Boolean literal
+/// * `String` - String literal
+/// * `Char` - Character literal
 #[derive(Debug, Clone)]
 pub enum Literal
 {
@@ -252,6 +446,13 @@ pub enum Literal
 	Char(char),
 }
 
+/// Array literal types.
+///
+/// Represents the two forms of array literals in the language.
+///
+/// # Variants
+/// * `List` - Explicit element list: `[1, 2, 3]`
+/// * `Repeat` - Repeated value: `[0; 10]`
 #[derive(Debug, Clone)]
 pub enum ArrayLiteral
 {
@@ -263,6 +464,15 @@ pub enum ArrayLiteral
 	},
 }
 
+/// Unary operator types.
+///
+/// Operators that take a single operand.
+///
+/// # Variants
+/// * `Neg` - Numeric negation: `-x`
+/// * `Not` - Logical/bitwise NOT: `!x`
+/// * `Deref` - Pointer dereference: `*ptr`
+/// * `Addr` - Address-of operator: `&x` or `&mut x`
 #[derive(Debug, Clone)]
 pub enum UnaryOp
 {
@@ -275,6 +485,36 @@ pub enum UnaryOp
 	},
 }
 
+/// Binary operator types.
+///
+/// Operators that take two operands.
+///
+/// # Variants
+/// Logical operators:
+/// * `LogicalOr` - `||`
+/// * `LogicalAnd` - `&&`
+///
+/// Comparison operators:
+/// * `Eq` - `==`
+/// * `Ne` - `!=`
+/// * `Lt` - `<`
+/// * `Gt` - `>`
+/// * `Le` - `<=`
+/// * `Ge` - `>=`
+///
+/// Arithmetic operators:
+/// * `Add` - `+`
+/// * `Sub` - `-`
+/// * `Mul` - `*`
+/// * `Div` - `/`
+/// * `Mod` - `%`
+///
+/// Bitwise operators:
+/// * `BitAnd` - `&`
+/// * `BitOr` - `|`
+/// * `BitXor` - `^`
+/// * `Shl` - `<<`
+/// * `Shr` - `>>`
 #[derive(Debug, Clone)]
 pub enum BinaryOp
 {
@@ -298,6 +538,22 @@ pub enum BinaryOp
 	Shr,
 }
 
+/// Assignment operator types.
+///
+/// Operators that perform assignment with optional operation.
+///
+/// # Variants
+/// * `Assign` - Simple assignment: `=`
+/// * `AddAssign` - Add and assign: `+=`
+/// * `SubAssign` - Subtract and assign: `-=`
+/// * `MulAssign` - Multiply and assign: `*=`
+/// * `DivAssign` - Divide and assign: `/=`
+/// * `ModAssign` - Modulo and assign: `%=`
+/// * `AndAssign` - Bitwise AND and assign: `&=`
+/// * `OrAssign` - Bitwise OR and assign: `|=`
+/// * `XorAssign` - Bitwise XOR and assign: `^=`
+/// * `ShlAssign` - Left shift and assign: `<<=`
+/// * `ShrAssign` - Right shift and assign: `>>=`
 #[derive(Debug, Clone)]
 pub enum AssignOp
 {
@@ -314,6 +570,15 @@ pub enum AssignOp
 	ShrAssign,
 }
 
+/// Variable declaration.
+///
+/// Represents a variable binding, either mutable or immutable.
+///
+/// # Fields
+/// * `ty` - Variable type
+/// * `name` - Variable name (can be qualified path)
+/// * `init` - Optional initializer expression
+/// * `comp_const` - Whether this is a compile-time constant (`const` vs `let`)
 #[derive(Debug, Clone)]
 pub struct VariableDecl
 {
@@ -323,6 +588,21 @@ pub struct VariableDecl
 	comp_const: bool,
 }
 
+/// Statement types.
+///
+/// Represents executable statements that don't necessarily produce a value.
+///
+/// # Variants
+/// * `VariableDecl` - Local variable declaration
+/// * `Assignment` - Assignment to a variable or location
+/// * `Return` - Return from function
+/// * `Expr` - Expression statement
+/// * `Break` - Break from loop
+/// * `Continue` - Continue to next loop iteration
+/// * `If` - Conditional statement
+/// * `While` - While loop
+/// * `For` - For-in loop
+/// * `Unsafe` - Unsafe block
 #[derive(Debug, Clone)]
 pub enum Stmt
 {
@@ -365,6 +645,23 @@ pub enum Stmt
 	Unsafe(Block),
 }
 
+/// Block of statements with optional tail expression.
+///
+/// Represents a sequence of statements that can optionally evaluate to a value
+/// (the tail expression). This is the primary scoping construct.
+///
+/// # Fields
+/// * `stmts` - List of statements in the block
+/// * `tail_expr` - Optional final expression (the block's value)
+///
+/// # Example
+/// ```
+/// // Block with tail expression:
+/// {
+///     let x = 5;
+///     x + 1  // tail expression, block evaluates to 6
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct Block
 {
@@ -372,6 +669,13 @@ pub struct Block
 	pub tail_expr: Option<Box<Expr>>,
 }
 
+/// Block content types.
+///
+/// Used to distinguish between regular blocks and top-level blocks.
+///
+/// # Variants
+/// * `Block` - Regular block with statements
+/// * `TopLevelBlock` - Top-level declarations block
 #[derive(Debug, Clone)]
 pub enum BlockContent
 {
@@ -379,6 +683,13 @@ pub enum BlockContent
 	TopLevelBlock(TopLevelBlock),
 }
 
+/// Match expression arm.
+///
+/// Represents a single arm in a match expression.
+///
+/// # Fields
+/// * `pattern` - Pattern to match against
+/// * `body` - Code to execute if pattern matches
 #[derive(Debug, Clone)]
 pub struct MatchArm
 {
@@ -386,6 +697,13 @@ pub struct MatchArm
 	pub body: MatchBody,
 }
 
+/// Match arm body types.
+///
+/// The body of a match arm can be either a single expression or a block.
+///
+/// # Variants
+/// * `Expr` - Single expression (requires comma)
+/// * `Block` - Block of statements
 #[derive(Debug, Clone)]
 pub enum MatchBody
 {
@@ -393,6 +711,15 @@ pub enum MatchBody
 	Block(Block),
 }
 
+/// Pattern matching patterns.
+///
+/// Represents patterns that can appear in match expressions.
+///
+/// # Variants
+/// * `Wildcard` - Catch-all pattern: `_`
+/// * `Literal` - Literal value pattern
+/// * `Variant` - Enum variant pattern with optional destructuring
+/// * `Range` - Range pattern
 #[derive(Debug, Clone)]
 pub enum Pattern
 {
@@ -406,6 +733,14 @@ pub enum Pattern
 	Range(RangeExpr),
 }
 
+/// Structure type declaration.
+///
+/// Represents a struct with named fields.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Struct name (can be qualified path)
+/// * `fields` - List of (type, name) pairs for fields
 #[derive(Debug, Clone)]
 pub struct StructDecl
 {
@@ -414,8 +749,19 @@ pub struct StructDecl
 	pub fields: Vec<(Type, Ident)>,
 }
 
+/// Type alias for union declarations.
+///
+/// Unions have the same structure as structs but different semantics
 pub type UnionDecl = StructDecl;
 
+/// C-style enumeration declaration.
+///
+/// Represents an enum where variants are integer constants.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Enum name (can be qualified path)
+/// * `variants` - List of (name, optional value) pairs
 #[derive(Debug, Clone)]
 pub struct EnumDecl
 {
@@ -424,6 +770,14 @@ pub struct EnumDecl
 	pub variants: Vec<(Ident, Option<Expr>)>,
 }
 
+/// Tagged union (Rust-style enum) declaration.
+///
+/// Represents an enum where variants can carry data.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Variant name (can be qualified path)
+/// * `variants` - List of (optional type, name) pairs for variants
 #[derive(Debug, Clone)]
 pub struct VariantDecl
 {
@@ -432,6 +786,16 @@ pub struct VariantDecl
 	pub variants: Vec<(Option<Type>, Ident)>,
 }
 
+/// Trait declaration.
+///
+/// Represents a trait (interface) definition.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Trait name (can be qualified path)
+/// * `generics` - Generic type parameters
+/// * `super_traits` - Traits that this trait extends
+/// * `items` - Associated items (functions, types, constants)
 #[derive(Debug, Clone)]
 pub struct TraitDecl
 {
@@ -442,6 +806,14 @@ pub struct TraitDecl
 	pub items: Vec<Spanned<TraitItem>>,
 }
 
+/// Trait item types.
+///
+/// Items that can appear in a trait definition.
+///
+/// # Variants
+/// * `Function` - Method signature with optional default implementation
+/// * `TypeAlias` - Associated type
+/// * `Const` - Associated constant
 #[derive(Debug, Clone)]
 pub enum TraitItem
 {
@@ -450,6 +822,18 @@ pub enum TraitItem
 	Const(VariableDecl),
 }
 
+/// Implementation block declaration.
+///
+/// Represents an `impl` block for either inherent implementations or
+/// trait implementations.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `generics` - Generic type parameters
+/// * `target` - Type being implemented for
+/// * `trait_path` - Optional trait being implemented (None for inherent impl)
+/// * `where_clause` - Generic constraints
+/// * `body` - Implementation items
 #[derive(Debug, Clone)]
 pub struct ImplDecl
 {
@@ -461,6 +845,13 @@ pub struct ImplDecl
 	pub body: Vec<Spanned<ImplItem>>,
 }
 
+/// Implementation target type.
+///
+/// Specifies what type an implementation applies to.
+///
+/// # Fields
+/// * `path` - Type path
+/// * `generics` - Generic arguments
 #[derive(Debug, Clone)]
 pub struct ImplTarget
 {
@@ -468,6 +859,14 @@ pub struct ImplTarget
 	pub generics: Vec<Type>,
 }
 
+/// Implementation block item types.
+///
+/// Items that can appear in an impl block.
+///
+/// # Variants
+/// * `Function` - Method implementation
+/// * `TypeAlias` - Associated type definition
+/// * `Const` - Associated constant definition
 #[derive(Debug, Clone)]
 pub enum ImplItem
 {
@@ -476,6 +875,13 @@ pub enum ImplItem
 	Const(VariableDecl),
 }
 
+/// Generic type constraint (where clause).
+///
+/// Represents a constraint like `T: Trait1 + Trait2`.
+///
+/// # Fields
+/// * `ty` - Type being constrained
+/// * `bounds` - List of trait bounds
 #[derive(Debug, Clone)]
 pub struct WhereConstraint
 {
@@ -483,6 +889,13 @@ pub struct WhereConstraint
 	pub bounds: Vec<Vec<Ident>>,
 }
 
+/// Parse error type.
+///
+/// Represents an error encountered during parsing with location information.
+///
+/// # Fields
+/// * `span` - Location of the error in the source
+/// * `message` - Human-readable error message
 #[derive(Debug, Clone)]
 pub struct ParseError
 {
@@ -500,6 +913,14 @@ impl std::fmt::Display for ParseError
 
 impl std::error::Error for ParseError {}
 
+/// Type alias declaration.
+///
+/// Represents a type alias like `type Int = i32;`.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Alias name (can be qualified path)
+/// * `ty` - Type being aliased
 #[derive(Debug, Clone)]
 pub struct TypeAliasDecl
 {
@@ -508,6 +929,14 @@ pub struct TypeAliasDecl
 	pub ty: Type,
 }
 
+/// Namespace declaration.
+///
+/// Represents a namespace/module containing top-level declarations.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Namespace name (can be qualified path)
+/// * `body` - Declarations within the namespace
 #[derive(Debug, Clone)]
 pub struct NamespaceDecl
 {
@@ -518,13 +947,11 @@ pub struct NamespaceDecl
 
 impl<'s, 'c> Parser<'s, 'c>
 {
-	/// Look at the next token without consuming it
 	fn peek(&mut self) -> &Token
 	{
 		self.lexer.peek().expect("lexer exhausted unexpectedly")
 	}
 
-	/// Consume and return the next token
 	fn next(&mut self) -> Token
 	{
 		let tok: Token = self.lexer.next().expect("lexer exhausted unexpectedly");
@@ -532,19 +959,16 @@ impl<'s, 'c> Parser<'s, 'c>
 		tok
 	}
 
-	/// Returns the TokenKind of the next token for convenience
 	fn peek_kind(&mut self) -> &TokenKind
 	{
 		&self.peek().kind
 	}
 
-	/// Check if the next token is the given kind
 	fn at(&mut self, kind: &TokenKind) -> bool
 	{
 		self.peek_kind() == kind
 	}
 
-	/// Consume the next token if it matches the given kind
 	fn consume(&mut self, kind: &TokenKind) -> bool
 	{
 		if self.at(kind) {
@@ -570,6 +994,20 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
+	/// Parse a complete program.
+	///
+	/// Entry point for parsing a source file. Parses all top-level declarations
+	/// until EOF is reached.
+	///
+	/// # Returns
+	/// * `Ok(Program)` - The parsed program AST
+	/// * `Err(ParseError)` - If a syntax error is encountered
+	///
+	/// # Example
+	/// ```
+	/// let program = parser.parse_program()?;
+	/// println!("Parsed {} items", program.items.len());
+	/// ```
 	pub fn parse_program(&mut self) -> Result<Program, ParseError>
 	{
 		let mut items: Vec<Spanned<TopLevelDecl>> = Vec::new();
