@@ -429,7 +429,7 @@ pub struct VariantDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Vec<Ident>,
-	pub variants: Vec<(Ident, Vec<Type>)>,
+	pub variants: Vec<(Option<Type>, Ident)>,
 }
 
 #[derive(Debug, Clone)]
@@ -2155,13 +2155,64 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_variant(&mut self) -> Result<Spanned<VariantDecl>, ParseError>
 	{
-		let tok: Token = self.next();
-		return Err(ParseError {
-			span: tok.span,
-			message: tok.format_error(
-				self.source,
-				"variant is not yet implemented, this will be done in a later version",
-			),
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Variant)?;
+
+		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
+		} else {
+			let tok: Token = self.next();
+			return Err(ParseError {
+				span: tok.span,
+				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+			});
+		};
+
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut fields: Vec<(Option<Type>, Ident)> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+				str
+			} else {
+				let tok: Token = self.next();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+				});
+			};
+
+			let field_type: Option<Type> = if self.at(&TokenKind::LeftParen) {
+				self.next();
+				let ty = Some(self.parse_type()?);
+				self.expect(&TokenKind::RightParen)?;
+				ty
+			} else {
+				None
+			};
+
+			fields.push((field_type, field_name));
+
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			self.expect(&TokenKind::Comma)?;
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		return Ok(Spanned {
+			node: VariantDecl {
+				modifiers,
+				name,
+				variants: fields,
+			},
+			span: span.merge(&self.last_span),
 		});
 	}
 
