@@ -613,7 +613,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			DeclKind::TypeAlias => {
 				let (type_alias, span): (TypeAliasDecl, Span) = self.parse_type_alias()?.unpack();
-
+				self.expect(&TokenKind::Semicolon)?;
 				(TopLevelDecl::TypeAlias(type_alias), span)
 			}
 			DeclKind::Namespace => {
@@ -1414,7 +1414,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Match => {
-				self.next();
 				let expr: Expr = self.parse_expr()?;
 				self.expect(&TokenKind::LeftBrace)?;
 
@@ -2545,5 +2544,1329 @@ impl<'s, 'c> Parser<'s, 'c>
 			node: TypeAliasDecl { modifiers, name, ty },
 			span: span.merge(&self.last_span),
 		})
+	}
+}
+
+#[cfg(test)]
+mod parser_tests
+{
+	use super::*;
+	use crate::Config;
+	use crate::lexer::Lexer;
+
+	fn parse_expr_from_str(input: &str) -> Result<Expr, ParseError>
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, input);
+		let mut parser = Parser::from(lexer);
+		parser.parse_expr()
+	}
+
+	fn parse_program_from_str(input: &str) -> Result<Program, ParseError>
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, input);
+		let mut parser = Parser::from(lexer);
+		parser.parse_program()
+	}
+
+	// ========== Literal Tests ==========
+
+	#[test]
+	fn test_parse_int_literal()
+	{
+		let result = parse_expr_from_str("42");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Int(42)) => (),
+			_ => panic!("Expected Int literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_float_literal()
+	{
+		let result = parse_expr_from_str("3.16");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Float(f)) if (f - 3.16).abs() < 0.001 => (),
+			_ => panic!("Expected Float literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_bool_literal_true()
+	{
+		let result = parse_expr_from_str("true");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Bool(true)) => (),
+			_ => panic!("Expected Bool(true) literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_bool_literal_false()
+	{
+		let result = parse_expr_from_str("false");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Bool(false)) => (),
+			_ => panic!("Expected Bool(false) literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_string_literal()
+	{
+		let result = parse_expr_from_str(r#""hello world""#);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::String(s)) if s == "hello world" => (),
+			_ => panic!("Expected String literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_char_literal()
+	{
+		let result = parse_expr_from_str("'a'");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Char('a')) => (),
+			_ => panic!("Expected Char literal"),
+		}
+	}
+
+	// ========== Identifier Tests ==========
+
+	#[test]
+	fn test_parse_simple_identifier()
+	{
+		let result = parse_expr_from_str("variable");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Identifier(path) if path == vec!["variable"] => (),
+			_ => panic!("Expected simple identifier"),
+		}
+	}
+
+	#[test]
+	fn test_parse_path_identifier()
+	{
+		let result = parse_expr_from_str("std::vec::Vec");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Identifier(path) if path == vec!["std", "vec", "Vec"] => (),
+			_ => panic!("Expected path identifier"),
+		}
+	}
+
+	#[test]
+	fn test_parse_self_keyword()
+	{
+		let result = parse_expr_from_str("self");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Identifier(path) if path == vec!["self"] => (),
+			_ => panic!("Expected self identifier"),
+		}
+	}
+
+	// ========== Binary Operation Tests ==========
+
+	#[test]
+	fn test_parse_addition()
+	{
+		let result = parse_expr_from_str("1 + 2");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary { op: BinaryOp::Add, .. } => (),
+			_ => panic!("Expected addition"),
+		}
+	}
+
+	#[test]
+	fn test_parse_subtraction()
+	{
+		let result = parse_expr_from_str("5 - 3");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary { op: BinaryOp::Sub, .. } => (),
+			_ => panic!("Expected subtraction"),
+		}
+	}
+
+	#[test]
+	fn test_parse_multiplication()
+	{
+		let result = parse_expr_from_str("4 * 3");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary { op: BinaryOp::Mul, .. } => (),
+			_ => panic!("Expected multiplication"),
+		}
+	}
+
+	#[test]
+	fn test_parse_division()
+	{
+		let result = parse_expr_from_str("10 / 2");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary { op: BinaryOp::Div, .. } => (),
+			_ => panic!("Expected division"),
+		}
+	}
+
+	#[test]
+	fn test_parse_modulo()
+	{
+		let result = parse_expr_from_str("10 % 3");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary { op: BinaryOp::Mod, .. } => (),
+			_ => panic!("Expected modulo"),
+		}
+	}
+
+	#[test]
+	fn test_parse_operator_precedence()
+	{
+		let result = parse_expr_from_str("1 + 2 * 3");
+		assert!(result.is_ok());
+		// Should parse as 1 + (2 * 3)
+		match result.unwrap() {
+			Expr::Binary {
+				op: BinaryOp::Add,
+				lhs,
+				rhs,
+			} => {
+				match *lhs {
+					Expr::Literal(Literal::Int(1)) => (),
+					_ => panic!("Expected lhs to be 1"),
+				}
+				match *rhs {
+					Expr::Binary { op: BinaryOp::Mul, .. } => (),
+					_ => panic!("Expected rhs to be multiplication"),
+				}
+			}
+			_ => panic!("Expected addition at top level"),
+		}
+	}
+
+	#[test]
+	fn test_parse_comparison_operators()
+	{
+		let ops = vec![
+			("1 < 2", BinaryOp::Lt),
+			("1 > 2", BinaryOp::Gt),
+			("1 <= 2", BinaryOp::Le),
+			("1 >= 2", BinaryOp::Ge),
+			("1 == 2", BinaryOp::Eq),
+			("1 != 2", BinaryOp::Ne),
+		];
+
+		for (input, expected_op) in ops {
+			let result = parse_expr_from_str(input);
+			assert!(result.is_ok(), "Failed to parse: {}", input);
+			match result.unwrap() {
+				Expr::Binary { op, .. } => {
+					assert!(
+						std::mem::discriminant(&op) == std::mem::discriminant(&expected_op),
+						"Expected {:?} for input: {}",
+						expected_op,
+						input
+					);
+				}
+				_ => panic!("Expected binary expression for: {}", input),
+			}
+		}
+	}
+
+	#[test]
+	fn test_parse_logical_operators()
+	{
+		let result = parse_expr_from_str("true && false");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary {
+				op: BinaryOp::LogicalAnd,
+				..
+			} => (),
+			_ => panic!("Expected logical AND"),
+		}
+
+		let result = parse_expr_from_str("true || false");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Binary {
+				op: BinaryOp::LogicalOr,
+				..
+			} => (),
+			_ => panic!("Expected logical OR"),
+		}
+	}
+
+	#[test]
+	fn test_parse_bitwise_operators()
+	{
+		let ops = vec![
+			("1 & 2", BinaryOp::BitAnd),
+			("1 | 2", BinaryOp::BitOr),
+			("1 ^ 2", BinaryOp::BitXor),
+			("1 << 2", BinaryOp::Shl),
+			("1 >> 2", BinaryOp::Shr),
+		];
+
+		for (input, expected_op) in ops {
+			let result = parse_expr_from_str(input);
+			assert!(result.is_ok(), "Failed to parse: {}", input);
+			match result.unwrap() {
+				Expr::Binary { op, .. } => {
+					assert!(
+						std::mem::discriminant(&op) == std::mem::discriminant(&expected_op),
+						"Expected {:?} for input: {}",
+						expected_op,
+						input
+					);
+				}
+				_ => panic!("Expected binary expression for: {}", input),
+			}
+		}
+	}
+
+	// ========== Unary Operation Tests ==========
+
+	#[test]
+	fn test_parse_negation()
+	{
+		let result = parse_expr_from_str("-5");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Unary { op: UnaryOp::Neg, .. } => (),
+			_ => panic!("Expected negation"),
+		}
+	}
+
+	#[test]
+	fn test_parse_logical_not()
+	{
+		let result = parse_expr_from_str("!true");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Unary { op: UnaryOp::Not, .. } => (),
+			_ => panic!("Expected logical NOT"),
+		}
+	}
+
+	#[test]
+	fn test_parse_dereference()
+	{
+		let result = parse_expr_from_str("*ptr");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Unary { op: UnaryOp::Deref, .. } => (),
+			_ => panic!("Expected dereference"),
+		}
+	}
+
+	#[test]
+	fn test_parse_address_of()
+	{
+		let result = parse_expr_from_str("&x");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Unary {
+				op: UnaryOp::Addr { mutable: false },
+				..
+			} => (),
+			_ => panic!("Expected address-of"),
+		}
+	}
+
+	#[test]
+	fn test_parse_mutable_address_of()
+	{
+		let result = parse_expr_from_str("&mut x");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Unary {
+				op: UnaryOp::Addr { mutable: true },
+				..
+			} => (),
+			_ => panic!("Expected mutable address-of"),
+		}
+	}
+
+	// ========== Cast Tests ==========
+
+	#[test]
+	fn test_parse_cast()
+	{
+		let result = parse_expr_from_str("(i32)42");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Cast { ty, expr } => {
+				match *ty.core {
+					TypeCore::Base { ref path, .. } if path == &vec!["i32"] => (),
+					_ => panic!("Expected i32 type"),
+				}
+				match *expr {
+					Expr::Literal(Literal::Int(42)) => (),
+					_ => panic!("Expected 42 literal"),
+				}
+			}
+			_ => panic!("Expected cast expression"),
+		}
+	}
+
+	// ========== Range Tests ==========
+
+	#[test]
+	fn test_parse_exclusive_range()
+	{
+		let result = parse_expr_from_str("1..10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: Some(_),
+				inclusive: false,
+			}) => (),
+			_ => panic!("Expected exclusive range"),
+		}
+	}
+
+	#[test]
+	fn test_parse_inclusive_range()
+	{
+		let result = parse_expr_from_str("1..=10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: Some(_),
+				inclusive: true,
+			}) => (),
+			_ => panic!("Expected inclusive range"),
+		}
+	}
+
+	#[test]
+	fn test_parse_open_ended_range()
+	{
+		let result = parse_expr_from_str("1..;");
+
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: None,
+				inclusive: false,
+			}) => (),
+			_ => panic!("Expected open-ended range"),
+		}
+	}
+
+	// ========== Call Tests ==========
+
+	#[test]
+	fn test_parse_function_call_no_args()
+	{
+		let result = parse_expr_from_str("foo()");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { callee, args } => {
+				match *callee {
+					Expr::Identifier(ref path) if path == &vec!["foo"] => (),
+					_ => panic!("Expected foo identifier"),
+				}
+				assert_eq!(args.len(), 0);
+			}
+			_ => panic!("Expected function call"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_call_with_args()
+	{
+		let result = parse_expr_from_str("foo(1, 2, 3)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { callee, args } => {
+				match *callee {
+					Expr::Identifier(ref path) if path == &vec!["foo"] => (),
+					_ => panic!("Expected foo identifier"),
+				}
+				assert_eq!(args.len(), 3);
+			}
+			_ => panic!("Expected function call"),
+		}
+	}
+
+	// ========== Field Access Tests ==========
+
+	#[test]
+	fn test_parse_field_access()
+	{
+		let result = parse_expr_from_str("obj.field");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Field { base, name } => {
+				match *base {
+					Expr::Identifier(ref path) if path == &vec!["obj"] => (),
+					_ => panic!("Expected obj identifier"),
+				}
+				assert_eq!(name, "field");
+			}
+			_ => panic!("Expected field access"),
+		}
+	}
+
+	#[test]
+	fn test_parse_chained_field_access()
+	{
+		let result = parse_expr_from_str("obj.field1.field2");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Field { base, name } => {
+				assert_eq!(name, "field2");
+				match *base {
+					Expr::Field {
+						name: ref inner_name, ..
+					} => {
+						assert_eq!(inner_name, "field1");
+					}
+					_ => panic!("Expected nested field access"),
+				}
+			}
+			_ => panic!("Expected field access"),
+		}
+	}
+
+	// ========== Index Tests ==========
+
+	#[test]
+	fn test_parse_array_index()
+	{
+		let result = parse_expr_from_str("arr[0]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Index { base, index } => {
+				match *base {
+					Expr::Identifier(ref path) if path == &vec!["arr"] => (),
+					_ => panic!("Expected arr identifier"),
+				}
+				match *index {
+					Expr::Literal(Literal::Int(0)) => (),
+					_ => panic!("Expected 0 index"),
+				}
+			}
+			_ => panic!("Expected index expression"),
+		}
+	}
+
+	// ========== Tuple Tests ==========
+
+	#[test]
+	fn test_parse_empty_tuple()
+	{
+		let result = parse_expr_from_str("()");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Tuple(elements) => assert_eq!(elements.len(), 0),
+			_ => panic!("Expected empty tuple"),
+		}
+	}
+
+	#[test]
+	fn test_parse_single_element_tuple()
+	{
+		let result = parse_expr_from_str("(1,)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Tuple(elements) => assert_eq!(elements.len(), 1),
+			_ => panic!("Expected single-element tuple"),
+		}
+	}
+
+	#[test]
+	fn test_parse_multi_element_tuple()
+	{
+		let result = parse_expr_from_str("(1, 2, 3)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Tuple(elements) => assert_eq!(elements.len(), 3),
+			_ => panic!("Expected multi-element tuple"),
+		}
+	}
+
+	#[test]
+	fn test_parse_parenthesized_expr()
+	{
+		let result = parse_expr_from_str("(42)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Int(42)) => (),
+			_ => panic!("Expected parenthesized expression to unwrap"),
+		}
+	}
+
+	// ========== Array Tests ==========
+
+	#[test]
+	fn test_parse_empty_array()
+	{
+		let result = parse_expr_from_str("[]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::List(elements)) => assert_eq!(elements.len(), 0),
+			_ => panic!("Expected empty array"),
+		}
+	}
+
+	#[test]
+	fn test_parse_array_list()
+	{
+		let result = parse_expr_from_str("[1, 2, 3]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::List(elements)) => assert_eq!(elements.len(), 3),
+			_ => panic!("Expected array list"),
+		}
+	}
+
+	#[test]
+	fn test_parse_array_repeat()
+	{
+		let result = parse_expr_from_str("[0; 10]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::Repeat { value, count }) => {
+				assert_eq!(value.len(), 1);
+				match *count {
+					Expr::Literal(Literal::Int(10)) => (),
+					_ => panic!("Expected count of 10"),
+				}
+			}
+			_ => panic!("Expected array repeat"),
+		}
+	}
+
+	// ========== Struct Init Tests ==========
+
+	#[test]
+	fn test_parse_struct_init_empty()
+	{
+		let result = parse_expr_from_str("Point {}").inspect_err(|e| println!("{}", e));
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::StructInit { path, fields } => {
+				assert_eq!(path, vec!["Point"]);
+				assert_eq!(fields.len(), 0);
+			}
+			_ => panic!("Expected struct init"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_init_with_fields()
+	{
+		let result = parse_expr_from_str("Point { x = 1, y = 2 }");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::StructInit { path, fields } => {
+				assert_eq!(path, vec!["Point"]);
+				assert_eq!(fields.len(), 2);
+				assert_eq!(fields[0].0, "x");
+				assert_eq!(fields[1].0, "y");
+			}
+			_ => panic!("Expected struct init"),
+		}
+	}
+
+	// ========== Block Tests ==========
+
+	#[test]
+	fn test_parse_empty_block()
+	{
+		let result = parse_expr_from_str("{}");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Block(block) => {
+				assert_eq!(block.stmts.len(), 0);
+				assert!(block.tail_expr.is_none());
+			}
+			_ => panic!("Expected block expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_block_with_statements()
+	{
+		let input = "{ let x: i32 = 5; x + 1 }";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Block(block) => {
+				assert_eq!(block.stmts.len(), 1);
+				assert!(block.tail_expr.is_some());
+			}
+			_ => panic!("Expected block expression"),
+		}
+	}
+
+	// ========== Match Tests ==========
+
+	#[test]
+	fn test_parse_match_expression()
+	{
+		let input = r#"match x {
+            1 => 10,
+            2 => 20,
+            _ => 0,
+        }"#;
+		let result = parse_expr_from_str(input);
+		match &result {
+			Ok(program) => {
+				println!("{:#?}", program);
+			}
+			Err(e) => {
+				println!("{}", e);
+			}
+		}
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Match { expr: _, arms } => {
+				assert_eq!(arms.len(), 3);
+			}
+			_ => panic!("Expected match expression"),
+		}
+	}
+
+	// ========== Type Tests ==========
+
+	#[test]
+	fn test_parse_simple_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "i32");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Base { path, .. } if path == &vec!["i32"] => (),
+			_ => panic!("Expected i32 type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "Vec<i32>");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Base { path, generics } => {
+				assert_eq!(path, &vec!["Vec"]);
+				assert_eq!(generics.len(), 1);
+			}
+			_ => panic!("Expected generic type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_reference_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "&i32");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Reference { mutable: false, .. } => (),
+			_ => panic!("Expected reference type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_mutable_reference_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "&mut i32");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Reference { mutable: true, .. } => (),
+			_ => panic!("Expected mutable reference type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pointer_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "i32*");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Pointer { .. } => (),
+			_ => panic!("Expected pointer type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_array_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "i32[10]");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Array { .. } => (),
+			_ => panic!("Expected array type"),
+		}
+	}
+
+	// ========== Variable Declaration Tests ==========
+
+	#[test]
+	fn test_parse_let_declaration()
+	{
+		let input = "let x: i32 = 5;";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		assert_eq!(program.items.len(), 1);
+	}
+
+	#[test]
+	fn test_parse_const_declaration()
+	{
+		let input = "const X: i32 = 5;";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		assert_eq!(program.items.len(), 1);
+	}
+
+	// ========== Function Tests ==========
+
+	#[test]
+	fn test_parse_simple_function()
+	{
+		let input = r#"
+            fn foo() {
+                return 42;
+            }
+        "#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		assert_eq!(program.items.len(), 1);
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.name, vec!["foo"]);
+				assert_eq!(func.signature.params.len(), 0);
+				assert!(func.body.is_some());
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_with_params()
+	{
+		let input = "fn add(x: i32, y: i32) -> i32 { x + y }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 2);
+				assert!(func.signature.return_type.is_some());
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_with_generics()
+	{
+		let input = "fn identity<T>(x: T) -> T { x }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 1);
+				assert_eq!(func.signature.generics[0], "T");
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_with_modifiers()
+	{
+		let input = "pub unsafe fn dangerous() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.modifiers.len() >= 2);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_function()
+	{
+		let input = "fn! heap_allocated() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_method_with_self()
+	{
+		let input = "fn method(self) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 1);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_method_with_ref_self()
+	{
+		let input = "fn method(&self) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_method_with_mut_ref_self()
+	{
+		let input = "fn method(&mut self) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Struct Tests ==========
+
+	#[test]
+	fn test_parse_empty_struct()
+	{
+		let input = "struct Empty {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.name, vec!["Empty"]);
+				assert_eq!(s.fields.len(), 0);
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_with_fields()
+	{
+		let input = "struct Point { x: i32, y: i32 }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.fields.len(), 2);
+				assert_eq!(s.fields[0].1, "x");
+				assert_eq!(s.fields[1].1, "y");
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pub_struct()
+	{
+		let input = "pub struct Public {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Struct(s) => {
+				assert!(!s.modifiers.is_empty());
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	// ========== Union Tests ==========
+
+	#[test]
+	fn test_parse_union()
+	{
+		let input = "union Data { i: i32, f: f64 }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Union(u) => {
+				assert_eq!(u.name, vec!["Data"]);
+				assert_eq!(u.fields.len(), 2);
+			}
+			_ => panic!("Expected union declaration"),
+		}
+	}
+
+	// ========== Enum Tests ==========
+
+	#[test]
+	fn test_parse_simple_enum()
+	{
+		let input = "enum Color { Red, Green, Blue }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Enum(e) => {
+				assert_eq!(e.name, vec!["Color"]);
+				assert_eq!(e.variants.len(), 3);
+			}
+			_ => panic!("Expected enum declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_enum_with_values()
+	{
+		let input = "enum Number { One = 1, Two = 2 }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Enum(e) => {
+				assert_eq!(e.variants.len(), 2);
+				assert!(e.variants[0].1.is_some());
+			}
+			_ => panic!("Expected enum declaration"),
+		}
+	}
+
+	// ========== Variant Tests ==========
+
+	#[test]
+	fn test_parse_variant()
+	{
+		let input = "variant Option { Some(i32), None }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Variant(v) => {
+				assert_eq!(v.name, vec!["Option"]);
+				assert_eq!(v.variants.len(), 2);
+			}
+			_ => panic!("Expected variant declaration"),
+		}
+	}
+
+	// ========== Type Alias Tests ==========
+
+	#[test]
+	fn test_parse_type_alias()
+	{
+		let input = "type Int = i32;";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{}", e));
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::TypeAlias(t) => {
+				assert_eq!(t.name, vec!["Int"]);
+			}
+			_ => panic!("Expected type alias declaration"),
+		}
+	}
+
+	// ========== Namespace Tests ==========
+
+	#[test]
+	fn test_parse_namespace()
+	{
+		let input = "namespace std { fn foo() {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Namespace(n) => {
+				assert_eq!(n.name, vec!["std"]);
+				assert_eq!(n.body.items.len(), 1);
+			}
+			_ => panic!("Expected namespace declaration"),
+		}
+	}
+
+	// ========== Trait Tests ==========
+
+	#[test]
+	fn test_parse_simple_trait()
+	{
+		let input = "trait Display { fn fmt(&self); }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Trait(t) => {
+				assert_eq!(t.name, vec!["Display"]);
+				assert_eq!(t.items.len(), 1);
+			}
+			_ => panic!("Expected trait declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_trait_with_generics()
+	{
+		let input = "trait Convert<T> { fn convert(self) -> T; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Trait(t) => {
+				assert_eq!(t.generics.len(), 1);
+			}
+			_ => panic!("Expected trait declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_trait_with_supertraits()
+	{
+		let input = "trait Sub: Super { }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Trait(t) => {
+				assert_eq!(t.super_traits.len(), 1);
+			}
+			_ => panic!("Expected trait declaration"),
+		}
+	}
+
+	// ========== Impl Tests ==========
+
+	#[test]
+	fn test_parse_inherent_impl()
+	{
+		let input = "impl MyStruct { fn method(&self) {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Impl(i) => {
+				assert_eq!(i.target.path, vec!["MyStruct"]);
+				assert!(i.trait_path.is_none());
+				assert_eq!(i.body.len(), 1);
+			}
+			_ => panic!("Expected impl declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_trait_impl()
+	{
+		let input = "impl Display for MyStruct { fn fmt(&self) {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Impl(i) => {
+				assert!(i.trait_path.is_some());
+				assert_eq!(i.target.path, vec!["MyStruct"]);
+			}
+			_ => panic!("Expected impl declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_impl()
+	{
+		let input = "impl<T> MyStruct<T> { }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0].node {
+			TopLevelDecl::Impl(i) => {
+				assert_eq!(i.generics.len(), 1);
+			}
+			_ => panic!("Expected impl declaration"),
+		}
+	}
+
+	// ========== Statement Tests ==========
+
+	#[test]
+	fn test_parse_if_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{if true { 1 }}");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_if_else_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{if true { 1 } else { 2 };}");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_while_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ while true { break; } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_for_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ for i in 0..10 { } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_return_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ return 42; }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ break; }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_continue_statement()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ continue; }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_assignment()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ x = 5; }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_compound_assignment()
+	{
+		let ops = vec!["+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="];
+		for op in ops {
+			let input = format!("{{ x {} 5; }}", op);
+			let config = Config::default();
+			let lexer = Lexer::new(&config, &input);
+			let mut parser = Parser::from(lexer);
+			let result = parser.parse_block();
+			assert!(result.is_ok(), "Failed to parse compound assignment: {}", op);
+		}
+	}
+
+	// ========== Complex Expression Tests ==========
+
+	#[test]
+	fn test_parse_nested_calls()
+	{
+		let result = parse_expr_from_str("foo(bar(baz()))");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_method_chain()
+	{
+		let result = parse_expr_from_str("obj.method1().method2().field");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_complex_expression()
+	{
+		let result = parse_expr_from_str("(a + b) * c - d / e");
+		assert!(result.is_ok());
+	}
+
+	// ========== Error Tests ==========
+
+	#[test]
+	fn test_parse_error_unexpected_token()
+	{
+		let result = parse_expr_from_str("let");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_error_unmatched_paren()
+	{
+		let result = parse_expr_from_str("(1 + 2");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_error_invalid_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "123");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_err());
 	}
 }
