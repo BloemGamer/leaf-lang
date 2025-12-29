@@ -1315,15 +1315,18 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				if self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
-					self.next(); // consume '{'
+					let checkpoint_span = self.last_span;
 
-					let is_struct_init =
-						!self.at(&TokenKind::RightBrace) && matches!(self.peek_kind(), TokenKind::Identifier(_));
+					self.next(); // {
 
-					self.lexer = checkpoint; // restore
+					let is_struct =
+						self.at(&TokenKind::RightBrace) || matches!(self.peek_kind(), TokenKind::Identifier(_));
 
-					if is_struct_init {
-						self.next(); // consume '{' again
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+
+					if is_struct {
+						self.next(); // {
 						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
 						self.expect(&TokenKind::RightBrace)?;
 						Ok(Expr::StructInit { path, fields })
