@@ -2021,11 +2021,60 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_union(&mut self) -> Result<Spanned<UnionDecl>, ParseError>
 	{
-		let struct_decl = self.parse_struct()?;
+		let span: Span = self.peek().span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Union)?;
 
-		let union_decl: Spanned<UnionDecl> = struct_decl;
+		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+			self.get_path()?
+		} else {
+			let tok: Token = self.next();
+			return Err(ParseError {
+				span: tok.span,
+				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+			});
+		};
 
-		return Ok(union_decl);
+		self.expect(&TokenKind::LeftBrace)?;
+
+		let mut fields: Vec<(Type, Ident)> = Vec::new();
+
+		while !self.at(&TokenKind::RightBrace) {
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+				str
+			} else {
+				let tok: Token = self.next();
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
+				});
+			};
+
+			self.expect(&TokenKind::Colon)?;
+
+			let field_type: Type = self.parse_type()?;
+
+			fields.push((field_type, field_name));
+
+			if *self.peek_kind() == TokenKind::RightBrace {
+				break;
+			}
+			self.expect(&TokenKind::Comma)?;
+		}
+
+		self.expect(&TokenKind::RightBrace)?;
+
+		return Ok(Spanned {
+			node: UnionDecl {
+				modifiers,
+				name,
+				fields,
+			},
+			span: span.merge(&self.last_span),
+		});
 	}
 
 	fn parse_namespace(&mut self) -> Result<Spanned<NamespaceDecl>, ParseError>
