@@ -1,4 +1,5 @@
 #![allow(clippy::needless_return)]
+#![allow(dead_code)]
 
 use std::{fs, process::exit};
 
@@ -22,8 +23,8 @@ fn main()
 	};
 	let lexed: Lexer = Lexer::new(&config, &file);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
-	let mut parsed: Parser = lexed.into(); // for now this has to be mute because of the parse program, this function will be replaced in the future
-	let program: Result<parser::Program, parser::ParseError> = parsed.parse_program();
+	let parsed: Parser = lexed.into();
+	let program: Result<parser::Program, parser::ParseError> = parsed.into();
 	match &program {
 		Ok(program) => {
 			println!("{:#?}", program);

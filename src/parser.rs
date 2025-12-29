@@ -116,6 +116,54 @@ pub struct Program
 	pub items: Vec<Spanned<TopLevelDecl>>,
 }
 
+// Add this implementation block after the existing From<Lexer> implementation
+// in your parser.rs file (around line 68)
+
+impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, ParseError>
+{
+	/// Converts a parser into a parsed program result.
+	///
+	/// This provides a convenient way to parse a complete program by consuming
+	/// the parser. It calls `parse_program()` internally.
+	///
+	/// # Arguments
+	/// * `parser` - The parser to consume
+	///
+	/// # Returns
+	/// * `Ok(Program)` - The successfully parsed program AST
+	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
+	///
+	/// # Example
+	/// ```
+	/// use parser::{Parser, Program, ParseError};
+	/// use lexer::Lexer;
+	/// use config::Config;
+	///
+	/// let config = Config::default();
+	/// let source = "fn main() { let x = 42; }";
+	/// let lexer = Lexer::new(&config, source);
+	/// let parser = Parser::from(lexer);
+	///
+	/// // Convert parser to Result<Program, ParseError>
+	/// let program: Result<Program, ParseError> = parser.into();
+	///
+	/// // Or more idiomatically in a single chain:
+	/// let program = Parser::from(Lexer::new(&config, source)).into();
+	/// ```
+	///
+	/// # Usage Pattern
+	/// This enables a clean one-shot parsing pattern:
+	/// ```
+	/// fn parse(config: &Config, source: &str) -> Result<Program, ParseError> {
+	///     Parser::from(Lexer::new(config, source)).into()
+	/// }
+	/// ```
+	fn from(mut parser: Parser<'s, 'c>) -> Self
+	{
+		parser.parse_program()
+	}
+}
+
 /// Type alias for top-level blocks (same structure as Program).
 ///
 /// Used in contexts like namespaces where a block of top-level declarations
