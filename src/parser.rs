@@ -1314,10 +1314,22 @@ impl<'s, 'c> Parser<'s, 'c>
 				let path: Vec<String> = self.get_path()?;
 
 				if self.at(&TokenKind::LeftBrace) {
-					self.next();
-					let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
-					self.expect(&TokenKind::RightBrace)?;
-					Ok(Expr::StructInit { path, fields })
+					let checkpoint = self.lexer.clone();
+					self.next(); // consume '{'
+
+					let is_struct_init =
+						!self.at(&TokenKind::RightBrace) && matches!(self.peek_kind(), TokenKind::Identifier(_));
+
+					self.lexer = checkpoint; // restore
+
+					if is_struct_init {
+						self.next(); // consume '{' again
+						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
+						self.expect(&TokenKind::RightBrace)?;
+						Ok(Expr::StructInit { path, fields })
+					} else {
+						Ok(Expr::Identifier(path))
+					}
 				} else {
 					Ok(Expr::Identifier(path))
 				}
