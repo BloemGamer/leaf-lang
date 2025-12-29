@@ -164,6 +164,14 @@ impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, ParseError>
 	}
 }
 
+impl<'s, 'c> From<Lexer<'s, 'c>> for Result<Program, ParseError>
+{
+	fn from(value: Lexer<'s, 'c>) -> Self
+	{
+		<Result<Program, ParseError>>::from(Parser::from(value))
+	}
+}
+
 /// Type alias for top-level blocks (same structure as Program).
 ///
 /// Used in contexts like namespaces where a block of top-level declarations
