@@ -48,6 +48,7 @@ fn main()
 - [x] Lexing
 - [ ] Preprocessor (lower priority)
 - [ ] Parsing -> AST
+- [ ] AST macro -> AST to AST
 - [ ] Semantic Analysis
 	- [ ] Desugaring / Lowering
 	- [ ] Symbol Collection
