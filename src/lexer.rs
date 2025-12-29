@@ -235,8 +235,8 @@ pub enum TokenKind
 	Struct,
 	/// Untagged union: `union`
 	Union,
-	/// Tagged union: `tagged_union`
-	TaggedUnion,
+	/// Tagged union: `variant`
+	Variant,
 	/// Enumeration definition: `enum`
 	Enum,
 	/// Implementation block: `impl`
@@ -1035,7 +1035,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"static" => TokenKind::Static,
 			"struct" => TokenKind::Struct,
 			"union" => TokenKind::Union,
-			"tagged_union" => TokenKind::TaggedUnion,
+			"variant" => TokenKind::Variant,
 			"enum" => TokenKind::Enum,
 			"type" => TokenKind::Type,
 			"impl" => TokenKind::Impl,
@@ -1495,7 +1495,7 @@ mod tests
 				TokenKind::Static,
 				TokenKind::Struct,
 				TokenKind::Union,
-				TokenKind::TaggedUnion,
+				TokenKind::Variant,
 				TokenKind::Enum,
 				TokenKind::Impl,
 				TokenKind::MacroDef,
