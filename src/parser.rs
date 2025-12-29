@@ -1852,6 +1852,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Match => {
+				self.next(); // match
 				let expr: Expr = self.parse_expr()?;
 				self.expect(&TokenKind::LeftBrace)?;
 
