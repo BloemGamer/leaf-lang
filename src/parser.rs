@@ -2103,122 +2103,119 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut tail_expr: Option<Box<Expr>> = None;
 
 		while !self.at(&TokenKind::RightBrace) {
-			if self.at(&TokenKind::Let) || self.at(&TokenKind::Const) {
-				let var_decl = self.parse_var_decl()?;
-				self.expect(&TokenKind::Semicolon)?;
-				stmts.push(Stmt::VariableDecl(var_decl.node));
-				continue;
-			}
+			let kind = self.peek_kind().clone();
 
-			if self.at(&TokenKind::Return) {
-				self.next();
-				let ret_expr = if self.at(&TokenKind::Semicolon) {
-					None
-				} else {
-					Some(self.parse_expr()?)
-				};
-				self.expect(&TokenKind::Semicolon)?;
-				stmts.push(Stmt::Return(ret_expr));
-				continue;
-			}
-
-			if self.at(&TokenKind::Break) {
-				self.next();
-				self.expect(&TokenKind::Semicolon)?;
-				stmts.push(Stmt::Break);
-				continue;
-			}
-
-			if self.at(&TokenKind::Continue) {
-				self.next();
-				self.expect(&TokenKind::Semicolon)?;
-				stmts.push(Stmt::Continue);
-				continue;
-			}
-
-			if self.at(&TokenKind::While) {
-				stmts.push(self.parse_while()?);
-				continue;
-			}
-
-			if self.at(&TokenKind::For) {
-				stmts.push(self.parse_for()?);
-				continue;
-			}
-
-			if self.at(&TokenKind::If) {
-				let if_stmt = self.parse_if()?;
-
-				if self.consume(&TokenKind::Semicolon) {
-					stmts.push(if_stmt);
-				} else if self.at(&TokenKind::RightBrace) {
-					tail_expr = Some(Box::new(self.stmt_if_to_expr(if_stmt)?));
-					break;
-				} else {
-					stmts.push(if_stmt);
+			match kind {
+				TokenKind::Let | TokenKind::Const => {
+					let var_decl = self.parse_var_decl()?;
+					self.expect(&TokenKind::Semicolon)?;
+					stmts.push(Stmt::VariableDecl(var_decl.node));
 				}
-				continue;
-			}
 
-			if self.at(&TokenKind::Delete) {
-				stmts.push(Stmt::Delete(self.parse_delete()?));
-			}
-
-			if self.at(&TokenKind::Unsafe) {
-				self.next();
-				let block = self.parse_block()?;
-				if self.consume(&TokenKind::Semicolon) {
-					stmts.push(Stmt::Unsafe(block));
-				} else if self.at(&TokenKind::RightBrace) {
-					tail_expr = Some(Box::new(Expr::Block(Box::new(block))));
-					break;
-				} else {
-					stmts.push(Stmt::Unsafe(block));
+				TokenKind::Return => {
+					self.next();
+					let ret_expr = if self.at(&TokenKind::Semicolon) {
+						None
+					} else {
+						Some(self.parse_expr()?)
+					};
+					self.expect(&TokenKind::Semicolon)?;
+					stmts.push(Stmt::Return(ret_expr));
 				}
-				continue;
-			}
 
-			let expr = self.parse_expr()?;
-
-			if self.is_assignment_op() {
-				let op = self.parse_assign_op()?;
-				let value = self.parse_expr()?;
-				self.expect(&TokenKind::Semicolon)?;
-				stmts.push(Stmt::Assignment {
-					target: expr,
-					op,
-					value,
-				});
-				continue;
-			}
-
-			let needs_semi = self.expr_needs_semicolon(&expr);
-
-			if needs_semi {
-				if self.consume(&TokenKind::Semicolon) {
-					stmts.push(Stmt::Expr(expr));
-				} else if self.at(&TokenKind::RightBrace) {
-					tail_expr = Some(Box::new(expr));
-					break;
-				} else {
-					let tok = self.peek().clone();
-					return Err(ParseError {
-						span: tok.span,
-						message: tok.format_error(self.source, "expected `;` or `}` after expression"),
-					});
+				TokenKind::Break => {
+					self.next();
+					self.expect(&TokenKind::Semicolon)?;
+					stmts.push(Stmt::Break);
 				}
-			} else if self.consume(&TokenKind::Semicolon) {
-				stmts.push(Stmt::Expr(expr));
-			} else if self.at(&TokenKind::RightBrace) {
-				tail_expr = Some(Box::new(expr));
-				break;
-			} else {
-				stmts.push(Stmt::Expr(expr));
+
+				TokenKind::Continue => {
+					self.next();
+					self.expect(&TokenKind::Semicolon)?;
+					stmts.push(Stmt::Continue);
+				}
+
+				TokenKind::While => {
+					stmts.push(self.parse_while()?);
+				}
+
+				TokenKind::For => {
+					stmts.push(self.parse_for()?);
+				}
+
+				TokenKind::If => {
+					let if_stmt = self.parse_if()?;
+
+					if self.consume(&TokenKind::Semicolon) {
+						stmts.push(if_stmt);
+					} else if self.at(&TokenKind::RightBrace) {
+						tail_expr = Some(Box::new(self.stmt_if_to_expr(if_stmt)?));
+						break;
+					} else {
+						stmts.push(if_stmt);
+					}
+				}
+
+				TokenKind::Delete => {
+					stmts.push(Stmt::Delete(self.parse_delete()?));
+				}
+
+				TokenKind::Unsafe => {
+					self.next();
+					let block = self.parse_block()?;
+
+					if self.consume(&TokenKind::Semicolon) {
+						stmts.push(Stmt::Unsafe(block));
+					} else if self.at(&TokenKind::RightBrace) {
+						tail_expr = Some(Box::new(Expr::Block(Box::new(block))));
+						break;
+					} else {
+						stmts.push(Stmt::Unsafe(block));
+					}
+				}
+
+				_ => {
+					let expr = self.parse_expr()?;
+
+					if self.is_assignment_op() {
+						let op = self.parse_assign_op()?;
+						let value = self.parse_expr()?;
+						self.expect(&TokenKind::Semicolon)?;
+						stmts.push(Stmt::Assignment {
+							target: expr,
+							op,
+							value,
+						});
+					} else {
+						let needs_semi = self.expr_needs_semicolon(&expr);
+
+						if needs_semi {
+							if self.consume(&TokenKind::Semicolon) {
+								stmts.push(Stmt::Expr(expr));
+							} else if self.at(&TokenKind::RightBrace) {
+								tail_expr = Some(Box::new(expr));
+								break;
+							} else {
+								let tok = self.peek().clone();
+								return Err(ParseError {
+									span: tok.span,
+									message: tok.format_error(self.source, "expected `;` or `}` after expression"),
+								});
+							}
+						} else if self.consume(&TokenKind::Semicolon) {
+							stmts.push(Stmt::Expr(expr));
+						} else if self.at(&TokenKind::RightBrace) {
+							tail_expr = Some(Box::new(expr));
+							break;
+						} else {
+							stmts.push(Stmt::Expr(expr));
+						}
+					}
+				}
 			}
 		}
 
 		self.expect(&TokenKind::RightBrace)?;
-
 		Ok(Block { stmts, tail_expr })
 	}
 
