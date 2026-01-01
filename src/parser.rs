@@ -29,6 +29,7 @@ pub struct Parser<'source, 'config>
 	source: &'source str,
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
+	buffered_token: Option<Token>,
 }
 
 impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
@@ -58,6 +59,7 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 			source,
 			lexer: lexer.peekable(),
 			last_span: Span::default(),
+			buffered_token: None,
 		}
 	}
 }
@@ -1005,11 +1007,18 @@ impl<'s, 'c> Parser<'s, 'c>
 {
 	fn peek(&mut self) -> &Token
 	{
+		if self.buffered_token.is_some() {
+			return self.buffered_token.as_ref().unwrap();
+		}
 		self.lexer.peek().expect("lexer exhausted unexpectedly")
 	}
 
 	fn next(&mut self) -> Token
 	{
+		if let Some(tok) = self.buffered_token.take() {
+			self.last_span = tok.span;
+			return tok;
+		}
 		let tok: Token = self.lexer.next().expect("lexer exhausted unexpectedly");
 		self.last_span = tok.span;
 		tok
@@ -1033,6 +1042,29 @@ impl<'s, 'c> Parser<'s, 'c>
 		} else {
 			false
 		}
+	}
+
+	fn consume_greater_than(&mut self) -> bool
+	{
+		if self.at(&TokenKind::GreaterThan) {
+			self.next();
+			return true;
+		}
+
+		if self.at(&TokenKind::RShift) {
+			let rshift_tok = self.next();
+
+			let virtual_gt = Token {
+				kind: TokenKind::GreaterThan,
+				span: rshift_tok.span,
+			};
+
+			self.buffered_token = Some(virtual_gt);
+
+			return true;
+		}
+
+		false
 	}
 
 	fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError>
@@ -1428,7 +1460,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut generics: Vec<Ident> = Vec::new();
 
-		if self.consume(&TokenKind::GreaterThan) {
+		if self.consume_greater_than() {
 			return Ok(generics);
 		}
 
@@ -1449,7 +1481,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 
-			if self.consume(&TokenKind::GreaterThan) {
+			if self.consume_greater_than() {
 				break;
 			}
 
@@ -1461,7 +1493,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 
-			if self.consume(&TokenKind::GreaterThan) {
+			if self.consume_greater_than() {
 				break;
 			}
 		}
@@ -2798,14 +2830,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut generics: Vec<Type> = Vec::new();
 
-		if self.consume(&TokenKind::GreaterThan) {
+		if self.consume_greater_than() {
 			return Ok(generics);
 		}
 
 		loop {
 			generics.push(self.parse_type()?);
 
-			if self.consume(&TokenKind::GreaterThan) {
+			if self.consume_greater_than() {
 				break;
 			}
 
@@ -2817,7 +2849,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 
-			if self.consume(&TokenKind::GreaterThan) {
+			if self.consume_greater_than() {
 				break;
 			}
 		}
