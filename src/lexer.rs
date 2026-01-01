@@ -443,7 +443,10 @@ impl<'source, 'config> Iterator for Lexer<'source, 'config>
 
 	fn next(&mut self) -> Option<Self::Item>
 	{
-		let token = self.next_token();
+		let mut token: Token = self.next_token();
+		while matches!(token.kind, TokenKind::LineComment(_) | TokenKind::BlockComment(_)) {
+			token = self.next_token();
+		}
 
 		return if matches!(token.kind, TokenKind::Eof | TokenKind::Invalid) {
 			if self.eof_returned {
