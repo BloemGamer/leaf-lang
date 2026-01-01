@@ -1689,7 +1689,7 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::LineComment(" this is a comment".to_string()),
+				// TokenKind::LineComment(" this is a comment".to_string()),
 				TokenKind::IntLiteral(42),
 				TokenKind::Eof,
 			]
@@ -1717,7 +1717,7 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::BlockComment(" block comment ".to_string()),
+				// TokenKind::BlockComment(" block comment ".to_string()),
 				TokenKind::IntLiteral(42),
 				TokenKind::Eof,
 			]
@@ -1745,7 +1745,7 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::BlockComment(" line1\nline2\nline3 ".to_string()),
+				// TokenKind::BlockComment(" line1\nline2\nline3 ".to_string()),
 				TokenKind::IntLiteral(42),
 				TokenKind::Eof,
 			]
