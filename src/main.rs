@@ -3,9 +3,11 @@
 
 use std::{fs, process::exit};
 
+use self::desuger::Desugarer;
 use self::lexer::Lexer;
 use self::parser::Parser;
 
+mod desuger;
 mod lexer;
 mod parser;
 
@@ -33,4 +35,9 @@ fn main()
 			println!("{}", e);
 		}
 	}
+
+	let mut desugager: Desugarer = Desugarer::new();
+
+	let desugared = desugager.desugar_program(program.unwrap());
+	println!("{:#?}", desugared);
 }
