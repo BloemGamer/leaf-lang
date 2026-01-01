@@ -633,15 +633,13 @@ pub enum AssignOp
 /// Represents a variable binding, either mutable or immutable.
 ///
 /// # Fields
-/// * `ty` - Variable type
-/// * `name` - Variable name (can be qualified path)
+/// * `pattern` - Pattern for destructuring
 /// * `init` - Optional initializer expression
 /// * `comp_const` - Whether this is a compile-time constant (`const` vs `let`)
 #[derive(Debug, Clone)]
 pub struct VariableDecl
 {
-	ty: Type,
-	name: Vec<Ident>,
+	pattern: Pattern, // not all can be used, this will be checked in an analyser
 	init: Option<Expr>,
 	comp_const: bool,
 }
@@ -1360,22 +1358,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 		let comp_const: bool = tok.kind == TokenKind::Const;
 
-		let var_name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
-			self.get_path()?
-		} else {
-			let tok: Token = self.next();
-			return Err(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-			});
-		};
+		let pattern = self.parse_pattern()?;
 
-		self.expect(&TokenKind::Colon)?;
-
-		let ty = self.parse_type()?;
-
-		let tok: &Token = self.peek();
-		let init: Option<Expr> = if tok.kind == TokenKind::Equals {
+		let init: Option<Expr> = if self.at(&TokenKind::Equals) {
 			self.next();
 			Some(self.parse_expr()?)
 		} else {
@@ -1384,8 +1369,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		return Ok(Spanned {
 			node: VariableDecl {
-				ty,
-				name: var_name,
+				pattern,
 				init,
 				comp_const,
 			},
