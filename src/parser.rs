@@ -658,7 +658,9 @@ pub struct VariableDecl
 /// * `Break` - Break from loop
 /// * `Continue` - Continue to next loop iteration
 /// * `If` - Conditional statement
+/// * `IfLet` - Pattern matching conditional statement
 /// * `While` - While loop
+/// * `WhileLetLoop` - Pattern matching while loop
 /// * `For` - For-in loop
 /// * `Unsafe` - Unsafe block
 #[derive(Debug, Clone)]
@@ -677,19 +679,34 @@ pub enum Stmt
 
 	Expr(Expr),
 
-	Break, // Maybe later it will have a value, to break a named loop
+	Break,
 	Continue,
 
 	If
 	{
 		cond: Expr,
 		then_block: Block,
-		else_branch: Option<Box<Stmt>>, // block or nested if
+		else_branch: Option<Box<Stmt>>,
+	},
+
+	IfLet
+	{
+		pattern: Pattern,
+		expr: Expr,
+		then_block: Block,
+		else_branch: Option<Box<Stmt>>,
 	},
 
 	While
 	{
 		cond: Expr,
+		body: Block,
+	},
+
+	WhileLetLoop
+	{
+		pattern: Pattern,
+		expr: Expr,
 		body: Block,
 	},
 
@@ -773,24 +790,40 @@ pub enum MatchBody
 
 /// Pattern matching patterns.
 ///
-/// Represents patterns that can appear in match expressions.
+/// Represents patterns that can appear in match expressions and if let/while let.
 ///
 /// # Variants
 /// * `Wildcard` - Catch-all pattern: `_`
 /// * `Literal` - Literal value pattern
+/// * `TypedIdentifier` - Bind to identifier with explicit type: `x: i32`
 /// * `Variant` - Enum variant pattern with optional destructuring
+/// * `Tuple` - Tuple pattern
+/// * `Struct` - Struct pattern with field matching
 /// * `Range` - Range pattern
+/// * `Or` - Or pattern: `pat1 | pat2`
 #[derive(Debug, Clone)]
 pub enum Pattern
 {
 	Wildcard,
 	Literal(Literal),
+	TypedIdentifier
+	{
+		name: Ident,
+		ty: Type,
+	},
 	Variant
 	{
 		path: Vec<Ident>,
 		args: Vec<Pattern>,
 	},
+	Tuple(Vec<Pattern>),
+	Struct
+	{
+		path: Vec<Ident>,
+		fields: Vec<(Ident, Pattern)>,
+	},
 	Range(RangeExpr),
+	Or(Vec<Pattern>),
 }
 
 /// Structure type declaration.
@@ -1847,8 +1880,8 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.next(); // {
 
-					let is_struct =
-						self.at(&TokenKind::RightBrace) || matches!(self.peek_kind(), TokenKind::Identifier(_));
+					let is_struct = self.at(&TokenKind::RightBrace)
+						|| (matches!(self.peek_kind(), TokenKind::Identifier(_)) && self.lookahead_for_struct_field());
 
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
@@ -1965,6 +1998,19 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
+	fn lookahead_for_struct_field(&mut self) -> bool
+	{
+		if let TokenKind::Identifier(_) = self.peek_kind() {
+			let checkpoint = self.lexer.clone();
+			self.next(); // identifier(_)
+			let has_equals = self.at(&TokenKind::Equals);
+			self.lexer = checkpoint;
+			has_equals
+		} else {
+			false
+		}
+	}
+
 	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError>
 	{
 		if self.at(&TokenKind::RightParen) {
@@ -2037,13 +2083,32 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
 	{
+		let mut patterns = vec![self.parse_pattern_no_or()?];
+
+		while self.consume(&TokenKind::Pipe) {
+			patterns.push(self.parse_pattern_no_or()?);
+		}
+
+		if patterns.len() == 1 {
+			Ok(patterns.into_iter().next().unwrap())
+		} else {
+			Ok(Pattern::Or(patterns))
+		}
+	}
+
+	fn parse_pattern_no_or(&mut self) -> Result<Pattern, ParseError>
+	{
 		let tok = self.peek().clone();
 
 		match &tok.kind {
 			TokenKind::Underscore => {
 				self.next();
+				if self.consume(&TokenKind::Colon) {
+					let _ignored_type = self.parse_type()?;
+				}
 				Ok(Pattern::Wildcard)
 			}
+
 			TokenKind::Identifier(_) => {
 				let path: Vec<String> = self.get_path()?;
 
@@ -2064,30 +2129,130 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.expect(&TokenKind::RightParen)?;
 					Ok(Pattern::Variant { path, args })
+				} else if self.consume(&TokenKind::LeftBrace) {
+					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
+
+					if !self.at(&TokenKind::RightBrace) {
+						loop {
+							let field_name = if let TokenKind::Identifier(name) = self.next().kind {
+								name
+							} else {
+								return Err(ParseError {
+									span: self.last_span,
+									message: "expected field name in struct pattern".to_string(),
+								});
+							};
+
+							self.expect(&TokenKind::Colon)?;
+
+							let pattern = self.parse_pattern()?;
+
+							fields.push((field_name, pattern));
+
+							if !self.consume(&TokenKind::Comma) {
+								break;
+							}
+							if self.at(&TokenKind::RightBrace) {
+								break;
+							}
+						}
+					}
+
+					self.expect(&TokenKind::RightBrace)?;
+					Ok(Pattern::Struct { path, fields })
+				} else if self.at(&TokenKind::Colon) {
+					if path.len() != 1 {
+						return Err(ParseError {
+							span: tok.span,
+							message: tok
+								.format_error(self.source, "binding patterns must be simple identifiers, not paths"),
+						});
+					}
+
+					self.next(); // :
+					let ty = self.parse_type()?;
+
+					Ok(Pattern::TypedIdentifier {
+						name: path[0].clone(),
+						ty,
+					})
 				} else {
 					Ok(Pattern::Variant { path, args: Vec::new() })
 				}
 			}
+
+			TokenKind::LeftParen => {
+				self.next(); // (
+
+				if self.consume(&TokenKind::RightParen) {
+					return Ok(Pattern::Tuple(Vec::new()));
+				}
+
+				let mut elements = vec![self.parse_pattern()?];
+
+				if self.consume(&TokenKind::Comma) {
+					if !self.at(&TokenKind::RightParen) {
+						loop {
+							elements.push(self.parse_pattern()?);
+							if !self.consume(&TokenKind::Comma) {
+								break;
+							}
+							if self.at(&TokenKind::RightParen) {
+								break;
+							}
+						}
+					}
+					self.expect(&TokenKind::RightParen)?;
+					Ok(Pattern::Tuple(elements))
+				} else {
+					self.expect(&TokenKind::RightParen)?;
+					Ok(elements.into_iter().next().unwrap())
+				}
+			}
+
 			TokenKind::IntLiteral(n) => {
 				self.next();
-				Ok(Pattern::Literal(Literal::Int(*n)))
+
+				if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEquals) {
+					let inclusive = self.at(&TokenKind::DotDotEquals);
+					self.next(); // .. | ..=
+
+					let end = if self.is_range_end() {
+						None
+					} else {
+						Some(Box::new(self.parse_expr()?))
+					};
+
+					Ok(Pattern::Range(RangeExpr {
+						start: Some(Box::new(Expr::Literal(Literal::Int(*n)))),
+						end,
+						inclusive,
+					}))
+				} else {
+					Ok(Pattern::Literal(Literal::Int(*n)))
+				}
 			}
+
 			TokenKind::True => {
 				self.next();
 				Ok(Pattern::Literal(Literal::Bool(true)))
 			}
+
 			TokenKind::False => {
 				self.next();
 				Ok(Pattern::Literal(Literal::Bool(false)))
 			}
+
 			TokenKind::StringLiteral(s) => {
 				self.next();
 				Ok(Pattern::Literal(Literal::String(s.clone())))
 			}
+
 			TokenKind::CharLiteral(c) => {
 				self.next();
 				Ok(Pattern::Literal(Literal::Char(*c)))
 			}
+
 			_ => Err(ParseError {
 				span: tok.span,
 				message: tok.format_error(self.source, "expected pattern"),
@@ -2136,7 +2301,24 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::While => {
-					stmts.push(self.parse_while()?);
+					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+					let checkpoint_span: Span = self.last_span;
+					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
+
+					self.next(); // while
+
+					if self.consume(&TokenKind::Let) {
+						let pattern: Pattern = self.parse_pattern()?;
+						self.expect(&TokenKind::Equals)?;
+						let expr: Expr = self.parse_expr()?;
+						let body: Block = self.parse_block()?;
+						stmts.push(Stmt::WhileLetLoop { pattern, expr, body });
+					} else {
+						self.lexer = checkpoint;
+						self.last_span = checkpoint_span;
+						self.buffered_token = checkpoint_buffered;
+						stmts.push(self.parse_while()?);
+					}
 				}
 
 				TokenKind::For => {
@@ -2144,15 +2326,63 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::If => {
-					let if_stmt = self.parse_if()?;
+					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+					let checkpoint_span: Span = self.last_span;
+					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
 
-					if self.consume(&TokenKind::Semicolon) {
-						stmts.push(if_stmt);
-					} else if self.at(&TokenKind::RightBrace) {
-						tail_expr = Some(Box::new(self.stmt_if_to_expr(if_stmt)?));
-						break;
+					self.next(); // if
+
+					if self.consume(&TokenKind::Let) {
+						let pattern: Pattern = self.parse_pattern()?;
+						self.expect(&TokenKind::Equals)?;
+						let expr: Expr = self.parse_expr()?;
+						let then_block: Block = self.parse_block()?;
+
+						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
+							if self.at(&TokenKind::If) {
+								Some(Box::new(self.parse_if_or_if_let()?))
+							} else {
+								let else_block: Block = self.parse_block()?;
+								Some(Box::new(Stmt::If {
+									cond: Expr::Literal(Literal::Bool(true)),
+									then_block: else_block,
+									else_branch: None,
+								}))
+							}
+						} else {
+							None
+						};
+
+						let if_let_stmt = Stmt::IfLet {
+							pattern,
+							expr,
+							then_block,
+							else_branch,
+						};
+
+						if self.consume(&TokenKind::Semicolon) {
+							stmts.push(if_let_stmt);
+						} else if self.at(&TokenKind::RightBrace) {
+							tail_expr = Some(Box::new(self.stmt_if_to_expr_iflet(if_let_stmt)?));
+							break;
+						} else {
+							stmts.push(if_let_stmt);
+						}
 					} else {
-						stmts.push(if_stmt);
+						self.lexer = checkpoint;
+						self.last_span = checkpoint_span;
+						self.buffered_token = checkpoint_buffered;
+
+						let if_stmt: Stmt = self.parse_if()?;
+
+						if self.consume(&TokenKind::Semicolon) {
+							stmts.push(if_stmt);
+						} else if self.at(&TokenKind::RightBrace) {
+							tail_expr = Some(Box::new(self.stmt_if_to_expr(if_stmt)?));
+							break;
+						} else {
+							stmts.push(if_stmt);
+						}
 					}
 				}
 
@@ -2162,7 +2392,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				TokenKind::Unsafe => {
 					self.next();
-					let block = self.parse_block()?;
+					let block: Block = self.parse_block()?;
 
 					if self.consume(&TokenKind::Semicolon) {
 						stmts.push(Stmt::Unsafe(block));
@@ -2175,11 +2405,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				_ => {
-					let expr = self.parse_expr()?;
+					let expr: Expr = self.parse_expr()?;
 
 					if self.is_assignment_op() {
-						let op = self.parse_assign_op()?;
-						let value = self.parse_expr()?;
+						let op: AssignOp = self.parse_assign_op()?;
+						let value: Expr = self.parse_expr()?;
 						self.expect(&TokenKind::Semicolon)?;
 						stmts.push(Stmt::Assignment {
 							target: expr,
@@ -2187,7 +2417,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							value,
 						});
 					} else {
-						let needs_semi = self.expr_needs_semicolon(&expr);
+						let needs_semi: bool = self.expr_needs_semicolon(&expr);
 
 						if needs_semi {
 							if self.consume(&TokenKind::Semicolon) {
@@ -2196,7 +2426,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								tail_expr = Some(Box::new(expr));
 								break;
 							} else {
-								let tok = self.peek().clone();
+								let tok: Token = self.peek().clone();
 								return Err(ParseError {
 									span: tok.span,
 									message: tok.format_error(self.source, "expected `;` or `}` after expression"),
@@ -2314,6 +2544,64 @@ impl<'s, 'c> Parser<'s, 'c>
 			then_block,
 			else_branch,
 		})
+	}
+
+	fn parse_if_or_if_let(&mut self) -> Result<Stmt, ParseError>
+	{
+		self.expect(&TokenKind::If)?;
+
+		if self.consume(&TokenKind::Let) {
+			let pattern = self.parse_pattern()?;
+			self.expect(&TokenKind::Equals)?;
+			let expr = self.parse_expr()?;
+			let then_block = self.parse_block()?;
+
+			let else_branch = if self.consume(&TokenKind::Else) {
+				if self.at(&TokenKind::If) {
+					Some(Box::new(self.parse_if_or_if_let()?))
+				} else {
+					let else_block = self.parse_block()?;
+					Some(Box::new(Stmt::If {
+						cond: Expr::Literal(Literal::Bool(true)),
+						then_block: else_block,
+						else_branch: None,
+					}))
+				}
+			} else {
+				None
+			};
+
+			Ok(Stmt::IfLet {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+			})
+		} else {
+			// Regular if
+			self.parse_if()
+		}
+	}
+
+	fn stmt_if_to_expr_iflet(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	{
+		match stmt {
+			Stmt::IfLet {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+			} => Ok(Expr::Block(Box::new(Block {
+				stmts: vec![Stmt::IfLet {
+					pattern,
+					expr,
+					then_block,
+					else_branch,
+				}],
+				tail_expr: None,
+			}))),
+			_ => unreachable!("Expected if let statement"),
+		}
 	}
 
 	fn parse_while(&mut self) -> Result<Stmt, ParseError>
@@ -4405,5 +4693,173 @@ mod parser_tests
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_if_let_basic()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(x: i64) = opt { x } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		assert_eq!(block.stmts.len(), 0);
+		assert!(block.tail_expr.is_some());
+	}
+
+	#[test]
+	fn test_parse_if_let_with_else()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(x: i64) = opt { x } else { 0 }; }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_if_let_else_if_let()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(
+			&config,
+			"{ if let Some(x: i32) = opt1 { x } else if let Some(y: i32) = opt2 { y } else { 0 }; }",
+		);
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_if_let_tuple_pattern()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let (x: i32, y: i32) = pair { x + y } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_if_let_wildcard()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(_) = opt { true } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_if_let_wildcard_with_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(_: i64) = opt { true } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	// ========== While Let Tests ==========
+
+	#[test]
+	fn test_parse_while_let()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ while let Some(x: i32) = iter.next() { process(x); } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::WhileLetLoop { .. } => (),
+			_ => panic!("Expected while let loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_while_let_tuple()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ while let (a: i32, b: i32) = get_pair() { } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	// ========== Enhanced Pattern Tests ==========
+
+	#[test]
+	fn test_parse_struct_pattern()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Point { x: i32, y: i32 } = pt { x } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_nested()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Point { x: a: i32, y: b: i32 } = pt { a } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_or_pattern()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(1) | Some(2) | Some(3) = x { true } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_nested_variant_pattern()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some(Point { x: a: i32, y: b: i32 }) = opt { a } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_variant_with_tuple()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let Some((x: i32, y: i32)) = opt { x } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_unit_variant()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "{ if let None = opt { true } }");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_block();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_match_with_typed_patterns()
+	{
+		let input = r#"
+			match x {
+				Some(val: i32) => val,
+				None => 0,
+			}
+		"#;
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
 	}
 }
