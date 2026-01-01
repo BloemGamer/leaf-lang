@@ -1412,11 +1412,40 @@ impl<'s, 'c> Parser<'s, 'c>
 					inner: Box::new(self.parse_type_core()?),
 				});
 			}
+			TokenKind::LeftParen => {
+				self.next(); // (
+
+				if self.consume(&TokenKind::RightParen) {
+					return Ok(TypeCore::Tuple(Vec::new()));
+				}
+
+				let mut types = vec![self.parse_type()?];
+
+				if self.consume(&TokenKind::Comma) {
+					if !self.at(&TokenKind::RightParen) {
+						loop {
+							types.push(self.parse_type()?);
+							if !self.consume(&TokenKind::Comma) {
+								break;
+							}
+							if self.at(&TokenKind::RightParen) {
+								break;
+							}
+						}
+					}
+					self.expect(&TokenKind::RightParen)?;
+					Ok(TypeCore::Tuple(types))
+				} else {
+					self.expect(&TokenKind::RightParen)?;
+					let ty = types.into_iter().next().unwrap();
+					Ok(*ty.core)
+				}
+			}
 			_ => {
 				let tok = tok.clone();
 				return Err(ParseError {
 					span: tok.span,
-					message: tok.format_error(self.source, "Expected an ampersand, mut or identifier"),
+					message: tok.format_error(self.source, "Expected an ampersand, mut, identifier, or '(' for type"),
 				});
 			}
 		}
