@@ -1226,7 +1226,10 @@ impl Token
 			.unwrap_or(source.len());
 		let line_text = &source[line_start..line_end];
 
-		let caret_offset = self.span.start_col - 1;
+		// Preserve tabs and spaces to maintain alignment
+		let prefix = &source[line_start..self.span.start];
+		let caret_indent: String = prefix.chars().map(|c| if c == '\t' { '\t' } else { ' ' }).collect();
+
 		let caret_length = (self.span.end - self.span.start).max(1);
 
 		format!(
@@ -1235,7 +1238,7 @@ impl Token
 			self.span.start_col,
 			message,
 			line_text,
-			" ".repeat(caret_offset),
+			caret_indent,
 			"^".repeat(caret_length)
 		)
 	}
