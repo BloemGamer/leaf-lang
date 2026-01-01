@@ -28,15 +28,17 @@ fn main()
 ## Roadmap
 ### Now busy with
 - [x] Writing the lexer
-- [ ] Writing the parser
+- [x] Writing the parser
+- [ ] Writing the desuger functions
 - [ ] Refining the syntax
 
 ### Short-term
 - [ ] Finish first compiler version
 
 ### Long-term
-- [ ] Adding tagged unions
+- [ ] Adding tagged unions (variants)
 - [ ] Adding templates
+- [ ] Adding lambda functions
 - [ ] Preprocessor
 - [ ] Code optimisations
 - [ ] C parser integration
@@ -47,13 +49,15 @@ fn main()
 ### Frontend
 - [x] Lexing
 - [ ] Preprocessor (lower priority)
-- [ ] Parsing -> AST
+- [x] Parsing -> AST
 - [ ] AST macro -> AST to AST
 - [ ] Semantic Analysis
 	- [ ] Desugaring / Lowering
 	- [ ] Symbol Collection
 	- [ ] Name Resolution + Type Analysis
+	- [ ] AST -> HIR
 	- [ ] Lifetime Analysis & Destructor Insertion
+	- [ ] HIR -> MIR
 - [ ] Optimizations (low priority)
 
 ### Backend
