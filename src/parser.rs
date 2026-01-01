@@ -700,6 +700,8 @@ pub enum Stmt
 		body: Block,
 	},
 
+	Delete(Vec<Ident>),
+
 	Unsafe(Block),
 }
 
@@ -2158,6 +2160,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				continue;
 			}
 
+			if self.at(&TokenKind::Delete) {
+				stmts.push(Stmt::Delete(self.parse_delete()?));
+			}
+
 			if self.at(&TokenKind::Unsafe) {
 				self.next();
 				let block = self.parse_block()?;
@@ -3071,6 +3077,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			node: TypeAliasDecl { modifiers, name, ty },
 			span: span.merge(&self.last_span),
 		})
+	}
+
+	fn parse_delete(&mut self) -> Result<Vec<Ident>, ParseError>
+	{
+		self.expect(&TokenKind::Delete)?;
+
+		return self.get_path();
 	}
 }
 
