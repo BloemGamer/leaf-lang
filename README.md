@@ -29,7 +29,7 @@ fn main()
 ### Now busy with
 - [x] Writing the lexer
 - [x] Writing the parser
-- [ ] Writing the desuger functions
+- [ ] Writing the desugarer
 - [ ] Refining the syntax
 
 ### Short-term
