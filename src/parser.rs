@@ -639,9 +639,9 @@ pub enum AssignOp
 #[derive(Debug, Clone)]
 pub struct VariableDecl
 {
-	pattern: Pattern, // not all can be used, this will be checked in an analyser
-	init: Option<Expr>,
-	comp_const: bool,
+	pub pattern: Pattern, // not all can be used, this will be checked in an analyser
+	pub init: Option<Expr>,
+	pub comp_const: bool,
 }
 
 /// Statement types.
