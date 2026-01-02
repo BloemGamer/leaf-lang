@@ -394,9 +394,9 @@ pub enum TypeCore
 #[derive(Debug, Clone)]
 pub struct RangeExpr
 {
-	start: Option<Box<Expr>>,
-	end: Option<Box<Expr>>,
-	inclusive: bool,
+	pub start: Option<Box<Expr>>,
+	pub end: Option<Box<Expr>>,
+	pub inclusive: bool,
 }
 
 /// Expression node.
@@ -1556,15 +1556,25 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	pub fn parse_expr(&mut self) -> Result<Expr, ParseError>
 	{
-		self.parse_logical_or()
+		self.parse_expr_inner(true)
 	}
 
-	fn parse_logical_or(&mut self) -> Result<Expr, ParseError>
+	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_logical_and()?;
+		self.parse_expr_inner(false)
+	}
+
+	fn parse_expr_inner(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
+	{
+		self.parse_logical_or(allow_struct_init)
+	}
+
+	fn parse_logical_or(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
+	{
+		let mut lhs: Expr = self.parse_logical_and(allow_struct_init)?;
 
 		while self.consume(&TokenKind::Or) {
-			let rhs: Expr = self.parse_logical_and()?;
+			let rhs: Expr = self.parse_logical_and(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalOr,
 				lhs: Box::new(lhs),
@@ -1575,12 +1585,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_logical_and(&mut self) -> Result<Expr, ParseError>
+	fn parse_logical_and(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_equality()?;
+		let mut lhs: Expr = self.parse_equality(allow_struct_init)?;
 
 		while self.consume(&TokenKind::And) {
-			let rhs: Expr = self.parse_equality()?;
+			let rhs: Expr = self.parse_equality(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalAnd,
 				lhs: Box::new(lhs),
@@ -1591,9 +1601,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_equality(&mut self) -> Result<Expr, ParseError>
+	fn parse_equality(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_relational()?;
+		let mut lhs: Expr = self.parse_relational(allow_struct_init)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -1603,7 +1613,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_relational()?;
+			let rhs: Expr = self.parse_relational(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -1614,9 +1624,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_relational(&mut self) -> Result<Expr, ParseError>
+	fn parse_relational(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_range()?;
+		let mut lhs: Expr = self.parse_range(allow_struct_init)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -1628,7 +1638,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_range()?;
+			let rhs: Expr = self.parse_range(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -1639,9 +1649,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_range(&mut self) -> Result<Expr, ParseError>
+	fn parse_range(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let start: Expr = self.parse_bitwise()?;
+		let start: Expr = self.parse_bitwise(allow_struct_init)?;
 
 		match self.peek_kind() {
 			TokenKind::DotDot => {
@@ -1649,7 +1659,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let end: Option<Box<Expr>> = if self.is_range_end() {
 					None
 				} else {
-					Some(Box::new(self.parse_bitwise()?))
+					Some(Box::new(self.parse_bitwise(allow_struct_init)?))
 				};
 				Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
@@ -1659,7 +1669,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::DotDotEquals => {
 				self.next();
-				let end: Box<Expr> = Box::new(self.parse_bitwise()?);
+				let end: Box<Expr> = Box::new(self.parse_bitwise(allow_struct_init)?);
 				Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
 					end: Some(end),
@@ -1682,9 +1692,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		)
 	}
 
-	fn parse_bitwise(&mut self) -> Result<Expr, ParseError>
+	fn parse_bitwise(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_additive()?;
+		let mut lhs: Expr = self.parse_additive(allow_struct_init)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -1697,7 +1707,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_additive()?;
+			let rhs: Expr = self.parse_additive(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -1708,9 +1718,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_additive(&mut self) -> Result<Expr, ParseError>
+	fn parse_additive(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_multiplicative()?;
+		let mut lhs: Expr = self.parse_multiplicative(allow_struct_init)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -1720,7 +1730,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_multiplicative()?;
+			let rhs: Expr = self.parse_multiplicative(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -1731,9 +1741,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_multiplicative(&mut self) -> Result<Expr, ParseError>
+	fn parse_multiplicative(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_cast()?;
+		let mut lhs: Expr = self.parse_cast(allow_struct_init)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -1744,7 +1754,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_cast()?;
+			let rhs: Expr = self.parse_cast(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -1755,7 +1765,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(lhs)
 	}
 
-	fn parse_cast(&mut self) -> Result<Expr, ParseError>
+	fn parse_cast(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
 		if self.at(&TokenKind::LeftParen) {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
@@ -1764,7 +1774,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			if let Ok(ty) = self.parse_type()
 				&& self.consume(&TokenKind::RightParen)
 			{
-				let expr: Expr = self.parse_cast()?;
+				let expr: Expr = self.parse_cast(allow_struct_init)?;
 				return Ok(Expr::Cast {
 					ty: Box::new(ty),
 					expr: Box::new(expr),
@@ -1774,10 +1784,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.lexer = checkpoint;
 		}
 
-		self.parse_unary()
+		self.parse_unary(allow_struct_init)
 	}
 
-	fn parse_unary(&mut self) -> Result<Expr, ParseError>
+	fn parse_unary(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
 		let op: UnaryOp = match self.peek_kind() {
 			TokenKind::Bang => {
@@ -1797,19 +1807,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				let mutable: bool = self.consume(&TokenKind::Mut);
 				UnaryOp::Addr { mutable }
 			}
-			_ => return self.parse_postfix(),
+			_ => return self.parse_postfix(allow_struct_init),
 		};
 
-		let expr: Expr = self.parse_unary()?;
+		let expr: Expr = self.parse_unary(allow_struct_init)?;
 		Ok(Expr::Unary {
 			op,
 			expr: Box::new(expr),
 		})
 	}
 
-	fn parse_postfix(&mut self) -> Result<Expr, ParseError>
+	fn parse_postfix(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut expr: Expr = self.parse_primary()?;
+		let mut expr: Expr = self.parse_primary(allow_struct_init)?;
 
 		loop {
 			match self.peek_kind() {
@@ -1832,7 +1842,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::LeftBracket => {
 					self.next();
-					let index: Expr = self.parse_expr()?;
+					let index: Expr = self.parse_expr()?; // Always allow struct init inside []
 					self.expect(&TokenKind::RightBracket)?;
 					expr = Expr::Index {
 						base: Box::new(expr),
@@ -1855,7 +1865,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(expr)
 	}
 
-	fn parse_primary(&mut self) -> Result<Expr, ParseError>
+	fn parse_primary(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
 		let tok: Token = self.peek().clone();
 
@@ -1892,9 +1902,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Identifier(_) => {
 				let path: Vec<String> = self.get_path()?;
 
-				if self.at(&TokenKind::LeftBrace) {
+				// KEY FIX: Only check for struct init if allow_struct_init is true
+				if allow_struct_init && self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
 					let checkpoint_span = self.last_span;
+					let checkpoint_buffered = self.buffered_token.clone();
 
 					self.next(); // {
 
@@ -1903,6 +1915,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
+					self.buffered_token = checkpoint_buffered;
 
 					if is_struct {
 						self.next(); // {
@@ -1924,7 +1937,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(Expr::Tuple(Vec::new()));
 				}
 
-				let first: Expr = self.parse_expr()?;
+				let first: Expr = self.parse_expr()?; // Always allow struct init inside ()
 
 				if self.consume(&TokenKind::RightParen) {
 					return Ok(first);
@@ -1964,7 +1977,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(Expr::Array(ArrayLiteral::List(Vec::new())));
 				}
 
-				let first: Expr = self.parse_expr()?;
+				let first: Expr = self.parse_expr()?; // Always allow struct init inside []
 
 				if self.consume(&TokenKind::Semicolon) {
 					let count: Expr = self.parse_expr()?;
@@ -1993,8 +2006,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Case => {
-				self.next(); // match
-				let expr: Expr = self.parse_expr()?;
+				self.next(); // case
+				let expr: Expr = self.parse_expr_no_struct()?; // Use no_struct for case expression
 				self.expect(&TokenKind::LeftBrace)?;
 
 				let mut arms: Vec<CaseArm> = Vec::new();
@@ -2468,7 +2481,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		self.expect(&TokenKind::RightBrace)?;
-		Ok(Block { stmts, tail_expr })
+		return Ok(Block { stmts, tail_expr });
 	}
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
@@ -2543,7 +2556,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_if(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::If)?;
-		let cond = self.parse_expr()?;
+		let cond = self.parse_expr_no_struct()?;
 		let then_block = self.parse_block()?;
 
 		let else_branch = if self.consume(&TokenKind::Else) {
@@ -2561,24 +2574,24 @@ impl<'s, 'c> Parser<'s, 'c>
 			None
 		};
 
-		Ok(Stmt::If {
+		return Ok(Stmt::If {
 			cond,
 			then_block,
 			else_branch,
-		})
+		});
 	}
 
 	fn parse_if_or_if_var(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::If)?;
 
-		if self.consume(&TokenKind::Var) {
-			let pattern = self.parse_pattern()?;
+		return if self.consume(&TokenKind::Var) {
+			let pattern: Pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
-			let expr = self.parse_expr()?;
-			let then_block = self.parse_block()?;
+			let expr: Expr = self.parse_expr()?;
+			let then_block: Block = self.parse_block()?;
 
-			let else_branch = if self.consume(&TokenKind::Else) {
+			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
 				if self.at(&TokenKind::If) {
 					Some(Box::new(self.parse_if_or_if_var()?))
 				} else {
@@ -2600,9 +2613,30 @@ impl<'s, 'c> Parser<'s, 'c>
 				else_branch,
 			})
 		} else {
-			// Regular if
-			self.parse_if()
-		}
+			let cond: Expr = self.parse_expr_no_struct()?;
+			let then_block: Block = self.parse_block()?;
+
+			let else_branch = if self.consume(&TokenKind::Else) {
+				if self.at(&TokenKind::If) {
+					Some(Box::new(self.parse_if_or_if_var()?))
+				} else {
+					let else_block = self.parse_block()?;
+					Some(Box::new(Stmt::If {
+						cond: Expr::Literal(Literal::Bool(true)),
+						then_block: else_block,
+						else_branch: None,
+					}))
+				}
+			} else {
+				None
+			};
+
+			Ok(Stmt::If {
+				cond,
+				then_block,
+				else_branch,
+			})
+		};
 	}
 
 	fn stmt_if_to_expr_ifvar(&self, stmt: Stmt) -> Result<Expr, ParseError>
@@ -2629,7 +2663,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_while(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::While)?;
-		let cond = self.parse_expr()?;
+		let cond = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
 		Ok(Stmt::While { cond, body })
 	}
@@ -2641,7 +2675,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let name: Vec<Ident> = self.get_path()?;
 
 		self.expect(&TokenKind::In)?;
-		let iter = self.parse_expr()?;
+		let iter = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
 
 		Ok(Stmt::For { name, iter, body })
