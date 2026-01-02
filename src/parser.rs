@@ -4054,7 +4054,7 @@ mod parser_tests
 		}
 	}
 
-	// ========== Match Tests ==========
+	// ========== Case Tests ==========
 
 	#[test]
 	fn test_parse_case_expression()
