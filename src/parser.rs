@@ -661,6 +661,7 @@ pub struct VariableDecl
 /// * `WhileVarLoop` - Pattern matching while loop
 /// * `For` - For-in loop
 /// * `Unsafe` - Unsafe block
+/// * `Block` - block
 #[derive(Debug, Clone)]
 pub enum Stmt
 {
@@ -723,6 +724,7 @@ pub enum Stmt
 	Delete(Vec<Ident>),
 
 	Unsafe(Block),
+	Block(Block),
 }
 
 /// Block of statements with optional tail expression.
@@ -1902,7 +1904,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Identifier(_) => {
 				let path: Vec<String> = self.get_path()?;
 
-				// KEY FIX: Only check for struct init if allow_struct_init is true
 				if allow_struct_init && self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
 					let checkpoint_span = self.last_span;
@@ -2452,28 +2453,39 @@ impl<'s, 'c> Parser<'s, 'c>
 							value,
 						});
 					} else {
-						let needs_semi: bool = self.expr_needs_semicolon(&expr);
-
-						if needs_semi {
+						if let Expr::Block(block) = expr {
 							if self.consume(&TokenKind::Semicolon) {
+								stmts.push(Stmt::Block(*block));
+							} else if self.at(&TokenKind::RightBrace) {
+								tail_expr = Some(Box::new(Expr::Block(block)));
+								break;
+							} else {
+								stmts.push(Stmt::Block(*block));
+							}
+						} else {
+							let needs_semi: bool = self.expr_needs_semicolon(&expr);
+
+							if needs_semi {
+								if self.consume(&TokenKind::Semicolon) {
+									stmts.push(Stmt::Expr(expr));
+								} else if self.at(&TokenKind::RightBrace) {
+									tail_expr = Some(Box::new(expr));
+									break;
+								} else {
+									let tok: Token = self.peek().clone();
+									return Err(ParseError {
+										span: tok.span,
+										message: tok.format_error(self.source, "expected `;` or `}` after expression"),
+									});
+								}
+							} else if self.consume(&TokenKind::Semicolon) {
 								stmts.push(Stmt::Expr(expr));
 							} else if self.at(&TokenKind::RightBrace) {
 								tail_expr = Some(Box::new(expr));
 								break;
 							} else {
-								let tok: Token = self.peek().clone();
-								return Err(ParseError {
-									span: tok.span,
-									message: tok.format_error(self.source, "expected `;` or `}` after expression"),
-								});
+								stmts.push(Stmt::Expr(expr));
 							}
-						} else if self.consume(&TokenKind::Semicolon) {
-							stmts.push(Stmt::Expr(expr));
-						} else if self.at(&TokenKind::RightBrace) {
-							tail_expr = Some(Box::new(expr));
-							break;
-						} else {
-							stmts.push(Stmt::Expr(expr));
 						}
 					}
 				}
@@ -4054,6 +4066,7 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			write!(f, "unsafe ")?;
 			write_block(f, w, block)
 		}
+		Stmt::Block(block) => write_block(f, w, block),
 	}
 }
 
@@ -4137,6 +4150,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, "unsafe ")?;
 			write_block(f, w, block)
 		}
+		Stmt::Block(block) => write_block(f, w, block),
 	}
 }
 
