@@ -39,5 +39,5 @@ fn main()
 	let mut desugager: Desugarer = Desugarer::new();
 
 	let desugared = desugager.desugar_program(program.unwrap());
-	println!("{:#?}", desugared);
+	println!("{}", desugared);
 }
