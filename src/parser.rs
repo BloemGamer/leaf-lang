@@ -16,7 +16,7 @@ use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 /// # Example
 /// ```
 /// let config = Config::default();
-/// let source = "fn main() { let x = 42; }";
+/// let source = "fn main() { var x = 42; }";
 /// let lexer = Lexer::new(&config, source);
 /// let mut parser = Parser::from(lexer);
 /// let program = parser.parse_program()?;
@@ -142,7 +142,7 @@ impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, ParseError>
 	/// use config::Config;
 	///
 	/// let config = Config::default();
-	/// let source = "fn main() { let x = 42; }";
+	/// let source = "fn main() { var x = 42; }";
 	/// let lexer = Lexer::new(&config, source);
 	/// let parser = Parser::from(lexer);
 	///
@@ -418,7 +418,7 @@ pub struct RangeExpr
 /// * `Array` - Array literal
 /// * `StructInit` - Struct initialization
 /// * `Block` - Block expression
-/// * `Match` - Pattern matching expression
+/// * `Case` - Pattern matching expression
 #[derive(Debug, Clone)]
 pub enum Expr
 {
@@ -477,10 +477,10 @@ pub enum Expr
 
 	Block(Box<Block>),
 
-	Match
+	Case
 	{
 		expr: Box<Expr>,
-		arms: Vec<MatchArm>,
+		arms: Vec<CaseArm>,
 	},
 }
 
@@ -656,9 +656,9 @@ pub struct VariableDecl
 /// * `Break` - Break from loop
 /// * `Continue` - Continue to next loop iteration
 /// * `If` - Conditional statement
-/// * `IfLet` - Pattern matching conditional statement
+/// * `IfVar` - Pattern matching conditional statement
 /// * `While` - While loop
-/// * `WhileLetLoop` - Pattern matching while loop
+/// * `WhileVarLoop` - Pattern matching while loop
 /// * `For` - For-in loop
 /// * `Unsafe` - Unsafe block
 #[derive(Debug, Clone)]
@@ -687,7 +687,7 @@ pub enum Stmt
 		else_branch: Option<Box<Stmt>>,
 	},
 
-	IfLet
+	IfVar
 	{
 		pattern: Pattern,
 		expr: Expr,
@@ -701,7 +701,7 @@ pub enum Stmt
 		body: Block,
 	},
 
-	WhileLetLoop
+	WhileVarLoop
 	{
 		pattern: Pattern,
 		expr: Expr,
@@ -733,7 +733,7 @@ pub enum Stmt
 /// ```
 /// // Block with tail expression:
 /// {
-///     let x = 5;
+///     var x = 5;
 ///     x + 1  // tail expression, block evaluates to 6
 /// }
 /// ```
@@ -758,21 +758,21 @@ pub enum BlockContent
 	TopLevelBlock(TopLevelBlock),
 }
 
-/// Match expression arm.
+/// Case expression arm.
 ///
-/// Represents a single arm in a match expression.
+/// Represents a single arm in a case expression.
 ///
 /// # Fields
 /// * `pattern` - Pattern to match against
 /// * `body` - Code to execute if pattern matches
 #[derive(Debug, Clone)]
-pub struct MatchArm
+pub struct CaseArm
 {
 	pub pattern: Pattern,
-	pub body: MatchBody,
+	pub body: CaseBody,
 }
 
-/// Match arm body types.
+/// Case arm body types.
 ///
 /// The body of a match arm can be either a single expression or a block.
 ///
@@ -780,7 +780,7 @@ pub struct MatchArm
 /// * `Expr` - Single expression (requires comma)
 /// * `Block` - Block of statements
 #[derive(Debug, Clone)]
-pub enum MatchBody
+pub enum CaseBody
 {
 	Expr(Expr),
 	Block(Block),
@@ -788,7 +788,7 @@ pub enum MatchBody
 
 /// Pattern matching patterns.
 ///
-/// Represents patterns that can appear in match expressions and if let/while let.
+/// Represents patterns that can appear in case expressions and if let/while let.
 ///
 /// # Variants
 /// * `Wildcard` - Catch-all pattern: `_`
@@ -1257,7 +1257,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Variant);
 				}
-				TokenKind::Let => {
+				TokenKind::Var => {
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Variable);
@@ -1350,7 +1350,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let tok: Token = self.next();
 		let span: Span = tok.span;
-		if !matches!(tok.kind, TokenKind::Const | TokenKind::Let) {
+		if !matches!(tok.kind, TokenKind::Const | TokenKind::Var) {
 			unreachable!(
 				"Bug: expected const or let for a variable declaration, got: {:?}",
 				tok.kind
@@ -1987,18 +1987,18 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(Expr::Block(Box::new(block)))
 			}
 
-			TokenKind::Match => {
+			TokenKind::Case => {
 				self.next(); // match
 				let expr: Expr = self.parse_expr()?;
 				self.expect(&TokenKind::LeftBrace)?;
 
-				let mut arms: Vec<MatchArm> = Vec::new();
+				let mut arms: Vec<CaseArm> = Vec::new();
 				while !self.at(&TokenKind::RightBrace) {
-					arms.push(self.parse_match_arm()?);
+					arms.push(self.parse_case_arm()?);
 				}
 
 				self.expect(&TokenKind::RightBrace)?;
-				Ok(Expr::Match {
+				Ok(Expr::Case {
 					expr: Box::new(expr),
 					arms,
 				})
@@ -2078,20 +2078,20 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(fields)
 	}
 
-	fn parse_match_arm(&mut self) -> Result<MatchArm, ParseError>
+	fn parse_case_arm(&mut self) -> Result<CaseArm, ParseError>
 	{
 		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::FatArrow)?; // =>
 
 		let body = if self.at(&TokenKind::LeftBrace) {
-			MatchBody::Block(self.parse_block()?)
+			CaseBody::Block(self.parse_block()?)
 		} else {
 			let expr = self.parse_expr()?;
 			self.expect(&TokenKind::Comma)?;
-			MatchBody::Expr(expr)
+			CaseBody::Expr(expr)
 		};
 
-		Ok(MatchArm { pattern, body })
+		Ok(CaseArm { pattern, body })
 	}
 
 	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
@@ -2284,7 +2284,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			let kind = self.peek_kind().clone();
 
 			match kind {
-				TokenKind::Let | TokenKind::Const => {
+				TokenKind::Var | TokenKind::Const => {
 					let var_decl = self.parse_var_decl()?;
 					self.expect(&TokenKind::Semicolon)?;
 					stmts.push(Stmt::VariableDecl(var_decl.node));
@@ -2320,12 +2320,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.next(); // while
 
-					if self.consume(&TokenKind::Let) {
+					if self.consume(&TokenKind::Var) {
 						let pattern: Pattern = self.parse_pattern()?;
 						self.expect(&TokenKind::Equals)?;
 						let expr: Expr = self.parse_expr()?;
 						let body: Block = self.parse_block()?;
-						stmts.push(Stmt::WhileLetLoop { pattern, expr, body });
+						stmts.push(Stmt::WhileVarLoop { pattern, expr, body });
 					} else {
 						self.lexer = checkpoint;
 						self.last_span = checkpoint_span;
@@ -2345,7 +2345,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.next(); // if
 
-					if self.consume(&TokenKind::Let) {
+					if self.consume(&TokenKind::Var) {
 						let pattern: Pattern = self.parse_pattern()?;
 						self.expect(&TokenKind::Equals)?;
 						let expr: Expr = self.parse_expr()?;
@@ -2353,7 +2353,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
 							if self.at(&TokenKind::If) {
-								Some(Box::new(self.parse_if_or_if_let()?))
+								Some(Box::new(self.parse_if_or_if_var()?))
 							} else {
 								let else_block: Block = self.parse_block()?;
 								Some(Box::new(Stmt::If {
@@ -2366,7 +2366,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							None
 						};
 
-						let if_let_stmt = Stmt::IfLet {
+						let if_var_stmt = Stmt::IfVar {
 							pattern,
 							expr,
 							then_block,
@@ -2374,12 +2374,12 @@ impl<'s, 'c> Parser<'s, 'c>
 						};
 
 						if self.consume(&TokenKind::Semicolon) {
-							stmts.push(if_let_stmt);
+							stmts.push(if_var_stmt);
 						} else if self.at(&TokenKind::RightBrace) {
-							tail_expr = Some(Box::new(self.stmt_if_to_expr_iflet(if_let_stmt)?));
+							tail_expr = Some(Box::new(self.stmt_if_to_expr_ifvar(if_var_stmt)?));
 							break;
 						} else {
-							stmts.push(if_let_stmt);
+							stmts.push(if_var_stmt);
 						}
 					} else {
 						self.lexer = checkpoint;
@@ -2464,7 +2464,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
 	{
-		!matches!(expr, Expr::Block(_) | Expr::Match { .. })
+		!matches!(expr, Expr::Block(_) | Expr::Case { .. })
 	}
 
 	fn is_assignment_op(&mut self) -> bool
@@ -2559,11 +2559,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		})
 	}
 
-	fn parse_if_or_if_let(&mut self) -> Result<Stmt, ParseError>
+	fn parse_if_or_if_var(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::If)?;
 
-		if self.consume(&TokenKind::Let) {
+		if self.consume(&TokenKind::Var) {
 			let pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
 			let expr = self.parse_expr()?;
@@ -2571,7 +2571,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let else_branch = if self.consume(&TokenKind::Else) {
 				if self.at(&TokenKind::If) {
-					Some(Box::new(self.parse_if_or_if_let()?))
+					Some(Box::new(self.parse_if_or_if_var()?))
 				} else {
 					let else_block = self.parse_block()?;
 					Some(Box::new(Stmt::If {
@@ -2584,7 +2584,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			Ok(Stmt::IfLet {
+			Ok(Stmt::IfVar {
 				pattern,
 				expr,
 				then_block,
@@ -2596,16 +2596,16 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn stmt_if_to_expr_iflet(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	fn stmt_if_to_expr_ifvar(&self, stmt: Stmt) -> Result<Expr, ParseError>
 	{
 		match stmt {
-			Stmt::IfLet {
+			Stmt::IfVar {
 				pattern,
 				expr,
 				then_block,
 				else_branch,
 			} => Ok(Expr::Block(Box::new(Block {
-				stmts: vec![Stmt::IfLet {
+				stmts: vec![Stmt::IfVar {
 					pattern,
 					expr,
 					then_block,
@@ -2613,7 +2613,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}],
 				tail_expr: None,
 			}))),
-			_ => unreachable!("Expected if let statement"),
+			_ => unreachable!("Expected if var statement"),
 		}
 	}
 
@@ -4042,7 +4042,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_block_with_statements()
 	{
-		let input = "{ let x: i32 = 5; x + 1 }";
+		let input = "{ var x: i32 = 5; x + 1 }";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 		match result.unwrap() {
@@ -4057,9 +4057,9 @@ mod parser_tests
 	// ========== Match Tests ==========
 
 	#[test]
-	fn test_parse_match_expression()
+	fn test_parse_case_expression()
 	{
-		let input = r#"match x {
+		let input = r#"case x {
             1 => 10,
             2 => 20,
             _ => 0,
@@ -4075,10 +4075,10 @@ mod parser_tests
 		}
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Match { expr: _, arms } => {
+			Expr::Case { expr: _, arms } => {
 				assert_eq!(arms.len(), 3);
 			}
-			_ => panic!("Expected match expression"),
+			_ => panic!("Expected case expression"),
 		}
 	}
 
@@ -4174,9 +4174,9 @@ mod parser_tests
 	// ========== Variable Declaration Tests ==========
 
 	#[test]
-	fn test_parse_let_declaration()
+	fn test_parse_var_declaration()
 	{
-		let input = "let x: i32 = 5;";
+		let input = "var x: i32 = 5;";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -4687,7 +4687,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_error_unexpected_token()
 	{
-		let result = parse_expr_from_str("let");
+		let result = parse_expr_from_str("var");
 		assert!(result.is_err());
 	}
 
@@ -4709,10 +4709,10 @@ mod parser_tests
 	}
 
 	#[test]
-	fn test_parse_if_let_basic()
+	fn test_parse_if_var_basic()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(x: i64) = opt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -4722,22 +4722,22 @@ mod parser_tests
 	}
 
 	#[test]
-	fn test_parse_if_let_with_else()
+	fn test_parse_if_var_with_else()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(x: i64) = opt { x } else { 0 }; }");
+		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } else { 0 }; }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 
 	#[test]
-	fn test_parse_if_let_else_if_let()
+	fn test_parse_if_var_else_if_var()
 	{
 		let config = Config::default();
 		let lexer = Lexer::new(
 			&config,
-			"{ if let Some(x: i32) = opt1 { x } else if let Some(y: i32) = opt2 { y } else { 0 }; }",
+			"{ if var Some(x: i32) = opt1 { x } else if var Some(y: i32) = opt2 { y } else { 0 }; }",
 		);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
@@ -4745,30 +4745,30 @@ mod parser_tests
 	}
 
 	#[test]
-	fn test_parse_if_let_tuple_pattern()
+	fn test_parse_if_var_tuple_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let (x: i32, y: i32) = pair { x + y } }");
+		let lexer = Lexer::new(&config, "{ if var (x: i32, y: i32) = pair { x + y } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 
 	#[test]
-	fn test_parse_if_let_wildcard()
+	fn test_parse_if_var_wildcard()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(_) = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(_) = opt { true } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
 	#[test]
-	fn test_parse_if_let_wildcard_with_type()
+	fn test_parse_if_var_wildcard_with_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(_: i64) = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(_: i64) = opt { true } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4780,14 +4780,14 @@ mod parser_tests
 	fn test_parse_while_let()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ while let Some(x: i32) = iter.next() { process(x); } }");
+		let lexer = Lexer::new(&config, "{ while var Some(x: i32) = iter.next() { process(x); } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
-			Stmt::WhileLetLoop { .. } => (),
-			_ => panic!("Expected while let loop"),
+			Stmt::WhileVarLoop { .. } => (),
+			_ => panic!("Expected while var loop"),
 		}
 	}
 
@@ -4795,7 +4795,7 @@ mod parser_tests
 	fn test_parse_while_let_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ while let (a: i32, b: i32) = get_pair() { } }");
+		let lexer = Lexer::new(&config, "{ while var (a: i32, b: i32) = get_pair() { } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4807,7 +4807,7 @@ mod parser_tests
 	fn test_parse_struct_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Point { x: i32, y: i32 } = pt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Point { x: i32, y: i32 } = pt { x } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4817,7 +4817,7 @@ mod parser_tests
 	fn test_parse_struct_pattern_nested()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Point { x: a: i32, y: b: i32 } = pt { a } }");
+		let lexer = Lexer::new(&config, "{ if var Point { x: a: i32, y: b: i32 } = pt { a } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4827,7 +4827,7 @@ mod parser_tests
 	fn test_parse_or_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(1) | Some(2) | Some(3) = x { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(1) | Some(2) | Some(3) = x { true } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4837,7 +4837,7 @@ mod parser_tests
 	fn test_parse_nested_variant_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some(Point { x: a: i32, y: b: i32 }) = opt { a } }");
+		let lexer = Lexer::new(&config, "{ if var Some(Point { x: a: i32, y: b: i32 }) = opt { a } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4847,7 +4847,7 @@ mod parser_tests
 	fn test_parse_variant_with_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let Some((x: i32, y: i32)) = opt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Some((x: i32, y: i32)) = opt { x } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -4857,17 +4857,17 @@ mod parser_tests
 	fn test_parse_unit_variant()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if let None = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var None = opt { true } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
 	#[test]
-	fn test_parse_match_with_typed_patterns()
+	fn test_parse_case_with_typed_patterns()
 	{
 		let input = r#"
-			match x {
+			case x {
 				Some(val: i32) => val,
 				None => 0,
 			}

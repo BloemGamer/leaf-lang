@@ -16,7 +16,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// # Example
 	/// ```
 	/// let config = Config::default();
-	/// let lexer = Lexer::new(&config, "fn main() {}");
+	/// let lexer = Lexer::new(&config, "func main() {}");
 	/// let (config_ref, lexer) = lexer.into_parts();
 	/// // Now both config_ref and lexer can be used independently
 	/// ```
@@ -41,7 +41,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 /// # Example
 /// ```
 /// let config = Config::default();
-/// let source = "fn main() { let x = 42; }";
+/// let source = "func main() { var x = 42; }";
 /// let mut lexer = Lexer::new(&config, source);
 ///
 /// while let Some(token) = lexer.next() {
@@ -209,8 +209,8 @@ pub enum TokenKind
 	While,
 	/// Iterator loop: `for`
 	For,
-	/// Pattern matching: `match`
-	Match,
+	/// Pattern matching: `case`
+	Case,
 	/// Return from function: `return`
 	Return,
 	/// Exit loop: `break`
@@ -227,8 +227,8 @@ pub enum TokenKind
 	FuncDef,
 	/// Constant declaration: `const`
 	Const,
-	/// Variable declaration: `let`
-	Let,
+	/// Variable declaration: `var`
+	Var,
 	/// Static variable: `static`
 	Static,
 	/// Structure definition: `struct`
@@ -383,7 +383,7 @@ pub enum TokenKind
 	Ellipsis,
 	/// Function return type: `->`
 	Arrow,
-	/// Match arm: `=>`
+	/// Case arm: `=>`
 	FatArrow,
 	/// Optional/error propagation: `?`
 	QuestionMark,
@@ -478,7 +478,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// # Example
 	/// ```
 	/// let config = Config::default();
-	/// let source = "let x = 42;";
+	/// let source = "var x = 42;";
 	/// let lexer = Lexer::new(&config, source);
 	/// ```
 	#[allow(unused)]
@@ -1033,14 +1033,14 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"else" => TokenKind::Else,
 			"while" => TokenKind::While,
 			"for" => TokenKind::For,
-			"match" => TokenKind::Match,
+			"case" => TokenKind::Case,
 			"return" => TokenKind::Return,
 			"break" => TokenKind::Break,
 			"continue" => TokenKind::Continue,
 			"namespace" => TokenKind::Namespace,
 			"fn" => TokenKind::FuncDef,
 			"const" => TokenKind::Const,
-			"let" => TokenKind::Let,
+			"var" => TokenKind::Var,
 			"static" => TokenKind::Static,
 			"struct" => TokenKind::Struct,
 			"union" => TokenKind::Union,
@@ -1216,7 +1216,7 @@ impl Token
 	/// println!("{}", error);
 	/// // Output:
 	/// // Error at 1:20: unexpected token
-	/// //   | let x = Vec<Vec<int>>;
+	/// //   | var x = Vec<Vec<int>>;
 	/// //   |                    ^^
 	/// ```
 	#[allow(unused)]
@@ -1273,7 +1273,7 @@ mod tests
 	#[test]
 	fn test_basic_tokens()
 	{
-		let source = "let x = 42 + 3.14;";
+		let source = "var x = 42 + 3.14;";
 		let config = Config::default();
 		let lexer = Lexer::new(&config, source);
 
@@ -1478,7 +1478,7 @@ mod tests
 	#[test]
 	fn test_control_flow_keywords()
 	{
-		let kinds = lex_kinds("if else while for match return break continue");
+		let kinds = lex_kinds("if else while for case return break continue");
 		assert_eq!(
 			kinds,
 			vec![
@@ -1486,7 +1486,7 @@ mod tests
 				TokenKind::Else,
 				TokenKind::While,
 				TokenKind::For,
-				TokenKind::Match,
+				TokenKind::Case,
 				TokenKind::Return,
 				TokenKind::Break,
 				TokenKind::Continue,
@@ -1962,13 +1962,13 @@ mod tests
 	}
 
 	#[test]
-	fn test_match_expression()
+	fn test_case_expression()
 	{
-		let kinds = lex_kinds("match x { 0 => true, _ => false }");
+		let kinds = lex_kinds("case x { 0 => true, _ => false }");
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::Match,
+				TokenKind::Case,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::LeftBrace,
 				TokenKind::IntLiteral(0),
@@ -2014,7 +2014,7 @@ mod tests
 	#[test]
 	fn test_format_error()
 	{
-		let source = "let x = 42;";
+		let source = "var x = 42;";
 		let token = Token {
 			kind: TokenKind::IntLiteral(42),
 			span: Span {
@@ -2030,14 +2030,14 @@ mod tests
 		let error = token.format_error(source, "unexpected number");
 		assert!(error.contains("Error at 1:9"));
 		assert!(error.contains("unexpected number"));
-		assert!(error.contains("let x = 42;"));
+		assert!(error.contains("var x = 42;"));
 		assert!(error.contains("^^"));
 	}
 
 	#[test]
 	fn test_format_error_multiline()
 	{
-		let source = "let x = 42;\nlet y = 100;";
+		let source = "var x = 42;\nvar y = 100;";
 		let token = Token {
 			kind: TokenKind::IntLiteral(100),
 			span: Span {
@@ -2053,7 +2053,7 @@ mod tests
 		let error = token.format_error(source, "value too large");
 		assert!(error.contains("Error at 2:9"));
 		assert!(error.contains("value too large"));
-		assert!(error.contains("let y = 100;"));
+		assert!(error.contains("var y = 100;"));
 		assert!(error.contains("^^^"));
 	}
 }
