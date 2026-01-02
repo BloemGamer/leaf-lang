@@ -128,47 +128,14 @@ impl Desugarer
 	{
 		return match stmt {
 			Stmt::For { name, iter, body } => self.desugar_for_loop(name, iter, body),
-
 			Stmt::If {
 				cond,
 				then_block,
-				else_branch: None,
-			} => {
-				// Don't add else branch to "if true" wrappers created by the parser
-				let desugared_cond = self.desugar_expr(cond);
-				let desugared_then = self.desugar_block(then_block);
-
-				match desugared_cond {
-					Expr::Literal(crate::parser::Literal::Bool(true)) => {
-						// This is a wrapper created by the parser, don't add else
-						Stmt::If {
-							cond: desugared_cond,
-							then_block: desugared_then,
-							else_branch: None,
-						}
-					}
-					_ => {
-						// Regular if statement, add empty else block
-						Stmt::If {
-							cond: desugared_cond,
-							then_block: desugared_then,
-							else_branch: Some(Box::new(Stmt::Expr(Expr::Block(Box::new(Block {
-								stmts: vec![],
-								tail_expr: None,
-							}))))),
-						}
-					}
-				}
-			}
-
-			Stmt::If {
-				cond,
-				then_block,
-				else_branch: Some(else_stmt),
+				else_branch: else_stmt,
 			} => Stmt::If {
 				cond: self.desugar_expr(cond),
 				then_block: self.desugar_block(then_block),
-				else_branch: Some(Box::new(self.desugar_stmt(*else_stmt))),
+				else_branch: else_stmt.map(|else_stmt| Box::new(self.desugar_stmt(*else_stmt))),
 			},
 
 			Stmt::IfVar {
@@ -558,33 +525,6 @@ mod tests
 	fn ident(name: &str) -> Expr
 	{
 		Expr::Identifier(vec![name.to_string()])
-	}
-
-	#[test]
-	fn test_desugar_if_without_else()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::If {
-			cond: Expr::Literal(Literal::Bool(true)),
-			then_block: Block {
-				stmts: vec![],
-				tail_expr: None,
-			},
-			else_branch: None,
-		};
-
-		let output = desugarer.desugar_stmt(input);
-
-		// Should add an empty else block
-		match output {
-			Stmt::If {
-				else_branch: Some(_), ..
-			} => {
-				// Success - else branch was added
-			}
-			_ => panic!("Expected if-else, got {:?}", output),
-		}
 	}
 
 	#[test]
