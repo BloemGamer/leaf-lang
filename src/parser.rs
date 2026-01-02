@@ -3436,6 +3436,997 @@ impl<'s, 'c> Parser<'s, 'c>
 	}
 }
 
+use std::fmt;
+
+struct IndentWriter
+{
+	indent_level: usize,
+	indent_str: &'static str,
+}
+
+impl IndentWriter
+{
+	fn new() -> Self
+	{
+		Self {
+			indent_level: 0,
+			indent_str: "    ", // 4 spaces
+		}
+	}
+
+	fn indent(&mut self)
+	{
+		self.indent_level += 1;
+	}
+
+	fn dedent(&mut self)
+	{
+		if self.indent_level > 0 {
+			self.indent_level -= 1;
+		}
+	}
+
+	fn write_indent(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		for _ in 0..self.indent_level {
+			write!(f, "{}", self.indent_str)?;
+		}
+		Ok(())
+	}
+}
+
+impl fmt::Display for Program
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		let mut writer: IndentWriter = IndentWriter::new();
+		for item in &self.items {
+			write_top_level_decl(f, &mut writer, &item.node)?;
+			writeln!(f)?; // Add blank line between top-level items
+		}
+		Ok(())
+	}
+}
+
+fn write_top_level_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, decl: &TopLevelDecl) -> fmt::Result
+{
+	match decl {
+		TopLevelDecl::Function(func) => write_function_decl(f, w, func),
+		TopLevelDecl::VariableDecl(var) => {
+			write_variable_decl(f, w, var)?;
+			write!(f, ";")
+		}
+		TopLevelDecl::Struct(s) => write_struct_decl(f, w, s),
+		TopLevelDecl::Union(u) => write_union_decl(f, w, u),
+		TopLevelDecl::Enum(e) => write_enum_decl(f, w, e),
+		TopLevelDecl::Variant(v) => write_variant_decl(f, w, v),
+		TopLevelDecl::TypeAlias(t) => {
+			write_type_alias_decl(f, w, t)?;
+			write!(f, ";")
+		}
+		TopLevelDecl::Trait(t) => write_trait_decl(f, w, t),
+		TopLevelDecl::Namespace(n) => write_namespace_decl(f, w, n),
+		TopLevelDecl::Impl(i) => write_impl_decl(f, w, i),
+		TopLevelDecl::Directive(d) => {
+			write!(f, "{};", d)
+		}
+	}
+}
+
+impl fmt::Display for Modifier
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			Modifier::Pub => write!(f, "pub"),
+			Modifier::Unsafe => write!(f, "unsafe"),
+			Modifier::Inline => write!(f, "inline"),
+			Modifier::Const => write!(f, "const"),
+			Modifier::Volatile => write!(f, "volatile"),
+			Modifier::Directive(d) => write!(f, "{}", d),
+		}
+	}
+}
+
+impl fmt::Display for Directive
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			Directive::Import(path) => write!(f, "@import \"{}\"", path),
+			Directive::Use(path) => write!(f, "@use {}", path.join("::")),
+			Directive::Custom { name, args } => {
+				write!(f, "@{}", name)?;
+				if !args.is_empty() {
+					write!(f, "(")?;
+					for (i, arg) in args.iter().enumerate() {
+						if i > 0 {
+							write!(f, ", ")?;
+						}
+						write!(f, "{}", arg)?;
+					}
+					write!(f, ")")?;
+				}
+				Ok(())
+			}
+		}
+	}
+}
+
+fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &FunctionDecl) -> fmt::Result
+{
+	write_function_signature(f, w, &func.signature)?;
+
+	if let Some(body) = &func.body {
+		write!(f, " ")?;
+		write_block(f, w, body)?;
+	} else {
+		write!(f, ";")?;
+	}
+
+	Ok(())
+}
+
+fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, sig: &FunctionSignature) -> fmt::Result
+{
+	for modifier in &sig.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	write!(f, "fn")?;
+
+	if sig.heap_func {
+		write!(f, "!")?;
+	}
+
+	write!(f, " {}", sig.name.join("::"))?;
+
+	if !sig.generics.is_empty() {
+		write!(f, "<{}>", sig.generics.join(", "))?;
+	}
+
+	write!(f, "(")?;
+	for (i, param) in sig.params.iter().enumerate() {
+		if i > 0 {
+			write!(f, ", ")?;
+		}
+		write!(f, "{}", param)?;
+	}
+	write!(f, ")")?;
+
+	if let Some(ret_ty) = &sig.return_type {
+		write!(f, " -> {}", ret_ty)?;
+	}
+
+	if !sig.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in sig.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	Ok(())
+}
+
+impl fmt::Display for Param
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}: {}", self.name.join("::"), self.ty)
+	}
+}
+
+impl fmt::Display for Type
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		for modifier in &self.modifiers {
+			write!(f, "{} ", modifier)?;
+		}
+
+		write!(f, "{}", self.core)
+	}
+}
+
+impl fmt::Display for TypeCore
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			TypeCore::Base { path, generics } => {
+				write!(f, "{}", path.join("::"))?;
+				if !generics.is_empty() {
+					write!(f, "<")?;
+					for (i, generic) in generics.iter().enumerate() {
+						if i > 0 {
+							write!(f, ", ")?;
+						}
+						write!(f, "{}", generic)?;
+					}
+					write!(f, ">")?;
+				}
+				Ok(())
+			}
+			TypeCore::Reference { mutable, inner } => {
+				write!(f, "&")?;
+				if *mutable {
+					write!(f, "mut ")?;
+				}
+				write!(f, "{}", inner)
+			}
+			TypeCore::Pointer { inner } => {
+				write!(f, "{}*", inner)
+			}
+			TypeCore::Array { inner, size } => {
+				write!(f, "{}[{}]", inner, size)
+			}
+			TypeCore::Tuple(types) => {
+				write!(f, "(")?;
+				for (i, ty) in types.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", ty)?;
+				}
+				write!(f, ")")
+			}
+		}
+	}
+}
+
+fn write_variable_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, var: &VariableDecl) -> fmt::Result
+{
+	if var.comp_const {
+		write!(f, "const ")?;
+	} else {
+		write!(f, "var ")?;
+	}
+
+	write!(f, "{}", var.pattern)?;
+
+	if let Some(init) = &var.init {
+		write!(f, " = {}", init)?;
+	}
+
+	Ok(())
+}
+
+impl fmt::Display for Pattern
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			Pattern::Wildcard => write!(f, "_"),
+			Pattern::Literal(lit) => write!(f, "{}", lit),
+			Pattern::TypedIdentifier { name, ty } => write!(f, "{}: {}", name, ty),
+			Pattern::Variant { path, args } => {
+				write!(f, "{}", path.join("::"))?;
+				if !args.is_empty() {
+					write!(f, "(")?;
+					for (i, arg) in args.iter().enumerate() {
+						if i > 0 {
+							write!(f, ", ")?;
+						}
+						write!(f, "{}", arg)?;
+					}
+					write!(f, ")")?;
+				}
+				Ok(())
+			}
+			Pattern::Tuple(patterns) => {
+				write!(f, "(")?;
+				for (i, pat) in patterns.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", pat)?;
+				}
+				write!(f, ")")
+			}
+			Pattern::Struct { path, fields } => {
+				write!(f, "{} {{", path.join("::"))?;
+				for (i, (name, pat)) in fields.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}: {}", name, pat)?;
+				}
+				write!(f, "}}")
+			}
+			Pattern::Range(range) => write!(f, "{}", range),
+			Pattern::Or(patterns) => {
+				for (i, pat) in patterns.iter().enumerate() {
+					if i > 0 {
+						write!(f, " | ")?;
+					}
+					write!(f, "{}", pat)?;
+				}
+				Ok(())
+			}
+		}
+	}
+}
+
+impl fmt::Display for Expr
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			Expr::Identifier(path) => write!(f, "{}", path.join("::")),
+			Expr::Literal(lit) => write!(f, "{}", lit),
+			Expr::Unary { op, expr } => match op {
+				UnaryOp::Neg => write!(f, "-{}", expr),
+				UnaryOp::Not => write!(f, "!{}", expr),
+				UnaryOp::Deref => write!(f, "*{}", expr),
+				UnaryOp::Addr { mutable } => {
+					if *mutable {
+						write!(f, "&mut {}", expr)
+					} else {
+						write!(f, "&{}", expr)
+					}
+				}
+			},
+			Expr::Binary { op, lhs, rhs } => {
+				write!(f, "({} {} {})", lhs, op, rhs)
+			}
+			Expr::Cast { ty, expr } => {
+				write!(f, "({}) {}", ty, expr)
+			}
+			Expr::Call { callee, args } => {
+				write!(f, "{}(", callee)?;
+				for (i, arg) in args.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", arg)?;
+				}
+				write!(f, ")")
+			}
+			Expr::Field { base, name } => {
+				write!(f, "{}.{}", base, name)
+			}
+			Expr::Index { base, index } => {
+				write!(f, "{}[{}]", base, index)
+			}
+			Expr::Range(range) => write!(f, "{}", range),
+			Expr::Tuple(exprs) => {
+				write!(f, "(")?;
+				for (i, expr) in exprs.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", expr)?;
+				}
+				write!(f, ")")
+			}
+			Expr::Array(arr) => write!(f, "{}", arr),
+			Expr::StructInit { path, fields } => {
+				write!(f, "{} {{", path.join("::"))?;
+				for (i, (name, expr)) in fields.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{} = {}", name, expr)?;
+				}
+				write!(f, "}}")
+			}
+			Expr::Block(block) => {
+				let mut w = IndentWriter::new();
+				write_block(f, &mut w, block)
+			}
+			Expr::Case { expr, arms } => {
+				// For case expressions, create a writer to handle indentation
+				let mut w = IndentWriter::new();
+				write_case(f, &mut w, expr, arms)
+			}
+		}
+	}
+}
+
+fn write_case(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[CaseArm]) -> fmt::Result
+{
+	writeln!(f, "case {} {{", expr)?;
+	w.indent();
+
+	for arm in arms {
+		w.write_indent(f)?;
+		write!(f, "{} => ", arm.pattern)?;
+		match &arm.body {
+			CaseBody::Expr(e) => {
+				write_expr(f, w, e)?;
+				writeln!(f, ",")?;
+			}
+			CaseBody::Block(b) => {
+				write_block(f, w, b)?;
+				writeln!(f, ",")?;
+			}
+		}
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+impl fmt::Display for Literal
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			Literal::Int(n) => write!(f, "{}", n),
+			Literal::Float(fl) => write!(f, "{}", fl),
+			Literal::Bool(b) => write!(f, "{}", b),
+			Literal::String(s) => write!(f, "\"{}\"", s),
+			Literal::Char(c) => write!(f, "'{}'", c),
+		}
+	}
+}
+
+impl fmt::Display for ArrayLiteral
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			ArrayLiteral::List(exprs) => {
+				write!(f, "[")?;
+				for (i, expr) in exprs.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", expr)?;
+				}
+				write!(f, "]")
+			}
+			ArrayLiteral::Repeat { value, count } => {
+				write!(f, "[")?;
+				for (i, expr) in value.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", expr)?;
+				}
+				write!(f, "; {}]", count)
+			}
+		}
+	}
+}
+
+impl fmt::Display for BinaryOp
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			BinaryOp::LogicalOr => write!(f, "||"),
+			BinaryOp::LogicalAnd => write!(f, "&&"),
+			BinaryOp::Eq => write!(f, "=="),
+			BinaryOp::Ne => write!(f, "!="),
+			BinaryOp::Lt => write!(f, "<"),
+			BinaryOp::Gt => write!(f, ">"),
+			BinaryOp::Le => write!(f, "<="),
+			BinaryOp::Ge => write!(f, ">="),
+			BinaryOp::Add => write!(f, "+"),
+			BinaryOp::Sub => write!(f, "-"),
+			BinaryOp::Mul => write!(f, "*"),
+			BinaryOp::Div => write!(f, "/"),
+			BinaryOp::Mod => write!(f, "%"),
+			BinaryOp::BitAnd => write!(f, "&"),
+			BinaryOp::BitOr => write!(f, "|"),
+			BinaryOp::BitXor => write!(f, "^"),
+			BinaryOp::Shl => write!(f, "<<"),
+			BinaryOp::Shr => write!(f, ">>"),
+		}
+	}
+}
+
+impl fmt::Display for RangeExpr
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		if let Some(start) = &self.start {
+			write!(f, "{}", start)?;
+		}
+
+		if self.inclusive {
+			write!(f, "..=")?;
+		} else {
+			write!(f, "..")?;
+		}
+
+		if let Some(end) = &self.end {
+			write!(f, "{}", end)?;
+		}
+
+		Ok(())
+	}
+}
+
+fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) -> fmt::Result
+{
+	writeln!(f, "{{")?;
+	w.indent();
+
+	for stmt in &block.stmts {
+		write_stmt(f, w, stmt)?;
+		writeln!(f)?;
+	}
+
+	if let Some(tail) = &block.tail_expr {
+		w.write_indent(f)?;
+		write_expr(f, w, tail)?;
+		writeln!(f)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> fmt::Result
+{
+	match expr {
+		Expr::Case { expr: case_expr, arms } => write_case(f, w, case_expr, arms),
+		Expr::Block(block) => write_block(f, w, block),
+		_ => write!(f, "{}", expr),
+	}
+}
+
+fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
+{
+	w.write_indent(f)?;
+	match stmt {
+		Stmt::VariableDecl(var) => {
+			write_variable_decl(f, w, var)?;
+			write!(f, ";")
+		}
+		Stmt::Assignment { target, op, value } => {
+			write!(f, "{} {} {};", target, op, value)
+		}
+		Stmt::Return(expr) => {
+			write!(f, "return")?;
+			if let Some(e) = expr {
+				write!(f, " {}", e)?;
+			}
+			write!(f, ";")
+		}
+		Stmt::Expr(expr) => match expr {
+			Expr::Case { expr: case_expr, arms } => {
+				write_case(f, w, case_expr, arms)?;
+				write!(f, ";")
+			}
+			Expr::Block(block) => {
+				write_block(f, w, block)?;
+				write!(f, ";")
+			}
+			_ => write!(f, "{};", expr),
+		},
+		Stmt::Break => write!(f, "break;"),
+		Stmt::Continue => write!(f, "continue;"),
+		Stmt::If {
+			cond,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if {} ", cond)?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_stmt_no_indent(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
+		Stmt::IfVar {
+			pattern,
+			expr,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if var {} = {} ", pattern, expr)?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_stmt_no_indent(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
+		Stmt::While { cond, body } => {
+			write!(f, "while {} ", cond)?;
+			write_block(f, w, body)
+		}
+		Stmt::Loop { body } => {
+			write!(f, "loop ")?;
+			write_block(f, w, body)
+		}
+		Stmt::WhileVarLoop { pattern, expr, body } => {
+			write!(f, "while var {} = {} ", pattern, expr)?;
+			write_block(f, w, body)
+		}
+		Stmt::For { name, iter, body } => {
+			write!(f, "for {} in {} ", name.join("::"), iter)?;
+			write_block(f, w, body)
+		}
+		Stmt::Delete(path) => {
+			write!(f, "delete {};", path.join("::"))
+		}
+		Stmt::Unsafe(block) => {
+			write!(f, "unsafe ")?;
+			write_block(f, w, block)
+		}
+	}
+}
+
+fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
+{
+	match stmt {
+		Stmt::VariableDecl(var) => {
+			write_variable_decl(f, w, var)?;
+			write!(f, ";")
+		}
+		Stmt::Assignment { target, op, value } => {
+			write!(f, "{} {} {};", target, op, value)
+		}
+		Stmt::Return(expr) => {
+			write!(f, "return")?;
+			if let Some(e) = expr {
+				write!(f, " {}", e)?;
+			}
+			write!(f, ";")
+		}
+		Stmt::Expr(expr) => match expr {
+			Expr::Case { expr: case_expr, arms } => {
+				write_case(f, w, case_expr, arms)?;
+				write!(f, ";")
+			}
+			Expr::Block(block) => {
+				write_block(f, w, block)?;
+				write!(f, ";")
+			}
+			_ => write!(f, "{};", expr),
+		},
+		Stmt::Break => write!(f, "break;"),
+		Stmt::Continue => write!(f, "continue;"),
+		Stmt::If {
+			cond,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if {} ", cond)?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_stmt_no_indent(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
+		Stmt::IfVar {
+			pattern,
+			expr,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if var {} = {} ", pattern, expr)?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_stmt_no_indent(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
+		Stmt::While { cond, body } => {
+			write!(f, "while {} ", cond)?;
+			write_block(f, w, body)
+		}
+		Stmt::Loop { body } => {
+			write!(f, "loop ")?;
+			write_block(f, w, body)
+		}
+		Stmt::WhileVarLoop { pattern, expr, body } => {
+			write!(f, "while var {} = {} ", pattern, expr)?;
+			write_block(f, w, body)
+		}
+		Stmt::For { name, iter, body } => {
+			write!(f, "for {} in {} ", name.join("::"), iter)?;
+			write_block(f, w, body)
+		}
+		Stmt::Delete(path) => {
+			write!(f, "delete {};", path.join("::"))
+		}
+		Stmt::Unsafe(block) => {
+			write!(f, "unsafe ")?;
+			write_block(f, w, block)
+		}
+	}
+}
+
+impl fmt::Display for AssignOp
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			AssignOp::Assign => write!(f, "="),
+			AssignOp::AddAssign => write!(f, "+="),
+			AssignOp::SubAssign => write!(f, "-="),
+			AssignOp::MulAssign => write!(f, "*="),
+			AssignOp::DivAssign => write!(f, "/="),
+			AssignOp::ModAssign => write!(f, "%="),
+			AssignOp::AndAssign => write!(f, "&="),
+			AssignOp::OrAssign => write!(f, "|="),
+			AssignOp::XorAssign => write!(f, "^="),
+			AssignOp::ShlAssign => write!(f, "<<="),
+			AssignOp::ShrAssign => write!(f, ">>="),
+		}
+	}
+}
+
+fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &StructDecl) -> fmt::Result
+{
+	for modifier in &s.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	writeln!(f, "struct {} {{", s.name.join("::"))?;
+	w.indent();
+
+	for (ty, name) in &s.fields {
+		w.write_indent(f)?;
+		writeln!(f, "{}: {},", name, ty)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionDecl) -> fmt::Result
+{
+	for modifier in &u.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	writeln!(f, "union {} {{", u.name.join("::"))?;
+	w.indent();
+
+	for (ty, name) in &u.fields {
+		w.write_indent(f)?;
+		writeln!(f, "{}: {},", name, ty)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDecl) -> fmt::Result
+{
+	for modifier in &e.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	writeln!(f, "enum {} {{", e.name.join("::"))?;
+	w.indent();
+
+	for (name, value) in &e.variants {
+		w.write_indent(f)?;
+		if let Some(val) = value {
+			writeln!(f, "{} = {},", name, val)?;
+		} else {
+			writeln!(f, "{},", name)?;
+		}
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &VariantDecl) -> fmt::Result
+{
+	for modifier in &v.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	writeln!(f, "variant {} {{", v.name.join("::"))?;
+	w.indent();
+
+	for (ty, name) in &v.variants {
+		w.write_indent(f)?;
+		if let Some(t) = ty {
+			writeln!(f, "{}({}),", name, t)?;
+		} else {
+			writeln!(f, "{},", name)?;
+		}
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &TypeAliasDecl) -> fmt::Result
+{
+	for modifier in &t.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	write!(f, "type {} = {}", t.name.join("::"), t.ty)
+}
+
+fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result
+{
+	for modifier in &n.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	writeln!(f, "namespace {} {{", n.name.join("::"))?;
+	w.indent();
+
+	for item in &n.body.items {
+		w.write_indent(f)?;
+		write_top_level_decl(f, w, &item.node)?;
+		writeln!(f)?;
+		writeln!(f)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result
+{
+	for modifier in &t.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	write!(f, "trait {}", t.name.join("::"))?;
+
+	if !t.generics.is_empty() {
+		write!(f, "<{}>", t.generics.join(", "))?;
+	}
+
+	if !t.super_traits.is_empty() {
+		write!(f, ": ")?;
+		for (i, st) in t.super_traits.iter().enumerate() {
+			if i > 0 {
+				write!(f, " + ")?;
+			}
+			write!(f, "{}", st.join("::"))?;
+		}
+	}
+
+	writeln!(f, " {{")?;
+	w.indent();
+
+	for item in &t.items {
+		w.write_indent(f)?;
+		write_trait_item(f, w, &item.node)?;
+		writeln!(f)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &TraitItem) -> fmt::Result
+{
+	match item {
+		TraitItem::Function(sig, body) => {
+			write_function_signature(f, w, sig)?;
+			if let Some(b) = body {
+				write!(f, " ")?;
+				write_block(f, w, b)
+			} else {
+				write!(f, ";")
+			}
+		}
+		TraitItem::TypeAlias(ta) => {
+			write_type_alias_decl(f, w, ta)?;
+			write!(f, ";")
+		}
+		TraitItem::Const(var) => {
+			write_variable_decl(f, w, var)?;
+			write!(f, ";")
+		}
+	}
+}
+
+fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDecl) -> fmt::Result
+{
+	for modifier in &i.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	write!(f, "impl")?;
+
+	if !i.generics.is_empty() {
+		write!(f, "<{}>", i.generics.join(", "))?;
+	}
+
+	if let Some(trait_path) = &i.trait_path {
+		write!(f, " {}", trait_path)?;
+		write!(f, " for")?;
+	}
+
+	write!(f, " {}", i.target)?;
+
+	if !i.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in i.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	writeln!(f, " {{")?;
+	w.indent();
+
+	for item in &i.body {
+		w.write_indent(f)?;
+		write_impl_item(f, w, &item.node)?;
+		writeln!(f)?;
+	}
+
+	w.dedent();
+	w.write_indent(f)?;
+	write!(f, "}}")
+}
+
+fn write_impl_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &ImplItem) -> fmt::Result
+{
+	match item {
+		ImplItem::Function(func) => write_function_decl(f, w, func),
+		ImplItem::TypeAlias(ta) => {
+			write_type_alias_decl(f, w, ta)?;
+			write!(f, ";")
+		}
+		ImplItem::Const(var) => {
+			write_variable_decl(f, w, var)?;
+			write!(f, ";")
+		}
+	}
+}
+
+impl fmt::Display for ImplTarget
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}", self.path.join("::"))?;
+
+		if !self.generics.is_empty() {
+			write!(f, "<")?;
+			for (i, generic) in self.generics.iter().enumerate() {
+				if i > 0 {
+					write!(f, ", ")?;
+				}
+				write!(f, "{}", generic)?;
+			}
+			write!(f, ">")?;
+		}
+
+		Ok(())
+	}
+}
+
+impl fmt::Display for WhereConstraint
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}: ", self.ty.join("::"))?;
+		for (i, bound) in self.bounds.iter().enumerate() {
+			if i > 0 {
+				write!(f, " + ")?;
+			}
+			write!(f, "{}", bound.join("::"))?;
+		}
+		Ok(())
+	}
+}
+
 #[cfg(test)]
 mod parser_tests
 {
