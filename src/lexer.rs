@@ -209,6 +209,8 @@ pub enum TokenKind
 	While,
 	/// Iterator loop: `for`
 	For,
+	/// Loop: `loop`
+	Loop,
 	/// Pattern matching: `case`
 	Case,
 	/// Return from function: `return`
@@ -1033,6 +1035,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"else" => TokenKind::Else,
 			"while" => TokenKind::While,
 			"for" => TokenKind::For,
+			"loop" => TokenKind::Loop,
 			"case" => TokenKind::Case,
 			"return" => TokenKind::Return,
 			"break" => TokenKind::Break,

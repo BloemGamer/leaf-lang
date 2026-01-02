@@ -701,6 +701,11 @@ pub enum Stmt
 		body: Block,
 	},
 
+	Loop
+	{
+		body: Block,
+	},
+
 	WhileVarLoop
 	{
 		pattern: Pattern,
@@ -2338,6 +2343,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					stmts.push(self.parse_for()?);
 				}
 
+				TokenKind::Loop => {
+					stmts.push(self.parse_loop()?);
+				}
+
 				TokenKind::If => {
 					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
 					let checkpoint_span: Span = self.last_span;
@@ -2636,6 +2645,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		let body = self.parse_block()?;
 
 		Ok(Stmt::For { name, iter, body })
+	}
+
+	fn parse_loop(&mut self) -> Result<Stmt, ParseError>
+	{
+		self.expect(&TokenKind::Loop)?;
+		return Ok(Stmt::Loop {
+			body: self.parse_block()?,
+		});
 	}
 
 	fn parse_function_decl(&mut self) -> Result<Spanned<FunctionDecl>, ParseError>
