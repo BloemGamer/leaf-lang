@@ -126,6 +126,10 @@ impl Desugarer
 
 	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
 	{
+		debug_assert!(
+			!matches!(stmt, Stmt::Expr(Expr::Block(_))),
+			"This should just be Stmt::Block(_)"
+		);
 		return match stmt {
 			Stmt::For { name, iter, body } => self.desugar_for_loop(name, iter, body),
 			Stmt::If {
@@ -169,10 +173,10 @@ impl Desugarer
 			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)),
 
 			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)),
+			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)),
 
 			Stmt::Delete(path) => Stmt::Delete(path),
 
-			// Bre
 			Stmt::Break => Stmt::Break,
 			Stmt::Continue => Stmt::Continue,
 		};
@@ -245,10 +249,10 @@ impl Desugarer
 				path: vec!["None".to_string()],
 				args: vec![],
 			},
-			body: CaseBody::Expr(Expr::Block(Box::new(Block {
+			body: CaseBody::Block(Block {
 				stmts: vec![Stmt::Break],
 				tail_expr: None,
-			}))),
+			}),
 		};
 
 		let case_expr: Expr = Expr::Case {
@@ -263,10 +267,10 @@ impl Desugarer
 			},
 		};
 
-		return Stmt::Expr(Expr::Block(Box::new(Block {
+		return Stmt::Block(Block {
 			stmts: vec![iter_decl, loop_stmt],
 			tail_expr: None,
-		})));
+		});
 	}
 
 	/// Desugar an if-var statement into a case expression.
@@ -319,27 +323,17 @@ impl Desugarer
 		});
 
 		let match_arm: CaseArm = CaseArm {
-			pattern,
+			pattern: self.desugar_pattern(pattern),
 			body: CaseBody::Block(desugared_then),
 		};
 
 		let else_arm: CaseArm = CaseArm {
 			pattern: Pattern::Wildcard,
 			body: if let Some(else_stmt) = else_branch {
-				let desugared_else = self.desugar_stmt(*else_stmt);
-				// Unwrap the "if true { block } else {}" wrapper that the parser creates
-				match desugared_else {
-					Stmt::If {
-						cond: Expr::Literal(crate::parser::Literal::Bool(true)),
-						then_block: block,
-						else_branch: None,
-					} => CaseBody::Block(block),
-					// If it's another if statement (else if), wrap it
-					other => CaseBody::Block(Block {
-						stmts: vec![other],
-						tail_expr: None,
-					}),
-				}
+				CaseBody::Block(Block {
+					stmts: vec![self.desugar_stmt(*else_stmt)],
+					tail_expr: None,
+				})
 			} else {
 				CaseBody::Block(Block {
 					stmts: vec![],
@@ -353,10 +347,10 @@ impl Desugarer
 			arms: vec![match_arm, else_arm],
 		};
 
-		return Stmt::Expr(Expr::Block(Box::new(Block {
+		return Stmt::Block(Block {
 			stmts: vec![temp_decl, Stmt::Expr(case_expr)],
 			tail_expr: None,
-		})));
+		});
 	}
 
 	/// Desugar a while-var loop into a regular loop with pattern matching.
@@ -401,16 +395,16 @@ impl Desugarer
 		});
 
 		let match_arm: CaseArm = CaseArm {
-			pattern,
+			pattern: self.desugar_pattern(pattern),
 			body: CaseBody::Block(desugared_body),
 		};
 
 		let break_arm: CaseArm = CaseArm {
 			pattern: Pattern::Wildcard,
-			body: CaseBody::Expr(Expr::Block(Box::new(Block {
+			body: CaseBody::Block(Block {
 				stmts: vec![Stmt::Break],
 				tail_expr: None,
-			}))),
+			}),
 		};
 
 		let case_expr: Expr = Expr::Case {
@@ -505,12 +499,42 @@ impl Desugarer
 	fn desugar_case_arm(&mut self, arm: CaseArm) -> CaseArm
 	{
 		return CaseArm {
-			pattern: arm.pattern,
+			pattern: self.desugar_pattern(arm.pattern),
 			body: match arm.body {
 				CaseBody::Expr(expr) => CaseBody::Expr(self.desugar_expr(expr)),
 				CaseBody::Block(block) => CaseBody::Block(self.desugar_block(block)),
 			},
 		};
+	}
+
+	fn desugar_pattern(&mut self, pattern: Pattern) -> Pattern
+	{
+		match pattern {
+			Pattern::Wildcard => Pattern::Wildcard,
+
+			Pattern::Literal(lit) => Pattern::Literal(lit),
+
+			Pattern::TypedIdentifier { name, ty } => Pattern::TypedIdentifier { name, ty },
+
+			Pattern::Variant { path, args } => Pattern::Variant {
+				path,
+				args: args.into_iter().map(|p| self.desugar_pattern(p)).collect(),
+			},
+
+			Pattern::Tuple(patterns) => Pattern::Tuple(patterns.into_iter().map(|p| self.desugar_pattern(p)).collect()),
+
+			Pattern::Struct { path, fields } => Pattern::Struct {
+				path,
+				fields: fields
+					.into_iter()
+					.map(|(name, pat)| (name, self.desugar_pattern(pat)))
+					.collect(),
+			},
+
+			Pattern::Range(range) => Pattern::Range(range),
+
+			Pattern::Or(patterns) => Pattern::Or(patterns.into_iter().map(|p| self.desugar_pattern(p)).collect()),
+		}
 	}
 }
 
@@ -538,22 +562,19 @@ mod tests
 				stmts: vec![],
 				tail_expr: None,
 			},
-			else_branch: Some(Box::new(Stmt::Expr(Expr::Block(Box::new(Block {
+			else_branch: Some(Box::new(Stmt::Block(Block {
 				stmts: vec![],
 				tail_expr: None,
-			}))))),
+			}))),
 		};
 
 		let output = desugarer.desugar_stmt(input);
 
-		// Should keep the else branch
 		match output {
 			Stmt::If {
 				else_branch: Some(_), ..
-			} => {
-				// Success - else branch preserved
-			}
-			_ => panic!("Expected if-else, got {:?}", output),
+			} => {}
+			_ => panic!("Expected if with else branch, got {:?}", output),
 		}
 	}
 
@@ -623,16 +644,13 @@ mod tests
 
 		let output = desugarer.desugar_stmt(input);
 
-		// Should desugar to a block with temp var and case expression
 		match output {
-			Stmt::Expr(Expr::Block(block)) => {
+			Stmt::Block(block) => {
 				assert_eq!(block.stmts.len(), 2);
-				// First statement should be variable declaration
 				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
-				// Second statement should be case expression
 				assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Case { .. })));
 			}
-			_ => panic!("Expected block with case expression, got {:?}", output),
+			_ => panic!("Expected Stmt::Block, got {:?}", output),
 		}
 	}
 
@@ -661,16 +679,125 @@ mod tests
 
 		let output = desugarer.desugar_stmt(input);
 
-		// Should desugar to a loop with temp var and case expression
 		match output {
 			Stmt::Loop { body } => {
 				assert_eq!(body.stmts.len(), 2);
-				// First statement should be variable declaration
 				assert!(matches!(body.stmts[0], Stmt::VariableDecl(_)));
-				// Second statement should be case expression with break on wildcard
 				assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Case { .. })));
 			}
-			_ => panic!("Expected loop with case expression, got {:?}", output),
+			_ => panic!("Expected desugared loop, got {:?}", output),
+		}
+	}
+
+	fn assert_no_expr_block(stmt: &Stmt)
+	{
+		match stmt {
+			Stmt::Expr(Expr::Block(_)) => {
+				panic!("Found Expr::Block used as statement: {:?}", stmt)
+			}
+
+			Stmt::Block(block) => {
+				for stmt in &block.stmts {
+					assert_no_expr_block(stmt);
+				}
+			}
+
+			Stmt::If {
+				then_block,
+				else_branch,
+				..
+			} => {
+				for stmt in &then_block.stmts {
+					assert_no_expr_block(stmt);
+				}
+				if let Some(else_stmt) = else_branch {
+					assert_no_expr_block(else_stmt);
+				}
+			}
+
+			Stmt::Loop { body } | Stmt::While { body, .. } | Stmt::Unsafe(body) => {
+				for stmt in &body.stmts {
+					assert_no_expr_block(stmt);
+				}
+			}
+
+			_ => {}
+		}
+	}
+
+	#[test]
+	fn test_no_expr_block_in_desugared_if_var()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let stmt = Stmt::IfVar {
+			pattern: Pattern::Wildcard,
+			expr: ident("x"),
+			then_block: Block {
+				stmts: vec![],
+				tail_expr: None,
+			},
+			else_branch: None,
+		};
+
+		let output = desugarer.desugar_stmt(stmt);
+
+		assert_no_expr_block(&output);
+	}
+
+	#[test]
+	fn test_desugar_case_arm_pattern_recursive()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let arm = CaseArm {
+			pattern: Pattern::Or(vec![
+				Pattern::Variant {
+					path: vec!["Some".into()],
+					args: vec![Pattern::Wildcard],
+				},
+				Pattern::Variant {
+					path: vec!["None".into()],
+					args: vec![],
+				},
+			]),
+			body: CaseBody::Block(Block {
+				stmts: vec![],
+				tail_expr: None,
+			}),
+		};
+
+		let out = desugarer.desugar_case_arm(arm);
+
+		match out.pattern {
+			Pattern::Or(ps) => assert_eq!(ps.len(), 2),
+			_ => panic!("Expected Pattern::Or"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_for_loop_shape()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let input = Stmt::For {
+			name: vec!["x".into()],
+			iter: ident("iter"),
+			body: Block {
+				stmts: vec![],
+				tail_expr: None,
+			},
+		};
+
+		let output = desugarer.desugar_stmt(input);
+
+		match output {
+			Stmt::Block(block) => {
+				assert_eq!(block.stmts.len(), 2);
+				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
+				assert!(matches!(block.stmts[1], Stmt::Loop { .. }));
+			}
+			_ => panic!("Expected desugared for-loop block"),
 		}
 	}
 }
