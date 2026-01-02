@@ -133,14 +133,33 @@ impl Desugarer
 				cond,
 				then_block,
 				else_branch: None,
-			} => Stmt::If {
-				cond: self.desugar_expr(cond),
-				then_block: self.desugar_block(then_block),
-				else_branch: Some(Box::new(Stmt::Expr(Expr::Block(Box::new(Block {
-					stmts: vec![],
-					tail_expr: None,
-				}))))),
-			},
+			} => {
+				// Don't add else branch to "if true" wrappers created by the parser
+				let desugared_cond = self.desugar_expr(cond);
+				let desugared_then = self.desugar_block(then_block);
+
+				match desugared_cond {
+					Expr::Literal(crate::parser::Literal::Bool(true)) => {
+						// This is a wrapper created by the parser, don't add else
+						Stmt::If {
+							cond: desugared_cond,
+							then_block: desugared_then,
+							else_branch: None,
+						}
+					}
+					_ => {
+						// Regular if statement, add empty else block
+						Stmt::If {
+							cond: desugared_cond,
+							then_block: desugared_then,
+							else_branch: Some(Box::new(Stmt::Expr(Expr::Block(Box::new(Block {
+								stmts: vec![],
+								tail_expr: None,
+							}))))),
+						}
+					}
+				}
+			}
 
 			Stmt::If {
 				cond,
@@ -157,12 +176,7 @@ impl Desugarer
 				expr,
 				then_block,
 				else_branch,
-			} => Stmt::IfVar {
-				pattern,
-				expr: self.desugar_expr(expr),
-				then_block: self.desugar_block(then_block),
-				else_branch: else_branch.map(|e| Box::new(self.desugar_stmt(*e))),
-			},
+			} => self.desugar_if_var(pattern, expr, then_block, else_branch),
 
 			Stmt::While { cond, body } => Stmt::While {
 				cond: self.desugar_expr(cond),
@@ -173,11 +187,7 @@ impl Desugarer
 				body: self.desugar_block(body),
 			},
 
-			Stmt::WhileVarLoop { pattern, expr, body } => Stmt::WhileVarLoop {
-				pattern, // Patterns stay as-is
-				expr: self.desugar_expr(expr),
-				body: self.desugar_block(body),
-			},
+			Stmt::WhileVarLoop { pattern, expr, body } => self.desugar_while_var_loop(pattern, expr, body),
 
 			Stmt::VariableDecl(var) => Stmt::VariableDecl(self.desugar_variable_decl(var)),
 
@@ -290,6 +300,163 @@ impl Desugarer
 			stmts: vec![iter_decl, loop_stmt],
 			tail_expr: None,
 		})));
+	}
+
+	/// Desugar an if-var statement into a case expression.
+	///
+	/// ```
+	/// if var pattern = expr {
+	///     then_block
+	/// } else {
+	///     else_block
+	/// }
+	/// ```
+	///
+	/// Becomes:
+	///
+	/// ```
+	/// {
+	///     var __tmp = expr;
+	///     case __tmp {
+	///         pattern => { then_block },
+	///         _ => { else_block },
+	///     }
+	/// }
+	/// ```
+	fn desugar_if_var(
+		&mut self,
+		pattern: Pattern,
+		expr: Expr,
+		then_block: Block,
+		else_branch: Option<Box<Stmt>>,
+	) -> Stmt
+	{
+		let temp_var: Ident = self.gen_temp("ifvar");
+
+		let desugared_expr: Expr = self.desugar_expr(expr);
+		let desugared_then: Block = self.desugar_block(then_block);
+
+		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				name: temp_var.clone(),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: vec!["_".to_string()],
+						generics: vec![],
+					}),
+				},
+			},
+			init: Some(desugared_expr),
+			comp_const: false,
+		});
+
+		let match_arm: CaseArm = CaseArm {
+			pattern,
+			body: CaseBody::Block(desugared_then),
+		};
+
+		let else_arm: CaseArm = CaseArm {
+			pattern: Pattern::Wildcard,
+			body: if let Some(else_stmt) = else_branch {
+				let desugared_else = self.desugar_stmt(*else_stmt);
+				// Unwrap the "if true { block } else {}" wrapper that the parser creates
+				match desugared_else {
+					Stmt::If {
+						cond: Expr::Literal(crate::parser::Literal::Bool(true)),
+						then_block: block,
+						else_branch: None,
+					} => CaseBody::Block(block),
+					// If it's another if statement (else if), wrap it
+					other => CaseBody::Block(Block {
+						stmts: vec![other],
+						tail_expr: None,
+					}),
+				}
+			} else {
+				CaseBody::Block(Block {
+					stmts: vec![],
+					tail_expr: None,
+				})
+			},
+		};
+
+		let case_expr: Expr = Expr::Case {
+			expr: Box::new(Expr::Identifier(vec![temp_var])),
+			arms: vec![match_arm, else_arm],
+		};
+
+		return Stmt::Expr(Expr::Block(Box::new(Block {
+			stmts: vec![temp_decl, Stmt::Expr(case_expr)],
+			tail_expr: None,
+		})));
+	}
+
+	/// Desugar a while-var loop into a regular loop with pattern matching.
+	///
+	/// ```
+	/// while var pattern = expr {
+	///     body
+	/// }
+	/// ```
+	///
+	/// Becomes:
+	///
+	/// ```
+	/// loop {
+	///     let __tmp = expr;
+	///     case __tmp {
+	///         pattern => { body },
+	///         _ => break,
+	///     }
+	/// }
+	/// ```
+	fn desugar_while_var_loop(&mut self, pattern: Pattern, expr: Expr, body: Block) -> Stmt
+	{
+		let temp_var: Ident = self.gen_temp("whilevar");
+
+		let desugared_expr: Expr = self.desugar_expr(expr);
+		let desugared_body: Block = self.desugar_block(body);
+
+		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				name: temp_var.clone(),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: vec!["_".to_string()],
+						generics: vec![],
+					}),
+				},
+			},
+			init: Some(desugared_expr),
+			comp_const: false,
+		});
+
+		let match_arm: CaseArm = CaseArm {
+			pattern,
+			body: CaseBody::Block(desugared_body),
+		};
+
+		let break_arm: CaseArm = CaseArm {
+			pattern: Pattern::Wildcard,
+			body: CaseBody::Expr(Expr::Block(Box::new(Block {
+				stmts: vec![Stmt::Break],
+				tail_expr: None,
+			}))),
+		};
+
+		let case_expr: Expr = Expr::Case {
+			expr: Box::new(Expr::Identifier(vec![temp_var])),
+			arms: vec![match_arm, break_arm],
+		};
+
+		return Stmt::Loop {
+			body: Block {
+				stmts: vec![temp_decl, Stmt::Expr(case_expr)],
+				tail_expr: None,
+			},
+		};
 	}
 
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
@@ -488,5 +655,82 @@ mod tests
 		assert_ne!(temp1, temp2);
 		assert_ne!(temp2, temp3);
 		assert_ne!(temp1, temp3);
+	}
+
+	#[test]
+	fn test_desugar_if_var()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let input = Stmt::IfVar {
+			pattern: Pattern::TypedIdentifier {
+				name: "x".to_string(),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: vec!["i32".to_string()],
+						generics: vec![],
+					}),
+				},
+			},
+			expr: Expr::Literal(Literal::Int(42)),
+			then_block: Block {
+				stmts: vec![],
+				tail_expr: None,
+			},
+			else_branch: None,
+		};
+
+		let output = desugarer.desugar_stmt(input);
+
+		// Should desugar to a block with temp var and case expression
+		match output {
+			Stmt::Expr(Expr::Block(block)) => {
+				assert_eq!(block.stmts.len(), 2);
+				// First statement should be variable declaration
+				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
+				// Second statement should be case expression
+				assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Case { .. })));
+			}
+			_ => panic!("Expected block with case expression, got {:?}", output),
+		}
+	}
+
+	#[test]
+	fn test_desugar_while_var_loop()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let input = Stmt::WhileVarLoop {
+			pattern: Pattern::TypedIdentifier {
+				name: "x".to_string(),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: vec!["i32".to_string()],
+						generics: vec![],
+					}),
+				},
+			},
+			expr: ident("some_value"),
+			body: Block {
+				stmts: vec![],
+				tail_expr: None,
+			},
+		};
+
+		let output = desugarer.desugar_stmt(input);
+
+		// Should desugar to a loop with temp var and case expression
+		match output {
+			Stmt::Loop { body } => {
+				assert_eq!(body.stmts.len(), 2);
+				// First statement should be variable declaration
+				assert!(matches!(body.stmts[0], Stmt::VariableDecl(_)));
+				// Second statement should be case expression with break on wildcard
+				assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Case { .. })));
+			}
+			_ => panic!("Expected loop with case expression, got {:?}", output),
+		}
 	}
 }
