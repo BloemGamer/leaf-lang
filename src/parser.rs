@@ -2457,40 +2457,38 @@ impl<'s, 'c> Parser<'s, 'c>
 							op,
 							value,
 						});
-					} else {
-						if let Expr::Block(block) = expr {
-							if self.consume(&TokenKind::Semicolon) {
-								stmts.push(Stmt::Block(*block));
-							} else if self.at(&TokenKind::RightBrace) {
-								tail_expr = Some(Box::new(Expr::Block(block)));
-								break;
-							} else {
-								stmts.push(Stmt::Block(*block));
-							}
+					} else if let Expr::Block(block) = expr {
+						if self.consume(&TokenKind::Semicolon) {
+							stmts.push(Stmt::Block(*block));
+						} else if self.at(&TokenKind::RightBrace) {
+							tail_expr = Some(Box::new(Expr::Block(block)));
+							break;
 						} else {
-							let needs_semi: bool = self.expr_needs_semicolon(&expr);
+							stmts.push(Stmt::Block(*block));
+						}
+					} else {
+						let needs_semi: bool = self.expr_needs_semicolon(&expr);
 
-							if needs_semi {
-								if self.consume(&TokenKind::Semicolon) {
-									stmts.push(Stmt::Expr(expr));
-								} else if self.at(&TokenKind::RightBrace) {
-									tail_expr = Some(Box::new(expr));
-									break;
-								} else {
-									let tok: Token = self.peek().clone();
-									return Err(ParseError {
-										span: tok.span,
-										message: tok.format_error(self.source, "expected `;` or `}` after expression"),
-									});
-								}
-							} else if self.consume(&TokenKind::Semicolon) {
+						if needs_semi {
+							if self.consume(&TokenKind::Semicolon) {
 								stmts.push(Stmt::Expr(expr));
 							} else if self.at(&TokenKind::RightBrace) {
 								tail_expr = Some(Box::new(expr));
 								break;
 							} else {
-								stmts.push(Stmt::Expr(expr));
+								let tok: Token = self.peek().clone();
+								return Err(ParseError {
+									span: tok.span,
+									message: tok.format_error(self.source, "expected `;` or `}` after expression"),
+								});
 							}
+						} else if self.consume(&TokenKind::Semicolon) {
+							stmts.push(Stmt::Expr(expr));
+						} else if self.at(&TokenKind::RightBrace) {
+							tail_expr = Some(Box::new(expr));
+							break;
+						} else {
+							stmts.push(Stmt::Expr(expr));
 						}
 					}
 				}
