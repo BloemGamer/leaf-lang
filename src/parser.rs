@@ -2429,6 +2429,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				TokenKind::Delete => {
 					stmts.push(Stmt::Delete(self.parse_delete()?));
+					self.expect(&TokenKind::Semicolon)?;
 				}
 
 				TokenKind::Unsafe => {
