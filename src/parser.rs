@@ -1488,6 +1488,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			let tok: Token = self.next();
 			match &tok.kind {
 				TokenKind::Identifier(s) => path.push(s.to_string()),
+				TokenKind::New => path.push("new".to_string()),
 				_ => {
 					return Err(ParseError {
 						span: tok.span,
