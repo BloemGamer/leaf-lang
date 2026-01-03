@@ -3709,7 +3709,7 @@ impl std::fmt::Display for DirectiveNode
 		if let Some(body) = &self.body {
 			write!(f, " ")?;
 			match body {
-				BlockContent::Block(block) => {
+				BlockContent::Block(_block) => {
 					// Format block inline or with braces
 					write!(f, "{{ ... }}")?;
 				}

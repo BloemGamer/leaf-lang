@@ -184,11 +184,7 @@ impl Desugarer
 			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)),
 			Stmt::Directive(directive) => Stmt::Directive(DirectiveNode {
 				directive: directive.directive,
-				body: if let Some(body) = directive.body {
-					Some(self.desugar_block_content(body))
-				} else {
-					None
-				},
+				body: directive.body.map(|body| self.desugar_block_content(body)),
 			}),
 
 			Stmt::Delete(path) => Stmt::Delete(path),
@@ -1055,11 +1051,11 @@ mod tests
 
 		let output = desugarer.desugar_namespace(ns);
 		// Verify the for loop inside was desugared
-		if let TopLevelDecl::Function(func) = &output.body.items[0].node {
-			if let Some(body) = &func.body {
-				// For loop should be desugared to a block
-				assert!(matches!(body.stmts[0], Stmt::Block(_)));
-			}
+		if let TopLevelDecl::Function(func) = &output.body.items[0].node
+			&& let Some(body) = &func.body
+		{
+			// For loop should be desugared to a block
+			assert!(matches!(body.stmts[0], Stmt::Block(_)));
 		}
 	}
 
