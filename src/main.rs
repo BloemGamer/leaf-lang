@@ -1,5 +1,5 @@
 #![allow(clippy::needless_return)]
-#![allow(dead_code)]
+// #![allow(dead_code)]
 
 use std::{fs, process::exit};
 
