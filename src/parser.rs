@@ -1248,8 +1248,38 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::Directive(_) => {
 					self.next();
+
 					if self.at(&TokenKind::LeftParen) {
 						self.skip_until_balanced_paren()?;
+					}
+
+					loop {
+						match self.peek_kind() {
+							TokenKind::Semicolon | TokenKind::LeftBrace => {
+								self.lexer = checkpoint;
+								self.last_span = checkpoint_span;
+								return Ok(DeclKind::Directive);
+							}
+							TokenKind::FuncDef
+							| TokenKind::Struct
+							| TokenKind::Union
+							| TokenKind::Enum
+							| TokenKind::Variant
+							| TokenKind::Type
+							| TokenKind::Namespace
+							| TokenKind::Impl
+							| TokenKind::Trait
+							| TokenKind::Var
+							| TokenKind::Const => {
+								break;
+							}
+							TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Directive(_) => {
+								break;
+							}
+							_ => {
+								self.next();
+							}
+						}
 					}
 				}
 				TokenKind::FuncDef => {
