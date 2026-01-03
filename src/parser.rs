@@ -210,7 +210,7 @@ pub enum TopLevelDecl
 	Trait(TraitDecl),
 	Namespace(NamespaceDecl),
 	Impl(ImplDecl),
-	Directive(Directive),
+	Directive(DirectiveNode),
 }
 
 /// Internal enum for distinguishing declaration kinds during parsing.
@@ -275,6 +275,13 @@ pub enum Directive
 		name: Ident,
 		args: Vec<Expr>,
 	},
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectiveNode
+{
+	pub directive: Directive,
+	pub body: Option<BlockContent>,
 }
 
 /// Function declaration.
@@ -725,6 +732,7 @@ pub enum Stmt
 
 	Unsafe(Block),
 	Block(Block),
+	Directive(DirectiveNode),
 }
 
 /// Block of statements with optional tail expression.
@@ -1163,9 +1171,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				(TopLevelDecl::VariableDecl(var_decl), span)
 			}
 			DeclKind::Directive => {
-				let (directive, span) = self.parse_directive()?.unpack();
-				self.expect(&TokenKind::Semicolon)?;
-				(TopLevelDecl::Directive(directive), span)
+				let (directive_node, span) = self.parse_directive_node()?.unpack();
+
+				if directive_node.body.is_none() {
+					self.expect(&TokenKind::Semicolon)?;
+				}
+
+				(TopLevelDecl::Directive(directive_node), span)
 			}
 			DeclKind::Struct => {
 				let (struct_decl, span): (StructDecl, Span) = self.parse_struct()?.unpack();
@@ -1219,7 +1231,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			match self.peek_kind() {
-				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Directive(_) => {
+				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline => {
 					self.next();
 				}
 				TokenKind::Const => {
@@ -1232,6 +1244,12 @@ impl<'s, 'c> Parser<'s, 'c>
 						self.lexer = checkpoint;
 						self.last_span = checkpoint_span;
 						return Ok(DeclKind::Variable);
+					}
+				}
+				TokenKind::Directive(_) => {
+					self.next();
+					if self.at(&TokenKind::LeftParen) {
+						self.skip_until_balanced_paren()?;
 					}
 				}
 				TokenKind::FuncDef => {
@@ -1300,6 +1318,74 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
+	fn skip_until_balanced_paren(&mut self) -> Result<(), ParseError>
+	{
+		if !self.at(&TokenKind::LeftParen) {
+			return Ok(());
+		}
+		self.next(); // consume '('
+
+		let mut depth = 1;
+		while depth > 0 {
+			match self.peek_kind() {
+				TokenKind::LeftParen => {
+					depth += 1;
+					self.next();
+				}
+				TokenKind::RightParen => {
+					depth -= 1;
+					self.next();
+				}
+				TokenKind::Eof => {
+					return Err(ParseError {
+						span: self.peek().span,
+						message: "unexpected EOF while parsing attribute arguments".to_string(),
+					});
+				}
+				_ => {
+					self.next();
+				}
+			}
+		}
+		Ok(())
+	}
+
+	fn parse_directive_node(&mut self) -> Result<Spanned<DirectiveNode>, ParseError>
+	{
+		debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+
+		let tok = self.next();
+		let start = tok.span;
+
+		let directive = match tok.kind {
+			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
+			_ => unreachable!("Bug: Token should be a directive"),
+		};
+
+		// Check if there's a block body
+		let body = if self.at(&TokenKind::LeftBrace) {
+			self.next(); // {
+
+			let content = if self.should_parse_as_top_level_block(&directive) {
+				BlockContent::TopLevelBlock(self.parse_program()?)
+			} else {
+				BlockContent::Block(self.parse_block_content()?)
+			};
+
+			self.expect(&TokenKind::RightBrace)?;
+			Some(content)
+		} else {
+			None
+		};
+
+		let end = self.last_span;
+
+		Ok(Spanned {
+			node: DirectiveNode { directive, body },
+			span: start.merge(&end),
+		})
+	}
+
 	fn parse_directive(&mut self) -> Result<Spanned<Directive>, ParseError>
 	{
 		debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
@@ -1318,6 +1404,16 @@ impl<'s, 'c> Parser<'s, 'c>
 			node,
 			span: start.merge(&end),
 		})
+	}
+
+	fn should_parse_as_top_level_block(&self, directive: &Directive) -> bool
+	{
+		match directive {
+			Directive::Custom { name, .. } => {
+				matches!(name.as_str(), "extern" | "cfg" | "module" | "namespace")
+			}
+			_ => false,
+		}
 	}
 
 	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
@@ -1342,6 +1438,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			lexer::Directive::Custom(name) => {
 				let args: Vec<Expr> = if self.at(&TokenKind::LeftParen) {
+					self.next(); // (
 					let args: Vec<Expr> = self.parse_argument_list()?;
 					self.expect(&TokenKind::RightParen)?;
 					args
@@ -2301,6 +2398,14 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		self.expect(&TokenKind::LeftBrace)?;
 
+		let ret = self.parse_block_content()?;
+
+		self.expect(&TokenKind::RightBrace)?;
+		return Ok(ret);
+	}
+
+	fn parse_block_content(&mut self) -> Result<Block, ParseError>
+	{
 		let mut stmts: Vec<Stmt> = Vec::new();
 		let mut tail_expr: Option<Box<Expr>> = None;
 
@@ -2446,6 +2551,16 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 				}
 
+				TokenKind::Directive(_) => {
+					let (directive_node, _span) = self.parse_directive_node()?.unpack();
+
+					if directive_node.body.is_none() {
+						self.expect(&TokenKind::Semicolon)?;
+					}
+
+					stmts.push(Stmt::Directive(directive_node));
+				}
+
 				_ => {
 					let expr: Expr = self.parse_expr()?;
 
@@ -2495,9 +2610,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 		}
-
-		self.expect(&TokenKind::RightBrace)?;
-		return Ok(Block { stmts, tail_expr });
+		Ok(Block { stmts, tail_expr })
 	}
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
@@ -2862,14 +2975,27 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let tok: &Token = self.peek();
 			match &tok.kind {
-				TokenKind::Directive(_) => ret.push(Modifier::Directive(self.parse_directive()?.node)),
-				TokenKind::Pub => ret.push(Modifier::Pub),
-				TokenKind::Unsafe => ret.push(Modifier::Unsafe),
-				TokenKind::Inline => ret.push(Modifier::Inline),
-				TokenKind::Const => ret.push(Modifier::Const),
+				TokenKind::Directive(_) => {
+					ret.push(Modifier::Directive(self.parse_directive()?.node));
+				}
+				TokenKind::Pub => {
+					ret.push(Modifier::Pub);
+					self.next();
+				}
+				TokenKind::Unsafe => {
+					ret.push(Modifier::Unsafe);
+					self.next();
+				}
+				TokenKind::Inline => {
+					ret.push(Modifier::Inline);
+					self.next();
+				}
+				TokenKind::Const => {
+					ret.push(Modifier::Const);
+					self.next();
+				}
 				_ => return Ok(ret),
 			}
-			self.next();
 		}
 	}
 
@@ -3544,13 +3670,45 @@ impl fmt::Display for Modifier
 	}
 }
 
-impl fmt::Display for Directive
+impl std::fmt::Display for DirectiveNode
 {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		write!(f, "{}", self.directive)?;
+
+		if let Some(body) = &self.body {
+			write!(f, " ")?;
+			match body {
+				BlockContent::Block(block) => {
+					// Format block inline or with braces
+					write!(f, "{{ ... }}")?;
+				}
+				BlockContent::TopLevelBlock(top_level) => {
+					write!(f, "{{ {} items }}", top_level.items.len())?;
+				}
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl std::fmt::Display for Directive
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		match self {
 			Directive::Import(path) => write!(f, "@import \"{}\"", path),
-			Directive::Use(path) => write!(f, "@use {}", path.join("::")),
+			Directive::Use(path) => {
+				write!(f, "@use ")?;
+				for (i, segment) in path.iter().enumerate() {
+					if i > 0 {
+						write!(f, "::")?;
+					}
+					write!(f, "{}", segment)?;
+				}
+				Ok(())
+			}
 			Directive::Custom { name, args } => {
 				write!(f, "@{}", name)?;
 				if !args.is_empty() {
@@ -4071,6 +4229,15 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			write_block(f, w, block)
 		}
 		Stmt::Block(block) => write_block(f, w, block),
+		Stmt::Directive(directive_node) => {
+			w.indent();
+			write!(f, "{}", directive_node)?;
+			if directive_node.body.is_none() {
+				write!(f, ";")?;
+			}
+			writeln!(f)?;
+			Ok(())
+		}
 	}
 }
 
@@ -4155,6 +4322,13 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write_block(f, w, block)
 		}
 		Stmt::Block(block) => write_block(f, w, block),
+		Stmt::Directive(directive_node) => {
+			write!(f, "{}", directive_node)?;
+			if directive_node.body.is_none() {
+				write!(f, ";")?;
+			}
+			Ok(())
+		}
 	}
 }
 
@@ -6007,7 +6181,10 @@ mod parser_tests
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0].node {
-			TopLevelDecl::Directive(Directive::Import(path)) => {
+			TopLevelDecl::Directive(DirectiveNode {
+				directive: Directive::Import(path),
+				..
+			}) => {
 				assert_eq!(path, "file.rs");
 			}
 			_ => panic!("Expected import directive"),
@@ -6022,7 +6199,10 @@ mod parser_tests
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0].node {
-			TopLevelDecl::Directive(Directive::Use(path)) => {
+			TopLevelDecl::Directive(DirectiveNode {
+				directive: Directive::Use(path),
+				..
+			}) => {
 				assert_eq!(path, &vec!["std", "vec", "Vec"]);
 			}
 			_ => panic!("Expected use directive"),
@@ -6045,7 +6225,10 @@ mod parser_tests
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0].node {
-			TopLevelDecl::Directive(Directive::Custom { name, args }) => {
+			TopLevelDecl::Directive(DirectiveNode {
+				directive: Directive::Custom { name, args },
+				..
+			}) => {
 				assert_eq!(name, "custom");
 				assert_eq!(args.len(), 3);
 			}

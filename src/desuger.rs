@@ -1,6 +1,6 @@
 use crate::parser::{
-	ArrayLiteral, Block, CaseArm, CaseBody, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl, Pattern,
-	Program, Spanned, Stmt, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
+	ArrayLiteral, Block, BlockContent, CaseArm, CaseBody, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem,
+	NamespaceDecl, Pattern, Program, Spanned, Stmt, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
 };
 
 #[derive(Debug, Default)]
@@ -124,6 +124,14 @@ impl Desugarer
 		};
 	}
 
+	fn desugar_block_content(&mut self, block: BlockContent) -> BlockContent
+	{
+		return match block {
+			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)),
+			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_program(block)),
+		};
+	}
+
 	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
 	{
 		debug_assert!(
@@ -174,6 +182,14 @@ impl Desugarer
 
 			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)),
 			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)),
+			Stmt::Directive(directive) => Stmt::Directive(DirectiveNode {
+				directive: directive.directive,
+				body: if let Some(body) = directive.body {
+					Some(self.desugar_block_content(body))
+				} else {
+					None
+				},
+			}),
 
 			Stmt::Delete(path) => Stmt::Delete(path),
 
