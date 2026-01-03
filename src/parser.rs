@@ -2103,10 +2103,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::FatArrow)?; // =>
 
-		let body = if self.at(&TokenKind::LeftBrace) {
-			CaseBody::Block(self.parse_block()?)
+		let body: CaseBody = if self.at(&TokenKind::LeftBrace) {
+			let case: CaseBody = CaseBody::Block(self.parse_block()?);
+			if self.at(&TokenKind::Comma) {
+				self.next(); // ,
+			}
+			case
 		} else {
-			let expr = self.parse_expr()?;
+			let expr: Expr = self.parse_expr()?;
 			self.expect(&TokenKind::Comma)?;
 			CaseBody::Expr(expr)
 		};
