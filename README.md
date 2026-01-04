@@ -14,8 +14,8 @@ A language that is designed to be used with C, with modern features and a platfo
 ```rs
 fn main()
 {
-	let a: i64 = 0;
-	let v: Vec<i64> = Vec::from!([0, 1, 2]);
+	var a: i64 = 0;
+	var v: Vec<i64> = Vec::with_len!(5);
 	print("{}", a);
 }
 ```
@@ -44,6 +44,7 @@ fn main()
 - [ ] C parser integration
 - [ ] Design a build system
 - [ ] Write compile time execution
+- [ ] Adding a LLVM backend (very low priority)
 
 ## Progress of the stages of the compiler
 ### Frontend
