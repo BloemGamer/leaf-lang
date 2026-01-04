@@ -1732,12 +1732,38 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_logical_and(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let mut lhs: Expr = self.parse_equality(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_bitwise(allow_struct_init)?;
 
 		while self.consume(&TokenKind::And) {
-			let rhs: Expr = self.parse_equality(allow_struct_init)?;
+			let rhs: Expr = self.parse_bitwise(allow_struct_init)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalAnd,
+				lhs: Box::new(lhs),
+				rhs: Box::new(rhs),
+			};
+		}
+
+		Ok(lhs)
+	}
+
+	fn parse_bitwise(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
+	{
+		let mut lhs: Expr = self.parse_equality(allow_struct_init)?;
+
+		loop {
+			let op: BinaryOp = match self.peek_kind() {
+				TokenKind::Ampersand => BinaryOp::BitAnd,
+				TokenKind::Pipe => BinaryOp::BitOr,
+				TokenKind::Caret => BinaryOp::BitXor,
+				TokenKind::LShift => BinaryOp::Shl,
+				TokenKind::RShift => BinaryOp::Shr,
+				_ => break,
+			};
+
+			self.next();
+			let rhs: Expr = self.parse_equality(allow_struct_init)?;
+			lhs = Expr::Binary {
+				op,
 				lhs: Box::new(lhs),
 				rhs: Box::new(rhs),
 			};
@@ -1796,7 +1822,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_range(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		let start: Expr = self.parse_bitwise(allow_struct_init)?;
+		let start: Expr = self.parse_additive(allow_struct_init)?;
 
 		match self.peek_kind() {
 			TokenKind::DotDot => {
@@ -1804,7 +1830,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let end: Option<Box<Expr>> = if self.is_range_end() {
 					None
 				} else {
-					Some(Box::new(self.parse_bitwise(allow_struct_init)?))
+					Some(Box::new(self.parse_additive(allow_struct_init)?))
 				};
 				Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
@@ -1814,7 +1840,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::DotDotEquals => {
 				self.next();
-				let end: Box<Expr> = Box::new(self.parse_bitwise(allow_struct_init)?);
+				let end: Box<Expr> = Box::new(self.parse_additive(allow_struct_init)?);
 				Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
 					end: Some(end),
@@ -1836,32 +1862,6 @@ impl<'s, 'c> Parser<'s, 'c>
 				| TokenKind::Semicolon
 				| TokenKind::FatArrow
 		)
-	}
-
-	fn parse_bitwise(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
-	{
-		let mut lhs: Expr = self.parse_additive(allow_struct_init)?;
-
-		loop {
-			let op: BinaryOp = match self.peek_kind() {
-				TokenKind::Ampersand => BinaryOp::BitAnd,
-				TokenKind::Pipe => BinaryOp::BitOr,
-				TokenKind::Caret => BinaryOp::BitXor,
-				TokenKind::LShift => BinaryOp::Shl,
-				TokenKind::RShift => BinaryOp::Shr,
-				_ => break,
-			};
-
-			self.next();
-			let rhs: Expr = self.parse_additive(allow_struct_init)?;
-			lhs = Expr::Binary {
-				op,
-				lhs: Box::new(lhs),
-				rhs: Box::new(rhs),
-			};
-		}
-
-		Ok(lhs)
 	}
 
 	fn parse_additive(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
