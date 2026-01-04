@@ -1819,6 +1819,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				| TokenKind::RightBracket
 				| TokenKind::RightBrace
 				| TokenKind::Semicolon
+				| TokenKind::FatArrow
 		)
 	}
 
