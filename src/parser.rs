@@ -3947,7 +3947,7 @@ impl fmt::Display for TypeCore
 	}
 }
 
-fn write_variable_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, var: &VariableDecl) -> fmt::Result
+fn write_variable_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, var: &VariableDecl) -> fmt::Result
 {
 	if var.comp_const {
 		write!(f, "const ")?;
@@ -3958,7 +3958,8 @@ fn write_variable_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, var: &
 	write!(f, "{}", var.pattern)?;
 
 	if let Some(init) = &var.init {
-		write!(f, " = {}", init)?;
+		write!(f, " = ")?;
+		write_expr(f, w, init)?;
 	}
 
 	Ok(())
@@ -4135,7 +4136,9 @@ impl fmt::Display for Expr
 
 fn write_case(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[CaseArm]) -> fmt::Result
 {
-	writeln!(f, "case {} {{", expr)?;
+	writeln!(f, "case ")?;
+	write_expr(f, w, expr)?;
+	writeln!(f, " {{")?;
 	w.indent();
 
 	for arm in arms {
@@ -4276,6 +4279,38 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 	match expr {
 		Expr::Case { expr: case_expr, arms } => write_case(f, w, case_expr, arms),
 		Expr::Block(block) => write_block(f, w, block),
+		Expr::If {
+			cond,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if ")?;
+			write_expr(f, w, cond)?;
+			write!(f, " ")?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_expr(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
+		Expr::IfVar {
+			pattern,
+			expr,
+			then_block,
+			else_branch,
+		} => {
+			write!(f, "if {} = ", pattern)?;
+
+			write_expr(f, w, expr)?;
+			write!(f, " ")?;
+			write_block(f, w, then_block)?;
+			if let Some(else_stmt) = else_branch {
+				write!(f, " else ")?;
+				write_expr(f, w, else_stmt)?;
+			}
+			Ok(())
+		}
 		_ => write!(f, "{}", expr),
 	}
 }
@@ -4283,18 +4318,27 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
 {
 	w.write_indent(f)?;
+	return write_stmt_no_indent(f, w, stmt);
+}
+
+fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
+{
 	match stmt {
 		Stmt::VariableDecl(var) => {
 			write_variable_decl(f, w, var)?;
 			write!(f, ";")
 		}
 		Stmt::Assignment { target, op, value } => {
-			write!(f, "{} {} {};", target, op, value)
+			write_expr(f, w, target)?;
+			write!(f, " {} ", op)?;
+			write_expr(f, w, value)?;
+			write!(f, ";")
 		}
 		Stmt::Return(expr) => {
 			write!(f, "return")?;
 			if let Some(e) = expr {
-				write!(f, " {}", e)?;
+				write!(f, " ")?;
+				write_expr(f, w, e)?;
 			}
 			write!(f, ";")
 		}
@@ -4307,7 +4351,10 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 				write_block(f, w, block)?;
 				write!(f, ";")
 			}
-			_ => write!(f, "{};", expr),
+			_ => {
+				write_expr(f, w, expr)?;
+				write!(f, ";",)
+			}
 		},
 		Stmt::Break => write!(f, "break;"),
 		Stmt::Continue => write!(f, "continue;"),
@@ -4316,7 +4363,9 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			then_block,
 			else_branch,
 		} => {
-			write!(f, "if {} ", cond)?;
+			write!(f, "if ")?;
+			write_expr(f, w, cond)?;
+			write!(f, " ")?;
 			write_block(f, w, then_block)?;
 			if let Some(else_stmt) = else_branch {
 				write!(f, " else ")?;
@@ -4330,7 +4379,9 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			then_block,
 			else_branch,
 		} => {
-			write!(f, "if var {} = {} ", pattern, expr)?;
+			write!(f, "if var {} = ", pattern)?;
+			write_expr(f, w, expr)?;
+			write!(f, " ")?;
 			write_block(f, w, then_block)?;
 			if let Some(else_stmt) = else_branch {
 				write!(f, " else ")?;
@@ -4339,7 +4390,9 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			Ok(())
 		}
 		Stmt::While { cond, body } => {
-			write!(f, "while {} ", cond)?;
+			write!(f, "while ")?;
+			write_expr(f, w, cond)?;
+			write!(f, " ")?;
 			write_block(f, w, body)
 		}
 		Stmt::Loop { body } => {
@@ -4347,11 +4400,15 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 			write_block(f, w, body)
 		}
 		Stmt::WhileVarLoop { pattern, expr, body } => {
-			write!(f, "while var {} = {} ", pattern, expr)?;
+			write!(f, "while var {} = ", pattern)?;
+			write_expr(f, w, expr)?;
+			write!(f, " ")?;
 			write_block(f, w, body)
 		}
 		Stmt::For { name, iter, body } => {
-			write!(f, "for {} in {} ", name.join("::"), iter)?;
+			write!(f, "for {} in ", name.join("::"))?;
+			write_expr(f, w, iter)?;
+			write!(f, " ")?;
 			write_block(f, w, body)
 		}
 		Stmt::Delete(path) => {
@@ -4369,97 +4426,6 @@ fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> 
 				write!(f, ";")?;
 			}
 			writeln!(f)?;
-			Ok(())
-		}
-	}
-}
-
-fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
-{
-	match stmt {
-		Stmt::VariableDecl(var) => {
-			write_variable_decl(f, w, var)?;
-			write!(f, ";")
-		}
-		Stmt::Assignment { target, op, value } => {
-			write!(f, "{} {} {};", target, op, value)
-		}
-		Stmt::Return(expr) => {
-			write!(f, "return")?;
-			if let Some(e) = expr {
-				write!(f, " {}", e)?;
-			}
-			write!(f, ";")
-		}
-		Stmt::Expr(expr) => match expr {
-			Expr::Case { expr: case_expr, arms } => {
-				write_case(f, w, case_expr, arms)?;
-				write!(f, ";")
-			}
-			Expr::Block(block) => {
-				write_block(f, w, block)?;
-				write!(f, ";")
-			}
-			_ => write!(f, "{};", expr),
-		},
-		Stmt::Break => write!(f, "break;"),
-		Stmt::Continue => write!(f, "continue;"),
-		Stmt::If {
-			cond,
-			then_block,
-			else_branch,
-		} => {
-			write!(f, "if {} ", cond)?;
-			write_block(f, w, then_block)?;
-			if let Some(else_stmt) = else_branch {
-				write!(f, " else ")?;
-				write_stmt_no_indent(f, w, else_stmt)?;
-			}
-			Ok(())
-		}
-		Stmt::IfVar {
-			pattern,
-			expr,
-			then_block,
-			else_branch,
-		} => {
-			write!(f, "if var {} = {} ", pattern, expr)?;
-			write_block(f, w, then_block)?;
-			if let Some(else_stmt) = else_branch {
-				write!(f, " else ")?;
-				write_stmt_no_indent(f, w, else_stmt)?;
-			}
-			Ok(())
-		}
-		Stmt::While { cond, body } => {
-			write!(f, "while {} ", cond)?;
-			write_block(f, w, body)
-		}
-		Stmt::Loop { body } => {
-			write!(f, "loop ")?;
-			write_block(f, w, body)
-		}
-		Stmt::WhileVarLoop { pattern, expr, body } => {
-			write!(f, "while var {} = {} ", pattern, expr)?;
-			write_block(f, w, body)
-		}
-		Stmt::For { name, iter, body } => {
-			write!(f, "for {} in {} ", name.join("::"), iter)?;
-			write_block(f, w, body)
-		}
-		Stmt::Delete(path) => {
-			write!(f, "delete {};", path.join("::"))
-		}
-		Stmt::Unsafe(block) => {
-			write!(f, "unsafe ")?;
-			write_block(f, w, block)
-		}
-		Stmt::Block(block) => write_block(f, w, block),
-		Stmt::Directive(directive_node) => {
-			write!(f, "{}", directive_node)?;
-			if directive_node.body.is_none() {
-				write!(f, ";")?;
-			}
 			Ok(())
 		}
 	}
@@ -4535,7 +4501,8 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 	for (name, value) in &e.variants {
 		w.write_indent(f)?;
 		if let Some(val) = value {
-			writeln!(f, "{} = {},", name, val)?;
+			writeln!(f, "{} = ,", name)?;
+			write_expr(f, w, val)?;
 		} else {
 			writeln!(f, "{},", name)?;
 		}
