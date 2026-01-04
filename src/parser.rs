@@ -2216,7 +2216,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::If => {
-				let if_stmt: Stmt = self.parse_if_or_if_var()?;
+				let if_stmt: Stmt = self.parse_if()?;
 				Ok(self.stmt_if_to_expr_wrapper(if_stmt)?)
 			}
 
@@ -2627,7 +2627,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
 							if self.at(&TokenKind::If) {
-								Some(Box::new(self.parse_if_or_if_var()?))
+								Some(Box::new(self.parse_if()?))
 							} else {
 								let else_block: Block = self.parse_block()?;
 								Some(Box::new(Stmt::If {
@@ -2829,34 +2829,6 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_if(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::If)?;
-		let cond = self.parse_expr_no_struct()?;
-		let then_block = self.parse_block()?;
-
-		let else_branch = if self.consume(&TokenKind::Else) {
-			if self.at(&TokenKind::If) {
-				Some(Box::new(self.parse_if()?))
-			} else {
-				let else_block = self.parse_block()?;
-				Some(Box::new(Stmt::If {
-					cond: Expr::Literal(Literal::Bool(true)),
-					then_block: else_block,
-					else_branch: None,
-				}))
-			}
-		} else {
-			None
-		};
-
-		return Ok(Stmt::If {
-			cond,
-			then_block,
-			else_branch,
-		});
-	}
-
-	fn parse_if_or_if_var(&mut self) -> Result<Stmt, ParseError>
-	{
-		self.expect(&TokenKind::If)?;
 
 		return if self.consume(&TokenKind::Var) {
 			let pattern: Pattern = self.parse_pattern()?;
@@ -2866,7 +2838,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
 				if self.at(&TokenKind::If) {
-					Some(Box::new(self.parse_if_or_if_var()?))
+					Some(Box::new(self.parse_if()?))
 				} else {
 					let else_block = self.parse_block()?;
 					Some(Box::new(Stmt::If {
@@ -2891,7 +2863,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let else_branch = if self.consume(&TokenKind::Else) {
 				if self.at(&TokenKind::If) {
-					Some(Box::new(self.parse_if_or_if_var()?))
+					Some(Box::new(self.parse_if()?))
 				} else {
 					let else_block = self.parse_block()?;
 					Some(Box::new(Stmt::If {
