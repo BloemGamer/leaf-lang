@@ -489,6 +489,21 @@ pub enum Expr
 		expr: Box<Expr>,
 		arms: Vec<CaseArm>,
 	},
+
+	If
+	{
+		cond: Box<Expr>,
+		then_block: Block,
+		else_branch: Option<Box<Expr>>,
+	},
+
+	IfVar
+	{
+		pattern: Pattern,
+		expr: Box<Expr>,
+		then_block: Block,
+		else_branch: Option<Box<Expr>>,
+	},
 }
 
 /// Literal value types.
@@ -2152,10 +2167,57 @@ impl<'s, 'c> Parser<'s, 'c>
 				})
 			}
 
+			TokenKind::If => {
+				let if_stmt: Stmt = self.parse_if_or_if_var()?;
+				Ok(self.stmt_if_to_expr_wrapper(if_stmt)?)
+			}
+
 			_ => Err(ParseError {
 				span: tok.span,
 				message: tok.format_error(self.source, "expected expression"),
 			}),
+		}
+	}
+
+	fn stmt_if_to_expr_wrapper(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	{
+		match stmt {
+			Stmt::If {
+				cond,
+				then_block,
+				else_branch,
+			} => Ok(Expr::If {
+				cond: Box::new(cond),
+				then_block,
+				else_branch: match else_branch {
+					Some(b) => {
+						if let Stmt::Expr(expr) = *b {
+							Some(Box::new(expr))
+						} else {
+							return Err(ParseError {
+								span: Default::default(), // TODO
+								message: "Got a not expression".to_string(),
+							});
+						}
+					}
+					None => None,
+				},
+			}),
+			Stmt::IfVar {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+			} => Ok(Expr::Block(Box::new(Block {
+				stmts: vec![Stmt::IfVar {
+					pattern,
+					expr,
+					then_block,
+					else_branch,
+				}],
+				tail_expr: None,
+			}))),
+			_ => unreachable!("Expected if or if var statement"),
 		}
 	}
 
@@ -2646,7 +2708,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
 	{
-		!matches!(expr, Expr::Block(_) | Expr::Case { .. })
+		!matches!(
+			expr,
+			Expr::Block(_) | Expr::Case { .. } | Expr::If { .. } | Expr::IfVar { .. }
+		)
 	}
 
 	fn is_assignment_op(&mut self) -> bool
@@ -4023,9 +4088,46 @@ impl fmt::Display for Expr
 				write_block(f, &mut w, block)
 			}
 			Expr::Case { expr, arms } => {
-				// For case expressions, create a writer to handle indentation
 				let mut w = IndentWriter::new();
 				write_case(f, &mut w, expr, arms)
+			}
+			Expr::If {
+				cond,
+				then_block,
+				else_branch,
+			} => {
+				write!(f, "if {} ", cond)?;
+				let mut w = IndentWriter::new();
+				write_block(f, &mut w, then_block)?;
+				if let Some(else_expr) = else_branch {
+					write!(f, " else ")?;
+					match else_expr.as_ref() {
+						Expr::Block(b) => write_block(f, &mut w, b)?,
+						Expr::If { .. } | Expr::IfVar { .. } => write!(f, "{}", else_expr)?,
+						_ => write!(f, "{}", else_expr)?,
+					}
+				}
+				Ok(())
+			}
+
+			Expr::IfVar {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+			} => {
+				write!(f, "if var {} = {} ", pattern, expr)?;
+				let mut w = IndentWriter::new();
+				write_block(f, &mut w, then_block)?;
+				if let Some(else_expr) = else_branch {
+					write!(f, " else ")?;
+					match else_expr.as_ref() {
+						Expr::Block(b) => write_block(f, &mut w, b)?,
+						Expr::If { .. } | Expr::IfVar { .. } => write!(f, "{}", else_expr)?,
+						_ => write!(f, "{}", else_expr)?,
+					}
+				}
+				Ok(())
 			}
 		}
 	}

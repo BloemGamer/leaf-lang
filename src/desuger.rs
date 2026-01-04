@@ -135,8 +135,11 @@ impl Desugarer
 	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
 	{
 		debug_assert!(
-			!matches!(stmt, Stmt::Expr(Expr::Block(_))),
-			"This should just be Stmt::Block(_)"
+			!matches!(
+				stmt,
+				Stmt::Expr(Expr::Block(_)) | Stmt::Expr(Expr::If { .. }) | Stmt::Expr(Expr::IfVar { .. })
+			),
+			"This should just be Stmt::.."
 		);
 		return match stmt {
 			Stmt::For { name, iter, body } => self.desugar_for_loop(name, iter, body),
@@ -494,7 +497,101 @@ impl Desugarer
 			Expr::Identifier(_) => expr,
 			Expr::Literal(_) => expr,
 			Expr::Range(_) => expr,
+			Expr::If {
+				cond,
+				then_block,
+				else_branch,
+			} => self.desugar_if_expr(cond, then_block, else_branch),
+
+			Expr::IfVar {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+			} => self.desugar_if_var_expr(pattern, expr, then_block, else_branch),
 		};
+	}
+
+	fn desugar_if_expr(&mut self, cond: Box<Expr>, then_block: Block, else_branch: Option<Box<Expr>>) -> Expr
+	{
+		Expr::If {
+			cond: Box::new(self.desugar_expr(*cond)),
+			then_block: self.desugar_block(then_block),
+			else_branch: else_branch.map(|e| Box::new(self.desugar_expr(*e))),
+		}
+	}
+
+	fn desugar_if_var_expr(
+		&mut self,
+		pattern: Pattern,
+		expr: Box<Expr>,
+		then_block: Block,
+		else_branch: Option<Box<Expr>>,
+	) -> Expr
+	{
+		let temp_var = self.gen_temp("ifvar_expr");
+
+		let desugared_expr = self.desugar_expr(*expr);
+		let desugared_then = self.desugar_block(then_block);
+
+		// Create temporary variable declaration
+		let temp_decl = Stmt::VariableDecl(VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				name: temp_var.clone(),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: vec!["_".to_string()],
+						generics: vec![],
+					}),
+				},
+			},
+			init: Some(desugared_expr),
+			comp_const: false,
+		});
+
+		// Create the matching arm
+		let match_arm = CaseArm {
+			pattern: self.desugar_pattern(pattern),
+			body: CaseBody::Block(desugared_then),
+		};
+
+		// Create the else arm
+		let else_arm = CaseArm {
+			pattern: Pattern::Wildcard,
+			body: if let Some(else_expr) = else_branch {
+				// If there's an else branch, desugar it
+				let desugared_else = self.desugar_expr(*else_expr);
+
+				// If the else is a block, use it directly
+				// Otherwise, wrap it as a block with tail expression
+				match desugared_else {
+					Expr::Block(block) => CaseBody::Block(*block),
+					other_expr => CaseBody::Block(Block {
+						stmts: vec![],
+						tail_expr: Some(Box::new(other_expr)),
+					}),
+				}
+			} else {
+				// No else branch - empty block (will be unit type)
+				CaseBody::Block(Block {
+					stmts: vec![],
+					tail_expr: None,
+				})
+			},
+		};
+
+		// Create the case expression
+		let case_expr = Expr::Case {
+			expr: Box::new(Expr::Identifier(vec![temp_var])),
+			arms: vec![match_arm, else_arm],
+		};
+
+		// Wrap in a block with the temp variable and case expression
+		Expr::Block(Box::new(Block {
+			stmts: vec![temp_decl],
+			tail_expr: Some(Box::new(case_expr)),
+		}))
 	}
 
 	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> ArrayLiteral
