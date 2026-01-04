@@ -425,7 +425,7 @@ pub struct RangeExpr
 /// * `Array` - Array literal
 /// * `StructInit` - Struct initialization
 /// * `Block` - Block expression
-/// * `Case` - Pattern matching expression
+/// * `Switch` - Pattern matching expression
 #[derive(Debug, Clone)]
 pub enum Expr
 {
@@ -484,10 +484,10 @@ pub enum Expr
 
 	Block(Box<Block>),
 
-	Case
+	Switch
 	{
 		expr: Box<Expr>,
-		arms: Vec<CaseArm>,
+		arms: Vec<SwitchArm>,
 	},
 
 	If
@@ -788,21 +788,21 @@ pub enum BlockContent
 	TopLevelBlock(TopLevelBlock),
 }
 
-/// Case expression arm.
+/// Switch expression arm.
 ///
-/// Represents a single arm in a case expression.
+/// Represents a single arm in a switch expression.
 ///
 /// # Fields
 /// * `pattern` - Pattern to match against
 /// * `body` - Code to execute if pattern matches
 #[derive(Debug, Clone)]
-pub struct CaseArm
+pub struct SwitchArm
 {
 	pub pattern: Pattern,
-	pub body: CaseBody,
+	pub body: SwitchBody,
 }
 
-/// Case arm body types.
+/// Switch arm body types.
 ///
 /// The body of a match arm can be either a single expression or a block.
 ///
@@ -810,7 +810,7 @@ pub struct CaseArm
 /// * `Expr` - Single expression (requires comma)
 /// * `Block` - Block of statements
 #[derive(Debug, Clone)]
-pub enum CaseBody
+pub enum SwitchBody
 {
 	Expr(Expr),
 	Block(Block),
@@ -818,7 +818,7 @@ pub enum CaseBody
 
 /// Pattern matching patterns.
 ///
-/// Represents patterns that can appear in case expressions and if let/while let.
+/// Represents patterns that can appear in switch expressions and if let/while let.
 ///
 /// # Variants
 /// * `Wildcard` - Catch-all pattern: `_`
@@ -2150,18 +2150,18 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(Expr::Block(Box::new(block)))
 			}
 
-			TokenKind::Case => {
-				self.next(); // case
-				let expr: Expr = self.parse_expr_no_struct()?; // Use no_struct for case expression
+			TokenKind::Switch => {
+				self.next(); // switch
+				let expr: Expr = self.parse_expr_no_struct()?; // Use no_struct for switch expression
 				self.expect(&TokenKind::LeftBrace)?;
 
-				let mut arms: Vec<CaseArm> = Vec::new();
+				let mut arms: Vec<SwitchArm> = Vec::new();
 				while !self.at(&TokenKind::RightBrace) {
-					arms.push(self.parse_case_arm()?);
+					arms.push(self.parse_switch_arm()?);
 				}
 
 				self.expect(&TokenKind::RightBrace)?;
-				Ok(Expr::Case {
+				Ok(Expr::Switch {
 					expr: Box::new(expr),
 					arms,
 				})
@@ -2288,24 +2288,24 @@ impl<'s, 'c> Parser<'s, 'c>
 		Ok(fields)
 	}
 
-	fn parse_case_arm(&mut self) -> Result<CaseArm, ParseError>
+	fn parse_switch_arm(&mut self) -> Result<SwitchArm, ParseError>
 	{
 		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::FatArrow)?; // =>
 
-		let body: CaseBody = if self.at(&TokenKind::LeftBrace) {
-			let case: CaseBody = CaseBody::Block(self.parse_block()?);
+		let body: SwitchBody = if self.at(&TokenKind::LeftBrace) {
+			let switch: SwitchBody = SwitchBody::Block(self.parse_block()?);
 			if self.at(&TokenKind::Comma) {
 				self.next(); // ,
 			}
-			case
+			switch
 		} else {
 			let expr: Expr = self.parse_expr()?;
 			self.expect(&TokenKind::Comma)?;
-			CaseBody::Expr(expr)
+			SwitchBody::Expr(expr)
 		};
 
-		Ok(CaseArm { pattern, body })
+		Ok(SwitchArm { pattern, body })
 	}
 
 	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
@@ -2710,7 +2710,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		!matches!(
 			expr,
-			Expr::Block(_) | Expr::Case { .. } | Expr::If { .. } | Expr::IfVar { .. }
+			Expr::Block(_) | Expr::Switch { .. } | Expr::If { .. } | Expr::IfVar { .. }
 		)
 	}
 
@@ -4088,9 +4088,9 @@ impl fmt::Display for Expr
 				let mut w = IndentWriter::new();
 				write_block(f, &mut w, block)
 			}
-			Expr::Case { expr, arms } => {
+			Expr::Switch { expr, arms } => {
 				let mut w = IndentWriter::new();
-				write_case(f, &mut w, expr, arms)
+				write_switch(f, &mut w, expr, arms)
 			}
 			Expr::If {
 				cond,
@@ -4134,9 +4134,9 @@ impl fmt::Display for Expr
 	}
 }
 
-fn write_case(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[CaseArm]) -> fmt::Result
+fn write_switch(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[SwitchArm]) -> fmt::Result
 {
-	write!(f, "case ")?;
+	write!(f, "switch ")?;
 	write_expr(f, w, expr)?;
 	writeln!(f, " {{")?;
 	w.indent();
@@ -4145,11 +4145,11 @@ fn write_case(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arm
 		w.write_indent(f)?;
 		write!(f, "{} => ", arm.pattern)?;
 		match &arm.body {
-			CaseBody::Expr(e) => {
+			SwitchBody::Expr(e) => {
 				write_expr(f, w, e)?;
 				writeln!(f, ",")?;
 			}
-			CaseBody::Block(b) => {
+			SwitchBody::Block(b) => {
 				write_block(f, w, b)?;
 				writeln!(f, ",")?;
 			}
@@ -4277,7 +4277,10 @@ fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) 
 fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> fmt::Result
 {
 	match expr {
-		Expr::Case { expr: case_expr, arms } => write_case(f, w, case_expr, arms),
+		Expr::Switch {
+			expr: switch_expr,
+			arms,
+		} => write_switch(f, w, switch_expr, arms),
 		Expr::Block(block) => write_block(f, w, block),
 		Expr::If {
 			cond,
@@ -4343,8 +4346,11 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, ";")
 		}
 		Stmt::Expr(expr) => match expr {
-			Expr::Case { expr: case_expr, arms } => {
-				write_case(f, w, case_expr, arms)?;
+			Expr::Switch {
+				expr: switch_expr,
+				arms,
+			} => {
+				write_switch(f, w, switch_expr, arms)?;
 				write!(f, ";")
 			}
 			Expr::Block(block) => {
@@ -5396,12 +5402,12 @@ mod parser_tests
 		}
 	}
 
-	// ========== Case Tests ==========
+	// ========== Switch Tests ==========
 
 	#[test]
-	fn test_parse_case_expression()
+	fn test_parse_switch_expression()
 	{
-		let input = r#"case x {
+		let input = r#"switch x {
             1 => 10,
             2 => 20,
             _ => 0,
@@ -5417,10 +5423,10 @@ mod parser_tests
 		}
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Case { expr: _, arms } => {
+			Expr::Switch { expr: _, arms } => {
 				assert_eq!(arms.len(), 3);
 			}
-			_ => panic!("Expected case expression"),
+			_ => panic!("Expected switch expression"),
 		}
 	}
 
@@ -6206,10 +6212,10 @@ mod parser_tests
 	}
 
 	#[test]
-	fn test_parse_case_with_typed_patterns()
+	fn test_parse_switch_with_typed_patterns()
 	{
 		let input = r#"
-			case x {
+			switch x {
 				Some(val: i32) => val,
 				None => 0,
 			}
@@ -6522,7 +6528,7 @@ mod parser_tests
 	fn test_parse_pattern_range_inclusive()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { 1..=10 => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1..=10 => true, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6532,7 +6538,7 @@ mod parser_tests
 	fn test_parse_pattern_range_exclusive()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { 1..10 => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1..10 => true, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6542,7 +6548,7 @@ mod parser_tests
 	fn test_parse_pattern_range_open_ended()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { 1.. => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1.. => true, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6552,7 +6558,7 @@ mod parser_tests
 	fn test_parse_pattern_char_literal()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { 'a' => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 'a' => true, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6562,7 +6568,7 @@ mod parser_tests
 	fn test_parse_pattern_string_literal()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, r#"{ case x { "hello" => true, } }"#);
+		let lexer = Lexer::new(&config, r#"{ switch x { "hello" => true, } }"#);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6572,7 +6578,7 @@ mod parser_tests
 	fn test_parse_pattern_bool_literals()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { true => 1, false => 0, } }");
+		let lexer = Lexer::new(&config, "{ switch x { true => 1, false => 0, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6582,7 +6588,7 @@ mod parser_tests
 	fn test_parse_pattern_nested_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { ((a: i32, b: i32), c: i32) => a, } }");
+		let lexer = Lexer::new(&config, "{ switch x { ((a: i32, b: i32), c: i32) => a, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6592,7 +6598,7 @@ mod parser_tests
 	fn test_parse_pattern_variant_multiple_args()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { Some(a: i32, b: i32, c: i32) => a, } }");
+		let lexer = Lexer::new(&config, "{ switch x { Some(a: i32, b: i32, c: i32) => a, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -6602,13 +6608,13 @@ mod parser_tests
 	fn test_parse_pattern_or_with_wildcards()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ case x { None | Some(_) => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { None | Some(_) => true, } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 
-	// ========== Expression Edge Cases ==========
+	// ========== Expression Edge Switchs ==========
 
 	#[test]
 	fn test_parse_nested_struct_init()
@@ -6726,9 +6732,9 @@ mod parser_tests
 	}
 
 	#[test]
-	fn test_parse_case_as_tail_expr()
+	fn test_parse_switch_as_tail_expr()
 	{
-		let result = parse_block_from_str("{ case x { 1 => 10, _ => 0, } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ switch x { 1 => 10, _ => 0, } }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_some());
@@ -6970,39 +6976,39 @@ mod parser_tests
 		assert!(result.is_ok());
 	}
 
-	// ========== Case Expression Tests ==========
+	// ========== Switch Expression Tests ==========
 
 	#[test]
-	fn test_parse_case_with_block_arms()
+	fn test_parse_switch_with_block_arms()
 	{
-		let input = "case x { 1 => { println(1); }, 2 => { println(2); }, }";
+		let input = "switch x { 1 => { println(1); }, 2 => { println(2); }, }";
 		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Case { arms, .. } => {
+			Expr::Switch { arms, .. } => {
 				for arm in arms {
 					match arm.body {
-						CaseBody::Block(_) => (),
+						SwitchBody::Block(_) => (),
 						_ => panic!("Expected block arm"),
 					}
 				}
 			}
-			_ => panic!("Expected case expression"),
+			_ => panic!("Expected switch expression"),
 		}
 	}
 
 	#[test]
-	fn test_parse_case_mixed_arms()
+	fn test_parse_switch_mixed_arms()
 	{
-		let input = "case x { 1 => 10, 2 => { println(2); 20 }, }";
+		let input = "switch x { 1 => 10, 2 => { println(2); 20 }, }";
 		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 
 	#[test]
-	fn test_parse_nested_case()
+	fn test_parse_nested_switch()
 	{
-		let input = "case x { 1 => case y { 2 => 3, _ => 4, }, _ => 0, }";
+		let input = "switch x { 1 => switch y { 2 => 3, _ => 4, }, _ => 0, }";
 		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
@@ -7157,18 +7163,18 @@ mod parser_tests
 	#[test]
 	fn test_error_invalid_pattern()
 	{
-		let result = parse_block_from_str("{ case x { 1 + 2 => 3, } }");
+		let result = parse_block_from_str("{ switch x { 1 + 2 => 3, } }");
 		assert!(result.is_err());
 	}
 
 	#[test]
-	fn test_error_missing_arrow_in_case()
+	fn test_error_missing_arrow_in_switch()
 	{
-		let result = parse_block_from_str("{ case x { 1 3, } }");
+		let result = parse_block_from_str("{ switch x { 1 3, } }");
 		assert!(result.is_err());
 	}
 
-	// ========== Edge Case Tests ==========
+	// ========== Edge Switch Tests ==========
 
 	#[test]
 	fn test_parse_empty_program()

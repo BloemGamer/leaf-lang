@@ -1,6 +1,7 @@
 use crate::parser::{
-	ArrayLiteral, Block, BlockContent, CaseArm, CaseBody, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem,
-	NamespaceDecl, Pattern, Program, Spanned, Stmt, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
+	ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
+	Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
+	VariableDecl,
 };
 
 #[derive(Debug, Default)]
@@ -209,7 +210,7 @@ impl Desugarer
 	/// {
 	///     let __iter = iter;
 	///     loop {
-	///         case __iter.next() {
+	///         switch __iter.next() {
 	///             Some(name) => { body },
 	///             None => break,
 	///         }
@@ -251,33 +252,33 @@ impl Desugarer
 			args: vec![],
 		};
 
-		let some_arm: CaseArm = CaseArm {
+		let some_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
 				path: vec!["Some".to_string()],
 				args: vec![name_pattern],
 			},
-			body: CaseBody::Block(desugared_body),
+			body: SwitchBody::Block(desugared_body),
 		};
 
-		let none_arm: CaseArm = CaseArm {
+		let none_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
 				path: vec!["None".to_string()],
 				args: vec![],
 			},
-			body: CaseBody::Block(Block {
+			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break],
 				tail_expr: None,
 			}),
 		};
 
-		let case_expr: Expr = Expr::Case {
+		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(next_call),
 			arms: vec![some_arm, none_arm],
 		};
 
 		let loop_stmt: Stmt = Stmt::Loop {
 			body: Block {
-				stmts: vec![Stmt::Expr(case_expr)],
+				stmts: vec![Stmt::Expr(switch_expr)],
 				tail_expr: None,
 			},
 		};
@@ -288,7 +289,7 @@ impl Desugarer
 		});
 	}
 
-	/// Desugar an if-var statement into a case expression.
+	/// Desugar an if-var statement into a switch expression.
 	///
 	/// ```
 	/// if var pattern = expr {
@@ -303,7 +304,7 @@ impl Desugarer
 	/// ```
 	/// {
 	///     var __tmp = expr;
-	///     case __tmp {
+	///     switch __tmp {
 	///         pattern => { then_block },
 	///         _ => { else_block },
 	///     }
@@ -337,33 +338,33 @@ impl Desugarer
 			comp_const: false,
 		});
 
-		let match_arm: CaseArm = CaseArm {
+		let match_arm: SwitchArm = SwitchArm {
 			pattern: self.desugar_pattern(pattern),
-			body: CaseBody::Block(desugared_then),
+			body: SwitchBody::Block(desugared_then),
 		};
 
-		let else_arm: CaseArm = CaseArm {
+		let else_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard,
 			body: if let Some(else_stmt) = else_branch {
-				CaseBody::Block(Block {
+				SwitchBody::Block(Block {
 					stmts: vec![self.desugar_stmt(*else_stmt)],
 					tail_expr: None,
 				})
 			} else {
-				CaseBody::Block(Block {
+				SwitchBody::Block(Block {
 					stmts: vec![],
 					tail_expr: None,
 				})
 			},
 		};
 
-		let case_expr: Expr = Expr::Case {
+		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier(vec![temp_var])),
 			arms: vec![match_arm, else_arm],
 		};
 
 		return Stmt::Block(Block {
-			stmts: vec![temp_decl, Stmt::Expr(case_expr)],
+			stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 			tail_expr: None,
 		});
 	}
@@ -381,7 +382,7 @@ impl Desugarer
 	/// ```
 	/// loop {
 	///     let __tmp = expr;
-	///     case __tmp {
+	///     switch __tmp {
 	///         pattern => { body },
 	///         _ => break,
 	///     }
@@ -409,27 +410,27 @@ impl Desugarer
 			comp_const: false,
 		});
 
-		let match_arm: CaseArm = CaseArm {
+		let match_arm: SwitchArm = SwitchArm {
 			pattern: self.desugar_pattern(pattern),
-			body: CaseBody::Block(desugared_body),
+			body: SwitchBody::Block(desugared_body),
 		};
 
-		let break_arm: CaseArm = CaseArm {
+		let break_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard,
-			body: CaseBody::Block(Block {
+			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break],
 				tail_expr: None,
 			}),
 		};
 
-		let case_expr: Expr = Expr::Case {
+		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier(vec![temp_var])),
 			arms: vec![match_arm, break_arm],
 		};
 
 		return Stmt::Loop {
 			body: Block {
-				stmts: vec![temp_decl, Stmt::Expr(case_expr)],
+				stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 				tail_expr: None,
 			},
 		};
@@ -489,9 +490,9 @@ impl Desugarer
 
 			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block))),
 
-			Expr::Case { expr, arms } => Expr::Case {
+			Expr::Switch { expr, arms } => Expr::Switch {
 				expr: Box::new(self.desugar_expr(*expr)),
-				arms: arms.into_iter().map(|arm| self.desugar_case_arm(arm)).collect(),
+				arms: arms.into_iter().map(|arm| self.desugar_switch_arm(arm)).collect(),
 			},
 
 			Expr::Identifier(_) => expr,
@@ -549,39 +550,39 @@ impl Desugarer
 			comp_const: false,
 		});
 
-		let match_arm = CaseArm {
+		let match_arm = SwitchArm {
 			pattern: self.desugar_pattern(pattern),
-			body: CaseBody::Block(desugared_then),
+			body: SwitchBody::Block(desugared_then),
 		};
 
-		let else_arm = CaseArm {
+		let else_arm = SwitchArm {
 			pattern: Pattern::Wildcard,
 			body: if let Some(else_expr) = else_branch {
 				let desugared_else = self.desugar_expr(*else_expr);
 
 				match desugared_else {
-					Expr::Block(block) => CaseBody::Block(*block),
-					other_expr => CaseBody::Block(Block {
+					Expr::Block(block) => SwitchBody::Block(*block),
+					other_expr => SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: Some(Box::new(other_expr)),
 					}),
 				}
 			} else {
-				CaseBody::Block(Block {
+				SwitchBody::Block(Block {
 					stmts: vec![],
 					tail_expr: None,
 				})
 			},
 		};
 
-		let case_expr = Expr::Case {
+		let switch_expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier(vec![temp_var])),
 			arms: vec![match_arm, else_arm],
 		};
 
 		Expr::Block(Box::new(Block {
 			stmts: vec![temp_decl],
-			tail_expr: Some(Box::new(case_expr)),
+			tail_expr: Some(Box::new(switch_expr)),
 		}))
 	}
 
@@ -596,13 +597,13 @@ impl Desugarer
 		};
 	}
 
-	fn desugar_case_arm(&mut self, arm: CaseArm) -> CaseArm
+	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> SwitchArm
 	{
-		return CaseArm {
+		return SwitchArm {
 			pattern: self.desugar_pattern(arm.pattern),
 			body: match arm.body {
-				CaseBody::Expr(expr) => CaseBody::Expr(self.desugar_expr(expr)),
-				CaseBody::Block(block) => CaseBody::Block(self.desugar_block(block)),
+				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)),
+				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)),
 			},
 		};
 	}
@@ -749,7 +750,7 @@ mod tests
 			Stmt::Block(block) => {
 				assert_eq!(block.stmts.len(), 2);
 				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
-				assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Case { .. })));
+				assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Switch { .. })));
 			}
 			_ => panic!("Expected Stmt::Block, got {:?}", output),
 		}
@@ -784,7 +785,7 @@ mod tests
 			Stmt::Loop { body } => {
 				assert_eq!(body.stmts.len(), 2);
 				assert!(matches!(body.stmts[0], Stmt::VariableDecl(_)));
-				assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Case { .. })));
+				assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Switch { .. })));
 			}
 			_ => panic!("Expected desugared loop, got {:?}", output),
 		}
@@ -847,11 +848,11 @@ mod tests
 	}
 
 	#[test]
-	fn test_desugar_case_arm_pattern_recursive()
+	fn test_desugar_switch_arm_pattern_recursive()
 	{
 		let mut desugarer = Desugarer::new();
 
-		let arm = CaseArm {
+		let arm = SwitchArm {
 			pattern: Pattern::Or(vec![
 				Pattern::Variant {
 					path: vec!["Some".into()],
@@ -862,13 +863,13 @@ mod tests
 					args: vec![],
 				},
 			]),
-			body: CaseBody::Block(Block {
+			body: SwitchBody::Block(Block {
 				stmts: vec![],
 				tail_expr: None,
 			}),
 		};
 
-		let out = desugarer.desugar_case_arm(arm);
+		let out = desugarer.desugar_switch_arm(arm);
 
 		match out.pattern {
 			Pattern::Or(ps) => assert_eq!(ps.len(), 2),
@@ -936,20 +937,20 @@ mod tests
 
 		let output = desugarer.desugar_stmt(input);
 
-		// Top-level should be a block with variable decl and case
+		// Top-level should be a block with variable decl and switch
 		match output {
 			Stmt::Block(block) => {
 				assert_eq!(block.stmts.len(), 2);
-				if let Stmt::Expr(Expr::Case { arms, .. }) = &block.stmts[1] {
+				if let Stmt::Expr(Expr::Switch { arms, .. }) = &block.stmts[1] {
 					// Then branch also should be desugared
 					match &arms[0].body {
-						CaseBody::Block(inner_block) => {
+						SwitchBody::Block(inner_block) => {
 							assert!(matches!(inner_block.stmts[0], Stmt::Block(_)));
 						}
-						_ => panic!("Expected inner block in case arm"),
+						_ => panic!("Expected inner block in switch arm"),
 					}
 				} else {
-					panic!("Expected Case expression at top level");
+					panic!("Expected Switch expression at top level");
 				}
 			}
 			_ => panic!("Expected Stmt::Block"),
@@ -1044,11 +1045,11 @@ mod tests
 	}
 
 	#[test]
-	fn test_desugar_nested_case_pattern()
+	fn test_desugar_nested_switch_pattern()
 	{
 		let mut desugarer = Desugarer::new();
 
-		let arm = CaseArm {
+		let arm = SwitchArm {
 			pattern: Pattern::Tuple(vec![
 				Pattern::Variant {
 					path: vec!["Some".into()],
@@ -1056,13 +1057,13 @@ mod tests
 				},
 				Pattern::Or(vec![Pattern::Wildcard, Pattern::Literal(Literal::Int(5))]),
 			]),
-			body: CaseBody::Block(Block {
+			body: SwitchBody::Block(Block {
 				stmts: vec![],
 				tail_expr: None,
 			}),
 		};
 
-		let out = desugarer.desugar_case_arm(arm);
+		let out = desugarer.desugar_switch_arm(arm);
 
 		if let Pattern::Tuple(patterns) = out.pattern {
 			assert_eq!(patterns.len(), 2);
@@ -1456,15 +1457,15 @@ mod tests
 	}
 
 	#[test]
-	fn test_desugar_case_with_nested_blocks()
+	fn test_desugar_switch_with_nested_blocks()
 	{
 		let mut desugarer = Desugarer::new();
 
-		let expr = Expr::Case {
+		let expr = Expr::Switch {
 			expr: Box::new(ident("x")),
-			arms: vec![CaseArm {
+			arms: vec![SwitchArm {
 				pattern: Pattern::Wildcard,
-				body: CaseBody::Block(Block {
+				body: SwitchBody::Block(Block {
 					stmts: vec![Stmt::For {
 						name: vec!["i".into()],
 						iter: ident("items"),
@@ -1481,16 +1482,16 @@ mod tests
 		let output = desugarer.desugar_expr(expr);
 
 		match output {
-			Expr::Case { arms, .. } => {
+			Expr::Switch { arms, .. } => {
 				match &arms[0].body {
-					CaseBody::Block(block) => {
+					SwitchBody::Block(block) => {
 						// For loop should be desugared
 						assert!(matches!(block.stmts[0], Stmt::Block(_)));
 					}
 					_ => panic!("Expected block body"),
 				}
 			}
-			_ => panic!("Expected case expression"),
+			_ => panic!("Expected switch expression"),
 		}
 	}
 

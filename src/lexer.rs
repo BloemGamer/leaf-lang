@@ -211,8 +211,8 @@ pub enum TokenKind
 	For,
 	/// Loop: `loop`
 	Loop,
-	/// Pattern matching: `case`
-	Case,
+	/// Pattern matching: `switch`
+	Switch,
 	/// Return from function: `return`
 	Return,
 	/// Exit loop: `break`
@@ -385,7 +385,7 @@ pub enum TokenKind
 	Ellipsis,
 	/// Function return type: `->`
 	Arrow,
-	/// Case arm: `=>`
+	/// Switch arm: `=>`
 	FatArrow,
 	/// Optional/error propagation: `?`
 	QuestionMark,
@@ -1036,7 +1036,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"while" => TokenKind::While,
 			"for" => TokenKind::For,
 			"loop" => TokenKind::Loop,
-			"case" => TokenKind::Case,
+			"switch" => TokenKind::Switch,
 			"return" => TokenKind::Return,
 			"break" => TokenKind::Break,
 			"continue" => TokenKind::Continue,
@@ -1481,7 +1481,7 @@ mod tests
 	#[test]
 	fn test_control_flow_keywords()
 	{
-		let kinds = lex_kinds("if else while for case return break continue");
+		let kinds = lex_kinds("if else while for switch return break continue");
 		assert_eq!(
 			kinds,
 			vec![
@@ -1489,7 +1489,7 @@ mod tests
 				TokenKind::Else,
 				TokenKind::While,
 				TokenKind::For,
-				TokenKind::Case,
+				TokenKind::Switch,
 				TokenKind::Return,
 				TokenKind::Break,
 				TokenKind::Continue,
@@ -1787,7 +1787,7 @@ mod tests
 		);
 	}
 
-	// ===== Error Cases =====
+	// ===== Error Switchs =====
 
 	#[test]
 	fn test_unterminated_string()
@@ -1965,13 +1965,13 @@ mod tests
 	}
 
 	#[test]
-	fn test_case_expression()
+	fn test_switch_expression()
 	{
-		let kinds = lex_kinds("case x { 0 => true, _ => false }");
+		let kinds = lex_kinds("switch x { 0 => true, _ => false }");
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::Case,
+				TokenKind::Switch,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::LeftBrace,
 				TokenKind::IntLiteral(0),
