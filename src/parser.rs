@@ -4136,7 +4136,7 @@ impl fmt::Display for Expr
 
 fn write_case(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[CaseArm]) -> fmt::Result
 {
-	writeln!(f, "case ")?;
+	write!(f, "case ")?;
 	write_expr(f, w, expr)?;
 	writeln!(f, " {{")?;
 	w.indent();
