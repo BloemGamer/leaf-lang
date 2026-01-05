@@ -18,7 +18,7 @@ use crate::lexer::{self, Lexer, Span, Token, TokenKind};
 /// let config = Config::default();
 /// let source = "fn main() { var x = 42; }";
 /// let lexer = Lexer::new(&config, source);
-/// let mut parser = Parser::from(lexer);
+/// let mut parser = Parser::from(lexer);pa
 /// let program = parser.parse_program()?;
 /// ```
 #[derive(Debug, Clone)]
@@ -700,8 +700,16 @@ pub enum Stmt
 
 	Expr(Expr),
 
-	Break,
-	Continue,
+	Break
+	{
+		label: Option<String>,
+		value: Option<Expr>,
+	},
+
+	Continue
+	{
+		label: Option<String>,
+	},
 
 	If
 	{
@@ -720,17 +728,20 @@ pub enum Stmt
 
 	While
 	{
+		label: Option<String>,
 		cond: Expr,
 		body: Block,
 	},
 
 	Loop
 	{
+		label: Option<String>,
 		body: Block,
 	},
 
 	WhileVarLoop
 	{
+		label: Option<String>,
 		pattern: Pattern,
 		expr: Expr,
 		body: Block,
@@ -738,6 +749,7 @@ pub enum Stmt
 
 	For
 	{
+		label: Option<String>,
 		name: Vec<Ident>,
 		iter: Expr,
 		body: Block,
@@ -748,6 +760,20 @@ pub enum Stmt
 	Unsafe(Block),
 	Block(Block),
 	Directive(DirectiveNode),
+}
+
+impl Stmt
+{
+	fn set_label(&mut self, label: String)
+	{
+		match self {
+			Stmt::While { label: l, .. } => *l = Some(label),
+			Stmt::Loop { label: l, .. } => *l = Some(label),
+			Stmt::For { label: l, .. } => *l = Some(label),
+			Stmt::WhileVarLoop { label: l, .. } => *l = Some(label),
+			_ => {}
+		}
+	}
 }
 
 /// Block of statements with optional tail expression.
@@ -2551,6 +2577,18 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut tail_expr: Option<Box<Expr>> = None;
 
 		while !self.at(&TokenKind::RightBrace) {
+			let saved_label: Option<String> = if matches!(self.peek_kind(), TokenKind::Label(_)) {
+				let tok = self.next();
+				if let TokenKind::Label(l) = tok.kind {
+					self.expect(&TokenKind::Colon)?;
+					Some(l)
+				} else {
+					None
+				}
+			} else {
+				None
+			};
+
 			let kind = self.peek_kind().clone();
 
 			match kind {
@@ -2572,44 +2610,69 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Break => {
-					self.next();
+					self.next(); // break
+
+					let label = if matches!(self.peek_kind(), TokenKind::Label(_)) {
+						let tok = self.next();
+						if let TokenKind::Label(l) = tok.kind {
+							Some(l)
+						} else {
+							None
+						}
+					} else {
+						None
+					};
+
+					let value = if self.at(&TokenKind::Semicolon) {
+						None
+					} else {
+						Some(self.parse_expr()?)
+					};
+
 					self.expect(&TokenKind::Semicolon)?;
-					stmts.push(Stmt::Break);
+					stmts.push(Stmt::Break { label, value });
 				}
 
 				TokenKind::Continue => {
-					self.next();
+					self.next(); // continue
+
+					let label = if matches!(self.peek_kind(), TokenKind::Label(_)) {
+						let tok = self.next();
+						if let TokenKind::Label(l) = tok.kind {
+							Some(l)
+						} else {
+							None
+						}
+					} else {
+						None
+					};
+
 					self.expect(&TokenKind::Semicolon)?;
-					stmts.push(Stmt::Continue);
+					stmts.push(Stmt::Continue { label });
 				}
 
 				TokenKind::While => {
-					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
-					let checkpoint_span: Span = self.last_span;
-					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
-
-					self.next(); // while
-
-					if self.consume(&TokenKind::Var) {
-						let pattern: Pattern = self.parse_pattern()?;
-						self.expect(&TokenKind::Equals)?;
-						let expr: Expr = self.parse_expr()?;
-						let body: Block = self.parse_block()?;
-						stmts.push(Stmt::WhileVarLoop { pattern, expr, body });
-					} else {
-						self.lexer = checkpoint;
-						self.last_span = checkpoint_span;
-						self.buffered_token = checkpoint_buffered;
-						stmts.push(self.parse_while()?);
+					let mut while_stmt = self.parse_while()?;
+					if let Some(lbl) = saved_label {
+						while_stmt.set_label(lbl);
 					}
+					stmts.push(while_stmt);
 				}
 
 				TokenKind::For => {
-					stmts.push(self.parse_for()?);
+					let mut for_stmt = self.parse_for()?;
+					if let Some(lbl) = saved_label {
+						for_stmt.set_label(lbl);
+					}
+					stmts.push(for_stmt);
 				}
 
 				TokenKind::Loop => {
-					stmts.push(self.parse_loop()?);
+					let mut loop_stmt = self.parse_loop()?;
+					if let Some(lbl) = saved_label {
+						loop_stmt.set_label(lbl);
+					}
+					stmts.push(loop_stmt);
 				}
 
 				TokenKind::If => {
@@ -2908,30 +2971,54 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_while(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::While)?;
-		let cond = self.parse_expr_no_struct()?;
-		let body = self.parse_block()?;
-		Ok(Stmt::While { cond, body })
+
+		if self.consume(&TokenKind::Var) {
+			let pattern: Pattern = self.parse_pattern()?;
+			self.expect(&TokenKind::Equals)?;
+			let expr: Expr = self.parse_expr()?;
+			let body: Block = self.parse_block()?;
+
+			Ok(Stmt::WhileVarLoop {
+				label: None,
+				pattern,
+				expr,
+				body,
+			})
+		} else {
+			let cond = self.parse_expr_no_struct()?;
+			let body = self.parse_block()?;
+
+			Ok(Stmt::While {
+				label: None,
+				cond,
+				body,
+			})
+		}
 	}
 
 	fn parse_for(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::For)?;
-
 		let name: Vec<Ident> = self.get_path()?;
-
 		self.expect(&TokenKind::In)?;
 		let iter = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
 
-		Ok(Stmt::For { name, iter, body })
+		Ok(Stmt::For {
+			label: None,
+			name,
+			iter,
+			body,
+		})
 	}
 
 	fn parse_loop(&mut self) -> Result<Stmt, ParseError>
 	{
 		self.expect(&TokenKind::Loop)?;
-		return Ok(Stmt::Loop {
+		Ok(Stmt::Loop {
+			label: None,
 			body: self.parse_block()?,
-		});
+		})
 	}
 
 	fn parse_function_decl(&mut self) -> Result<Spanned<FunctionDecl>, ParseError>
@@ -4382,8 +4469,24 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, ";",)
 			}
 		},
-		Stmt::Break => write!(f, "break;"),
-		Stmt::Continue => write!(f, "continue;"),
+		Stmt::Break { label, value } => {
+			write!(f, "break")?;
+			if let Some(lbl) = label {
+				write!(f, " '{}", lbl)?;
+			}
+			if let Some(val) = value {
+				write!(f, " ")?;
+				write_expr(f, w, val)?;
+			}
+			write!(f, ";")
+		}
+		Stmt::Continue { label } => {
+			write!(f, "continue")?;
+			if let Some(lbl) = label {
+				write!(f, " '{}", lbl)?;
+			}
+			write!(f, ";")
+		}
 		Stmt::If {
 			cond,
 			then_block,
@@ -4415,23 +4518,45 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			}
 			Ok(())
 		}
-		Stmt::While { cond, body } => {
+		Stmt::While { label, cond, body } => {
+			if let Some(lbl) = label {
+				write!(f, "'{}: ", lbl)?;
+			}
 			write!(f, "while ")?;
 			write_expr(f, w, cond)?;
 			write!(f, " ")?;
 			write_block(f, w, body)
 		}
-		Stmt::Loop { body } => {
+		Stmt::Loop { label, body } => {
+			if let Some(lbl) = label {
+				write!(f, "'{}: ", lbl)?;
+			}
 			write!(f, "loop ")?;
 			write_block(f, w, body)
 		}
-		Stmt::WhileVarLoop { pattern, expr, body } => {
+		Stmt::WhileVarLoop {
+			label,
+			pattern,
+			expr,
+			body,
+		} => {
+			if let Some(lbl) = label {
+				write!(f, "'{}: ", lbl)?;
+			}
 			write!(f, "while var {} = ", pattern)?;
 			write_expr(f, w, expr)?;
 			write!(f, " ")?;
 			write_block(f, w, body)
 		}
-		Stmt::For { name, iter, body } => {
+		Stmt::For {
+			label,
+			name,
+			iter,
+			body,
+		} => {
+			if let Some(lbl) = label {
+				write!(f, "'{}: ", lbl)?;
+			}
 			write!(f, "for {} in ", name.join("::"))?;
 			write_expr(f, w, iter)?;
 			write!(f, " ")?;
@@ -7263,6 +7388,660 @@ mod parser_tests
 		let lexer = Lexer::new(&config, "Box<Vec<Option<i32>>>");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Loop Label and Break Value Tests ==========
+
+	#[test]
+	fn test_parse_break_with_value()
+	{
+		let result = parse_block_from_str("{ loop { break 42; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { body, .. } => match &body.stmts[0] {
+				Stmt::Break {
+					label: None,
+					value: Some(_),
+				} => (),
+				_ => panic!("Expected break with value"),
+			},
+			_ => panic!("Expected loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_break_without_value()
+	{
+		let result = parse_block_from_str("{ loop { break; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { body, .. } => match &body.stmts[0] {
+				Stmt::Break {
+					label: None,
+					value: None,
+				} => (),
+				_ => panic!("Expected break without value"),
+			},
+			_ => panic!("Expected loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_labeled_loop()
+	{
+		let result = parse_block_from_str("{ 'outer: loop { break; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { label: Some(lbl), .. } => {
+				assert_eq!(lbl, "outer");
+			}
+			_ => panic!("Expected labeled loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_break_with_label()
+	{
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { label: Some(_), body } => match &body.stmts[0] {
+				Stmt::Break {
+					label: Some(lbl),
+					value: None,
+				} => {
+					assert_eq!(lbl, "outer");
+				}
+				_ => panic!("Expected break with label"),
+			},
+			_ => panic!("Expected labeled loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_break_with_label_and_value()
+	{
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer 42; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { body, .. } => match &body.stmts[0] {
+				Stmt::Break {
+					label: Some(lbl),
+					value: Some(_),
+				} => {
+					assert_eq!(lbl, "outer");
+				}
+				_ => panic!("Expected break with label and value"),
+			},
+			_ => panic!("Expected loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_continue_with_label()
+	{
+		let result = parse_block_from_str("{ 'outer: loop { continue 'outer; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { body, .. } => match &body.stmts[0] {
+				Stmt::Continue { label: Some(lbl) } => {
+					assert_eq!(lbl, "outer");
+				}
+				_ => panic!("Expected continue with label"),
+			},
+			_ => panic!("Expected loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_continue_without_label()
+	{
+		let result = parse_block_from_str("{ loop { continue; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop { body, .. } => match &body.stmts[0] {
+				Stmt::Continue { label: None } => (),
+				_ => panic!("Expected continue without label"),
+			},
+			_ => panic!("Expected loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_labeled_while_loop()
+	{
+		let result = parse_block_from_str("{ 'outer: while true { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::While { label: Some(lbl), .. } => {
+				assert_eq!(lbl, "outer");
+			}
+			_ => panic!("Expected labeled while loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_labeled_for_loop()
+	{
+		let result =
+			parse_block_from_str("{ 'outer: for i in 0..10 { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::For { label: Some(lbl), .. } => {
+				assert_eq!(lbl, "outer");
+			}
+			_ => panic!("Expected labeled for loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_labeled_while_var_loop()
+	{
+		let result = parse_block_from_str("{ 'outer: while var Some(x: i32) = opt { break 'outer; } }")
+			.inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::WhileVarLoop { label: Some(lbl), .. } => {
+				assert_eq!(lbl, "outer");
+			}
+			_ => panic!("Expected labeled while var loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_nested_labeled_loops()
+	{
+		let input = r#"{
+		'outer: loop {
+			'inner: loop {
+				break 'outer;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Loop {
+				label: Some(outer_lbl),
+				body,
+			} => {
+				assert_eq!(outer_lbl, "outer");
+				match &body.stmts[0] {
+					Stmt::Loop {
+						label: Some(inner_lbl), ..
+					} => {
+						assert_eq!(inner_lbl, "inner");
+					}
+					_ => panic!("Expected inner labeled loop"),
+				}
+			}
+			_ => panic!("Expected outer labeled loop"),
+		}
+	}
+
+	#[test]
+	fn test_parse_break_to_outer_loop()
+	{
+		let input = r#"{
+		'outer: loop {
+			'inner: loop {
+				if condition {
+					break 'outer;
+				}
+				break 'inner;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_continue_to_outer_loop()
+	{
+		let input = r#"{
+		'outer: for i in 0..10 {
+			'inner: for j in 0..10 {
+				if j == 5 {
+					continue 'outer;
+				}
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_loop_with_break_value_as_expression()
+	{
+		let input = r#"{
+		var result: i32 = loop {
+			if condition {
+				break 42;
+			}
+		};
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_labeled_loop_with_break_value()
+	{
+		let input = r#"{
+		var result: i32 = 'search: loop {
+			if found {
+				break 'search 100;
+			}
+		};
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_with_complex_expression()
+	{
+		let input = r#"{
+		loop {
+			break x * 2 + y;
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_with_function_call()
+	{
+		let input = r#"{
+		loop {
+			break compute_result();
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_label_with_underscore()
+	{
+		let result =
+			parse_block_from_str("{ 'outer_loop: loop { break 'outer_loop; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_label_with_numbers()
+	{
+		let result = parse_block_from_str("{ 'loop1: loop { break 'loop1; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_multiple_labeled_loops_same_level()
+	{
+		let input = r#"{
+		'first: loop {
+			break 'first;
+		}
+		'second: loop {
+			break 'second;
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_deeply_nested_labeled_loops()
+	{
+		let input = r#"{
+		'level1: loop {
+			'level2: while true {
+				'level3: for i in 0..10 {
+					'level4: loop {
+						break 'level1;
+					}
+				}
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_block_expression()
+	{
+		let input = r#"{
+		loop {
+			break {
+				var x: i32 = 10;
+				x + 5
+			};
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_if_expression()
+	{
+		let input = r#"{
+		loop {
+			break if condition { 1 } else { 2 };
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_match()
+	{
+		let input = r#"{
+		loop {
+			break switch x {
+				1 => 10,
+				2 => 20,
+				_ => 0,
+			};
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_label_similar_to_lifetime()
+	{
+		let result = parse_block_from_str("{ 'a: loop { break 'a; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_char_literal_still_works()
+	{
+		let result = parse_expr_from_str("'x'").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Literal(Literal::Char('x')) => (),
+			_ => panic!("Expected char literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_char_literal_and_label_in_same_block()
+	{
+		let input = r#"{
+		var ch: char = 'a';
+		'outer: loop {
+			if ch == 'b' {
+				break 'outer;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_single_char_label()
+	{
+		let result = parse_block_from_str("{ 'a: loop { break 'a; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_while_with_break_value()
+	{
+		let input = r#"{
+		while true {
+			break 42;
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_for_with_break_value()
+	{
+		let input = r#"{
+		for i in 0..10 {
+			if i == 5 {
+				break i;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_labeled_for_with_continue_and_break()
+	{
+		let input = r#"{
+		'outer: for i in 0..10 {
+			if i == 3 {
+				continue 'outer;
+			}
+			if i == 7 {
+				break 'outer i;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_multiple_breaks_different_labels()
+	{
+		let input = r#"{
+		'outer: loop {
+			'inner: loop {
+				if a {
+					break 'outer 1;
+				}
+				if b {
+					break 'inner 2;
+				}
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_display_labeled_loop()
+	{
+		let input = "'outer: loop { break 'outer; }";
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
+			.inspect_err(|e| println!("{e}"))
+			.unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("'outer"));
+	}
+
+	#[test]
+	fn test_display_break_with_value()
+	{
+		let input = "loop { break 42; }";
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
+			.inspect_err(|e| println!("{e}"))
+			.unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("break"));
+		assert!(output.contains("42"));
+	}
+
+	#[test]
+	fn test_display_break_with_label_and_value()
+	{
+		let input = "'outer: loop { break 'outer 42; }";
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
+			.inspect_err(|e| println!("{e}"))
+			.unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("'outer"));
+		assert!(output.contains("break"));
+	}
+
+	#[test]
+	fn test_parse_label_without_colon_error()
+	{
+		let result = parse_block_from_str("{ 'outer loop { break; } }");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_colon_without_label()
+	{
+		let result = parse_block_from_str("{ : loop { break; } }");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_real_world_example_search()
+	{
+		let input = r#"{
+		'search: for item in collection {
+			if item.matches(target) {
+				break 'search item.value;
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_real_world_example_nested_iteration()
+	{
+		let input = r#"{
+		'outer: for row in 0..height {
+			'inner: for col in 0..width {
+				if grid[row][col] == target {
+					break 'outer (row, col);
+				}
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_real_world_example_state_machine()
+	{
+		let input = r#"{
+		'state_machine: loop {
+			switch current_state {
+				State::Init => {
+					if init_success() {
+						break 'state_machine Result::Ok;
+					}
+					current_state = State::Retry;
+					continue 'state_machine;
+				},
+				State::Retry => {
+					if retry_count > 3 {
+						break 'state_machine Result::Error;
+					}
+					continue 'state_machine;
+				},
+				_ => break 'state_machine Result::Error,
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_in_nested_if_in_loop()
+	{
+		let input = r#"{
+		'outer: loop {
+			if condition1 {
+				if condition2 {
+					break 'outer 42;
+				}
+			}
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_label_name_like_keyword()
+	{
+		// Labels named after keywords should work
+		let result = parse_block_from_str("{ 'while: loop { break 'while; } }").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_very_long_label_name()
+	{
+		let result = parse_block_from_str(
+			"{ 'this_is_a_very_long_label_name_for_testing: loop { break 'this_is_a_very_long_label_name_for_testing; } }",
+		)
+		.inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_tuple()
+	{
+		let input = r#"{
+		loop {
+			break (1, 2, 3);
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_array()
+	{
+		let input = r#"{
+		loop {
+			break [1, 2, 3];
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_break_value_with_struct_init()
+	{
+		let input = r#"{
+		loop {
+			break Point { x = 1, y = 2 };
+		}
+	}"#;
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 }

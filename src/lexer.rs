@@ -199,6 +199,8 @@ pub enum TokenKind
 	Underscore,
 	/// Self keyword: `self`
 	SelfKw,
+	/// Label: `'label'
+	Label(String),
 
 	// ===== Keywords - Control Flow =====
 	/// Conditional: `if`
@@ -558,7 +560,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 			// Literals
 			'"' => self.lex_string_literal(),
-			'\'' => self.lex_char_literal(),
+			'\'' => self.lex_char_or_label(),
 			'0'..='9' => self.lex_number(),
 
 			// Identifiers and keywords
@@ -888,6 +890,53 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		// Unterminated string
 		TokenKind::Invalid
+	}
+
+	fn lex_char_or_label(&mut self) -> TokenKind
+	{
+		let pos_backup = self.position;
+		let char_backup = self.current_char;
+		let line_backup = self.line;
+		let col_backup = self.column;
+
+		self.advance(); // '
+
+		match self.current_char {
+			Some(ch) if ch.is_alphabetic() || ch == '_' => {
+				let mut label_name = String::new();
+				label_name.push(ch);
+				self.advance();
+
+				let is_multi_char = self.current_char.is_some_and(|c| c.is_alphanumeric() || c == '_');
+
+				if is_multi_char {
+					while let Some(c) = self.current_char {
+						if c.is_alphanumeric() || c == '_' {
+							label_name.push(c);
+							self.advance();
+						} else {
+							break;
+						}
+					}
+					return TokenKind::Label(label_name);
+				} else if self.current_char == Some('\'') {
+					self.position = pos_backup;
+					self.current_char = char_backup;
+					self.line = line_backup;
+					self.column = col_backup;
+					return self.lex_char_literal();
+				} else {
+					return TokenKind::Label(label_name);
+				}
+			}
+			_ => {
+				self.position = pos_backup;
+				self.current_char = char_backup;
+				self.line = line_backup;
+				self.column = col_backup;
+				self.lex_char_literal()
+			}
+		}
 	}
 
 	fn lex_char_literal(&mut self) -> TokenKind
@@ -1800,7 +1849,7 @@ mod tests
 	fn test_unterminated_char()
 	{
 		let kinds = lex_kinds("'a");
-		assert_eq!(kinds, vec![TokenKind::Invalid]);
+		assert_eq!(kinds, vec![TokenKind::Label("a".to_string()), TokenKind::Eof]); // the paser should determine if a label can happen
 	}
 
 	#[test]
