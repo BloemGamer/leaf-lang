@@ -6442,7 +6442,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_loop_basic()
 	{
-		let result = parse_block_from_str("{ loop { break; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert_eq!(block.stmts.len(), 1);
@@ -7466,7 +7466,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_break_with_value()
 	{
-		let result = parse_block_from_str("{ loop { break 42; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break 42; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7484,7 +7484,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_break_without_value()
 	{
-		let result = parse_block_from_str("{ loop { break; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7502,7 +7502,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_labeled_loop()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7516,7 +7516,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_break_with_label()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7536,7 +7536,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_break_with_label_and_value()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break 'outer 42; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer 42; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7556,7 +7556,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_continue_with_label()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { continue 'outer; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { continue 'outer; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7573,7 +7573,7 @@ mod parser_tests
 	#[test]
 	fn test_parse_continue_without_label()
 	{
-		let result = parse_block_from_str("{ loop { continue; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { continue; }; }").inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -7636,8 +7636,8 @@ mod parser_tests
 		'outer: loop {
 			'inner: loop {
 				break 'outer;
-			}
-		}
+			};
+		};
 	}"#;
 		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
