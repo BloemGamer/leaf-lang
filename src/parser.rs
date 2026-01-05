@@ -504,6 +504,12 @@ pub enum Expr
 		then_block: Block,
 		else_branch: Option<Box<Expr>>,
 	},
+
+	Loop
+	{
+		label: Option<String>,
+		body: Box<Block>,
+	},
 }
 
 /// Literal value types.
@@ -2246,6 +2252,37 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(self.stmt_if_to_expr_wrapper(if_stmt)?)
 			}
 
+			TokenKind::Loop => {
+				let loop_stmt: Stmt = self.parse_loop()?;
+				Ok(self.stmt_loop_to_expr(loop_stmt)?)
+			}
+
+			TokenKind::Label(label) => {
+				self.next(); // label
+				self.expect(&TokenKind::Colon)?; // :
+
+				if self.at(&TokenKind::Loop) {
+					self.next(); // loop
+					let body = self.parse_block()?;
+					Ok(Expr::Loop {
+						label: Some(label.to_owned()),
+						body: Box::new(body),
+					})
+				} else {
+					let tok: Token = self.next();
+					return Err(ParseError {
+						span: tok.span,
+						message: tok.format_error(
+							self.source,
+							&format!(
+								"Expected a loop, because only a loop can return a value, and have a label, got: {:?}",
+								tok.kind
+							),
+						),
+					});
+				}
+			}
+
 			_ => Err(ParseError {
 				span: tok.span,
 				message: tok.format_error(self.source, "expected expression"),
@@ -2292,6 +2329,17 @@ impl<'s, 'c> Parser<'s, 'c>
 				tail_expr: None,
 			}))),
 			_ => unreachable!("Expected if or if var statement"),
+		}
+	}
+
+	fn stmt_loop_to_expr(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	{
+		match stmt {
+			Stmt::Loop { label, body } => Ok(Expr::Loop {
+				label,
+				body: Box::new(body),
+			}),
+			_ => unreachable!("Expected loop statement"),
 		}
 	}
 
@@ -2668,11 +2716,18 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Loop => {
-					let mut loop_stmt = self.parse_loop()?;
+					let mut loop_stmt: Stmt = self.parse_loop()?;
 					if let Some(lbl) = saved_label {
 						loop_stmt.set_label(lbl);
 					}
-					stmts.push(loop_stmt);
+
+					if self.at(&TokenKind::RightBrace) {
+						tail_expr = Some(Box::new(self.stmt_loop_to_expr(loop_stmt)?));
+						break;
+					} else {
+						self.consume(&TokenKind::Semicolon);
+						stmts.push(loop_stmt);
+					}
 				}
 
 				TokenKind::If => {
@@ -2821,7 +2876,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		!matches!(
 			expr,
-			Expr::Block(_) | Expr::Switch { .. } | Expr::If { .. } | Expr::IfVar { .. }
+			Expr::Block(_) | Expr::Switch { .. } | Expr::If { .. } | Expr::IfVar { .. } | Expr::Loop { .. }
 		)
 	}
 
@@ -4237,6 +4292,14 @@ impl fmt::Display for Expr
 				}
 				Ok(())
 			}
+			Expr::Loop { label, body } => {
+				if let Some(lbl) = label {
+					write!(f, "'{}: ", lbl)?;
+				}
+				write!(f, "loop ")?;
+				let mut w = IndentWriter::new();
+				write_block(f, &mut w, body)
+			}
 		}
 	}
 }
@@ -4420,6 +4483,13 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 				write_expr(f, w, else_stmt)?;
 			}
 			Ok(())
+		}
+		Expr::Loop { label, body } => {
+			if let Some(lbl) = label {
+				write!(f, "'{}: ", lbl)?;
+			}
+			write!(f, "loop ")?;
+			write_block(f, w, body)
 		}
 		_ => write!(f, "{}", expr),
 	}
