@@ -2417,14 +2417,72 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let body: SwitchBody = if self.at(&TokenKind::LeftBrace) {
 			let switch: SwitchBody = SwitchBody::Block(self.parse_block()?);
-			if self.at(&TokenKind::Comma) {
-				self.next(); // ,
-			}
+			self.consume(&TokenKind::Comma);
 			switch
 		} else {
-			let expr: Expr = self.parse_expr()?;
-			self.expect(&TokenKind::Comma)?;
-			SwitchBody::Expr(expr)
+			let is_stmt = matches!(
+				self.peek_kind(),
+				TokenKind::Break | TokenKind::Continue | TokenKind::Return
+			);
+
+			if is_stmt {
+				let stmt = match self.peek_kind() {
+					TokenKind::Break => {
+						self.next(); // break
+						let label = if matches!(self.peek_kind(), TokenKind::Label(_)) {
+							let tok = self.next();
+							if let TokenKind::Label(l) = tok.kind {
+								Some(l)
+							} else {
+								None
+							}
+						} else {
+							None
+						};
+						let value = if self.at(&TokenKind::Comma) {
+							None
+						} else {
+							Some(self.parse_expr()?)
+						};
+						Stmt::Break { label, value }
+					}
+					TokenKind::Continue => {
+						self.next(); // continue
+						let label = if matches!(self.peek_kind(), TokenKind::Label(_)) {
+							let tok = self.next();
+							if let TokenKind::Label(l) = tok.kind {
+								Some(l)
+							} else {
+								None
+							}
+						} else {
+							None
+						};
+						Stmt::Continue { label }
+					}
+					TokenKind::Return => {
+						self.next(); // return
+						let ret_expr = if self.at(&TokenKind::Comma) {
+							None
+						} else {
+							Some(self.parse_expr()?)
+						};
+						Stmt::Return(ret_expr)
+					}
+					_ => unreachable!(),
+				};
+
+				self.expect(&TokenKind::Comma)?;
+
+				SwitchBody::Block(Block {
+					stmts: vec![stmt],
+					tail_expr: None,
+				})
+			} else {
+				let expr: Expr = self.parse_expr()?;
+				self.expect(&TokenKind::Comma)?;
+				SwitchBody::Expr(expr)
+			}
 		};
 
 		Ok(SwitchArm { pattern, body })
