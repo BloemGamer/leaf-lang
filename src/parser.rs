@@ -483,6 +483,7 @@ pub enum Expr
 	},
 
 	Block(Box<Block>),
+	UnsafeBlock(Box<Block>),
 
 	Switch
 	{
@@ -2228,6 +2229,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::LeftBrace => {
 				let block: Block = self.parse_block()?;
 				Ok(Expr::Block(Box::new(block)))
+			}
+
+			TokenKind::Unsafe => {
+				self.next(); // unsafe
+				let block: Block = self.parse_block()?;
+				Ok(Expr::UnsafeBlock(Box::new(block)))
 			}
 
 			TokenKind::Switch => {
@@ -4308,6 +4315,11 @@ impl fmt::Display for Expr
 				let mut w = IndentWriter::new();
 				write_block(f, &mut w, block)
 			}
+			Expr::UnsafeBlock(block) => {
+				write!(f, "unsafe ")?;
+				let mut w = IndentWriter::new();
+				write_block(f, &mut w, block)
+			}
 			Expr::Switch { expr, arms } => {
 				let mut w = IndentWriter::new();
 				write_switch(f, &mut w, expr, arms)
@@ -4510,6 +4522,10 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 			arms,
 		} => write_switch(f, w, switch_expr, arms),
 		Expr::Block(block) => write_block(f, w, block),
+		Expr::UnsafeBlock(block) => {
+			write!(f, "unsafe ")?;
+			write_block(f, w, block)
+		}
 		Expr::If {
 			cond,
 			then_block,
