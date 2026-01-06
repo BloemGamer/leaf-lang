@@ -1197,7 +1197,7 @@ mod tests
 						SwitchBody::Block(inner_block) => {
 							assert!(matches!(inner_block.stmts[0], Stmt::Block(_)));
 						}
-						_ => panic!("Expected inner block in switch arm"),
+						SwitchBody::Expr(_) => panic!("Expected inner block in switch arm"),
 					}
 				} else {
 					panic!("Expected Switch expression at top level");
@@ -1286,12 +1286,12 @@ mod tests
 
 		match desugared_list {
 			ArrayLiteral::List { elements, .. } => assert_eq!(elements.len(), 2),
-			_ => panic!("Expected List variant"),
+			ArrayLiteral::Repeat { .. } => panic!("Expected List variant"),
 		}
 
 		match desugared_repeat {
 			ArrayLiteral::Repeat { value, .. } => assert_eq!(value.len(), 1),
-			_ => panic!("Expected Repeat variant"),
+			ArrayLiteral::List { .. } => panic!("Expected Repeat variant"),
 		}
 	}
 
@@ -1799,7 +1799,7 @@ mod tests
 						// For loop should be desugared
 						assert!(matches!(block.stmts[0], Stmt::Block(_)));
 					}
-					_ => panic!("Expected block body"),
+					SwitchBody::Expr(_) => panic!("Expected block body"),
 				}
 			}
 			_ => panic!("Expected switch expression"),

@@ -628,6 +628,7 @@ impl Spanned for Expr
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		return match self {
 			Expr::Identifier { span, .. } => *span,
 			Expr::Literal { span, .. } => *span,
@@ -698,6 +699,7 @@ impl Spanned for ArrayLiteral
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		return match self {
 			ArrayLiteral::List { span, .. } => *span,
 			ArrayLiteral::Repeat { span, .. } => *span,
@@ -959,6 +961,7 @@ impl Spanned for Stmt
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		return match self {
 			Stmt::VariableDecl(VariableDecl { span, .. }) => *span,
 			Stmt::Assignment { span, .. } => *span,
@@ -984,6 +987,7 @@ impl Stmt
 {
 	fn set_label(&mut self, label: String)
 	{
+		#[allow(clippy::match_same_arms)]
 		match self {
 			Stmt::While { label: l, .. } => *l = Some(label),
 			Stmt::Loop { label: l, .. } => *l = Some(label),
@@ -1152,6 +1156,7 @@ impl Spanned for Pattern
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		return match self {
 			Pattern::Wildcard { span } => *span,
 			Pattern::Literal { span, .. } => *span,
@@ -1303,6 +1308,7 @@ impl Spanned for TraitItem
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		match self {
 			TraitItem::Function { span, .. } => return *span,
 			TraitItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
@@ -1388,6 +1394,7 @@ impl Spanned for ImplItem
 {
 	fn span(&self) -> Span
 	{
+		#[allow(clippy::match_same_arms)]
 		match self {
 			ImplItem::Function(FunctionDecl { span, .. }) => return *span,
 			ImplItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
@@ -1712,6 +1719,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 
 					loop {
+						#[allow(clippy::match_same_arms)]
 						match self.peek_kind() {
 							TokenKind::Semicolon | TokenKind::LeftBrace => {
 								self.lexer = checkpoint;
@@ -1917,7 +1925,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			lexer::Directive::Import => {
 				let incl: Token = self.next();
 				let ret: Directive = match &incl.kind {
-					TokenKind::StringLiteral(str) => Directive::Import(str.to_string()),
+					TokenKind::StringLiteral(str) => Directive::Import(str.clone()),
 					_ => {
 						return Err(ParseError {
 							span: incl.span,
@@ -2076,7 +2084,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let tok: Token = self.next();
 			match &tok.kind {
-				TokenKind::Identifier(s) => path.push(s.to_string()),
+				TokenKind::Identifier(s) => path.push(s.clone()),
 				TokenKind::New => path.push("new".to_string()),
 				_ => {
 					return Err(ParseError {
@@ -4487,11 +4495,10 @@ impl IndentWriter
 		self.indent_level += 1;
 	}
 
-	const fn dedent(&mut self)
+	fn dedent(&mut self)
 	{
-		if self.indent_level > 0 {
-			self.indent_level -= 1;
-		}
+		debug_assert!(self.indent_level > 0);
+		self.indent_level -= 1;
 	}
 
 	fn write_indent(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
@@ -4886,7 +4893,6 @@ impl fmt::Display for Expr
 					write!(f, " else ")?;
 					match else_expr.as_ref() {
 						Expr::Block(b) => write_block(f, &mut w, b)?,
-						Expr::If { .. } | Expr::IfVar { .. } => write!(f, "{}", else_expr)?,
 						_ => write!(f, "{}", else_expr)?,
 					}
 				}
@@ -4907,7 +4913,6 @@ impl fmt::Display for Expr
 					write!(f, " else ")?;
 					match else_expr.as_ref() {
 						Expr::Block(b) => write_block(f, &mut w, b)?,
-						Expr::If { .. } | Expr::IfVar { .. } => write!(f, "{}", else_expr)?,
 						_ => write!(f, "{}", else_expr)?,
 					}
 				}
@@ -7862,7 +7867,7 @@ mod parser_tests
 				for arm in arms {
 					match arm.body {
 						SwitchBody::Block(_) => (),
-						_ => panic!("Expected block arm"),
+						SwitchBody::Expr(_) => panic!("Expected block arm"),
 					}
 				}
 			}
