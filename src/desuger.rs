@@ -18,7 +18,7 @@ impl Desugarer
 {
 	pub fn new() -> Self
 	{
-		return Default::default();
+		return Desugarer::default();
 	}
 
 	fn gen_temp(&mut self, name: &str) -> Ident
@@ -42,6 +42,7 @@ impl Desugarer
 
 	fn pop_loop(&mut self)
 	{
+		debug_assert!(!self.loop_stack.is_empty(), "Popping empty loop stack");
 		self.loop_stack.pop();
 	}
 
@@ -81,7 +82,7 @@ impl Desugarer
 
 	fn desugar_function(&mut self, mut func: FunctionDecl) -> FunctionDecl
 	{
-		self.loop_stack.clear();
+		debug_assert!(self.loop_stack.is_empty(), "loop_stack should be empty");
 
 		if let Some(body) = func.body {
 			func.body = Some(self.desugar_block(body));
@@ -297,8 +298,6 @@ impl Desugarer
 
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body);
-		let current_label: Ident = actual_label.clone();
-		self.pop_loop();
 
 		let name_pattern: Pattern = if name.len() == 1 {
 			Pattern::TypedIdentifier {
@@ -315,7 +314,7 @@ impl Desugarer
 			}
 		} else {
 			Pattern::Variant {
-				path: name.clone(),
+				path: name,
 				args: vec![],
 				span: Span::default(),
 			}
@@ -370,7 +369,7 @@ impl Desugarer
 			},
 			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break {
-					label: Some(current_label.clone()),
+					label: Some(actual_label.clone()),
 					value: None,
 					span: Span::default(),
 				}],
@@ -387,7 +386,7 @@ impl Desugarer
 		};
 
 		let loop_stmt: Stmt = Stmt::Loop {
-			label: Some(current_label),
+			label: Some(actual_label),
 			body: Block {
 				stmts: vec![Stmt::Expr(switch_expr)],
 				tail_expr: None,
@@ -395,6 +394,8 @@ impl Desugarer
 			},
 			span: Span::default(),
 		};
+
+		self.pop_loop();
 
 		return Stmt::Block(Block {
 			stmts: vec![iter_decl, loop_stmt],
@@ -492,8 +493,6 @@ impl Desugarer
 
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body);
-		let current_label: String = actual_label.clone();
-		self.pop_loop();
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -523,7 +522,7 @@ impl Desugarer
 			pattern: Pattern::Wildcard { span: Span::default() },
 			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break {
-					label: Some(current_label.clone()),
+					label: Some(actual_label.clone()),
 					value: None,
 					span: Span::default(),
 				}],
@@ -542,15 +541,19 @@ impl Desugarer
 			span: Span::default(),
 		};
 
-		Stmt::Loop {
-			label: Some(current_label),
+		let result = Stmt::Loop {
+			label: Some(actual_label),
 			body: Block {
 				stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 				tail_expr: None,
 				span: Span::default(),
 			},
 			span,
-		}
+		};
+
+		self.pop_loop();
+
+		return result;
 	}
 
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
@@ -775,9 +778,7 @@ impl Desugarer
 	{
 		return match pattern {
 			Pattern::Wildcard { span } => Pattern::Wildcard { span },
-
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
-
 			Pattern::TypedIdentifier { name, ty, span } => Pattern::TypedIdentifier { name, ty, span },
 
 			Pattern::Variant { path, args, span } => Pattern::Variant {
@@ -786,10 +787,18 @@ impl Desugarer
 				span,
 			},
 
-			Pattern::Tuple { patterns, span } => Pattern::Tuple {
-				patterns: patterns.into_iter().map(|p| self.desugar_pattern(p)).collect(),
-				span,
-			},
+			Pattern::Tuple { patterns, span } => {
+				let desugared: Vec<Pattern> = patterns.into_iter().map(|p| self.desugar_pattern(p)).collect();
+
+				if desugared.len() == 1 {
+					desugared.into_iter().next().unwrap()
+				} else {
+					Pattern::Tuple {
+						patterns: desugared,
+						span,
+					}
+				}
+			}
 
 			Pattern::Struct { path, fields, span } => Pattern::Struct {
 				path,
@@ -802,10 +811,27 @@ impl Desugarer
 
 			Pattern::Range(range) => Pattern::Range(range),
 
-			Pattern::Or { patterns, span } => Pattern::Or {
-				patterns: patterns.into_iter().map(|p| self.desugar_pattern(p)).collect(),
-				span,
-			},
+			Pattern::Or { patterns, span } => {
+				let mut flattened: Vec<Pattern> = Vec::new();
+				for pat in patterns {
+					let desugared = self.desugar_pattern(pat);
+					match desugared {
+						Pattern::Or { patterns: inner, .. } => {
+							flattened.extend(inner);
+						}
+						other => flattened.push(other),
+					}
+				}
+
+				if flattened.len() == 1 {
+					flattened.into_iter().next().unwrap()
+				} else {
+					Pattern::Or {
+						patterns: flattened,
+						span,
+					}
+				}
+			}
 		};
 	}
 }
