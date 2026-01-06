@@ -18,8 +18,11 @@
 #![warn(clippy::unchecked_time_subtraction)]
 #![warn(clippy::useless_conversion)]
 #![warn(clippy::zero_prefixed_literal)]
+#![warn(clippy::fallible_impl_from)]
+#![warn(clippy::multiple_unsafe_ops_per_block)]
+#![warn(clippy::ptr_as_ptr)]
+#![warn(clippy::transmute_ptr_to_ptr)]
 // Error handeling
-#![warn(clippy::missing_panics_doc)]
 #![warn(clippy::manual_ok_or)]
 #![warn(clippy::manual_unwrap_or)]
 #![warn(clippy::unnecessary_wraps)]
@@ -46,6 +49,7 @@
 #![warn(clippy::naive_bytecount)]
 #![warn(clippy::needless_range_loop)]
 #![warn(clippy::iter_skip_zero)]
+#![warn(clippy::result_large_err)]
 // Iterator
 #![warn(clippy::needless_for_each)]
 #![warn(clippy::manual_map)]
@@ -63,8 +67,16 @@
 #![warn(clippy::style)]
 #![warn(clippy::shadow_reuse)]
 #![warn(clippy::enum_glob_use)]
-#![warn(clippy::doc_markdown)]
 #![warn(clippy::implicit_return)]
+#![warn(clippy::module_name_repetitions)]
+#![warn(clippy::self_named_module_files)]
+#![warn(clippy::let_underscore_untyped)]
+#![warn(clippy::rest_pat_in_fully_bound_structs)]
+// Docs
+#![warn(clippy::doc_markdown)]
+#![warn(clippy::missing_safety_doc)]
+#![warn(clippy::missing_panics_doc)]
+#![warn(clippy::missing_errors_doc)]
 // Warning collections
 #![warn(clippy::nursery)]
 // Cargo
