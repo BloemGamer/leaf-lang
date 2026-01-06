@@ -1,4 +1,5 @@
 use crate::Config;
+use crate::parser::ParseError;
 
 impl<'source, 'config> Lexer<'source, 'config>
 {
@@ -1281,8 +1282,8 @@ impl Token
 	/// println!("{}", error);
 	/// // Output:
 	/// // Error at 1:20: unexpected token
-	/// //   | var x = Vec<Vec<int>>;
-	/// //   |                    ^^
+	/// //   | var x = Vec<Vec<int>;
+	/// //   |                     ^
 	/// ```
 	#[allow(unused)]
 	pub fn format_error(&self, source: &str, message: &str) -> String
@@ -1309,6 +1310,89 @@ impl Token
 			caret_indent,
 			"^".repeat(caret_length)
 		)
+	}
+}
+
+impl Span
+{
+	/// Formats an error message with source code context.
+	///
+	/// Generates a human-readable error message that includes the line number,
+	/// column number, the relevant line of source code, and a visual indicator
+	/// (caret) pointing to the location of the error.
+	///
+	/// # Arguments
+	/// * `source` - The complete source code string
+	/// * `message` - The error message to display
+	///
+	/// # Returns
+	/// A formatted string containing the error location, message, source line,
+	/// and visual indicator pointing to the error position.
+	///
+	/// # Example
+	/// ```
+	/// let span = Span { /* ... */ };
+	/// let error = span.format_error(source, "unexpected token");
+	/// println!("{}", error);
+	/// // Output:
+	/// // Error at 1:20: unexpected token
+	/// //   | var x = Vec<Vec<int>;
+	/// //   |                     ^
+	/// ```
+	#[allow(unused)]
+	pub fn format_error(&self, source: &str, message: &str) -> String
+	{
+		let line_start = source[..self.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+		let line_end = source[self.start..]
+			.find('\n')
+			.map(|i| self.start + i)
+			.unwrap_or(source.len());
+		let line_text = &source[line_start..line_end];
+
+		// Preserve tabs and spaces to maintain alignment
+		let prefix = &source[line_start..self.start];
+		let caret_indent: String = prefix.chars().map(|c| if c == '\t' { '\t' } else { ' ' }).collect();
+
+		let caret_length = (self.end - self.start).max(1);
+
+		format!(
+			"Error at {}:{}: {}\n  | {}\n  | {}{}",
+			self.start_line,
+			self.start_col,
+			message,
+			line_text,
+			caret_indent,
+			"^".repeat(caret_length)
+		)
+	}
+
+	#[allow(unused)]
+	/// Creates a ParseError in a readable style from a span
+	///
+	/// # Arguments
+	/// * `source` - The complete source code string
+	/// * `message` - The error message to display
+	///
+	/// # Returns
+	/// A ParseError containing a formatted string containing the error location, message, source line,
+	/// and visual indicator pointing to the error position and the span itself.
+	///
+	/// # Example
+	/// ```
+	/// let span = Span { /* ... */ };
+	/// let error = span.make_parser_error(source, "unexpected token");
+	/// println!("{}", error);
+	/// // Output:
+	/// // Error at 1:20: unexpected token
+	/// //   | var x = Vec<Vec<int>;
+	/// //   |                     ^
+	/// ```
+	pub fn make_parser_error(self, source: &str, message: &str) -> ParseError
+	{
+		return ParseError {
+			span: self,
+			message: self.format_error(source, message),
+		};
 	}
 }
 
