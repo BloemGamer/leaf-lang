@@ -214,6 +214,8 @@ pub enum TokenKind
 	Underscore,
 	/// Self keyword: `self`
 	SelfKw,
+	/// Default keyword: `default`
+	Default,
 	/// Label: `'label`
 	Label(String),
 
@@ -1097,6 +1099,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		match ident.as_str() {
 			"_" => return TokenKind::Underscore,
 			"self" => return TokenKind::SelfKw,
+			"default" => return TokenKind::Default,
 			"if" => return TokenKind::If,
 			"else" => return TokenKind::Else,
 			"while" => return TokenKind::While,
