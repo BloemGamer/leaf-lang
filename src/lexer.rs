@@ -90,6 +90,11 @@ pub struct Token
 	pub span: Span,
 }
 
+pub trait Spanned
+{
+	fn span(&self) -> Span;
+}
+
 /// Source code position information for a token.
 ///
 /// Tracks both byte offsets and line/column positions for a span of source code.
@@ -123,6 +128,14 @@ pub struct Span
 	pub start_col: usize,
 	pub end_line: usize,
 	pub end_col: usize,
+}
+
+impl Spanned for Span
+{
+	fn span(&self) -> Span
+	{
+		return *self;
+	}
 }
 
 impl Span
