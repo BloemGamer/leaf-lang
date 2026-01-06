@@ -3,391 +3,522 @@
 // ============================================================================
 
 // --- Comments ---
-comment = "//" , { character - "\n" } , "\n"
-        | "/*" , { character } , "*/" ;
+line_comment  = "//" , { character - "\n" } , "\n" ;
+block_comment = "/*" , { character } , "*/" ;
+doc_comment   = "///" , { character - "\n" } , "\n"
+              | "/**" , { character } , "*/" ;
+
+comment = line_comment | block_comment | doc_comment ;
 
 // --- Basic lexical elements ---
 letter     = "A"…"Z" | "a"…"z" ;
 digit      = "0"…"9" ;
+hex_digit  = digit | "A"…"F" | "a"…"f" ;
 character  = ? any Unicode character ? ;
 
-// --- Operators ---
-equal_type = "=" | "+=" | "-=" | "*=" | "/=" | "%="
-           | "&=" | "|=" | "^=" | "~=" | ">>=" | "<<=" ;
-
 // --- Identifiers ---
-identifier = letter , { letter | digit | "_" } ;
-namespaced_identifier = identifier , { "::" , identifier } ;
+identifier = ( letter | "_" ) , { letter | digit | "_" } ;
+path = identifier , { "::" , identifier } ;
+
+// Label for loops: 'label:
+label = "'" , identifier ;
 
 // --- Literals ---
-integer_literal = [ "0x" | "0b" | "0o" ] , digit , { digit | "_" } ;
-float_literal   = digit , { digit | "_" } , "." , digit , { digit | "_" } ;
-string_literal  = "\"" , { character - "\"" | "\\" , character } , "\"" ;
-char_literal    = "'" , ( character - "'" | "\\" , character ) , "'" ;
+integer_literal = decimal_literal
+                | hex_literal
+                | binary_literal
+                | octal_literal ;
+
+decimal_literal = digit , { digit | "_" } ;
+hex_literal     = "0x" , hex_digit , { hex_digit | "_" } ;
+binary_literal  = "0b" , ( "0" | "1" ) , { ( "0" | "1" ) | "_" } ;
+octal_literal   = "0o" , ( "0"…"7" ) , { ( "0"…"7" ) | "_" } ;
+
+float_literal = digit , { digit | "_" } , "." , digit , { digit | "_" } ;
+
+string_literal = '"' , { character - '"' | escape_sequence } , '"' ;
+char_literal   = "'" , ( character - "'" | escape_sequence ) , "'" ;
+
+escape_sequence = "\" , ( "n" | "t" | "r" | "0" | "\" | "'" | '"' ) ;
+
 boolean_literal = "true" | "false" ;
 
-// Array literal: [1, 2, 3] or [value; count] or []
-array_literal = "[" , [ array_elements ] , "]" ;
-array_elements = expression , ( ";" , expression
-                              | { "," , expression } , [ "," ] ) ;
+// --- Array literals ---
+// [1, 2, 3] or [value; count] or []
+array_literal = "[" , [ array_content ] , "]" ;
+array_content = expression , ( ";" , expression )  // repeat: [0; 10]
+              | expression , { "," , expression } , [ "," ] ; // list: [1, 2, 3]
 
-// Tuple literal: (1, 2, 3) or () - must have comma for single element (x,)
-tuple_literal = "(" , [ expression , "," , [ expression , { "," , expression } , [ "," ] ] ] , ")" ;
+// --- Tuple literals ---
+// () or (1,) or (1, 2, 3)
+tuple_literal = "(" , [ tuple_content ] , ")" ;
+tuple_content = expression , "," , [ expression , { "," , expression } , [ "," ] ] ;
 
-// Struct literal: Point { x = 10, y = 20 } or Point { x = 10, y = 20, }
-struct_literal = namespaced_identifier , "{" , [ field_init_list ] , "}" ;
-field_init_list = field_init , { "," , field_init } , [ "," ] ;
-field_init = identifier , "=" , expression ;
+// --- Struct literals ---
+// Point { x = 10, y = 20 }
+struct_literal = path , "{" , [ struct_field_list ] , "}" ;
+struct_field_list = struct_field , { "," , struct_field } , [ "," ] ;
+struct_field = identifier , "=" , expression ;
 
-literal = integer_literal
-        | float_literal
-        | string_literal
-        | char_literal
-        | boolean_literal
-        | array_literal
-        | struct_literal ;
+// --- Range expressions ---
+// 1..10 or 1..=10 or 1.. or ..10 or ..
+range_expr = [ expression ] , ( ".." | "..=" ) , [ expression ] ;
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+// Assignment operators
+assign_op = "=" | "+=" | "-=" | "*=" | "/=" | "%="
+          | "&=" | "|=" | "^=" | "~=" | ">>=" | "<<=" ;
+
+// Binary operators (by precedence level)
+logical_or_op  = "||" ;
+logical_and_op = "&&" ;
+equality_op    = "==" | "!=" ;
+relational_op  = "<" | ">" | "<=" | ">=" ;
+bitwise_or_op  = "|" ;
+bitwise_xor_op = "^" ;
+bitwise_and_op = "&" ;
+shift_op       = "<<" | ">>" ;
+additive_op    = "+" | "-" ;
+multiplicative_op = "*" | "/" | "%" ;
+
+// Unary operators
+unary_op = "-"           // negation
+         | "!"           // logical NOT
+         | "*"           // dereference
+         | "&" , [ "mut" ] ; // address-of
 
 // ============================================================================
 // EXPRESSIONS (with precedence from lowest to highest)
 // ============================================================================
 
-// --- Main expression entry point ---
-expression = logical_or ;
+expression = logical_or_expr ;
 
-// --- Precedence levels (lowest to highest) ---
+// Precedence level 1: Logical OR
+logical_or_expr = logical_and_expr , { logical_or_op , logical_and_expr } ;
 
-// Level 1: Logical OR
-logical_or = logical_and , { "||" , logical_and } ;
+// Precedence level 2: Logical AND
+logical_and_expr = bitwise_or_expr , { logical_and_op , bitwise_or_expr } ;
 
-// Level 2: Logical AND
-logical_and = equality , { "&&" , equality } ;
+// Precedence level 3: Bitwise OR
+bitwise_or_expr = bitwise_xor_expr , { bitwise_or_op , bitwise_xor_expr } ;
 
-// Level 3: Equality
-equality = relational , { ( "==" | "!=" ) , relational } ;
+// Precedence level 4: Bitwise XOR
+bitwise_xor_expr = bitwise_and_expr , { bitwise_xor_op , bitwise_and_expr } ;
 
-// Level 4: Relational/Comparison
-relational = range , { ( "<" | ">" | "<=" | ">=" ) , range } ;
+// Precedence level 5: Bitwise AND
+bitwise_and_expr = equality_expr , { bitwise_and_op , equality_expr } ;
 
-// Level 5: Range expressions (.. and ..=)
-range = bitwise , [ ( ".." | "..=" ) , bitwise ] ;
+// Precedence level 6: Equality
+equality_expr = relational_expr , { equality_op , relational_expr } ;
 
-// Level 6: Bitwise operations
-bitwise = additive , { ( "&" | "|" | "^" | ">>" | "<<" ) , additive } ;
+// Precedence level 7: Relational/Comparison
+relational_expr = shift_expr , { relational_op , shift_expr } ;
 
-// Level 7: Addition and Subtraction
-additive = multiplicative , { ( "+" | "-" ) , multiplicative } ;
+// Precedence level 8: Shift
+shift_expr = range_expr , { shift_op , range_expr } ;
 
-// Level 8: Multiplication, Division, Modulo
-multiplicative = cast , { ( "*" | "/" | "%" ) , cast } ;
+// Precedence level 9: Range
+range_expr = additive_expr , [ ( ".." | "..=" ) , [ additive_expr ] ] ;
 
-// Level 9: Cast expressions
-// Cast: (type)expr - must have explicit grouping to avoid ambiguity
-cast = "(" , type , ")" , cast
-     | unary ;
+// Precedence level 10: Additive
+additive_expr = multiplicative_expr , { additive_op , multiplicative_expr } ;
 
-// Level 10: Unary operators
-unary = ( "!" | "-" | "*" | "&" [ "mut" ] ) , unary
-      | postfix ;
+// Precedence level 11: Multiplicative
+multiplicative_expr = cast_expr , { multiplicative_op , cast_expr } ;
 
-// Level 11: Postfix operations (field access, indexing, calls)
-postfix = primary , { postfix_op } ;
+// Precedence level 12: Cast
+// Cast: (type)expr
+cast_expr = "(" , type , ")" , cast_expr
+          | unary_expr ;
 
-postfix_op = "." , identifier                    // field access
-           | "[" , expression , "]"              // array indexing
-           | [ "!" | "?" ], "(" , [ argument_list ] , ")" ;     // function call
+// Precedence level 13: Unary
+unary_expr = unary_op , unary_expr
+           | postfix_expr ;
 
-// Level 12: Primary expressions (highest precedence)
-primary = namespaced_identifier
-        | literal
-        | tuple_literal
-        | "(" , expression , ")" ;
+// Precedence level 14: Postfix (field access, indexing, calls)
+postfix_expr = primary_expr , { postfix_op } ;
+
+postfix_op = "." , identifier                      // field access
+           | "[" , expression , "]"                // array indexing
+           | "(" , [ argument_list ] , ")" ;       // function call
 
 argument_list = expression , { "," , expression } , [ "," ] ;
 
+// Precedence level 15: Primary expressions
+primary_expr = path
+             | integer_literal
+             | float_literal
+             | string_literal
+             | char_literal
+             | boolean_literal
+             | array_literal
+             | tuple_literal
+             | struct_literal
+             | block_expr
+             | unsafe_block_expr
+             | switch_expr
+             | if_expr
+             | loop_expr
+             | "default"
+             | "new"
+             | "self"
+             | "(" , expression , ")" ;
+
 // ============================================================================
-// L-VALUES (Assignable expressions)
+// BLOCK AND CONTROL FLOW EXPRESSIONS
 // ============================================================================
 
-lvalue = unary_lvalue
-       | postfix_lvalue ;
+// Block expression: { stmt; stmt; expr }
+block_expr = "{" , block_content , "}" ;
 
-unary_lvalue = "*" , lvalue ;  // dereference
+block_content = { statement } , [ expression ] ;
 
-postfix_lvalue = primary_lvalue , { postfix_lvalue_op } ;
+// Unsafe block: unsafe { ... }
+unsafe_block_expr = "unsafe" , block_expr ;
 
-postfix_lvalue_op = "." , identifier           // field access
-                  | "[" , expression , "]" ;   // array indexing
+// Switch expression: switch expr { pattern => expr, }
+switch_expr = "switch" , expression , "{" , { switch_arm } , "}" ;
 
-primary_lvalue = namespaced_identifier
-               | "(" , lvalue , ")" ;
+switch_arm = pattern , "=>" , switch_arm_body ;
+
+switch_arm_body = expression , ","      // expression arm
+                | block_expr , [ "," ] ; // block arm
+
+// If expression: if cond { } else { }
+if_expr = "if" , [ "var" ] , if_condition , block_expr , 
+          [ "else" , ( block_expr | if_expr ) ] ;
+
+if_condition = pattern , "=" , expression  // if var pattern = expr
+             | expression ;                // if expr
+
+// Loop expression: loop { } or 'label: loop { }
+loop_expr = [ label , ":" ] , "loop" , block_expr ;
+
+// ============================================================================
+// PATTERNS
+// ============================================================================
+
+pattern = or_pattern ;
+
+or_pattern = and_pattern , { "|" , and_pattern } ;
+
+and_pattern = wildcard_pattern
+            | literal_pattern
+            | typed_identifier_pattern
+            | variant_pattern
+            | tuple_pattern
+            | struct_pattern
+            | range_pattern ;
+
+wildcard_pattern = "_" , [ ":" , type ] ;
+
+literal_pattern = integer_literal
+                | float_literal
+                | string_literal
+                | char_literal
+                | boolean_literal ;
+
+typed_identifier_pattern = identifier , ":" , type ;
+
+variant_pattern = path , [ "(" , [ pattern_list ] , ")" ] ;
+
+tuple_pattern = "(" , [ pattern_list ] , ")" ;
+
+struct_pattern = path , "{" , [ struct_pattern_field_list ] , "}" ;
+
+struct_pattern_field_list = struct_pattern_field , { "," , struct_pattern_field } , [ "," ] ;
+struct_pattern_field = identifier , ":" , pattern ;
+
+range_pattern = [ expression ] , ( ".." | "..=" ) , [ expression ] ;
+
+pattern_list = pattern , { "," , pattern } , [ "," ] ;
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-type = ( "let" | "const" ) , [ type_modifiers ] , type_core ;
+type = [ type_modifier , { type_modifier } ] , type_core ;
 
-// Core type structure: reference/pointer modifiers, base type, suffixes
-type_core = [ reference_modifier ] , type_base , { type_suffix } ;
+type_core = reference_type
+          | base_type
+          | tuple_type ;
 
-// Reference modifier: & or &mut (only one, at the start)
-reference_modifier = "&" , [ "mut" ] ;
+// Reference type: &T or &mut T
+reference_type = "&" , [ "mut" ] , type_core ;
 
-// Base type: name with optional generic parameters
-type_base = namespaced_identifier , [ generic_args ] ;
+// Base type: Name<T, U> followed by suffixes
+base_type = path , [ generic_args ] , { type_suffix } ;
 
-// Type suffixes: pointers and arrays (applied left-to-right)
-type_suffix = "*"                          // pointer: int* or int**
-            | "[" , expression , "]" ;     // array: int[10] or int[10][20]
+// Type suffixes: pointers
+type_suffix = "*"                          // pointer: T*
+            | "[" , [ expression ] , "]" ; // array: T[10]
 
-// Generic arguments: <T, U, V>
-generic_args = "<" , type , { "," , type } , [ "," ] , ">" ;
-
-// Tuple type: (int, bool) or () or (int,)
+// Tuple type: (T, U) or () or (T,)
 tuple_type = "(" , [ type , { "," , type } , [ "," ] ] , ")" ;
 
-// Type modifiers (e.g., volatile)
-type_modifiers = type_modifier , { type_modifier } ;
-type_modifier = "volatile" | "static" | directive ;
+// Generic arguments: <T, U>
+generic_args = "<" , type , { "," , type } , [ "," ] , ">" ;
 
-// ============================================================================
-// DIRECTIVES
-// ============================================================================
-
-directive = import_directive
-          | use_directive
-          | custom_directive ;
-
-import_directive = "@import" , string_literal , ";" ;
-
-use_directive = "@use" , namespaced_identifier , ";" ;
-
-custom_directive = "@" , identifier ,
-                   [ "(" , [ expression , { "," , expression } , [ "," ] ] , ")" ] ,
-                   [ block ] ,
-                   ;
-
-// ============================================================================
-// MODIFIERS
-// ============================================================================
-
-modifiers = modifier , { modifier } ;
-modifier = "pub" | "unsafe" | "inline" | directive ;
+// Type modifiers
+type_modifier = "const" | "volatile" | directive ;
 
 // ============================================================================
 // STATEMENTS
 // ============================================================================
 
-statement = [ directive ] ,
-            ( variable_decl
-            | assignment
-            | return_stmt
-            | expression_stmt
-            | block
-            | if_stmt
-            | while_stmt
-            | for_stmt
-            | match_stmt
-            | unsafe_block
-            | break_stmt
-            | continue_stmt
-            ) ;
+statement = [ label , ":" ] , statement_kind ;
 
-variable_decl = [ type_modifiers ] , type , identifier , [ "=" , expression ] , ";" ;
+statement_kind = variable_decl_stmt
+               | assignment_stmt
+               | return_stmt
+               | break_stmt
+               | continue_stmt
+               | expr_stmt
+               | if_stmt
+               | while_stmt
+               | for_stmt
+               | loop_stmt
+               | delete_stmt
+               | unsafe_stmt
+               | block_stmt
+               | directive_stmt ;
 
-assignment = lvalue , equal_type , expression , ";" ;
+// Variable declaration: var x: i32 = 5; or const X: i32 = 5;
+variable_decl_stmt = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
 
+// Assignment: x = 5; or x += 5;
+assignment_stmt = expression , assign_op , expression , ";" ;
+
+// Return: return; or return expr;
 return_stmt = "return" , [ expression ] , ";" ;
 
-expression_stmt = expression , ";" ;
+// Break: break; or break 'label; or break expr; or break 'label expr;
+break_stmt = "break" , [ label ] , [ expression ] , ";" ;
 
-break_stmt = "break" , ";" ;
+// Continue: continue; or continue 'label;
+continue_stmt = "continue" , [ label ] , ";" ;
 
-continue_stmt = "continue" , ";" ;
+// Expression statement: expr;
+expr_stmt = expression , ";" ;
 
-// delete var
-delete_stmt = "delete" , namespace_identefier ;
+// If statement: if cond { } else { }
+if_stmt = "if" , [ "var" ] , if_condition , block_expr ,
+          [ "else" , ( block_expr | if_stmt ) ] ;
 
-// type var = new type
-new_stmt = "new" , type ;
+// While statement: while cond { } or while var pattern = expr { }
+while_stmt = "while" , [ "var" ] , while_condition , block_expr ;
 
+while_condition = "while" , pattern , "=" , expression  // while var pattern = expr
+                | expression ;                          // while expr
 
+// For statement: for x in iter { }
+for_stmt = "for" , path , "in" , expression , block_expr ;
 
-// --- Control flow statements ---
+// Loop statement: loop { }
+loop_stmt = "loop" , block_expr ;
 
-if_stmt = "if" , expression , block , [ "else" , ( block | if_stmt ) ] ;
+// Delete statement: delete ptr;
+delete_stmt = "delete" , path , ";" ;
 
-while_stmt = "while" , expression , block ;
+// Unsafe statement: unsafe { }
+unsafe_stmt = "unsafe" , block_expr ;
 
-for_stmt = "for" , ( "_" | ( identifier , ":" , type ) ), "in" , expression , block ;
+// Block statement: { }
+block_stmt = block_expr ;
 
-unsafe_block = "unsafe" , block ;
-
-// --- Match statement ---
-// Match: match expr { Pattern => expr, Pattern => { ... }, }
-match_stmt = "match" , expression , "{" , { match_arm } , "}" ;
-
-match_arm = pattern , "=>" , match_arm_body ;
-
-// Match arm body: either an expression with comma, or a block (no comma)
-match_arm_body = expression , ","
-               | block ;
-
-// Patterns for matching
-pattern = pattern_variant
-        | pattern_literal
-        | pattern_wildcard ;
-
-pattern_variant = namespaced_identifier , [ "(" , [ pattern_list ] , ")" ] ;
-pattern_literal = literal ;
-pattern_wildcard = "_" ;
-
-pattern_list = pattern , { "," , pattern } , [ "," ] ;
+// Directive statement: @directive; or @directive { }
+directive_stmt = directive_node ;
 
 // ============================================================================
-// BLOCKS (with optional trailing expression)
+// DIRECTIVES
 // ============================================================================
 
-// Block can have:
-// - Multiple statements ending with semicolons
-// - Optional trailing expression (no semicolon) that becomes the block's value
-block = "{" , { statement } , [ expression ] , "}" ;
+directive_node = directive , [ directive_body ] ;
+
+directive_body = "{" , ( block_content | program ) , "}" ;
+
+directive = import_directive
+          | use_directive
+          | custom_directive ;
+
+import_directive = "@import" , string_literal ;
+
+use_directive = "@use" , path ;
+
+custom_directive = "@" , identifier , [ "(" , [ argument_list ] , ")" ] ;
 
 // ============================================================================
-// FUNCTIONS
+// MODIFIERS
 // ============================================================================
 
-function_decl = [ modifiers ] ,
-                "fn" ,
-				[ "!" | "?" ] , // ! means function calls heap, in the future maybe have different allocaters, ? means check for the generics, and only allowd in generic functions
-                identifier ,
-                [ generic_params ] ,
-                "(" , [ parameter_list ] , ")" ,
-                [ "->" , type ] ,
-                [ where_clause ] ,
-                block ;
+modifier = "pub"
+         | "unsafe"
+         | "inline"
+         | "const"
+         | "volatile"
+         | directive ;
 
-// Generic parameters: <T, U, V>
-generic_params = "<" , identifier , { "," , identifier } , [ "," ] , ">" ;
+modifier_list = { modifier } ;
 
-// Parameters: (int x, bool y, &mut Self)
-parameter_list = parameter , { "," , parameter } , [ "," ] ;
+// ============================================================================
+// FUNCTION DECLARATIONS
+// ============================================================================
 
-parameter = (identifier , ":" , [ type_modifiers ] , type_core)
-          | ( [ "&" , [ "mut" ] ] , "Self" ) ;
+function_decl = function_signature , ( block_expr | ";" ) ;
 
-// Where clause: where T: Trait, U: Trait1 + Trait2
-where_clause = "where" , constraint , { "," , constraint } , [ "," ] ;
-
-constraint = identifier , ":" , trait_bound_list ;
-
-trait_bound_list = trait_bound , { "+" , trait_bound } ;
-
-trait_bound = namespaced_identifier ;
-
-// --- Function signature (for traits) ---
-function_signature = "fn" ,
-					 [ "!" | "?" ] , // ! means function calls heap, in the future maybe have different allocaters
-                     identifier ,
+function_signature = modifier_list ,
+                     "fn" ,
+                     [ "!" ] ,  // heap-allocated function
+                     path ,
                      [ generic_params ] ,
                      "(" , [ parameter_list ] , ")" ,
                      [ "->" , type ] ,
                      [ where_clause ] ;
 
+// Generic parameters: <T, U>
+generic_params = "<" , identifier , { "," , identifier } , [ "," ] , ">" ;
+
+// Function parameters
+parameter_list = parameter , { "," , parameter } , [ "," ] ;
+
+parameter = self_parameter
+          | regular_parameter ;
+
+self_parameter = [ "&" , [ "mut" ] ] , "self" ;
+
+regular_parameter = path , ":" , type ;
+
+// Where clause: where T: Trait1 + Trait2, U: Trait3
+where_clause = "where" , constraint , { "," , constraint } , [ "," ] ;
+
+constraint = path , ":" , trait_bound_list ;
+
+trait_bound_list = path , { "+" , path } ;
+
 // ============================================================================
-// STRUCTS, ENUMS, UNIONS
+// TYPE DECLARATIONS
 // ============================================================================
 
-struct_decl = [ modifiers ] ,
+// Struct: struct Point { x: i32, y: i32 }
+struct_decl = modifier_list ,
               "struct" ,
-              identifier ,
-              "{" , [ field_decl_list ] , "}" ;
+              path ,
+              "{" , [ struct_field_decl_list ] , "}" ;
 
-field_decl_list = field_decl , { "," , field_decl } , [ "," ] ;
+struct_field_decl_list = struct_field_decl , { "," , struct_field_decl } , [ "," ] ;
 
-field_decl = type , identifier ;
+struct_field_decl = identifier , ":" , type , [ "=" , expression ] ;
 
-// --- Union (C-style union) ---
-union_decl = [ modifiers ] ,
+// Union: union Data { i: i32, f: f64 }
+union_decl = modifier_list ,
              "union" ,
-             identifier ,
-             "{" , [ field_decl_list ] , "}" ;
+             path ,
+             "{" , [ union_field_decl_list ] , "}" ;
 
-// --- Tagged union (Rust-style enum with data) ---
-taggedunion_decl = [ modifiers ] ,
-                   "taggedunion" ,
-                   identifier ,
-                   "{" , variant_list , "}" ;
+union_field_decl_list = union_field_decl , { "," , union_field_decl } , [ "," ] ;
 
-variant_list = variant , { "," , variant } , [ "," ] ;
+union_field_decl = identifier , ":" , type ;
 
-variant = identifier , "(" , [ type_list ] , ")" ;
-
-type_list = type , { "," , type } , [ "," ] ;
-
-// --- Enum (C-style enum) ---
-enum_decl = [ modifiers ] ,
+// Enum (C-style): enum Color { Red, Green, Blue }
+enum_decl = modifier_list ,
             "enum" ,
-            identifier ,
-            "{" , identifier_list , "}" ;
+            path ,
+            "{" , [ enum_variant_list ] , "}" ;
 
-identifier_list = identifier , { "," , identifier } , [ "," ] ;
+enum_variant_list = enum_variant , { "," , enum_variant } , [ "," ] ;
 
-// ============================================================================
-// TYPE ALIASES
-// ============================================================================
+enum_variant = identifier , [ "=" , expression ] ;
 
-type_alias_decl = [ modifiers ] ,
+// Variant (Rust-style enum): variant Option { Some(i32), None }
+variant_decl = modifier_list ,
+               "variant" ,
+               path ,
+               "{" , [ variant_variant_list ] , "}" ;
+
+variant_variant_list = variant_variant , { "," , variant_variant } , [ "," ] ;
+
+variant_variant = identifier , [ "(" , type , ")" ] , [ "=" , expression ] ; // "=" only for value variants, so it's easier to use with C
+
+// Type alias: type Int = i32;
+type_alias_decl = modifier_list ,
                   "type" ,
-                  identifier ,
+                  path ,
                   "=" ,
                   type ,
                   ";" ;
 
 // ============================================================================
-// TRAITS
+// TRAIT DECLARATIONS
 // ============================================================================
 
-trait_decl = [ modifiers ] ,
+trait_decl = modifier_list ,
              "trait" ,
-             identifier ,
+             path ,
              [ generic_params ] ,
+             [ ":" , trait_bound_list ] ,
              "{" , { trait_item } , "}" ;
 
-trait_item = function_signature , ";" ;
+trait_item = trait_function
+           | trait_type_alias
+           | trait_const ;
+
+trait_function = function_signature , ( block_expr | ";" ) ;
+
+trait_type_alias = modifier_list , "type" , path , "=" , type , ";" ;
+
+trait_const = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
 
 // ============================================================================
-// NAMESPACES AND IMPLEMENTATIONS
+// IMPL BLOCKS
 // ============================================================================
 
-namespace_decl = [ modifiers ] ,
-                 "namespace" ,
-                 identifier ,
-                 block ;
-
-impl_decl = [ modifiers ] ,
+impl_decl = modifier_list ,
             "impl" ,
             [ generic_params ] ,
-            namespaced_identifier ,
-            [ "for" , namespaced_identifier ] ,
+            impl_target ,
+            [ "for" , impl_target ] ,
             [ where_clause ] ,
-            block ;
+            "{" , { impl_item } , "}" ;
+
+impl_target = path , [ generic_args ] ;
+
+impl_item = impl_function
+          | impl_type_alias
+          | impl_const ;
+
+impl_function = function_decl ;
+
+impl_type_alias = type_alias_decl ;
+
+impl_const = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
+
+// ============================================================================
+// NAMESPACE DECLARATIONS
+// ============================================================================
+
+namespace_decl = modifier_list ,
+                 "namespace" ,
+                 path ,
+                 "{" , program , "}" ;
 
 // ============================================================================
 // TOP-LEVEL DECLARATIONS
 // ============================================================================
 
-top_level_decl = directive
-               | variable_decl
+top_level_decl = directive_stmt
+               | variable_decl_stmt
                | function_decl
                | struct_decl
-               | enum_decl
                | union_decl
-               | taggedunion_decl
+               | enum_decl
+               | variant_decl
                | type_alias_decl
                | trait_decl
-               | namespace_decl
-               | impl_decl ;
+               | impl_decl
+               | namespace_decl ;
 
 // ============================================================================
 // PROGRAM (entry point)
@@ -396,36 +527,81 @@ top_level_decl = directive
 program = { top_level_decl } ;
 
 // ============================================================================
-// NOTES ON PRECEDENCE AND PARSING
+// NOTES ON OPERATOR PRECEDENCE AND PARSING
 // ============================================================================
 //
-// Operator precedence (lowest to highest):
-//   1. || (logical OR)
-//   2. && (logical AND)
-//   3. == != (equality)
-//   4. < > <= >= (comparison)
-//   5. .. ..= (range)
-//   6. & | ^ >> << (bitwise)
-//   7. + - (additive)
-//   8. * / % (multiplicative)
-//   9. (type) (cast)
-//  10. ! - * & (unary)
-//  11. . [] () (postfix)
-//  12. literals, identifiers, parentheses (primary)
+// Operator precedence (lowest to highest): // should be the same as C
+//   1.  ||           (logical OR)
+//   2.  &&           (logical AND)
+//   3.  |            (bitwise OR)
+//   4.  ^            (bitwise XOR)
+//   5.  &            (bitwise AND)
+//   6.  == !=        (equality)
+//   7.  < > <= >=    (relational)
+//   8.  << >>        (shift)
+//   9.  .. ..=       (range)
+//  10.  + -          (additive)
+//  11.  * / %        (multiplicative)
+//  12.  (type)       (cast)
+//  13.  ! - * &      (unary)
+//  14.  . [] ()      (postfix)
+//  15.  literals, identifiers, blocks (primary)
 //
-// Type structure:
-//   [modifiers] [&[mut]] BaseType [generic_args] [*...] [[expr]...]
-//   Examples:
-//     - int
-//     - &mut Vec<int>
-//     - int*
-//     - int[10][20]
-//     - &String*[5]
+// Type structure examples:
+//   - i32
+//   - &mut Vec<i32>
+//   - i32*
+//   - i32[10][20]
+//   - &String*[5]
+//   - (i32, bool)
+//   - ()
 //
-// Blocks with trailing expressions:
+// Block with tail expression:
 //   {
-//     let x: i64 = 5;
-//     x + 1  // <-- No semicolon: this becomes the block's value
+//     var x: i32 = 5;
+//     x + 1  // No semicolon: this is the block's value
 //   }
+//
+// Labeled loops:
+//   'outer: loop {
+//     'inner: loop {
+//       break 'outer;  // breaks out of outer loop
+//     }
+//   }
+//
+// Break with value:
+//   var result: i32 = loop {
+//     if condition {
+//       break 42;  // loop evaluates to 42
+//     }
+//   };
+//
+// If-var (pattern matching if):
+//   if var Some(x: i32) = opt {
+//     // x is bound here
+//   }
+//
+// While-var (pattern matching while):
+//   while var Some(x: i32) = iter.next() {
+//     // x is bound here
+//   }
+//
+// Switch expression (must be exhaustive):
+//   switch x {
+//     1 => 10,
+//     2 => { println("two"); 20 },
+//     _ => 0,
+//   }
+//
+// Struct with default field values:
+//   struct Point {
+//     x: i32 = 0,
+//     y: i32 = 0,
+//   }
+//
+// Special keywords:
+//   - default: represents default value for a value a struct
+//   - new: represents constructor call / the default value
+//   - self: current instance
 //
 // ============================================================================
