@@ -25,7 +25,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	{
 		let config = self.config;
 		let source = self.source;
-		(config, source, self)
+		return (config, source, self);
 	}
 }
 
@@ -91,6 +91,7 @@ pub struct Token
 	pub span: Span,
 }
 
+#[allow(unused)]
 pub trait Spanned
 {
 	fn span(&self) -> Span;
@@ -157,14 +158,14 @@ impl Span
 	/// ```
 	pub fn merge(&self, other: &Span) -> Self
 	{
-		Self {
+		return Self {
 			start: self.start.min(other.start),
 			end: self.end.max(other.end),
 			start_line: self.start_line.min(other.start_line),
 			start_col: self.start_col.min(other.start_col),
 			end_line: self.end_line.max(other.end_line),
 			end_col: self.end_col.max(other.end_col),
-		}
+		};
 	}
 }
 
@@ -213,7 +214,7 @@ pub enum TokenKind
 	Underscore,
 	/// Self keyword: `self`
 	SelfKw,
-	/// Label: `'label'
+	/// Label: `'label`
 	Label(String),
 
 	// ===== Keywords - Control Flow =====
@@ -512,7 +513,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			eof_returned: false,
 		};
 		lexer.current_char = lexer.source.chars().next();
-		lexer
+		return lexer;
 	}
 
 	/// Retrieves the next token from the source code.
@@ -642,7 +643,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		let end_line = self.line;
 		let end_col = self.column;
 
-		Token {
+		return Token {
 			kind,
 			span: Span {
 				start,
@@ -652,7 +653,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 				end_line,
 				end_col,
 			},
-		}
+		};
 	}
 
 	fn lex_plus_family(&mut self) -> TokenKind
@@ -660,16 +661,16 @@ impl<'source, 'config> Lexer<'source, 'config>
 		self.advance(); // consume '+'
 		if self.current_char == Some('=') {
 			self.advance();
-			TokenKind::PlusEquals
+			return TokenKind::PlusEquals;
 		} else {
-			TokenKind::Plus
+			return TokenKind::Plus;
 		}
 	}
 
 	fn lex_minus_family(&mut self) -> TokenKind
 	{
 		self.advance(); // consume '-'
-		match self.current_char {
+		return match self.current_char {
 			Some('=') => {
 				self.advance();
 				TokenKind::MinusEquals
@@ -679,24 +680,24 @@ impl<'source, 'config> Lexer<'source, 'config>
 				TokenKind::Arrow
 			}
 			_ => TokenKind::Minus,
-		}
+		};
 	}
 
 	fn lex_star_family(&mut self) -> TokenKind
 	{
 		self.advance(); // consume '*'
-		if self.current_char == Some('=') {
+		return if self.current_char == Some('=') {
 			self.advance();
 			TokenKind::StarEquals
 		} else {
 			TokenKind::Star
-		}
+		};
 	}
 
 	fn lex_slash_family(&mut self) -> TokenKind
 	{
 		self.advance(); // consume '/'
-		match self.current_char {
+		return match self.current_char {
 			Some('=') => {
 				self.advance();
 				TokenKind::SlashEquals
@@ -712,24 +713,24 @@ impl<'source, 'config> Lexer<'source, 'config>
 				self.lex_block_comment()
 			}
 			_ => TokenKind::Slash,
-		}
+		};
 	}
 
 	fn lex_mod_family(&mut self) -> TokenKind
 	{
-		self.advance(); // consume '%'
-		if self.current_char == Some('=') {
+		self.advance(); // %
+		return if self.current_char == Some('=') {
 			self.advance();
 			TokenKind::ModEquals
 		} else {
 			TokenKind::Mod
-		}
+		};
 	}
 
 	fn lex_less_family(&mut self) -> TokenKind
 	{
-		self.advance(); // consume '<'
-		match self.current_char {
+		self.advance(); // <
+		return match self.current_char {
 			Some('<') => {
 				self.advance();
 				if self.current_char == Some('=') {
@@ -744,7 +745,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 				TokenKind::LessEquals
 			}
 			_ => TokenKind::LessThan,
-		}
+		};
 	}
 
 	fn lex_greater_family(&mut self) -> TokenKind
@@ -755,16 +756,16 @@ impl<'source, 'config> Lexer<'source, 'config>
 				self.advance();
 				if self.current_char == Some('=') {
 					self.advance();
-					TokenKind::RShiftEquals
+					return TokenKind::RShiftEquals;
 				} else {
-					TokenKind::RShift
+					return TokenKind::RShift;
 				}
 			}
 			Some('=') => {
 				self.advance();
-				TokenKind::GreaterEquals
+				return TokenKind::GreaterEquals;
 			}
-			_ => TokenKind::GreaterThan,
+			_ => return TokenKind::GreaterThan,
 		}
 	}
 
@@ -774,13 +775,13 @@ impl<'source, 'config> Lexer<'source, 'config>
 		match self.current_char {
 			Some('=') => {
 				self.advance();
-				TokenKind::EqualsEquals
+				return TokenKind::EqualsEquals;
 			}
 			Some('>') => {
 				self.advance();
-				TokenKind::FatArrow
+				return TokenKind::FatArrow;
 			}
-			_ => TokenKind::Equals,
+			_ => return TokenKind::Equals,
 		}
 	}
 
@@ -790,13 +791,13 @@ impl<'source, 'config> Lexer<'source, 'config>
 		match self.current_char {
 			Some('&') => {
 				self.advance();
-				TokenKind::And
+				return TokenKind::And;
 			}
 			Some('=') => {
 				self.advance();
-				TokenKind::AmpersandEquals
+				return TokenKind::AmpersandEquals;
 			}
-			_ => TokenKind::Ampersand,
+			_ => return TokenKind::Ampersand,
 		}
 	}
 
@@ -806,13 +807,13 @@ impl<'source, 'config> Lexer<'source, 'config>
 		match self.current_char {
 			Some('|') => {
 				self.advance();
-				TokenKind::Or
+				return TokenKind::Or;
 			}
 			Some('=') => {
 				self.advance();
-				TokenKind::PipeEquals
+				return TokenKind::PipeEquals;
 			}
-			_ => TokenKind::Pipe,
+			_ => return TokenKind::Pipe,
 		}
 	}
 
@@ -821,9 +822,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		self.advance(); // consume '^'
 		if self.current_char == Some('=') {
 			self.advance();
-			TokenKind::CaretEquals
+			return TokenKind::CaretEquals;
 		} else {
-			TokenKind::Caret
+			return TokenKind::Caret;
 		}
 	}
 
@@ -832,9 +833,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		self.advance(); // consume '~'
 		if self.current_char == Some('=') {
 			self.advance();
-			TokenKind::TildeEquals
+			return TokenKind::TildeEquals;
 		} else {
-			TokenKind::Tilde
+			return TokenKind::Tilde;
 		}
 	}
 
@@ -843,9 +844,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		self.advance(); // consume '!'
 		if self.current_char == Some('=') {
 			self.advance();
-			TokenKind::BangEquals
+			return TokenKind::BangEquals;
 		} else {
-			TokenKind::Bang
+			return TokenKind::Bang;
 		}
 	}
 
@@ -858,16 +859,16 @@ impl<'source, 'config> Lexer<'source, 'config>
 				match self.current_char {
 					Some('.') => {
 						self.advance();
-						TokenKind::Ellipsis
+						return TokenKind::Ellipsis;
 					}
 					Some('=') => {
 						self.advance();
-						TokenKind::DotDotEquals
+						return TokenKind::DotDotEquals;
 					}
-					_ => TokenKind::DotDot,
+					_ => return TokenKind::DotDot,
 				}
 			}
-			_ => TokenKind::Dot,
+			_ => return TokenKind::Dot,
 		}
 	}
 
@@ -876,9 +877,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		self.advance(); // consume ':'
 		if self.current_char == Some(':') {
 			self.advance();
-			TokenKind::DoubleColon
+			return TokenKind::DoubleColon;
 		} else {
-			TokenKind::Colon
+			return TokenKind::Colon;
 		}
 	}
 
@@ -903,7 +904,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		}
 
 		// Unterminated string
-		TokenKind::Invalid
+		return TokenKind::Invalid;
 	}
 
 	fn lex_char_or_label(&mut self) -> TokenKind
@@ -921,7 +922,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 				label_name.push(ch);
 				self.advance();
 
-				let is_multi_char = self.current_char.is_some_and(|c| c.is_alphanumeric() || c == '_');
+				let is_multi_char = self
+					.current_char
+					.is_some_and(|c| return c.is_alphanumeric() || c == '_');
 
 				if is_multi_char {
 					while let Some(c) = self.current_char {
@@ -948,7 +951,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 				self.current_char = char_backup;
 				self.line = line_backup;
 				self.column = col_backup;
-				self.lex_char_literal()
+				return self.lex_char_literal();
 			}
 		}
 	}
@@ -969,12 +972,12 @@ impl<'source, 'config> Lexer<'source, 'config>
 		if self.current_char == Some('\'') {
 			self.advance(); // consume closing '\''
 			if let Some(c) = ch {
-				TokenKind::CharLiteral(c)
+				return TokenKind::CharLiteral(c);
 			} else {
-				TokenKind::Invalid
+				return TokenKind::Invalid;
 			}
 		} else {
-			TokenKind::Invalid
+			return TokenKind::Invalid;
 		}
 	}
 
@@ -991,7 +994,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			_ => return None,
 		};
 		self.advance();
-		Some(escaped)
+		return Some(escaped);
 	}
 
 	fn read_radix_number(&mut self, radix: u32, is_valid_digit: impl Fn(char) -> bool) -> TokenKind
@@ -1009,9 +1012,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		i64::from_str_radix(&num_str, radix)
+		return i64::from_str_radix(&num_str, radix)
 			.map(TokenKind::IntLiteral)
-			.unwrap_or(TokenKind::Invalid)
+			.unwrap_or(TokenKind::Invalid);
 	}
 
 	fn lex_number(&mut self) -> TokenKind
@@ -1023,17 +1026,17 @@ impl<'source, 'config> Lexer<'source, 'config>
 				Some('x') => {
 					self.advance(); // '0'
 					self.advance(); // 'x'
-					return self.read_radix_number(16, |c| c.is_ascii_hexdigit());
+					return self.read_radix_number(16, |c| return c.is_ascii_hexdigit());
 				}
 				Some('b') => {
 					self.advance(); // '0'
 					self.advance(); // 'b'
-					return self.read_radix_number(2, |c| c == '0' || c == '1');
+					return self.read_radix_number(2, |c| return c == '0' || c == '1');
 				}
 				Some('o') => {
 					self.advance(); // '0'
 					self.advance(); // 'o'
-					return self.read_radix_number(8, |c| ('0'..='7').contains(&c));
+					return self.read_radix_number(8, |c| return ('0'..='7').contains(&c));
 				}
 				_ => {}
 			}
@@ -1050,7 +1053,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		if self.current_char == Some('.') && self.peek().is_some_and(|c| c.is_ascii_digit()) {
+		if self.current_char == Some('.') && self.peek().is_some_and(|c| return c.is_ascii_digit()) {
 			num_str.push('.');
 			self.advance(); // consume '.'
 
@@ -1066,14 +1069,14 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 
 			if let Ok(val) = num_str.parse::<f64>() {
-				TokenKind::FloatLiteral(val)
+				return TokenKind::FloatLiteral(val);
 			} else {
-				TokenKind::Invalid
+				return TokenKind::Invalid;
 			}
 		} else {
 			match num_str.parse::<i64>() {
-				Ok(val) => TokenKind::IntLiteral(val),
-				Err(_) => TokenKind::Invalid,
+				Ok(val) => return TokenKind::IntLiteral(val),
+				Err(_) => return TokenKind::Invalid,
 			}
 		}
 	}
@@ -1092,43 +1095,43 @@ impl<'source, 'config> Lexer<'source, 'config>
 		}
 
 		match ident.as_str() {
-			"_" => TokenKind::Underscore,
-			"self" => TokenKind::SelfKw,
-			"if" => TokenKind::If,
-			"else" => TokenKind::Else,
-			"while" => TokenKind::While,
-			"for" => TokenKind::For,
-			"loop" => TokenKind::Loop,
-			"switch" => TokenKind::Switch,
-			"return" => TokenKind::Return,
-			"break" => TokenKind::Break,
-			"continue" => TokenKind::Continue,
-			"namespace" => TokenKind::Namespace,
-			"fn" => TokenKind::FuncDef,
-			"const" => TokenKind::Const,
-			"var" => TokenKind::Var,
-			"static" => TokenKind::Static,
-			"struct" => TokenKind::Struct,
-			"union" => TokenKind::Union,
-			"variant" => TokenKind::Variant,
-			"enum" => TokenKind::Enum,
-			"type" => TokenKind::Type,
-			"impl" => TokenKind::Impl,
-			"trait" => TokenKind::Trait,
-			"macro" => TokenKind::MacroDef,
-			"pub" => TokenKind::Pub,
-			"inline" => TokenKind::Inline,
-			"mut" => TokenKind::Mut,
-			"unsafe" => TokenKind::Unsafe,
-			"volatile" => TokenKind::Volatile,
-			"in" => TokenKind::In,
-			"as" => TokenKind::As,
-			"where" => TokenKind::Where,
-			"true" => TokenKind::True,
-			"false" => TokenKind::False,
-			"new" => TokenKind::New,
-			"delete" => TokenKind::Delete,
-			_ => TokenKind::Identifier(ident),
+			"_" => return TokenKind::Underscore,
+			"self" => return TokenKind::SelfKw,
+			"if" => return TokenKind::If,
+			"else" => return TokenKind::Else,
+			"while" => return TokenKind::While,
+			"for" => return TokenKind::For,
+			"loop" => return TokenKind::Loop,
+			"switch" => return TokenKind::Switch,
+			"return" => return TokenKind::Return,
+			"break" => return TokenKind::Break,
+			"continue" => return TokenKind::Continue,
+			"namespace" => return TokenKind::Namespace,
+			"fn" => return TokenKind::FuncDef,
+			"const" => return TokenKind::Const,
+			"var" => return TokenKind::Var,
+			"static" => return TokenKind::Static,
+			"struct" => return TokenKind::Struct,
+			"union" => return TokenKind::Union,
+			"variant" => return TokenKind::Variant,
+			"enum" => return TokenKind::Enum,
+			"type" => return TokenKind::Type,
+			"impl" => return TokenKind::Impl,
+			"trait" => return TokenKind::Trait,
+			"macro" => return TokenKind::MacroDef,
+			"pub" => return TokenKind::Pub,
+			"inline" => return TokenKind::Inline,
+			"mut" => return TokenKind::Mut,
+			"unsafe" => return TokenKind::Unsafe,
+			"volatile" => return TokenKind::Volatile,
+			"in" => return TokenKind::In,
+			"as" => return TokenKind::As,
+			"where" => return TokenKind::Where,
+			"true" => return TokenKind::True,
+			"false" => return TokenKind::False,
+			"new" => return TokenKind::New,
+			"delete" => return TokenKind::Delete,
+			_ => return TokenKind::Identifier(ident),
 		}
 	}
 
@@ -1152,7 +1155,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			_ => Directive::Custom(directive),
 		};
 
-		TokenKind::Directive(dir)
+		return TokenKind::Directive(dir);
 	}
 
 	fn lex_macro(&mut self) -> TokenKind
@@ -1169,7 +1172,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		TokenKind::Macro(macro_name)
+		return TokenKind::Macro(macro_name);
 	}
 
 	fn lex_line_comment(&mut self) -> TokenKind
@@ -1190,9 +1193,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		}
 
 		if is_doc {
-			TokenKind::DocsComment(comment)
+			return TokenKind::DocsComment(comment);
 		} else {
-			TokenKind::LineComment(comment)
+			return TokenKind::LineComment(comment);
 		}
 	}
 
@@ -1216,9 +1219,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 		}
 
 		if is_doc {
-			TokenKind::DocsComment(comment)
+			return TokenKind::DocsComment(comment);
 		} else {
-			TokenKind::BlockComment(comment)
+			return TokenKind::BlockComment(comment);
 		}
 	}
 
@@ -1252,9 +1255,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 	fn peek(&self) -> Option<char>
 	{
 		if let Some(ch) = self.current_char {
-			self.source[self.position + ch.len_utf8()..].chars().next()
+			return self.source[self.position + ch.len_utf8()..].chars().next();
 		} else {
-			None
+			return None;
 		}
 	}
 }
@@ -1288,20 +1291,23 @@ impl Token
 	#[allow(unused)]
 	pub fn format_error(&self, source: &str, message: &str) -> String
 	{
-		let line_start = source[..self.span.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+		let line_start = source[..self.span.start].rfind('\n').map(|i| return i + 1).unwrap_or(0);
 		let line_end = source[self.span.start..]
 			.find('\n')
-			.map(|i| self.span.start + i)
+			.map(|i| return self.span.start + i)
 			.unwrap_or(source.len());
 		let line_text = &source[line_start..line_end];
 
 		// Preserve tabs and spaces to maintain alignment
 		let prefix = &source[line_start..self.span.start];
-		let caret_indent: String = prefix.chars().map(|c| if c == '\t' { '\t' } else { ' ' }).collect();
+		let caret_indent: String = prefix
+			.chars()
+			.map(|c| if c == '\t' { return '\t' } else { return ' ' })
+			.collect();
 
 		let caret_length = (self.span.end - self.span.start).max(1);
 
-		format!(
+		return format!(
 			"Error at {}:{}: {}\n  | {}\n  | {}{}",
 			self.span.start_line,
 			self.span.start_col,
@@ -1309,7 +1315,7 @@ impl Token
 			line_text,
 			caret_indent,
 			"^".repeat(caret_length)
-		)
+		);
 	}
 }
 
@@ -1342,20 +1348,23 @@ impl Span
 	#[allow(unused)]
 	pub fn format_error(&self, source: &str, message: &str) -> String
 	{
-		let line_start = source[..self.start].rfind('\n').map(|i| i + 1).unwrap_or(0);
+		let line_start = source[..self.start].rfind('\n').map(|i| return i + 1).unwrap_or(0);
 		let line_end = source[self.start..]
 			.find('\n')
-			.map(|i| self.start + i)
+			.map(|i| return self.start + i)
 			.unwrap_or(source.len());
 		let line_text = &source[line_start..line_end];
 
 		// Preserve tabs and spaces to maintain alignment
 		let prefix = &source[line_start..self.start];
-		let caret_indent: String = prefix.chars().map(|c| if c == '\t' { '\t' } else { ' ' }).collect();
+		let caret_indent: String = prefix
+			.chars()
+			.map(|c| if c == '\t' { return '\t' } else { return ' ' })
+			.collect();
 
 		let caret_length = (self.end - self.start).max(1);
 
-		format!(
+		return format!(
 			"Error at {}:{}: {}\n  | {}\n  | {}{}",
 			self.start_line,
 			self.start_col,
@@ -1363,18 +1372,18 @@ impl Span
 			line_text,
 			caret_indent,
 			"^".repeat(caret_length)
-		)
+		);
 	}
 
 	#[allow(unused)]
-	/// Creates a ParseError in a readable style from a span
+	/// Creates a `ParseError` in a readable style from a span
 	///
 	/// # Arguments
 	/// * `source` - The complete source code string
 	/// * `message` - The error message to display
 	///
 	/// # Returns
-	/// A ParseError containing a formatted string containing the error location, message, source line,
+	/// A `ParseError` containing a formatted string containing the error location, message, source line,
 	/// and visual indicator pointing to the error position and the span itself.
 	///
 	/// # Example
@@ -1406,7 +1415,7 @@ mod tests
 	{
 		let config = Config::default();
 		let lexer = Lexer::new(&config, source);
-		lexer.map(|t| t.kind).collect()
+		return lexer.map(|t| return t.kind).collect();
 	}
 
 	/// Helper function to extract tokens from source
@@ -1414,7 +1423,7 @@ mod tests
 	{
 		let config = Config::default();
 		let lexer = Lexer::new(&config, source);
-		lexer.collect()
+		return lexer.collect();
 	}
 
 	// ===== Basic Token Tests =====

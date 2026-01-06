@@ -23,9 +23,9 @@ impl Desugarer
 
 	fn gen_temp(&mut self, name: &str) -> Ident
 	{
-		let name: Ident = format!("#__tmp_{}_{}", self.tmp_counter, name);
+		let new_name: Ident = format!("#__tmp_{}_{}", self.tmp_counter, name);
 		self.tmp_counter += 1;
-		return name;
+		return new_name;
 	}
 
 	fn gen_loop_label(&mut self) -> Ident
@@ -35,7 +35,7 @@ impl Desugarer
 
 	fn push_loop(&mut self, label: Option<String>) -> String
 	{
-		let actual_label = label.unwrap_or_else(|| self.gen_loop_label());
+		let actual_label = label.unwrap_or_else(|| return self.gen_loop_label());
 		self.loop_stack.push(actual_label.clone());
 		return actual_label;
 	}
@@ -53,30 +53,30 @@ impl Desugarer
 
 	pub fn desugar_program(&mut self, program: Program) -> Program
 	{
-		Program {
+		return Program {
 			items: program
 				.items
 				.into_iter()
-				.map(|item| self.desugar_top_level_decl(item))
+				.map(|item| return self.desugar_top_level_decl(item))
 				.collect(),
 			span: program.span,
-		}
+		};
 	}
 
 	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> TopLevelDecl
 	{
 		match decl {
-			TopLevelDecl::Function(func) => TopLevelDecl::Function(self.desugar_function(func)),
-			TopLevelDecl::Namespace(ns) => TopLevelDecl::Namespace(self.desugar_namespace(ns)),
-			TopLevelDecl::Impl(impl_decl) => TopLevelDecl::Impl(self.desugar_impl(impl_decl)),
-			TopLevelDecl::Trait(trait_decl) => TopLevelDecl::Trait(self.desugar_trait(trait_decl)),
-			TopLevelDecl::Directive(d) => TopLevelDecl::Directive(self.desugar_directive_node(d)),
-			TopLevelDecl::VariableDecl(var) => TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)),
-			TopLevelDecl::Struct(s) => TopLevelDecl::Struct(s),
-			TopLevelDecl::Union(u) => TopLevelDecl::Union(u),
-			TopLevelDecl::Enum(e) => TopLevelDecl::Enum(e),
-			TopLevelDecl::Variant(v) => TopLevelDecl::Variant(v),
-			TopLevelDecl::TypeAlias(t) => TopLevelDecl::TypeAlias(t),
+			TopLevelDecl::Function(func) => return TopLevelDecl::Function(self.desugar_function(func)),
+			TopLevelDecl::Namespace(ns) => return TopLevelDecl::Namespace(self.desugar_namespace(ns)),
+			TopLevelDecl::Impl(impl_decl) => return TopLevelDecl::Impl(self.desugar_impl(impl_decl)),
+			TopLevelDecl::Trait(trait_decl) => return TopLevelDecl::Trait(self.desugar_trait(trait_decl)),
+			TopLevelDecl::Directive(d) => return TopLevelDecl::Directive(self.desugar_directive_node(d)),
+			TopLevelDecl::VariableDecl(var) => return TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)),
+			TopLevelDecl::Struct(s) => return TopLevelDecl::Struct(s),
+			TopLevelDecl::Union(u) => return TopLevelDecl::Union(u),
+			TopLevelDecl::Enum(e) => return TopLevelDecl::Enum(e),
+			TopLevelDecl::Variant(v) => return TopLevelDecl::Variant(v),
+			TopLevelDecl::TypeAlias(t) => return TopLevelDecl::TypeAlias(t),
 		}
 	}
 
@@ -102,12 +102,12 @@ impl Desugarer
 			.body
 			.into_iter()
 			.map(|item| match item {
-				ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)),
-				ImplItem::TypeAlias(t) => ImplItem::TypeAlias(t),
-				ImplItem::Const(c) => ImplItem::Const(self.desugar_variable_decl(c)),
+				ImplItem::Function(func) => return ImplItem::Function(self.desugar_function(func)),
+				ImplItem::TypeAlias(t) => return ImplItem::TypeAlias(t),
+				ImplItem::Const(c) => return ImplItem::Const(self.desugar_variable_decl(c)),
 			})
 			.collect();
-		impl_decl
+		return impl_decl;
 	}
 
 	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> TraitDecl
@@ -118,15 +118,15 @@ impl Desugarer
 			.map(|item| match item {
 				TraitItem::Function { signature, body, span } => {
 					debug_assert!(self.loop_stack.is_empty());
-					let desugared_body = body.map(|b| self.desugar_block(b));
-					TraitItem::Function {
+					let desugared_body = body.map(|b| return self.desugar_block(b));
+					return TraitItem::Function {
 						signature,
 						body: desugared_body,
 						span,
-					}
+					};
 				}
-				TraitItem::TypeAlias(t) => TraitItem::TypeAlias(t),
-				TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)),
+				TraitItem::TypeAlias(t) => return TraitItem::TypeAlias(t),
+				TraitItem::Const(c) => return TraitItem::Const(self.desugar_variable_decl(c)),
 			})
 			.collect();
 		return trait_decl;
@@ -134,15 +134,19 @@ impl Desugarer
 
 	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> DirectiveNode
 	{
-		directive.body = directive.body.map(|body| self.desugar_block_content(body));
+		directive.body = directive.body.map(|body| return self.desugar_block_content(body));
 		return directive;
 	}
 
 	fn desugar_block(&mut self, block: Block) -> Block
 	{
 		return Block {
-			stmts: block.stmts.into_iter().map(|stmt| self.desugar_stmt(stmt)).collect(),
-			tail_expr: block.tail_expr.map(|expr| Box::new(self.desugar_expr(*expr))),
+			stmts: block
+				.stmts
+				.into_iter()
+				.map(|stmt| return self.desugar_stmt(stmt))
+				.collect(),
+			tail_expr: block.tail_expr.map(|expr| return Box::new(self.desugar_expr(*expr))),
 			span: block.span,
 		};
 	}
@@ -174,7 +178,7 @@ impl Desugarer
 			} => Stmt::If {
 				cond: self.desugar_expr(cond),
 				then_block: self.desugar_block(then_block),
-				else_branch: else_branch.map(|stmt| Box::new(self.desugar_stmt(*stmt))),
+				else_branch: else_branch.map(|stmt| return Box::new(self.desugar_stmt(*stmt))),
 				span,
 			},
 
@@ -237,23 +241,23 @@ impl Desugarer
 			},
 
 			Stmt::Return { value, span } => Stmt::Return {
-				value: value.map(|e| self.desugar_expr(e)),
+				value: value.map(|e| return self.desugar_expr(e)),
 				span,
 			},
 
 			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)),
 
 			Stmt::Break { label, value, span } => {
-				let actual_label = label.or_else(|| self.current_loop().cloned());
+				let actual_label = label.or_else(|| return self.current_loop().cloned());
 				Stmt::Break {
 					label: actual_label,
-					value: value.map(|v| self.desugar_expr(v)),
+					value: value.map(|v| return self.desugar_expr(v)),
 					span,
 				}
 			}
 
 			Stmt::Continue { label, span } => {
-				let actual_label = label.or_else(|| self.current_loop().cloned());
+				let actual_label = label.or_else(|| return self.current_loop().cloned());
 				Stmt::Continue {
 					label: actual_label,
 					span,
@@ -558,9 +562,9 @@ impl Desugarer
 
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
 	{
-		var.init = var.init.map(|init| self.desugar_expr(init));
+		var.init = var.init.map(|init| return self.desugar_expr(init));
 		var.pattern = self.desugar_pattern(var.pattern);
-		var
+		return var;
 	}
 
 	fn desugar_expr(&mut self, expr: Expr) -> Expr
@@ -587,7 +591,7 @@ impl Desugarer
 
 			Expr::Call { callee, args, span } => Expr::Call {
 				callee: Box::new(self.desugar_expr(*callee)),
-				args: args.into_iter().map(|arg| self.desugar_expr(arg)).collect(),
+				args: args.into_iter().map(|arg| return self.desugar_expr(arg)).collect(),
 				span,
 			},
 
@@ -604,7 +608,7 @@ impl Desugarer
 			},
 
 			Expr::Tuple { elements, span } => Expr::Tuple {
-				elements: elements.into_iter().map(|e| self.desugar_expr(e)).collect(),
+				elements: elements.into_iter().map(|e| return self.desugar_expr(e)).collect(),
 				span,
 			},
 
@@ -614,7 +618,7 @@ impl Desugarer
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, expr)| (name, self.desugar_expr(expr)))
+					.map(|(name, expr)| return (name, self.desugar_expr(expr)))
 					.collect(),
 				span,
 			},
@@ -625,7 +629,10 @@ impl Desugarer
 
 			Expr::Switch { expr, arms, span } => Expr::Switch {
 				expr: Box::new(self.desugar_expr(*expr)),
-				arms: arms.into_iter().map(|arm| self.desugar_switch_arm(arm)).collect(),
+				arms: arms
+					.into_iter()
+					.map(|arm| return self.desugar_switch_arm(arm))
+					.collect(),
 				span,
 			},
 
@@ -664,7 +671,7 @@ impl Desugarer
 		return Expr::If {
 			cond: Box::new(self.desugar_expr(cond)),
 			then_block: self.desugar_block(then_block),
-			else_branch: else_branch.map(|e| Box::new(self.desugar_expr(*e))),
+			else_branch: else_branch.map(|e| return Box::new(self.desugar_expr(*e))),
 			span,
 		};
 	}
@@ -751,11 +758,11 @@ impl Desugarer
 	{
 		return match array_lit {
 			ArrayLiteral::List { elements, span } => ArrayLiteral::List {
-				elements: elements.into_iter().map(|e| self.desugar_expr(e)).collect(),
+				elements: elements.into_iter().map(|e| return self.desugar_expr(e)).collect(),
 				span,
 			},
 			ArrayLiteral::Repeat { value, count, span } => ArrayLiteral::Repeat {
-				value: value.into_iter().map(|e| self.desugar_expr(e)).collect(),
+				value: value.into_iter().map(|e| return self.desugar_expr(e)).collect(),
 				count: Box::new(self.desugar_expr(*count)),
 				span,
 			},
@@ -783,12 +790,12 @@ impl Desugarer
 
 			Pattern::Variant { path, args, span } => Pattern::Variant {
 				path,
-				args: args.into_iter().map(|p| self.desugar_pattern(p)).collect(),
+				args: args.into_iter().map(|p| return self.desugar_pattern(p)).collect(),
 				span,
 			},
 
 			Pattern::Tuple { patterns, span } => {
-				let desugared: Vec<Pattern> = patterns.into_iter().map(|p| self.desugar_pattern(p)).collect();
+				let desugared: Vec<Pattern> = patterns.into_iter().map(|p| return self.desugar_pattern(p)).collect();
 
 				if desugared.len() == 1 {
 					desugared.into_iter().next().unwrap()
@@ -804,7 +811,7 @@ impl Desugarer
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, pat)| (name, self.desugar_pattern(pat)))
+					.map(|(name, pat)| return (name, self.desugar_pattern(pat)))
 					.collect(),
 				span,
 			},
@@ -845,51 +852,51 @@ mod tests
 	// Helper to create a simple identifier expression
 	fn ident(name: &str) -> Expr
 	{
-		Expr::Identifier {
+		return Expr::Identifier {
 			path: vec![name.to_string()],
 			span: Span::default(),
-		}
+		};
 	}
 
 	// Helper to create a literal int expression
 	fn int_lit(value: i64) -> Expr
 	{
-		Expr::Literal {
+		return Expr::Literal {
 			value: Literal::Int(value),
 			span: Span::default(),
-		}
+		};
 	}
 
 	// Helper to create a literal bool expression
 	fn bool_lit(value: bool) -> Expr
 	{
-		Expr::Literal {
+		return Expr::Literal {
 			value: Literal::Bool(value),
 			span: Span::default(),
-		}
+		};
 	}
 
 	// Helper to create a simple type
 	fn simple_type(name: &str) -> Type
 	{
-		Type {
+		return Type {
 			modifiers: vec![],
 			core: Box::new(TypeCore::Base {
 				path: vec![name.to_string()],
 				generics: vec![],
 			}),
 			span: Span::default(),
-		}
+		};
 	}
 
 	// Helper to create a typed identifier pattern
 	fn typed_ident_pattern(name: &str, type_name: &str) -> Pattern
 	{
-		Pattern::TypedIdentifier {
+		return Pattern::TypedIdentifier {
 			name: name.to_string(),
 			ty: simple_type(type_name),
 			span: Span::default(),
-		}
+		};
 	}
 
 	#[test]

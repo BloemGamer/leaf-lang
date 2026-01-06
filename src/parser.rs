@@ -53,14 +53,14 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	/// ```
 	fn from(lexer: Lexer<'s, 'c>) -> Self
 	{
-		let (config, source, lexer) = lexer.into_parts();
-		Self {
+		let (config, source, lex) = lexer.into_parts();
+		return Self {
 			config,
 			source,
-			lexer: lexer.peekable(),
+			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
-		}
+		};
 	}
 }
 
@@ -82,7 +82,7 @@ impl Spanned for Span
 {
 	fn span(&self) -> Span
 	{
-		*self
+		return *self;
 	}
 }
 
@@ -90,7 +90,7 @@ impl Spanned for Token
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -113,7 +113,7 @@ impl Spanned for Program
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -158,7 +158,7 @@ impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, ParseError>
 	/// ```
 	fn from(mut parser: Parser<'s, 'c>) -> Self
 	{
-		parser.parse_program()
+		return parser.parse_program();
 	}
 }
 
@@ -166,7 +166,7 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Result<Program, ParseError>
 {
 	fn from(value: Lexer<'s, 'c>) -> Self
 	{
-		<Result<Program, ParseError>>::from(Parser::from(value))
+		return <Result<Program, ParseError>>::from(Parser::from(value));
 	}
 }
 
@@ -213,7 +213,7 @@ impl Spanned for TopLevelDecl
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			TopLevelDecl::Function(f) => f.span(),
 			TopLevelDecl::VariableDecl(v) => v.span(),
 			TopLevelDecl::Struct(s) => s.span(),
@@ -225,7 +225,7 @@ impl Spanned for TopLevelDecl
 			TopLevelDecl::Namespace(n) => n.span(),
 			TopLevelDecl::Impl(i) => i.span(),
 			TopLevelDecl::Directive(d) => d.span(),
-		}
+		};
 	}
 }
 
@@ -313,7 +313,7 @@ impl Spanned for DirectiveNode
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -338,7 +338,7 @@ impl Spanned for FunctionDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -372,7 +372,7 @@ impl Spanned for FunctionSignature
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -396,7 +396,7 @@ impl Spanned for Param
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -420,7 +420,7 @@ impl Spanned for Type
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -485,7 +485,7 @@ impl Spanned for RangeExpr
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -628,7 +628,7 @@ impl Spanned for Expr
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			Expr::Identifier { span, .. } => *span,
 			Expr::Literal { span, .. } => *span,
 			Expr::Unary { span, .. } => *span,
@@ -648,7 +648,7 @@ impl Spanned for Expr
 			Expr::If { span, .. } => *span,
 			Expr::IfVar { span, .. } => *span,
 			Expr::Loop { span, .. } => *span,
-		}
+		};
 	}
 }
 
@@ -698,10 +698,10 @@ impl Spanned for ArrayLiteral
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			ArrayLiteral::List { span, .. } => *span,
 			ArrayLiteral::Repeat { span, .. } => *span,
-		}
+		};
 	}
 }
 
@@ -833,7 +833,7 @@ impl Spanned for VariableDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -959,7 +959,7 @@ impl Spanned for Stmt
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			Stmt::VariableDecl(VariableDecl { span, .. }) => *span,
 			Stmt::Assignment { span, .. } => *span,
 			Stmt::Return { span, .. } => *span,
@@ -976,7 +976,7 @@ impl Spanned for Stmt
 			Stmt::Unsafe(block) => block.span(),
 			Stmt::Block(block) => block.span(),
 			Stmt::Directive(DirectiveNode { span, .. }) => *span,
-		}
+		};
 	}
 }
 
@@ -1024,7 +1024,7 @@ impl Spanned for Block
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1062,7 +1062,7 @@ impl Spanned for SwitchArm
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1085,10 +1085,10 @@ impl Spanned for SwitchBody
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			SwitchBody::Expr(expr) => expr.span(),
 			SwitchBody::Block(Block { span, .. }) => *span,
-		}
+		};
 	}
 }
 
@@ -1152,7 +1152,7 @@ impl Spanned for Pattern
 {
 	fn span(&self) -> Span
 	{
-		match self {
+		return match self {
 			Pattern::Wildcard { span } => *span,
 			Pattern::Literal { span, .. } => *span,
 			Pattern::TypedIdentifier { span, .. } => *span,
@@ -1161,7 +1161,7 @@ impl Spanned for Pattern
 			Pattern::Struct { span, .. } => *span,
 			Pattern::Range(RangeExpr { span, .. }) => *span,
 			Pattern::Or { span, .. } => *span,
-		}
+		};
 	}
 }
 
@@ -1187,7 +1187,7 @@ impl Spanned for StructDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1218,7 +1218,7 @@ impl Spanned for EnumDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1244,7 +1244,7 @@ impl Spanned for VariantDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1274,7 +1274,7 @@ impl Spanned for TraitDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1304,9 +1304,9 @@ impl Spanned for TraitItem
 	fn span(&self) -> Span
 	{
 		match self {
-			TraitItem::Function { span, .. } => *span,
-			TraitItem::TypeAlias(TypeAliasDecl { span, .. }) => *span,
-			TraitItem::Const(VariableDecl { span, .. }) => *span,
+			TraitItem::Function { span, .. } => return *span,
+			TraitItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
+			TraitItem::Const(VariableDecl { span, .. }) => return *span,
 		}
 	}
 }
@@ -1340,7 +1340,7 @@ impl Spanned for ImplDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1364,7 +1364,7 @@ impl Spanned for ImplTarget
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1389,9 +1389,9 @@ impl Spanned for ImplItem
 	fn span(&self) -> Span
 	{
 		match self {
-			ImplItem::Function(FunctionDecl { span, .. }) => *span,
-			ImplItem::TypeAlias(TypeAliasDecl { span, .. }) => *span,
-			ImplItem::Const(VariableDecl { span, .. }) => *span,
+			ImplItem::Function(FunctionDecl { span, .. }) => return *span,
+			ImplItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
+			ImplItem::Const(VariableDecl { span, .. }) => return *span,
 		}
 	}
 }
@@ -1416,7 +1416,7 @@ impl Spanned for WhereConstraint
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1438,7 +1438,7 @@ impl std::fmt::Display for ParseError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
-		write!(f, "Parse error at {:?}: {}", self.span, self.message)
+		return write!(f, "Parse error at {:?}: {}", self.span, self.message);
 	}
 }
 
@@ -1466,7 +1466,7 @@ impl Spanned for TypeAliasDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1492,7 +1492,7 @@ impl Spanned for NamespaceDecl
 {
 	fn span(&self) -> Span
 	{
-		self.span
+		return self.span;
 	}
 }
 
@@ -1503,7 +1503,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		if self.buffered_token.is_some() {
 			return self.buffered_token.as_ref().unwrap();
 		}
-		self.lexer.peek().expect("lexer exhausted unexpectedly")
+		return self.lexer.peek().expect("lexer exhausted unexpectedly");
 	}
 
 	fn next(&mut self) -> Token
@@ -1514,26 +1514,26 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 		let tok: Token = self.lexer.next().expect("lexer exhausted unexpectedly");
 		self.last_span = tok.span;
-		tok
+		return tok;
 	}
 
 	fn peek_kind(&mut self) -> &TokenKind
 	{
-		&self.peek().kind
+		return &self.peek().kind;
 	}
 
 	fn at(&mut self, kind: &TokenKind) -> bool
 	{
-		self.peek_kind() == kind
+		return self.peek_kind() == kind;
 	}
 
 	fn consume(&mut self, kind: &TokenKind) -> bool
 	{
 		if self.at(kind) {
 			self.next();
-			true
+			return true;
 		} else {
-			false
+			return false;
 		}
 	}
 
@@ -1557,7 +1557,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			return true;
 		}
 
-		false
+		return false;
 	}
 
 	fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError>
@@ -1565,13 +1565,16 @@ impl<'s, 'c> Parser<'s, 'c>
 		let tok: &Token = self.peek();
 
 		if &tok.kind == expected {
-			Ok(self.next())
+			return Ok(self.next());
 		} else {
-			let tok: Token = tok.clone();
-			Err(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected {:?}, found {:?}", expected, tok.kind)),
-			})
+			let err_tok: Token = tok.clone();
+			return Err(ParseError {
+				span: err_tok.span,
+				message: err_tok.format_error(
+					self.source,
+					&format!("expected {:?}, found {:?}", expected, err_tok.kind),
+				),
+			});
 		}
 	}
 
@@ -1608,7 +1611,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				.merge(&items.last().expect("this should not be possible").span())
 		};
 
-		Ok(Program { items, span })
+		return Ok(Program { items, span });
 	}
 
 	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, ParseError>
@@ -1832,7 +1835,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 		}
-		Ok(())
+		return Ok(());
 	}
 
 	fn parse_directive_node(&mut self) -> Result<DirectiveNode, ParseError>
@@ -1864,20 +1867,20 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let end: Span = self.last_span;
 
-		Ok(DirectiveNode {
+		return Ok(DirectiveNode {
 			directive,
 			body,
 			span: start.merge(&end),
-		})
+		});
 	}
 
 	fn should_parse_as_top_level_block(&self, directive: &Directive) -> bool // TODO, find out why I have this funcition
 	{
 		match directive {
 			Directive::Custom { name, .. } => {
-				matches!(name.as_str(), "extern" | "cfg" | "module" | "namespace")
+				return matches!(name.as_str(), "extern" | "cfg" | "module" | "namespace");
 			}
-			_ => false,
+			_ => return false,
 		}
 	}
 
@@ -1895,7 +1898,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		// let end: Span = self.last_span;
 
-		Ok(node)
+		return Ok(node);
 	}
 
 	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
@@ -2020,18 +2023,19 @@ impl<'s, 'c> Parser<'s, 'c>
 						}
 					}
 					self.expect(&TokenKind::RightParen)?;
-					Ok(TypeCore::Tuple(types))
+					return Ok(TypeCore::Tuple(types));
 				} else {
 					self.expect(&TokenKind::RightParen)?;
 					let ty = types.into_iter().next().unwrap();
-					Ok(*ty.core)
+					return Ok(*ty.core);
 				}
 			}
 			_ => {
-				let tok = tok.clone();
+				let err_tok: Token = tok.clone();
 				return Err(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "Expected an ampersand, mut, identifier, or '(' for type"),
+					span: err_tok.span,
+					message: err_tok
+						.format_error(self.source, "Expected an ampersand, mut, identifier, or '(' for type"),
 				});
 			}
 		}
@@ -2057,7 +2061,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				_ => break,
 			}
 		}
-		Ok(base)
+		return Ok(base);
 	}
 
 	fn get_path(&mut self) -> Result<Vec<Ident>, ParseError>
@@ -2133,22 +2137,22 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(generics)
+		return Ok(generics);
 	}
 
 	pub fn parse_expr(&mut self) -> Result<Expr, ParseError>
 	{
-		self.parse_expr_inner(true)
+		return self.parse_expr_inner(true);
 	}
 
 	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
 	{
-		self.parse_expr_inner(false)
+		return self.parse_expr_inner(false);
 	}
 
 	fn parse_expr_inner(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
 	{
-		self.parse_logical_or(allow_struct_init)
+		return self.parse_logical_or(allow_struct_init);
 	}
 
 	fn parse_logical_or(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2166,7 +2170,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_logical_and(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2184,7 +2188,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_bitwise_or(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2203,7 +2207,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_bitwise_xor(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2222,7 +2226,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_bitwise_and(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2241,7 +2245,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_equality(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2266,7 +2270,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_relational(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2293,7 +2297,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_shift(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2318,7 +2322,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_range(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2334,30 +2338,30 @@ impl<'s, 'c> Parser<'s, 'c>
 				} else {
 					Some(Box::new(self.parse_additive(allow_struct_init)?))
 				};
-				Ok(Expr::Range(RangeExpr {
+				return Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
 					end,
 					inclusive: false,
 					span: span.merge(&self.last_span),
-				}))
+				}));
 			}
 			TokenKind::DotDotEquals => {
 				self.next();
 				let end: Box<Expr> = Box::new(self.parse_additive(allow_struct_init)?);
-				Ok(Expr::Range(RangeExpr {
+				return Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
 					end: Some(end),
 					inclusive: true,
 					span: span.merge(&self.last_span),
-				}))
+				}));
 			}
-			_ => Ok(start),
+			_ => return Ok(start),
 		}
 	}
 
 	fn is_range_end(&mut self) -> bool
 	{
-		matches!(
+		return matches!(
 			self.peek_kind(),
 			TokenKind::Comma
 				| TokenKind::RightParen
@@ -2365,7 +2369,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				| TokenKind::RightBrace
 				| TokenKind::Semicolon
 				| TokenKind::FatArrow
-		)
+		);
 	}
 
 	fn parse_additive(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2390,7 +2394,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_multiplicative(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2416,7 +2420,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 		}
 
-		Ok(lhs)
+		return Ok(lhs);
 	}
 
 	fn parse_cast(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2440,7 +2444,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.lexer = checkpoint;
 		}
 
-		self.parse_unary(allow_struct_init)
+		return self.parse_unary(allow_struct_init);
 	}
 
 	fn parse_unary(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2468,11 +2472,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 
 		let expr: Expr = self.parse_unary(allow_struct_init)?;
-		Ok(Expr::Unary {
+		return Ok(Expr::Unary {
 			op,
 			expr: Box::new(expr),
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_postfix(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2524,7 +2528,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(expr)
+		return Ok(expr);
 	}
 
 	fn parse_primary(&mut self, allow_struct_init: bool) -> Result<Expr, ParseError>
@@ -2535,52 +2539,52 @@ impl<'s, 'c> Parser<'s, 'c>
 		match &tok.kind {
 			TokenKind::IntLiteral(n) => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::Int(*n),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::FloatLiteral(f) => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::Float(*f),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::StringLiteral(s) => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::String(s.clone()),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::CharLiteral(c) => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::Char(*c),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::True => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::Bool(true),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::False => {
 				self.next();
-				Ok(Expr::Literal {
+				return Ok(Expr::Literal {
 					value: Literal::Bool(false),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 			TokenKind::SelfKw => {
 				self.next();
-				Ok(Expr::Identifier {
+				return Ok(Expr::Identifier {
 					path: vec!["self".to_string()],
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
 			TokenKind::Identifier(_) => {
@@ -2604,22 +2608,22 @@ impl<'s, 'c> Parser<'s, 'c>
 						self.next(); // {
 						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
 						self.expect(&TokenKind::RightBrace)?;
-						Ok(Expr::StructInit {
+						return Ok(Expr::StructInit {
 							path,
 							fields,
 							span: span.merge(&self.last_span),
-						})
+						});
 					} else {
-						Ok(Expr::Identifier {
+						return Ok(Expr::Identifier {
 							path,
 							span: span.merge(&self.last_span),
-						})
+						});
 					}
 				} else {
-					Ok(Expr::Identifier {
+					return Ok(Expr::Identifier {
 						path,
 						span: span.merge(&self.last_span),
-					})
+					});
 				}
 			}
 
@@ -2666,10 +2670,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 
-				Err(ParseError {
+				return Err(ParseError {
 					span: tok.span,
 					message: tok.format_error(self.source, "expected ',' or ')' in tuple"),
-				})
+				});
 			}
 
 			TokenKind::LeftBracket => {
@@ -2703,21 +2707,21 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				self.expect(&TokenKind::RightBracket)?;
-				Ok(Expr::Array(ArrayLiteral::List {
+				return Ok(Expr::Array(ArrayLiteral::List {
 					elements,
 					span: span.merge(&self.last_span),
-				}))
+				}));
 			}
 
 			TokenKind::LeftBrace => {
 				let block: Block = self.parse_block()?;
-				Ok(Expr::Block(Box::new(block)))
+				return Ok(Expr::Block(Box::new(block)));
 			}
 
 			TokenKind::Unsafe => {
 				self.next(); // unsafe
 				let block: Block = self.parse_block()?;
-				Ok(Expr::UnsafeBlock(Box::new(block)))
+				return Ok(Expr::UnsafeBlock(Box::new(block)));
 			}
 
 			TokenKind::Switch => {
@@ -2731,21 +2735,21 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				self.expect(&TokenKind::RightBrace)?;
-				Ok(Expr::Switch {
+				return Ok(Expr::Switch {
 					expr: Box::new(expr),
 					arms,
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
 			TokenKind::If => {
 				let if_stmt: Stmt = self.parse_if()?;
-				Ok(self.stmt_if_to_expr_wrapper(if_stmt)?)
+				return self.stmt_if_to_expr_wrapper(if_stmt);
 			}
 
 			TokenKind::Loop => {
 				let loop_stmt: Stmt = self.parse_loop()?;
-				Ok(self.stmt_loop_to_expr(loop_stmt)?)
+				return Ok(self.stmt_loop_to_expr(loop_stmt));
 			}
 
 			TokenKind::Label(label) => {
@@ -2755,11 +2759,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				if self.at(&TokenKind::Loop) {
 					self.next(); // loop
 					let body = self.parse_block()?;
-					Ok(Expr::Loop {
+					return Ok(Expr::Loop {
 						label: Some(label.to_owned()),
 						body: Box::new(body),
 						span: span.merge(&self.last_span),
-					})
+					});
 				} else {
 					let tok: Token = self.next();
 					return Err(ParseError {
@@ -2775,16 +2779,18 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 
-			_ => Err(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, "expected expression"),
-			}),
+			_ => {
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, "expected expression"),
+				});
+			}
 		}
 	}
 
 	fn stmt_if_to_expr_wrapper(&self, stmt: Stmt) -> Result<Expr, ParseError>
 	{
-		match stmt {
+		return match stmt {
 			Stmt::If {
 				cond,
 				then_block,
@@ -2836,17 +2842,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				span,
 			}),
 			_ => unreachable!("Expected if or if var statement"),
-		}
+		};
 	}
 
-	fn stmt_loop_to_expr(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	fn stmt_loop_to_expr(&self, stmt: Stmt) -> Expr
 	{
 		match stmt {
-			Stmt::Loop { label, body, span } => Ok(Expr::Loop {
-				label,
-				body: Box::new(body),
-				span,
-			}),
+			Stmt::Loop { label, body, span } => {
+				return Expr::Loop {
+					label,
+					body: Box::new(body),
+					span,
+				};
+			}
 			_ => unreachable!("Expected loop statement"),
 		}
 	}
@@ -2858,9 +2866,9 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.next(); // identifier(_)
 			let has_equals = self.at(&TokenKind::Equals);
 			self.lexer = checkpoint;
-			has_equals
+			return has_equals;
 		} else {
-			false
+			return false;
 		}
 	}
 
@@ -2879,7 +2887,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			args.push(self.parse_expr()?);
 		}
 
-		Ok(args)
+		return Ok(args);
 	}
 
 	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, ParseError>
@@ -2915,7 +2923,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(fields)
+		return Ok(fields);
 	}
 
 	fn parse_switch_arm(&mut self) -> Result<SwitchArm, ParseError>
@@ -3006,11 +3014,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		};
 
-		Ok(SwitchArm {
+		return Ok(SwitchArm {
 			pattern,
 			body,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
@@ -3023,12 +3031,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		if patterns.len() == 1 {
-			Ok(patterns.into_iter().next().unwrap())
+			return Ok(patterns.into_iter().next().unwrap());
 		} else {
-			Ok(Pattern::Or {
+			return Ok(Pattern::Or {
 				patterns,
 				span: span.merge(&self.last_span),
-			})
+			});
 		}
 	}
 
@@ -3043,7 +3051,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				if self.consume(&TokenKind::Colon) {
 					let _ignored_type = self.parse_type()?;
 				}
-				Ok(Pattern::Wildcard { span })
+				return Ok(Pattern::Wildcard { span });
 			}
 
 			TokenKind::Identifier(_) => {
@@ -3065,11 +3073,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 
 					self.expect(&TokenKind::RightParen)?;
-					Ok(Pattern::Variant {
+					return Ok(Pattern::Variant {
 						path,
 						args,
 						span: span.merge(&self.last_span),
-					})
+					});
 				} else if self.consume(&TokenKind::LeftBrace) {
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
 
@@ -3100,11 +3108,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 
 					self.expect(&TokenKind::RightBrace)?;
-					Ok(Pattern::Struct {
+					return Ok(Pattern::Struct {
 						path,
 						fields,
 						span: span.merge(&self.last_span),
-					})
+					});
 				} else if self.at(&TokenKind::Colon) {
 					if path.len() != 1 {
 						return Err(ParseError {
@@ -3117,17 +3125,17 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next(); // :
 					let ty: Type = self.parse_type()?;
 
-					Ok(Pattern::TypedIdentifier {
+					return Ok(Pattern::TypedIdentifier {
 						name: path[0].clone(),
 						ty,
 						span: span.merge(&self.last_span),
-					})
+					});
 				} else {
-					Ok(Pattern::Variant {
+					return Ok(Pattern::Variant {
 						path,
 						args: Vec::new(),
 						span: span.merge(&self.last_span),
-					})
+					});
 				}
 			}
 
@@ -3156,13 +3164,13 @@ impl<'s, 'c> Parser<'s, 'c>
 						}
 					}
 					self.expect(&TokenKind::RightParen)?;
-					Ok(Pattern::Tuple {
+					return Ok(Pattern::Tuple {
 						patterns,
 						span: span.merge(&self.last_span),
-					})
+					});
 				} else {
 					self.expect(&TokenKind::RightParen)?;
-					Ok(patterns.into_iter().next().unwrap())
+					return Ok(patterns.into_iter().next().unwrap());
 				}
 			}
 
@@ -3179,7 +3187,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						Some(Box::new(self.parse_expr()?))
 					};
 
-					Ok(Pattern::Range(RangeExpr {
+					return Ok(Pattern::Range(RangeExpr {
 						start: Some(Box::new(Expr::Literal {
 							value: Literal::Int(*n),
 							span: tok.span(),
@@ -3187,51 +3195,53 @@ impl<'s, 'c> Parser<'s, 'c>
 						end,
 						inclusive,
 						span: span.merge(&self.last_span),
-					}))
+					}));
 				} else {
-					Ok(Pattern::Literal {
+					return Ok(Pattern::Literal {
 						value: Literal::Int(*n),
 						span: tok.span(),
-					})
+					});
 				}
 			}
 
 			TokenKind::True => {
 				self.next();
-				Ok(Pattern::Literal {
+				return Ok(Pattern::Literal {
 					value: Literal::Bool(true),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
 			TokenKind::False => {
 				self.next();
-				Ok(Pattern::Literal {
+				return Ok(Pattern::Literal {
 					value: Literal::Bool(false),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
 			TokenKind::StringLiteral(s) => {
 				self.next();
-				Ok(Pattern::Literal {
+				return Ok(Pattern::Literal {
 					value: Literal::String(s.clone()),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
 			TokenKind::CharLiteral(c) => {
 				self.next();
-				Ok(Pattern::Literal {
+				return Ok(Pattern::Literal {
 					value: Literal::Char(*c),
 					span: span.merge(&self.last_span),
-				})
+				});
 			}
 
-			_ => Err(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, "expected pattern"),
-			}),
+			_ => {
+				return Err(ParseError {
+					span: tok.span,
+					message: tok.format_error(self.source, "expected pattern"),
+				});
+			}
 		}
 	}
 
@@ -3359,7 +3369,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 
 					if self.at(&TokenKind::RightBrace) {
-						tail_expr = Some(Box::new(self.stmt_loop_to_expr(loop_stmt)?));
+						tail_expr = Some(Box::new(self.stmt_loop_to_expr(loop_stmt)));
 						break;
 					} else {
 						self.consume(&TokenKind::Semicolon);
@@ -3508,24 +3518,24 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 		}
-		Ok(Block {
+		return Ok(Block {
 			stmts,
 			tail_expr,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
 	{
-		!matches!(
+		return !matches!(
 			expr,
 			Expr::Block { .. } | Expr::Switch { .. } | Expr::If { .. } | Expr::IfVar { .. } | Expr::Loop { .. }
-		)
+		);
 	}
 
 	fn is_assignment_op(&mut self) -> bool
 	{
-		matches!(
+		return matches!(
 			self.peek_kind(),
 			TokenKind::Equals
 				| TokenKind::PlusEquals
@@ -3539,7 +3549,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				| TokenKind::TildeEquals
 				| TokenKind::LShiftEquals
 				| TokenKind::RShiftEquals
-		)
+		);
 	}
 
 	fn parse_assign_op(&mut self) -> Result<AssignOp, ParseError>
@@ -3565,7 +3575,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		};
 		self.next();
-		Ok(op)
+		return Ok(op);
 	}
 
 	fn parse_if(&mut self) -> Result<Stmt, ParseError>
@@ -3632,23 +3642,23 @@ impl<'s, 'c> Parser<'s, 'c>
 			let expr: Expr = self.parse_expr()?;
 			let body: Block = self.parse_block()?;
 
-			Ok(Stmt::WhileVarLoop {
+			return Ok(Stmt::WhileVarLoop {
 				label: None,
 				pattern,
 				expr,
 				body,
 				span: span.merge(&self.last_span),
-			})
+			});
 		} else {
 			let cond = self.parse_expr_no_struct()?;
 			let body = self.parse_block()?;
 
-			Ok(Stmt::While {
+			return Ok(Stmt::While {
 				label: None,
 				cond,
 				body,
 				span: span.merge(&self.last_span),
-			})
+			});
 		}
 	}
 
@@ -3661,36 +3671,36 @@ impl<'s, 'c> Parser<'s, 'c>
 		let iter = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
 
-		Ok(Stmt::For {
+		return Ok(Stmt::For {
 			label: None,
 			name,
 			iter,
 			body,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_loop(&mut self) -> Result<Stmt, ParseError>
 	{
 		let span: Span = self.peek().span();
 		self.expect(&TokenKind::Loop)?;
-		Ok(Stmt::Loop {
+		return Ok(Stmt::Loop {
 			label: None,
 			body: self.parse_block()?,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_function_decl(&mut self) -> Result<FunctionDecl, ParseError>
 	{
-		let span: Span = self.peek().span();
+		let mut span: Span = self.peek().span();
 		let signature: FunctionSignature = self.parse_function_signature()?;
 		let body: Option<Block> = if self.at(&TokenKind::Semicolon) {
 			None
 		} else {
 			Some(self.parse_block()?)
 		};
-		let span: Span = span.merge(&self.last_span);
+		span = span.merge(&self.last_span);
 		return Ok(FunctionDecl {
 			signature,
 			body,
@@ -3837,7 +3847,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		self.expect(&TokenKind::RightParen)?;
-		Ok(params)
+		return Ok(params);
 	}
 
 	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ParseError>
@@ -4181,11 +4191,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			Vec::new()
 		};
 
-		Ok(ImplTarget {
+		return Ok(ImplTarget {
 			path,
 			generics,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_type_generics(&mut self) -> Result<Vec<Type>, ParseError>
@@ -4220,7 +4230,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(generics)
+		return Ok(generics);
 	}
 
 	fn parse_impl_item(&mut self) -> Result<ImplItem, ParseError>
@@ -4251,7 +4261,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		};
 
-		Ok(node)
+		return Ok(node);
 	}
 
 	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, ParseError>
@@ -4290,7 +4300,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(constraints)
+		return Ok(constraints);
 	}
 
 	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, ParseError>
@@ -4304,12 +4314,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.expect(&TokenKind::Equals)?;
 		let ty = self.parse_type()?;
 
-		Ok(TypeAliasDecl {
+		return Ok(TypeAliasDecl {
 			modifiers,
 			name,
 			ty,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_trait(&mut self) -> Result<TraitDecl, ParseError>
@@ -4343,14 +4353,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::RightBrace)?;
 
-		Ok(TraitDecl {
+		return Ok(TraitDecl {
 			modifiers,
 			name,
 			generics,
 			super_traits,
 			items,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_trait_bounds(&mut self) -> Result<Vec<Vec<Ident>>, ParseError>
@@ -4366,7 +4376,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
-		Ok(bounds)
+		return Ok(bounds);
 	}
 
 	fn parse_trait_item(&mut self) -> Result<TraitItem, ParseError>
@@ -4411,7 +4421,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		};
 
-		Ok(node)
+		return Ok(node);
 	}
 
 	fn parse_trait_type_alias(&mut self) -> Result<TypeAliasDecl, ParseError>
@@ -4432,12 +4442,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			});
 		};
 
-		Ok(TypeAliasDecl {
+		return Ok(TypeAliasDecl {
 			modifiers,
 			name,
 			ty,
 			span: span.merge(&self.last_span),
-		})
+		});
 	}
 
 	fn parse_delete(&mut self) -> Result<Vec<Ident>, ParseError>
@@ -4460,10 +4470,10 @@ impl IndentWriter
 {
 	fn new() -> Self
 	{
-		Self {
+		return Self {
 			indent_level: 0,
 			indent_str: "    ", // 4 spaces
-		}
+		};
 	}
 
 	fn indent(&mut self)
@@ -4483,7 +4493,7 @@ impl IndentWriter
 		for _ in 0..self.indent_level {
 			write!(f, "{}", self.indent_str)?;
 		}
-		Ok(())
+		return Ok(());
 	}
 }
 
@@ -4496,32 +4506,30 @@ impl fmt::Display for Program
 			write_top_level_decl(f, &mut writer, item)?;
 			writeln!(f)?; // Add blank line between top-level items
 		}
-		Ok(())
+		return Ok(());
 	}
 }
 
 fn write_top_level_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, decl: &TopLevelDecl) -> fmt::Result
 {
 	match decl {
-		TopLevelDecl::Function(func) => write_function_decl(f, w, func),
+		TopLevelDecl::Function(func) => return write_function_decl(f, w, func),
 		TopLevelDecl::VariableDecl(var) => {
 			write_variable_decl(f, w, var)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
-		TopLevelDecl::Struct(s) => write_struct_decl(f, w, s),
-		TopLevelDecl::Union(u) => write_union_decl(f, w, u),
-		TopLevelDecl::Enum(e) => write_enum_decl(f, w, e),
-		TopLevelDecl::Variant(v) => write_variant_decl(f, w, v),
+		TopLevelDecl::Struct(s) => return write_struct_decl(f, w, s),
+		TopLevelDecl::Union(u) => return write_union_decl(f, w, u),
+		TopLevelDecl::Enum(e) => return write_enum_decl(f, w, e),
+		TopLevelDecl::Variant(v) => return write_variant_decl(f, w, v),
 		TopLevelDecl::TypeAlias(t) => {
 			write_type_alias_decl(f, w, t)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
-		TopLevelDecl::Trait(t) => write_trait_decl(f, w, t),
-		TopLevelDecl::Namespace(n) => write_namespace_decl(f, w, n),
-		TopLevelDecl::Impl(i) => write_impl_decl(f, w, i),
-		TopLevelDecl::Directive(d) => {
-			write!(f, "{};", d)
-		}
+		TopLevelDecl::Trait(t) => return write_trait_decl(f, w, t),
+		TopLevelDecl::Namespace(n) => return write_namespace_decl(f, w, n),
+		TopLevelDecl::Impl(i) => return write_impl_decl(f, w, i),
+		TopLevelDecl::Directive(d) => return write!(f, "{};", d),
 	}
 }
 
@@ -4530,12 +4538,12 @@ impl fmt::Display for Modifier
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Modifier::Pub => write!(f, "pub"),
-			Modifier::Unsafe => write!(f, "unsafe"),
-			Modifier::Inline => write!(f, "inline"),
-			Modifier::Const => write!(f, "const"),
-			Modifier::Volatile => write!(f, "volatile"),
-			Modifier::Directive(d) => write!(f, "{}", d),
+			Modifier::Pub => return write!(f, "pub"),
+			Modifier::Unsafe => return write!(f, "unsafe"),
+			Modifier::Inline => return write!(f, "inline"),
+			Modifier::Const => return write!(f, "const"),
+			Modifier::Volatile => return write!(f, "volatile"),
+			Modifier::Directive(d) => return write!(f, "{}", d),
 		}
 	}
 }
@@ -4559,7 +4567,7 @@ impl std::fmt::Display for DirectiveNode
 			}
 		}
 
-		Ok(())
+		return Ok(());
 	}
 }
 
@@ -4568,7 +4576,7 @@ impl std::fmt::Display for Directive
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		match self {
-			Directive::Import(path) => write!(f, "@import \"{}\"", path),
+			Directive::Import(path) => return write!(f, "@import \"{}\"", path),
 			Directive::Use(path) => {
 				write!(f, "@use ")?;
 				for (i, segment) in path.iter().enumerate() {
@@ -4577,7 +4585,7 @@ impl std::fmt::Display for Directive
 					}
 					write!(f, "{}", segment)?;
 				}
-				Ok(())
+				return Ok(());
 			}
 			Directive::Custom { name, args } => {
 				write!(f, "@{}", name)?;
@@ -4591,7 +4599,7 @@ impl std::fmt::Display for Directive
 					}
 					write!(f, ")")?;
 				}
-				Ok(())
+				return Ok(());
 			}
 		}
 	}
@@ -4608,7 +4616,7 @@ fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &
 		write!(f, ";")?;
 	}
 
-	Ok(())
+	return Ok(());
 }
 
 fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, sig: &FunctionSignature) -> fmt::Result
@@ -4652,14 +4660,14 @@ fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, s
 		}
 	}
 
-	Ok(())
+	return Ok(());
 }
 
 impl fmt::Display for Param
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		write!(f, "{}: {}", self.name.join("::"), self.ty)
+		return write!(f, "{}: {}", self.name.join("::"), self.ty);
 	}
 }
 
@@ -4671,7 +4679,7 @@ impl fmt::Display for Type
 			write!(f, "{} ", modifier)?;
 		}
 
-		write!(f, "{}", self.core)
+		return write!(f, "{}", self.core);
 	}
 }
 
@@ -4692,21 +4700,17 @@ impl fmt::Display for TypeCore
 					}
 					write!(f, ">")?;
 				}
-				Ok(())
+				return Ok(());
 			}
 			TypeCore::Reference { mutable, inner } => {
 				write!(f, "&")?;
 				if *mutable {
 					write!(f, "mut ")?;
 				}
-				write!(f, "{}", inner)
+				return write!(f, "{}", inner);
 			}
-			TypeCore::Pointer { inner } => {
-				write!(f, "{}*", inner)
-			}
-			TypeCore::Array { inner, size } => {
-				write!(f, "{}[{}]", inner, size)
-			}
+			TypeCore::Pointer { inner } => return write!(f, "{}*", inner),
+			TypeCore::Array { inner, size } => return write!(f, "{}[{}]", inner, size),
 			TypeCore::Tuple(types) => {
 				write!(f, "(")?;
 				for (i, ty) in types.iter().enumerate() {
@@ -4715,7 +4719,7 @@ impl fmt::Display for TypeCore
 					}
 					write!(f, "{}", ty)?;
 				}
-				write!(f, ")")
+				return write!(f, ")");
 			}
 		}
 	}
@@ -4736,7 +4740,7 @@ fn write_variable_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, var: &V
 		write_expr(f, w, init)?;
 	}
 
-	Ok(())
+	return Ok(());
 }
 
 impl fmt::Display for Pattern
@@ -4744,9 +4748,9 @@ impl fmt::Display for Pattern
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Pattern::Wildcard { .. } => write!(f, "_"),
-			Pattern::Literal { value: lit, .. } => write!(f, "{}", lit),
-			Pattern::TypedIdentifier { name, ty, .. } => write!(f, "{}: {}", name, ty),
+			Pattern::Wildcard { .. } => return write!(f, "_"),
+			Pattern::Literal { value: lit, .. } => return write!(f, "{}", lit),
+			Pattern::TypedIdentifier { name, ty, .. } => return write!(f, "{}: {}", name, ty),
 			Pattern::Variant { path, args, .. } => {
 				write!(f, "{}", path.join("::"))?;
 				if !args.is_empty() {
@@ -4759,7 +4763,7 @@ impl fmt::Display for Pattern
 					}
 					write!(f, ")")?;
 				}
-				Ok(())
+				return Ok(());
 			}
 			Pattern::Tuple { patterns, .. } => {
 				write!(f, "(")?;
@@ -4769,7 +4773,7 @@ impl fmt::Display for Pattern
 					}
 					write!(f, "{}", pat)?;
 				}
-				write!(f, ")")
+				return write!(f, ")");
 			}
 			Pattern::Struct { path, fields, .. } => {
 				write!(f, "{} {{", path.join("::"))?;
@@ -4779,9 +4783,9 @@ impl fmt::Display for Pattern
 					}
 					write!(f, "{}: {}", name, pat)?;
 				}
-				write!(f, "}}")
+				return write!(f, "}}");
 			}
-			Pattern::Range(range) => write!(f, "{}", range),
+			Pattern::Range(range) => return write!(f, "{}", range),
 			Pattern::Or { patterns, .. } => {
 				for (i, pat) in patterns.iter().enumerate() {
 					if i > 0 {
@@ -4789,7 +4793,7 @@ impl fmt::Display for Pattern
 					}
 					write!(f, "{}", pat)?;
 				}
-				Ok(())
+				return Ok(());
 			}
 		}
 	}
@@ -4800,26 +4804,22 @@ impl fmt::Display for Expr
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Expr::Identifier { path, .. } => write!(f, "{}", path.join("::")),
-			Expr::Literal { value: lit, .. } => write!(f, "{}", lit),
+			Expr::Identifier { path, .. } => return write!(f, "{}", path.join("::")),
+			Expr::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Expr::Unary { op, expr, .. } => match op {
-				UnaryOp::Neg => write!(f, "-{}", expr),
-				UnaryOp::Not => write!(f, "!{}", expr),
-				UnaryOp::Deref => write!(f, "*{}", expr),
+				UnaryOp::Neg => return write!(f, "-{}", expr),
+				UnaryOp::Not => return write!(f, "!{}", expr),
+				UnaryOp::Deref => return write!(f, "*{}", expr),
 				UnaryOp::Addr { mutable } => {
 					if *mutable {
-						write!(f, "&mut {}", expr)
+						return write!(f, "&mut {}", expr);
 					} else {
-						write!(f, "&{}", expr)
+						return write!(f, "&{}", expr);
 					}
 				}
 			},
-			Expr::Binary { op, lhs, rhs, .. } => {
-				write!(f, "({} {} {})", lhs, op, rhs)
-			}
-			Expr::Cast { ty, expr, .. } => {
-				write!(f, "({}) {}", ty, expr)
-			}
+			Expr::Binary { op, lhs, rhs, .. } => return write!(f, "({} {} {})", lhs, op, rhs),
+			Expr::Cast { ty, expr, .. } => return write!(f, "({}) {}", ty, expr),
 			Expr::Call { callee, args, .. } => {
 				write!(f, "{}(", callee)?;
 				for (i, arg) in args.iter().enumerate() {
@@ -4828,15 +4828,11 @@ impl fmt::Display for Expr
 					}
 					write!(f, "{}", arg)?;
 				}
-				write!(f, ")")
+				return write!(f, ")");
 			}
-			Expr::Field { base, name, .. } => {
-				write!(f, "{}.{}", base, name)
-			}
-			Expr::Index { base, index, .. } => {
-				write!(f, "{}[{}]", base, index)
-			}
-			Expr::Range(range) => write!(f, "{}", range),
+			Expr::Field { base, name, .. } => return write!(f, "{}.{}", base, name),
+			Expr::Index { base, index, .. } => return write!(f, "{}[{}]", base, index),
+			Expr::Range(range) => return write!(f, "{}", range),
 			Expr::Tuple { elements: exprs, .. } => {
 				write!(f, "(")?;
 				for (i, expr) in exprs.iter().enumerate() {
@@ -4845,9 +4841,9 @@ impl fmt::Display for Expr
 					}
 					write!(f, "{}", expr)?;
 				}
-				write!(f, ")")
+				return write!(f, ")");
 			}
-			Expr::Array(arr) => write!(f, "{}", arr),
+			Expr::Array(arr) => return write!(f, "{}", arr),
 			Expr::StructInit { path, fields, .. } => {
 				write!(f, "{} {{", path.join("::"))?;
 				for (i, (name, expr)) in fields.iter().enumerate() {
@@ -4856,20 +4852,20 @@ impl fmt::Display for Expr
 					}
 					write!(f, "{} = {}", name, expr)?;
 				}
-				write!(f, "}}")
+				return write!(f, "}}");
 			}
 			Expr::Block(block) => {
 				let mut w = IndentWriter::new();
-				write_block(f, &mut w, block)
+				return write_block(f, &mut w, block);
 			}
 			Expr::UnsafeBlock(block) => {
 				write!(f, "unsafe ")?;
 				let mut w = IndentWriter::new();
-				write_block(f, &mut w, block)
+				return write_block(f, &mut w, block);
 			}
 			Expr::Switch { expr, arms, .. } => {
 				let mut w = IndentWriter::new();
-				write_switch(f, &mut w, expr, arms)
+				return write_switch(f, &mut w, expr, arms);
 			}
 			Expr::If {
 				cond,
@@ -4888,7 +4884,7 @@ impl fmt::Display for Expr
 						_ => write!(f, "{}", else_expr)?,
 					}
 				}
-				Ok(())
+				return Ok(());
 			}
 
 			Expr::IfVar {
@@ -4909,7 +4905,7 @@ impl fmt::Display for Expr
 						_ => write!(f, "{}", else_expr)?,
 					}
 				}
-				Ok(())
+				return Ok(());
 			}
 			Expr::Loop { label, body, .. } => {
 				if let Some(lbl) = label {
@@ -4917,7 +4913,7 @@ impl fmt::Display for Expr
 				}
 				write!(f, "loop ")?;
 				let mut w = IndentWriter::new();
-				write_block(f, &mut w, body)
+				return write_block(f, &mut w, body);
 			}
 		}
 	}
@@ -4947,7 +4943,7 @@ fn write_switch(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, a
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 impl fmt::Display for Literal
@@ -4955,11 +4951,11 @@ impl fmt::Display for Literal
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Literal::Int(n) => write!(f, "{}", n),
-			Literal::Float(fl) => write!(f, "{}", fl),
-			Literal::Bool(b) => write!(f, "{}", b),
-			Literal::String(s) => write!(f, "\"{}\"", s),
-			Literal::Char(c) => write!(f, "'{}'", c),
+			Literal::Int(n) => return write!(f, "{}", n),
+			Literal::Float(fl) => return write!(f, "{}", fl),
+			Literal::Bool(b) => return write!(f, "{}", b),
+			Literal::String(s) => return write!(f, "\"{}\"", s),
+			Literal::Char(c) => return write!(f, "'{}'", c),
 		}
 	}
 }
@@ -4977,7 +4973,7 @@ impl fmt::Display for ArrayLiteral
 					}
 					write!(f, "{}", expr)?;
 				}
-				write!(f, "]")
+				return write!(f, "]");
 			}
 			ArrayLiteral::Repeat { value, count, .. } => {
 				write!(f, "[")?;
@@ -4987,7 +4983,7 @@ impl fmt::Display for ArrayLiteral
 					}
 					write!(f, "{}", expr)?;
 				}
-				write!(f, "; {}]", count)
+				return write!(f, "; {}]", count);
 			}
 		}
 	}
@@ -4998,24 +4994,24 @@ impl fmt::Display for BinaryOp
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			BinaryOp::LogicalOr => write!(f, "||"),
-			BinaryOp::LogicalAnd => write!(f, "&&"),
-			BinaryOp::Eq => write!(f, "=="),
-			BinaryOp::Ne => write!(f, "!="),
-			BinaryOp::Lt => write!(f, "<"),
-			BinaryOp::Gt => write!(f, ">"),
-			BinaryOp::Le => write!(f, "<="),
-			BinaryOp::Ge => write!(f, ">="),
-			BinaryOp::Add => write!(f, "+"),
-			BinaryOp::Sub => write!(f, "-"),
-			BinaryOp::Mul => write!(f, "*"),
-			BinaryOp::Div => write!(f, "/"),
-			BinaryOp::Mod => write!(f, "%"),
-			BinaryOp::BitAnd => write!(f, "&"),
-			BinaryOp::BitOr => write!(f, "|"),
-			BinaryOp::BitXor => write!(f, "^"),
-			BinaryOp::Shl => write!(f, "<<"),
-			BinaryOp::Shr => write!(f, ">>"),
+			BinaryOp::LogicalOr => return write!(f, "||"),
+			BinaryOp::LogicalAnd => return write!(f, "&&"),
+			BinaryOp::Eq => return write!(f, "=="),
+			BinaryOp::Ne => return write!(f, "!="),
+			BinaryOp::Lt => return write!(f, "<"),
+			BinaryOp::Gt => return write!(f, ">"),
+			BinaryOp::Le => return write!(f, "<="),
+			BinaryOp::Ge => return write!(f, ">="),
+			BinaryOp::Add => return write!(f, "+"),
+			BinaryOp::Sub => return write!(f, "-"),
+			BinaryOp::Mul => return write!(f, "*"),
+			BinaryOp::Div => return write!(f, "/"),
+			BinaryOp::Mod => return write!(f, "%"),
+			BinaryOp::BitAnd => return write!(f, "&"),
+			BinaryOp::BitOr => return write!(f, "|"),
+			BinaryOp::BitXor => return write!(f, "^"),
+			BinaryOp::Shl => return write!(f, "<<"),
+			BinaryOp::Shr => return write!(f, ">>"),
 		}
 	}
 }
@@ -5038,7 +5034,7 @@ impl fmt::Display for RangeExpr
 			write!(f, "{}", end)?;
 		}
 
-		Ok(())
+		return Ok(());
 	}
 }
 
@@ -5060,7 +5056,7 @@ fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) 
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> fmt::Result
@@ -5070,11 +5066,11 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 			expr: switch_expr,
 			arms,
 			..
-		} => write_switch(f, w, switch_expr, arms),
-		Expr::Block(block) => write_block(f, w, block),
+		} => return write_switch(f, w, switch_expr, arms),
+		Expr::Block(block) => return write_block(f, w, block),
 		Expr::UnsafeBlock(block) => {
 			write!(f, "unsafe ")?;
-			write_block(f, w, block)
+			return write_block(f, w, block);
 		}
 		Expr::If {
 			cond,
@@ -5090,7 +5086,7 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 				write!(f, " else ")?;
 				write_expr(f, w, else_stmt)?;
 			}
-			Ok(())
+			return Ok(());
 		}
 		Expr::IfVar {
 			pattern,
@@ -5108,16 +5104,16 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 				write!(f, " else ")?;
 				write_expr(f, w, else_stmt)?;
 			}
-			Ok(())
+			return Ok(());
 		}
 		Expr::Loop { label, body, .. } => {
 			if let Some(lbl) = label {
 				write!(f, "'{}: ", lbl)?;
 			}
 			write!(f, "loop ")?;
-			write_block(f, w, body)
+			return write_block(f, w, body);
 		}
-		_ => write!(f, "{}", expr),
+		_ => return write!(f, "{}", expr),
 	}
 }
 
@@ -5132,13 +5128,13 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 	match stmt {
 		Stmt::VariableDecl(var) => {
 			write_variable_decl(f, w, var)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		Stmt::Assignment { target, op, value, .. } => {
 			write_expr(f, w, target)?;
 			write!(f, " {} ", op)?;
 			write_expr(f, w, value)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		Stmt::Return { value, .. } => {
 			write!(f, "return")?;
@@ -5146,20 +5142,20 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, " ")?;
 				write_expr(f, w, e)?;
 			}
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		Stmt::Expr(expr) => match expr {
 			Expr::Switch { expr, arms, .. } => {
 				write_switch(f, w, expr, arms)?;
-				write!(f, ";")
+				return write!(f, ";");
 			}
 			Expr::Block(block) => {
 				write_block(f, w, block)?;
-				write!(f, ";")
+				return write!(f, ";");
 			}
 			_ => {
 				write_expr(f, w, expr)?;
-				write!(f, ";",)
+				return write!(f, ";",);
 			}
 		},
 		Stmt::Break { label, value, .. } => {
@@ -5171,14 +5167,14 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, " ")?;
 				write_expr(f, w, val)?;
 			}
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		Stmt::Continue { label, .. } => {
 			write!(f, "continue")?;
 			if let Some(lbl) = label {
 				write!(f, " '{}", lbl)?;
 			}
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		Stmt::If {
 			cond,
@@ -5194,7 +5190,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, " else ")?;
 				write_stmt_no_indent(f, w, else_stmt)?;
 			}
-			Ok(())
+			return Ok(());
 		}
 		Stmt::IfVar {
 			pattern,
@@ -5211,7 +5207,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, " else ")?;
 				write_stmt_no_indent(f, w, else_stmt)?;
 			}
-			Ok(())
+			return Ok(());
 		}
 		Stmt::While { label, cond, body, .. } => {
 			if let Some(lbl) = label {
@@ -5220,14 +5216,14 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, "while ")?;
 			write_expr(f, w, cond)?;
 			write!(f, " ")?;
-			write_block(f, w, body)
+			return write_block(f, w, body);
 		}
 		Stmt::Loop { label, body, .. } => {
 			if let Some(lbl) = label {
 				write!(f, "'{}: ", lbl)?;
 			}
 			write!(f, "loop ")?;
-			write_block(f, w, body)
+			return write_block(f, w, body);
 		}
 		Stmt::WhileVarLoop {
 			label,
@@ -5242,7 +5238,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, "while var {} = ", pattern)?;
 			write_expr(f, w, expr)?;
 			write!(f, " ")?;
-			write_block(f, w, body)
+			return write_block(f, w, body);
 		}
 		Stmt::For {
 			label,
@@ -5257,16 +5253,14 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, "for {} in ", name.join("::"))?;
 			write_expr(f, w, iter)?;
 			write!(f, " ")?;
-			write_block(f, w, body)
+			return write_block(f, w, body);
 		}
-		Stmt::Delete { path, .. } => {
-			write!(f, "delete {};", path.join("::"))
-		}
+		Stmt::Delete { path, .. } => return write!(f, "delete {};", path.join("::")),
 		Stmt::Unsafe(block) => {
 			write!(f, "unsafe ")?;
-			write_block(f, w, block)
+			return write_block(f, w, block);
 		}
-		Stmt::Block(block) => write_block(f, w, block),
+		Stmt::Block(block) => return write_block(f, w, block),
 		Stmt::Directive(directive_node) => {
 			w.indent();
 			write!(f, "{}", directive_node)?;
@@ -5274,7 +5268,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 				write!(f, ";")?;
 			}
 			writeln!(f)?;
-			Ok(())
+			return Ok(());
 		}
 	}
 }
@@ -5284,17 +5278,17 @@ impl fmt::Display for AssignOp
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			AssignOp::Assign => write!(f, "="),
-			AssignOp::AddAssign => write!(f, "+="),
-			AssignOp::SubAssign => write!(f, "-="),
-			AssignOp::MulAssign => write!(f, "*="),
-			AssignOp::DivAssign => write!(f, "/="),
-			AssignOp::ModAssign => write!(f, "%="),
-			AssignOp::AndAssign => write!(f, "&="),
-			AssignOp::OrAssign => write!(f, "|="),
-			AssignOp::XorAssign => write!(f, "^="),
-			AssignOp::ShlAssign => write!(f, "<<="),
-			AssignOp::ShrAssign => write!(f, ">>="),
+			AssignOp::Assign => return write!(f, "="),
+			AssignOp::AddAssign => return write!(f, "+="),
+			AssignOp::SubAssign => return write!(f, "-="),
+			AssignOp::MulAssign => return write!(f, "*="),
+			AssignOp::DivAssign => return write!(f, "/="),
+			AssignOp::ModAssign => return write!(f, "%="),
+			AssignOp::AndAssign => return write!(f, "&="),
+			AssignOp::OrAssign => return write!(f, "|="),
+			AssignOp::XorAssign => return write!(f, "^="),
+			AssignOp::ShlAssign => return write!(f, "<<="),
+			AssignOp::ShrAssign => return write!(f, ">>="),
 		}
 	}
 }
@@ -5315,7 +5309,7 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionDecl) -> fmt::Result
@@ -5334,7 +5328,7 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDecl) -> fmt::Result
@@ -5358,7 +5352,7 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &VariantDecl) -> fmt::Result
@@ -5381,7 +5375,7 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &TypeAliasDecl) -> fmt::Result
@@ -5390,7 +5384,7 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &
 		write!(f, "{} ", modifier)?;
 	}
 
-	write!(f, "type {} = {}", t.name.join("::"), t.ty)
+	return write!(f, "type {} = {}", t.name.join("::"), t.ty);
 }
 
 fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result
@@ -5411,7 +5405,7 @@ fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Na
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result
@@ -5447,7 +5441,7 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &TraitItem) -> fmt::Result
@@ -5457,18 +5451,18 @@ fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &Tra
 			write_function_signature(f, w, signature)?;
 			if let Some(b) = body {
 				write!(f, " ")?;
-				write_block(f, w, b)
+				return write_block(f, w, b);
 			} else {
-				write!(f, ";")
+				return write!(f, ";");
 			}
 		}
 		TraitItem::TypeAlias(ta) => {
 			write_type_alias_decl(f, w, ta)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		TraitItem::Const(var) => {
 			write_variable_decl(f, w, var)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 	}
 }
@@ -5513,20 +5507,20 @@ fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDec
 
 	w.dedent();
 	w.write_indent(f)?;
-	write!(f, "}}")
+	return write!(f, "}}");
 }
 
 fn write_impl_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &ImplItem) -> fmt::Result
 {
 	match item {
-		ImplItem::Function(func) => write_function_decl(f, w, func),
+		ImplItem::Function(func) => return write_function_decl(f, w, func),
 		ImplItem::TypeAlias(ta) => {
 			write_type_alias_decl(f, w, ta)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 		ImplItem::Const(var) => {
 			write_variable_decl(f, w, var)?;
-			write!(f, ";")
+			return write!(f, ";");
 		}
 	}
 }
@@ -5548,7 +5542,7 @@ impl fmt::Display for ImplTarget
 			write!(f, ">")?;
 		}
 
-		Ok(())
+		return Ok(());
 	}
 }
 
@@ -5563,7 +5557,7 @@ impl fmt::Display for WhereConstraint
 			}
 			write!(f, "{}", bound.join("::"))?;
 		}
-		Ok(())
+		return Ok(());
 	}
 }
 
@@ -5579,7 +5573,7 @@ mod parser_tests
 		let config = Config::default();
 		let lexer = Lexer::new(&config, input);
 		let mut parser = Parser::from(lexer);
-		parser.parse_expr()
+		return parser.parse_expr();
 	}
 
 	fn parse_program_from_str(input: &str) -> Result<Program, ParseError>
@@ -5587,7 +5581,7 @@ mod parser_tests
 		let config = Config::default();
 		let lexer = Lexer::new(&config, input);
 		let mut parser = Parser::from(lexer);
-		parser.parse_program()
+		return parser.parse_program();
 	}
 
 	fn parse_block_from_str(input: &str) -> Result<Block, ParseError>
@@ -5595,7 +5589,7 @@ mod parser_tests
 		let config = Config::default();
 		let lexer = Lexer::new(&config, input);
 		let mut parser = Parser::from(lexer);
-		parser.parse_block()
+		return parser.parse_block();
 	}
 
 	// ========== Literal Tests ==========
