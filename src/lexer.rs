@@ -2215,4 +2215,11 @@ mod tests
 		assert!(error.contains("var y = 100;"));
 		assert!(error.contains("^^^"));
 	}
+
+	#[test]
+	fn test_memory_management_keywords()
+	{
+		let kinds = lex_kinds("new delete");
+		assert_eq!(kinds, vec![TokenKind::New, TokenKind::Delete, TokenKind::Eof,]);
+	}
 }
