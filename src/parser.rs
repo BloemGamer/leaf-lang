@@ -1196,10 +1196,31 @@ impl Spanned for StructDecl
 	}
 }
 
-/// Type alias for union declarations.
+/// Structure type declaration.
 ///
-/// Unions have the same structure as structs but different semantics
-pub type UnionDecl = StructDecl;
+/// Represents a union with named fields.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Struct name (can be qualified path)
+/// * `fields` - List of (type, name) pairs for fields
+/// * `span` - Source location of the struct
+#[derive(Debug, Clone)]
+pub struct UnionDecl
+{
+	pub modifiers: Vec<Modifier>,
+	pub name: Vec<Ident>,
+	pub fields: Vec<(Type, Ident)>,
+	pub span: Span,
+}
+
+impl Spanned for UnionDecl
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
 
 /// C-style enumeration declaration.
 ///
@@ -1650,7 +1671,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				TopLevelDecl::Struct(struct_decl)
 			}
 			DeclKind::Union => {
-				let union_decl: StructDecl = self.parse_union()?;
+				let union_decl: UnionDecl = self.parse_union()?;
 
 				TopLevelDecl::Union(union_decl)
 			}
