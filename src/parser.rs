@@ -1507,10 +1507,10 @@ impl<'s, 'c> Parser<'s, 'c>
 {
 	fn peek(&mut self) -> &Token
 	{
-		if self.buffered_token.is_some() {
-			return self.buffered_token.as_ref().unwrap();
-		}
-		return self.lexer.peek().expect("lexer exhausted unexpectedly");
+		return self
+			.buffered_token
+			.as_ref()
+			.unwrap_or_else(|| return self.lexer.peek().expect("lexer exhausted unexpectedly"));
 	}
 
 	fn next(&mut self) -> Token
@@ -2022,7 +2022,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(TypeCore::Tuple(Vec::new()));
 				}
 
-				let mut types = vec![self.parse_type()?];
+				let mut types: Vec<Type> = vec![self.parse_type()?];
 
 				if self.consume(&TokenKind::Comma) {
 					if !self.at(&TokenKind::RightParen) {
@@ -2040,7 +2040,9 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(TypeCore::Tuple(types));
 				} else {
 					self.expect(&TokenKind::RightParen)?;
-					let ty = types.into_iter().next().unwrap();
+					let ty: Type = types.into_iter().next().expect(
+						"this should already be cought in the code before, because of `vec![self.parse_type()?]",
+					);
 					return Ok(*ty.core);
 				}
 			}
@@ -3045,7 +3047,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		if patterns.len() == 1 {
-			return Ok(patterns.into_iter().next().unwrap());
+			return Ok(patterns.into_iter().next().expect("len == 1, so should not error"));
 		} else {
 			return Ok(Pattern::Or {
 				patterns,
@@ -3184,7 +3186,9 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else {
 					self.expect(&TokenKind::RightParen)?;
-					return Ok(patterns.into_iter().next().unwrap());
+					return Ok(patterns.into_iter().next().expect(
+						"this should already be cought in the code before, because of `vec![self.parse_pattern()?]",
+					));
 				}
 			}
 

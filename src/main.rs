@@ -23,6 +23,9 @@
 #![warn(clippy::manual_ok_or)]
 #![warn(clippy::manual_unwrap_or)]
 #![warn(clippy::unnecessary_wraps)]
+#![warn(clippy::panic)]
+#![warn(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::panic, clippy::unwrap_used))]
 // Performance / Allocation
 #![warn(clippy::inefficient_to_string)]
 #![warn(clippy::slow_vector_initialization)]
@@ -35,6 +38,14 @@
 #![warn(clippy::needless_borrow)]
 #![warn(clippy::or_fun_call)]
 #![warn(clippy::verbose_bit_mask)]
+#![warn(clippy::rc_buffer)]
+#![warn(clippy::rc_mutex)]
+#![warn(clippy::large_stack_arrays)]
+#![warn(clippy::borrowed_box)]
+#![warn(clippy::redundant_static_lifetimes)]
+#![warn(clippy::naive_bytecount)]
+#![warn(clippy::needless_range_loop)]
+#![warn(clippy::iter_skip_zero)]
 // Iterator
 #![warn(clippy::needless_for_each)]
 #![warn(clippy::manual_map)]
@@ -42,7 +53,12 @@
 // Control flow / code structure
 #![warn(clippy::branches_sharing_code)]
 #![warn(clippy::match_wildcard_for_single_variants)]
+#![warn(clippy::exhaustive_enums)]
+#![warn(clippy::exhaustive_structs)]
 #![warn(clippy::never_loop)]
+#![warn(clippy::match_bool)]
+#![warn(clippy::unnested_or_patterns)]
+#![warn(clippy::redundant_guards)]
 // Style
 #![warn(clippy::style)]
 #![warn(clippy::shadow_reuse)]
@@ -72,6 +88,7 @@ mod lexer;
 mod parser;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
+#[allow(clippy::exhaustive_structs)]
 pub struct Config {}
 
 fn main()
@@ -99,6 +116,6 @@ fn main()
 
 	let mut desugager: Desugarer = Desugarer::new();
 
-	let desugared = desugager.desugar_program(program.unwrap());
+	let desugared = desugager.desugar_program(program.expect("found an error in the program"));
 	println!("{desugared}");
 }

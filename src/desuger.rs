@@ -804,7 +804,7 @@ impl Desugarer
 				let desugared: Vec<Pattern> = patterns.into_iter().map(|p| return self.desugar_pattern(p)).collect();
 
 				if desugared.len() == 1 {
-					desugared.into_iter().next().unwrap()
+					desugared.into_iter().next().expect("len == 1, so should not error")
 				} else {
 					Pattern::Tuple {
 						patterns: desugared,
@@ -837,7 +837,7 @@ impl Desugarer
 				}
 
 				if flattened.len() == 1 {
-					flattened.into_iter().next().unwrap()
+					flattened.into_iter().next().expect("len == 1, so should not error")
 				} else {
 					Pattern::Or {
 						patterns: flattened,
