@@ -1267,14 +1267,14 @@ impl Spanned for EnumDecl
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Variant name (can be qualified path)
-/// * `variants` - List of (optional type, name) pairs for variants
+/// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) pairs for variants
 /// * `span` - Source location of the variant
 #[derive(Debug, Clone)]
 pub struct VariantDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Vec<Ident>,
-	pub variants: Vec<(Option<Type>, Ident)>,
+	pub variants: Vec<(Option<Type>, Ident, Option<Expr>)>,
 	pub span: Span,
 }
 
@@ -4157,7 +4157,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Option<Type>, Ident)> = Vec::new();
+		let mut fields: Vec<(Option<Type>, Ident, Option<Expr>)> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace) {
 			if *self.peek_kind() == TokenKind::RightBrace {
@@ -4182,7 +4182,14 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			fields.push((field_type, field_name));
+			let field_value: Option<Expr> = if self.at(&TokenKind::Equals) {
+				self.next();
+				Some(self.parse_expr()?)
+			} else {
+				None
+			};
+
+			fields.push((field_type, field_name, field_value));
 
 			if *self.peek_kind() == TokenKind::RightBrace {
 				break;
@@ -5437,13 +5444,17 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 	writeln!(f, "variant {} {{", v.name.join("::"))?;
 	w.indent();
 
-	for (ty, name) in &v.variants {
+	for (ty, name, value) in &v.variants {
 		w.write_indent(f)?;
+		write!(f, "{}", name)?;
 		if let Some(t) = ty {
-			writeln!(f, "{}({}),", name, t)?;
-		} else {
-			writeln!(f, "{},", name)?;
+			write!(f, "({})", t)?;
 		}
+		if let Some(val) = value {
+			write!(f, " = ")?;
+			write_expr(f, w, val)?;
+		}
+		writeln!(f, ",")?;
 	}
 
 	w.dedent();
@@ -9063,5 +9074,55 @@ mod parser_tests
 		assert!(output.contains("default"));
 		assert!(output.contains("new"));
 		assert!(output.contains("A"));
+	}
+
+	#[test]
+	fn test_parse_variant_with_values()
+	{
+		let input = "variant Status { Success = 0, Error = 1, Pending = 2 }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Variant(v) => {
+				assert_eq!(v.variants.len(), 3);
+				assert!(v.variants[0].2.is_some()); // Success has value
+				assert!(v.variants[1].2.is_some()); // Error has value
+				assert!(v.variants[2].2.is_some()); // Pending has value
+			}
+			_ => panic!("Expected variant declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_variant_mixed_types_and_values()
+	{
+		let input = "variant Mixed { Unit = 0, WithData(i32) = 1, Other }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Variant(v) => {
+				assert_eq!(v.variants.len(), 3);
+				// Unit: no type, has value
+				assert!(v.variants[0].0.is_none());
+				assert!(v.variants[0].2.is_some());
+				// WithData: has type, has value
+				assert!(v.variants[1].0.is_some());
+				assert!(v.variants[1].2.is_some());
+				// Other: no type, no value
+				assert!(v.variants[2].0.is_none());
+				assert!(v.variants[2].2.is_none());
+			}
+			_ => panic!("Expected variant declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_variant_with_complex_values()
+	{
+		let input = "variant Flags { A = 1 << 0, B = 1 << 1, C = 1 << 2 }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
 	}
 }
