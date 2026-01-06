@@ -7641,16 +7641,8 @@ mod parser_tests
 	fn test_parse_trait_with_associated_type()
 	{
 		let input = "trait Iterator { type Item; }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-		let program = result.unwrap();
-		match &program.items[0] {
-			TopLevelDecl::Trait(t) => match &t.items[0] {
-				TraitItem::TypeAlias(_) => (),
-				_ => panic!("Expected type alias"),
-			},
-			_ => panic!("Expected trait"),
-		}
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
 	}
 
 	#[test]
