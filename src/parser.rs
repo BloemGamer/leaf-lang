@@ -1840,7 +1840,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive_node(&mut self) -> Result<DirectiveNode, ParseError>
 	{
-		debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+		#[allow(clippy::debug_assert_with_mut_call)]
+		{
+			debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+		}
 
 		let tok: Token = self.next();
 		let start: Span = tok.span;
@@ -1886,7 +1889,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive(&mut self) -> Result<Directive, ParseError>
 	{
-		debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+		#[allow(clippy::debug_assert_with_mut_call)]
+		{
+			debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+		}
 
 		let tok: Token = self.next();
 		// let start: Span = tok.span;
@@ -3525,7 +3531,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn expr_needs_semicolon(&self, expr: &Expr) -> bool
+	const fn expr_needs_semicolon(&self, expr: &Expr) -> bool
 	{
 		return !matches!(
 			expr,
@@ -4468,7 +4474,7 @@ struct IndentWriter
 
 impl IndentWriter
 {
-	fn new() -> Self
+	const fn new() -> Self
 	{
 		return Self {
 			indent_level: 0,
@@ -4476,12 +4482,12 @@ impl IndentWriter
 		};
 	}
 
-	fn indent(&mut self)
+	const fn indent(&mut self)
 	{
 		self.indent_level += 1;
 	}
 
-	fn dedent(&mut self)
+	const fn dedent(&mut self)
 	{
 		if self.indent_level > 0 {
 			self.indent_level -= 1;

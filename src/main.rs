@@ -1,4 +1,3 @@
-#![allow(clippy::needless_return)]
 // #![allow(dead_code)]
 // #![warn(clippy::pedantic)]
 #![warn(clippy::if_same_then_else)]
@@ -14,6 +13,12 @@
 #![warn(clippy::needless_borrow)]
 #![warn(clippy::needless_for_each)]
 #![warn(clippy::shadow_reuse)]
+#![warn(clippy::correctness)]
+#![warn(clippy::style)]
+#![warn(clippy::nursery)]
+#![allow(clippy::use_self)]
+#![allow(clippy::needless_return)]
+
 // #![warn(clippy::todo)]
 
 use std::{fs, process::exit};
@@ -26,18 +31,19 @@ mod desuger;
 mod lexer;
 mod parser;
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Config {}
 
 fn main()
 {
 	let config: Config = Config::default();
-	let file: String = if let Ok(f) = fs::read_to_string("slang-test/main.sl") {
-		f
-	} else {
-		println!("could not open file");
-		exit(1)
-	};
+	let file: String = fs::read_to_string("slang-test/main.sl").map_or_else(
+		|_| {
+			println!("could not open file");
+			exit(1)
+		},
+		|f| return f,
+	);
 	let lexed: Lexer = Lexer::new(&config, &file);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();

@@ -28,7 +28,7 @@ impl Desugarer
 		return new_name;
 	}
 
-	fn gen_loop_label(&mut self) -> Ident
+	fn gen_loop_label(&self) -> Ident
 	{
 		return format!("#__loop_{}", self.loop_stack.len());
 	}
@@ -449,19 +449,22 @@ impl Desugarer
 
 		let else_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard { span: Span::default() },
-			body: if let Some(else_stmt) = else_branch {
-				SwitchBody::Block(Block {
-					stmts: vec![self.desugar_stmt(*else_stmt)],
-					tail_expr: None,
-					span: Span::default(),
-				})
-			} else {
-				SwitchBody::Block(Block {
-					stmts: vec![],
-					tail_expr: None,
-					span: Span::default(),
-				})
-			},
+			body: else_branch.map_or_else(
+				|| {
+					return SwitchBody::Block(Block {
+						stmts: vec![],
+						tail_expr: None,
+						span: Span::default(),
+					});
+				},
+				|else_stmt| {
+					return SwitchBody::Block(Block {
+						stmts: vec![self.desugar_stmt(*else_stmt)],
+						tail_expr: None,
+						span: Span::default(),
+					});
+				},
+			),
 			span: Span::default(),
 		};
 
@@ -717,24 +720,27 @@ impl Desugarer
 
 		let else_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard { span: Span::default() },
-			body: if let Some(else_expr) = else_branch {
-				let desugared_else = self.desugar_expr(*else_expr);
-
-				match desugared_else {
-					Expr::Block(block) => SwitchBody::Block(*block),
-					other_expr => SwitchBody::Block(Block {
+			body: else_branch.map_or_else(
+				|| {
+					return SwitchBody::Block(Block {
 						stmts: vec![],
-						tail_expr: Some(Box::new(other_expr)),
+						tail_expr: None,
 						span: Span::default(),
-					}),
-				}
-			} else {
-				SwitchBody::Block(Block {
-					stmts: vec![],
-					tail_expr: None,
-					span: Span::default(),
-				})
-			},
+					});
+				},
+				|else_expr| {
+					let desugared_else = self.desugar_expr(*else_expr);
+
+					return match desugared_else {
+						Expr::Block(block) => SwitchBody::Block(*block),
+						other_expr => SwitchBody::Block(Block {
+							stmts: vec![],
+							tail_expr: Some(Box::new(other_expr)),
+							span: Span::default(),
+						}),
+					};
+				},
+			),
 			span: Span::default(),
 		};
 
@@ -2720,7 +2726,7 @@ mod tests
 					&& let SwitchBody::Block(match_block) = &arms[0].body
 					&& let Some(Stmt::Continue { label, .. }) = match_block.stmts.first()
 				{
-					assert_eq!(label, &Some(loop_label.clone()));
+					assert_eq!(label, &Some(loop_label));
 				}
 			}
 			_ => panic!("Expected loop"),

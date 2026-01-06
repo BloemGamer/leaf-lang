@@ -21,7 +21,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// let (config_ref, lexer) = lexer.into_parts();
 	/// // Now both config_ref and lexer can be used independently
 	/// ```
-	pub fn into_parts(self) -> (&'config Config, &'source str, Lexer<'source, 'config>)
+	pub const fn into_parts(self) -> (&'config Config, &'source str, Lexer<'source, 'config>)
 	{
 		let config = self.config;
 		let source = self.source;
@@ -49,7 +49,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 ///     println!("{:?}", token);
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Lexer<'source, 'config>
 {
 	source: &'source str,
@@ -121,7 +121,7 @@ pub trait Spanned
 ///     end_col: 6,
 /// };
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub struct Span
 {
 	pub start: usize,
@@ -448,7 +448,7 @@ pub enum TokenKind
 /// let dir = Directive::Import;       // @import
 /// let dir = Directive::Custom("cfg".to_string()); // @cfg
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Directive
 {
 	Use,
@@ -1435,9 +1435,7 @@ mod tests
 		let config = Config::default();
 		let lexer = Lexer::new(&config, source);
 
-		let tokens: Vec<Token> = lexer.into_iter().collect();
-
-		assert_eq!(tokens.len(), 8);
+		assert_eq!(lexer.into_iter().count(), 8);
 	}
 
 	#[test]
