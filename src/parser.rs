@@ -2794,13 +2794,17 @@ impl<'s, 'c> Parser<'s, 'c>
 				cond: Box::new(cond),
 				then_block,
 				else_branch: match else_branch {
-					Some(b) => {
-						if let Stmt::Expr(expr) = *b {
-							Some(Box::new(expr))
-						} else {
-							return Err(b.span().make_parser_error(self.source, "Got a not expression"));
+					Some(b) => match *b {
+						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(self.stmt_if_to_expr_wrapper(*b)?)),
+						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
+						Stmt::Expr(expr) => Some(Box::new(expr)),
+						_ => {
+							return Err(ParseError {
+								span: b.span(),
+								message: "Expected expression, block, or if statement in else branch".to_string(),
+							});
 						}
-					}
+					},
 					None => None,
 				},
 				span,
@@ -2816,16 +2820,17 @@ impl<'s, 'c> Parser<'s, 'c>
 				expr: Box::new(expr),
 				then_block,
 				else_branch: match else_branch {
-					Some(b) => {
-						if let Stmt::Expr(expr) = *b {
-							Some(Box::new(expr))
-						} else {
+					Some(b) => match *b {
+						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(self.stmt_if_to_expr_wrapper(*b)?)),
+						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
+						Stmt::Expr(expr) => Some(Box::new(expr)),
+						_ => {
 							return Err(ParseError {
 								span: b.span(),
-								message: "Got a not expression".to_string(),
+								message: "Expected expression, block, or if statement in else branch".to_string(),
 							});
 						}
-					}
+					},
 					None => None,
 				},
 				span,
