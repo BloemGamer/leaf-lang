@@ -1177,14 +1177,14 @@ impl Spanned for Pattern
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Struct name (can be qualified path)
-/// * `fields` - List of (type, name) pairs for fields
+/// * `fields` - List of (type, name, Option<default_value>) pairs for fields
 /// * `span` - Source location of the struct
 #[derive(Debug, Clone)]
 pub struct StructDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Vec<Ident>,
-	pub fields: Vec<(Type, Ident)>,
+	pub fields: Vec<(Type, Ident, Option<Expr>)>,
 	pub span: Span,
 }
 
@@ -3938,7 +3938,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Type, Ident)> = Vec::new();
+		let mut fields: Vec<(Type, Ident, Option<Expr>)> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace) {
 			if *self.peek_kind() == TokenKind::RightBrace {
@@ -3958,7 +3958,13 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let field_type: Type = self.parse_type()?;
 
-			fields.push((field_type, field_name));
+			let default_value: Option<Expr> = if self.consume(&TokenKind::Equals) {
+				Some(self.parse_expr()?)
+			} else {
+				None
+			};
+
+			fields.push((field_type, field_name, default_value));
 
 			if *self.peek_kind() == TokenKind::RightBrace {
 				break;
@@ -5338,9 +5344,13 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 	writeln!(f, "struct {} {{", s.name.join("::"))?;
 	w.indent();
 
-	for (ty, name) in &s.fields {
+	for (ty, name, default_value) in &s.fields {
 		w.write_indent(f)?;
-		writeln!(f, "{}: {},", name, ty)?;
+		write!(f, "{}: {}", name, ty)?;
+		if let Some(default) = default_value {
+			write!(f, " = {}", default)?;
+		}
+		writeln!(f, ",")?;
 	}
 
 	w.dedent();
@@ -8810,6 +8820,48 @@ mod parser_tests
 		}
 	}"#;
 		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_struct_with_default_values()
+	{
+		let input = "struct Point { x: i32 = 0, y: i32 = 0 }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.fields.len(), 2);
+				assert!(s.fields[0].2.is_some()); // x has default value
+				assert!(s.fields[1].2.is_some()); // y has default value
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_mixed_defaults()
+	{
+		let input = "struct Person { name: String, age: i32 = 0 }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.fields.len(), 2);
+				assert!(s.fields[0].2.is_none()); // name has no default
+				assert!(s.fields[1].2.is_some()); // age has default
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_default_complex_expr()
+	{
+		let input = "struct Config { timeout: i32 = 30 * 1000 }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 }
