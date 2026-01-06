@@ -665,7 +665,11 @@ impl Desugarer
 				desugared
 			}
 
-			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Range(_) => expr,
+			Expr::Identifier { .. }
+			| Expr::Literal { .. }
+			| Expr::Range(_)
+			| Expr::Default { .. }
+			| Expr::New { .. } => expr,
 		};
 	}
 
