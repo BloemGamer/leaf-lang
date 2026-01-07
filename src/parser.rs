@@ -2783,17 +2783,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					}));
 				}
 
-				let first: Expr = self.parse_expr()?; // Always allow struct init inside []
-
-				if self.consume(&TokenKind::Semicolon) {
-					let count: Expr = self.parse_expr()?;
-					self.expect(&TokenKind::RightBracket)?;
-					return Ok(Expr::Array(ArrayLiteral::Repeat {
-						value: vec![first],
-						count: Box::new(count),
-						span: span.merge(&self.last_span),
-					}));
-				}
+				let first: Expr = self.parse_expr()?;
 
 				let mut elements: Vec<Expr> = vec![first];
 				while self.consume(&TokenKind::Comma) {
@@ -2801,6 +2791,16 @@ impl<'s, 'c> Parser<'s, 'c>
 						break;
 					}
 					elements.push(self.parse_expr()?);
+				}
+
+				if self.consume(&TokenKind::Semicolon) {
+					let count: Expr = self.parse_expr()?;
+					self.expect(&TokenKind::RightBracket)?;
+					return Ok(Expr::Array(ArrayLiteral::Repeat {
+						value: elements,
+						count: Box::new(count),
+						span: span.merge(&self.last_span),
+					}));
 				}
 
 				self.expect(&TokenKind::RightBracket)?;
