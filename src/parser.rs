@@ -533,11 +533,6 @@ pub enum Expr
 		span: Span,
 	},
 
-	New
-	{
-		span: Span,
-	},
-
 	Unary
 	{
 		op: UnaryOp,
@@ -643,7 +638,6 @@ impl Spanned for Expr
 			Expr::Identifier { span, .. } => *span,
 			Expr::Literal { span, .. } => *span,
 			Expr::Default { span } => *span,
-			Expr::New { span } => *span,
 			Expr::Unary { span, .. } => *span,
 			Expr::Binary { span, .. } => *span,
 			Expr::Cast { span, .. } => *span,
@@ -1137,6 +1131,7 @@ pub enum Pattern
 	{
 		name: Ident,
 		ty: Type,
+		call_constructor: bool,
 		span: Span,
 	},
 	Variant
@@ -2120,7 +2115,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			let tok: Token = self.next();
 			match &tok.kind {
 				TokenKind::Identifier(s) => path.push(s.clone()),
-				TokenKind::New => path.push("new".to_string()),
 				_ => {
 					return Err(ParseError {
 						span: tok.span,
@@ -2631,13 +2625,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Default => {
 				self.next();
 				return Ok(Expr::Default {
-					span: span.merge(&self.last_span),
-				});
-			}
-
-			TokenKind::New => {
-				self.next();
-				return Ok(Expr::New {
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -3187,9 +3174,17 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next(); // :
 					let ty: Type = self.parse_type()?;
 
+					let call_constructor: bool = if self.consume(&TokenKind::LeftParen) {
+						self.expect(&TokenKind::RightParen)?;
+						true
+					} else {
+						false
+					};
+
 					return Ok(Pattern::TypedIdentifier {
 						name: path[0].clone(),
 						ty,
+						call_constructor,
 						span: span.merge(&self.last_span),
 					});
 				} else {
@@ -4826,7 +4821,18 @@ impl fmt::Display for Pattern
 		match self {
 			Pattern::Wildcard { .. } => return write!(f, "_"),
 			Pattern::Literal { value: lit, .. } => return write!(f, "{}", lit),
-			Pattern::TypedIdentifier { name, ty, .. } => return write!(f, "{}: {}", name, ty),
+			Pattern::TypedIdentifier {
+				name,
+				ty,
+				call_constructor,
+				..
+			} => {
+				write!(f, "{}: {}", name, ty)?;
+				if *call_constructor {
+					write!(f, "()")?;
+				}
+				return Ok(());
+			}
 			Pattern::Variant { path, args, .. } => {
 				write!(f, "{}", path.join("::"))?;
 				if !args.is_empty() {
@@ -4883,7 +4889,6 @@ impl fmt::Display for Expr
 			Expr::Identifier { path, .. } => return write!(f, "{}", path.join("::")),
 			Expr::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Expr::Default { .. } => return write!(f, "default"),
-			Expr::New { .. } => return write!(f, "new"),
 			Expr::Unary { op, expr, .. } => match op {
 				UnaryOp::Neg => return write!(f, "-{}", expr),
 				UnaryOp::Not => return write!(f, "!{}", expr),
@@ -7699,7 +7704,7 @@ mod parser_tests
 	fn test_parse_function_default()
 	{
 		let input = "fn default() -> Self { Self::new() }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_err()); // should fail, no function default is allowed, because of the default keyword
 	}
 
@@ -7708,7 +7713,7 @@ mod parser_tests
 	{
 		let input = "fn new() -> Self { Self::new() }";
 		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
-		assert!(result.is_err()); // should fail, no function default is allowed, because of the default keyword
+		assert!(result.is_err());
 	}
 
 	#[test]
@@ -8892,188 +8897,6 @@ mod parser_tests
 		let input = "struct Config { timeout: i32 = 30 * 1000 }";
 		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_keyword_standalone()
-	{
-		let result = parse_expr_from_str("new").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-		match result.unwrap() {
-			Expr::New { .. } => (),
-			_ => panic!("Expected new expression"),
-		}
-	}
-
-	#[test]
-	fn test_parse_struct_init_with_new()
-	{
-		let result = parse_expr_from_str("Point { x = new, y = 2 }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-		match result.unwrap() {
-			Expr::StructInit { path, fields, .. } => {
-				assert_eq!(path, vec!["Point"]);
-				assert_eq!(fields.len(), 2);
-				assert_eq!(fields[0].0, "x");
-				match &fields[0].1 {
-					Expr::New { .. } => (),
-					_ => panic!("Expected new expression"),
-				}
-			}
-			_ => panic!("Expected struct init"),
-		}
-	}
-
-	#[test]
-	fn test_parse_struct_init_with_default_and_new()
-	{
-		let result = parse_expr_from_str("Config { a = default, b = new, c = 3 }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-		match result.unwrap() {
-			Expr::StructInit { fields, .. } => {
-				assert_eq!(fields.len(), 3);
-				// a should be default
-				match &fields[0].1 {
-					Expr::Default { .. } => (),
-					_ => panic!("Expected default for a"),
-				}
-				// b should be new
-				match &fields[1].1 {
-					Expr::New { .. } => (),
-					_ => panic!("Expected new for b"),
-				}
-				// c should be an int literal
-				match &fields[2].1 {
-					Expr::Literal {
-						value: Literal::Int(3), ..
-					} => (),
-					_ => panic!("Expected int literal 3 for c"),
-				}
-			}
-			_ => panic!("Expected struct init"),
-		}
-	}
-
-	#[test]
-	fn test_parse_new_in_variable_declaration()
-	{
-		let result = parse_block_from_str("{ var x: Point = new; }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_function_call()
-	{
-		let result = parse_expr_from_str("process(new)").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_array()
-	{
-		let result = parse_expr_from_str("[new, new, new]").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_tuple()
-	{
-		let result = parse_expr_from_str("(new, 1, 2)").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_as_return_value()
-	{
-		let result = parse_block_from_str("{ return new; }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_binary_expression()
-	{
-		// This might not make semantic sense but should parse
-		let result = parse_expr_from_str("new + 1").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_if_condition()
-	{
-		let result = parse_block_from_str("{ if new { 1 } else { 2 } }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_match_arm()
-	{
-		let result = parse_expr_from_str("switch x { 1 => new, _ => 0, }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_vs_path_new()
-	{
-		// Test that Point::new (path) and standalone new are different
-		let result1 = parse_expr_from_str("Point::new()").inspect_err(|e| println!("{e}"));
-		assert!(result1.is_ok());
-		match result1.unwrap() {
-			Expr::Call { callee, .. } => match callee.as_ref() {
-				Expr::Identifier { path, .. } => {
-					assert_eq!(path, &vec!["Point", "new"]);
-				}
-				_ => panic!("Expected identifier in callee"),
-			},
-			_ => panic!("Expected function call"),
-		}
-
-		let result2 = parse_expr_from_str("new").inspect_err(|e| println!("{e}"));
-		assert!(result2.is_ok());
-		match result2.unwrap() {
-			Expr::New { .. } => (),
-			_ => panic!("Expected new keyword expression"),
-		}
-	}
-
-	#[test]
-	fn test_parse_default_vs_new_semantics()
-	{
-		// Both should parse successfully in struct init
-		let result = parse_expr_from_str("A { a = default, b = new, c = 3 }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_new_in_nested_struct_init()
-	{
-		let result = parse_expr_from_str("Outer { inner = Inner { x = new } }").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_array_repeat_with_new()
-	{
-		let result = parse_expr_from_str("[new; 10]").inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_display_new_keyword()
-	{
-		let expr = parse_expr_from_str("new").unwrap();
-		let output = format!("{}", expr);
-		assert_eq!(output, "new");
-	}
-
-	#[test]
-	fn test_display_struct_with_new_and_default()
-	{
-		let input = "A { a = default, b = new, c = 3 }";
-		let expr = parse_expr_from_str(input).unwrap();
-		let output = format!("{}", expr);
-		assert!(output.contains("default"));
-		assert!(output.contains("new"));
-		assert!(output.contains("A"));
 	}
 
 	#[test]

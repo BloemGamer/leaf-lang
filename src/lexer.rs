@@ -238,8 +238,6 @@ pub enum TokenKind
 	Break,
 	/// Skip to next iteration: `continue`
 	Continue,
-	/// Call the constructor for a type: `new`
-	New,
 	/// Call the destructor for a type: `delete`
 	Delete,
 
@@ -1132,7 +1130,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"where" => return TokenKind::Where,
 			"true" => return TokenKind::True,
 			"false" => return TokenKind::False,
-			"new" => return TokenKind::New,
 			"delete" => return TokenKind::Delete,
 			_ => return TokenKind::Identifier(ident),
 		}
@@ -2219,7 +2216,7 @@ mod tests
 	#[test]
 	fn test_memory_management_keywords()
 	{
-		let kinds = lex_kinds("new delete");
-		assert_eq!(kinds, vec![TokenKind::New, TokenKind::Delete, TokenKind::Eof,]);
+		let kinds = lex_kinds("delete");
+		assert_eq!(kinds, vec![TokenKind::Delete, TokenKind::Eof,]);
 	}
 }
