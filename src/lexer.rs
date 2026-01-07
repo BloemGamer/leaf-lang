@@ -97,6 +97,12 @@ pub trait Spanned
 	fn span(&self) -> Span;
 }
 
+#[allow(unused)]
+pub trait ErrorFromSpan
+{
+	fn from_span(span: impl Spanned, message: String) -> Self;
+}
+
 /// Source code position information for a token.
 ///
 /// Tracks both byte offsets and line/column positions for a span of source code.
@@ -137,6 +143,14 @@ impl Spanned for Span
 	fn span(&self) -> Span
 	{
 		return *self;
+	}
+}
+
+impl Span
+{
+	pub fn make_error<E: ErrorFromSpan>(self, source: &str, message: &str) -> E
+	{
+		return E::from_span(self, self.format_error(source, message));
 	}
 }
 

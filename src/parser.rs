@@ -1,8 +1,8 @@
-use std::iter::Peekable;
+use std::{convert::TryFrom, iter::Peekable};
 
 use crate::{
 	CompileError, Config,
-	lexer::{self, Lexer, Span, Token, TokenKind},
+	lexer::{self, ErrorFromSpan, Lexer, Span, Token, TokenKind},
 };
 
 /// Recursive descent parser for the programming language.
@@ -119,8 +119,10 @@ impl Spanned for Program
 	}
 }
 
-impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, CompileError>
+impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
 {
+	type Error = CompileError;
+
 	/// Converts a parser into a parsed program result.
 	///
 	/// This provides a convenient way to parse a complete program by consuming
@@ -131,11 +133,11 @@ impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, CompileError>
 	///
 	/// # Returns
 	/// * `Ok(Program)` - The successfully parsed program AST
-	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
+	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
 	/// ```
-	/// use parser::{Parser, Program, ParseError};
+	/// use parser::{Parser, Program, CompileError};
 	/// use lexer::Lexer;
 	/// use config::Config;
 	///
@@ -144,31 +146,55 @@ impl<'s, 'c> From<Parser<'s, 'c>> for Result<Program, CompileError>
 	/// let lexer = Lexer::new(&config, source);
 	/// let parser = Parser::from(lexer);
 	///
-	/// // Convert parser to Result<Program, ParseError>
-	/// let program: Result<Program, ParseError> = parser.into();
+	/// // Convert parser to Program using TryFrom
+	/// let program = Program::try_from(parser)?;
 	///
 	/// // Or more idiomatically in a single chain:
-	/// let program = Parser::from(Lexer::new(&config, source)).into();
+	/// let program = Program::try_from(Parser::from(Lexer::new(&config, source)))?;
 	/// ```
-	///
-	/// # Usage Pattern
-	/// This enables a clean one-shot parsing pattern:
-	/// ```
-	/// fn parse(config: &Config, source: &str) -> Result<Program, ParseError> {
-	///     Parser::from(Lexer::new(config, source)).into()
-	/// }
-	/// ```
-	fn from(mut parser: Parser<'s, 'c>) -> Self
+	fn try_from(mut parser: Parser<'s, 'c>) -> Result<Self, Self::Error>
 	{
 		return parser.parse_program();
 	}
 }
 
-impl<'s, 'c> From<Lexer<'s, 'c>> for Result<Program, CompileError>
+impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 {
-	fn from(value: Lexer<'s, 'c>) -> Self
+	type Error = CompileError;
+
+	/// Converts a lexer into a parsed program.
+	///
+	/// This provides a convenient way to parse a complete program directly from a lexer.
+	/// Internally, it first converts the lexer into a parser, then parses the program.
+	///
+	/// # Arguments
+	/// * `lexer` - The lexer to consume
+	///
+	/// # Returns
+	/// * `Ok(Program)` - The successfully parsed program AST
+	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
+	///
+	/// # Example
+	/// ```
+	/// use lexer::Lexer;
+	/// use parser::{Parser, Program};
+	/// use config::Config;
+	///
+	/// let config = Config::default();
+	/// let source = "fn main() { var x = 42; }";
+	/// let lexer = Lexer::new(&config, source);
+	///
+	/// // Convert lexer directly to a Program
+	/// let program = Program::try_from(lexer)?;
+	///
+	/// // Or in a single chain:
+	/// let program = Program::try_from(Lexer::new(&config, source))?;
+	/// ```
+	fn try_from(lexer: Lexer<'s, 'c>) -> Result<Self, Self::Error>
 	{
-		return <Result<Program, CompileError>>::from(Parser::from(value));
+		let mut parser: Parser<'_, '_> = Parser::from(lexer);
+
+		return parser.parse_program();
 	}
 }
 
@@ -1480,6 +1506,17 @@ impl std::fmt::Display for ParseError
 }
 
 impl std::error::Error for ParseError {}
+
+impl ErrorFromSpan for ParseError
+{
+	fn from_span(span: impl lexer::Spanned, message: String) -> Self
+	{
+		return ParseError {
+			span: span.span(),
+			message,
+		};
+	}
+}
 
 /// Type alias declaration.
 ///

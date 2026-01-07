@@ -159,7 +159,7 @@ fn main()
 	let lexed: Lexer = Lexer::new(&config, &file);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
-	let program: Result<parser::Program, CompileError> = parsed.into();
+	let program: Result<parser::Program, CompileError> = parsed.try_into();
 	match &program {
 		Ok(ast) => {
 			println!("{ast:#?}");
