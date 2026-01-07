@@ -1509,11 +1509,11 @@ impl std::error::Error for ParseError {}
 
 impl ErrorFromSpan for ParseError
 {
-	fn from_span(span: impl lexer::Spanned, message: String) -> Self
+	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
 	{
-		return ParseError {
+		return Self {
 			span: span.span(),
-			message,
+			message: message.into(),
 		};
 	}
 }

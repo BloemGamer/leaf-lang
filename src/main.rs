@@ -72,8 +72,6 @@
 #![warn(clippy::needless_for_each)]
 // Control Flow / Code Structure
 #![warn(clippy::branches_sharing_code)]
-#![warn(clippy::exhaustive_enums)]
-#![warn(clippy::exhaustive_structs)]
 #![warn(clippy::match_bool)]
 #![warn(clippy::match_wildcard_for_single_variants)]
 #![warn(clippy::never_loop)]
@@ -113,23 +111,24 @@
 
 use std::{fs, process::exit};
 
-use self::desuger::Desugarer;
-use self::lexer::Lexer;
-use self::parser::{ParseError, Parser};
+use self::{
+	desuger::{DesugarError, Desugarer},
+	lexer::{ErrorFromSpan, Lexer, Span},
+	parser::{ParseError, Parser},
+};
 
 mod desuger;
 mod lexer;
 mod parser;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
-#[allow(clippy::exhaustive_structs)]
 pub struct Config {}
 
-#[allow(clippy::exhaustive_enums)]
 #[derive(Debug, Clone)]
 pub enum CompileError
 {
 	ParseError(ParseError),
+	DesugarError(DesugarError),
 }
 
 impl std::fmt::Display for CompileError
@@ -140,11 +139,27 @@ impl std::fmt::Display for CompileError
 			CompileError::ParseError(error) => {
 				write!(f, "{}", error)
 			}
+			CompileError::DesugarError(error) => {
+				write!(f, "{}", error)
+			}
 		};
 	}
 }
 
 impl std::error::Error for CompileError {}
+
+#[allow(dead_code)]
+impl CompileError
+{
+	fn parse_error(span: Span, msg: impl Into<String>) -> Self
+	{
+		return CompileError::ParseError(ParseError::from_span(span, msg.into()));
+	}
+	fn desugar_error(span: Span, msg: impl Into<String>) -> Self
+	{
+		return CompileError::DesugarError(DesugarError::from_span(span, msg.into()));
+	}
+}
 
 fn main()
 {
@@ -171,6 +186,14 @@ fn main()
 
 	let mut desugager: Desugarer = Desugarer::new();
 
-	let desugared = desugager.desugar_program(program.expect("found an error in the program"));
-	println!("{desugared}");
+	let desugared: Result<parser::Program, CompileError> =
+		desugager.desugar_program(program.expect("found an error in the program"));
+	match &desugared {
+		Ok(ast) => {
+			println!("{ast:#?}");
+		}
+		Err(e) => {
+			println!("{e}");
+		}
+	}
 }

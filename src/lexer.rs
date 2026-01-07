@@ -100,7 +100,7 @@ pub trait Spanned
 #[allow(unused)]
 pub trait ErrorFromSpan
 {
-	fn from_span(span: impl Spanned, message: String) -> Self;
+	fn from_span(span: impl Spanned, message: impl Into<String>) -> Self;
 }
 
 /// Source code position information for a token.

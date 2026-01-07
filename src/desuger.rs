@@ -1,5 +1,8 @@
+// Complete implementation (without tests) - corrected with CompileError propagation
+
 use crate::{
-	lexer::Span,
+	CompileError,
+	lexer::{self, ErrorFromSpan, Span},
 	parser::{
 		ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
 		Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
@@ -12,6 +15,34 @@ pub struct Desugarer
 {
 	tmp_counter: usize,
 	loop_stack: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DesugarError
+{
+	pub span: Span,
+	pub message: String,
+}
+
+impl std::fmt::Display for DesugarError
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return write!(f, "Parse error at {:?}: {}", self.span, self.message);
+	}
+}
+
+impl std::error::Error for DesugarError {}
+
+impl ErrorFromSpan for DesugarError
+{
+	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
+	{
+		return Self {
+			span: span.span(),
+			message: message.into(),
+		};
+	}
 }
 
 impl Desugarer
@@ -51,124 +82,140 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
-	pub fn desugar_program(&mut self, program: Program) -> Program
+	pub fn desugar_program(&mut self, program: Program) -> Result<Program, CompileError>
 	{
-		return Program {
-			items: program
-				.items
-				.into_iter()
-				.map(|item| return self.desugar_top_level_decl(item))
-				.collect(),
+		let items: Vec<TopLevelDecl> = program
+			.items
+			.into_iter()
+			.map(|item| self.desugar_top_level_decl(item))
+			.collect::<Result<Vec<_>, _>>()?;
+
+		Ok(Program {
+			items,
 			span: program.span,
-		};
+		})
 	}
 
-	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> TopLevelDecl
+	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> Result<TopLevelDecl, CompileError>
 	{
-		match decl {
-			TopLevelDecl::Function(func) => return TopLevelDecl::Function(self.desugar_function(func)),
-			TopLevelDecl::Namespace(ns) => return TopLevelDecl::Namespace(self.desugar_namespace(ns)),
-			TopLevelDecl::Impl(impl_decl) => return TopLevelDecl::Impl(self.desugar_impl(impl_decl)),
-			TopLevelDecl::Trait(trait_decl) => return TopLevelDecl::Trait(self.desugar_trait(trait_decl)),
-			TopLevelDecl::Directive(d) => return TopLevelDecl::Directive(self.desugar_directive_node(d)),
-			TopLevelDecl::VariableDecl(var) => return TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)),
-			TopLevelDecl::Struct(s) => return TopLevelDecl::Struct(s),
-			TopLevelDecl::Union(u) => return TopLevelDecl::Union(u),
-			TopLevelDecl::Enum(e) => return TopLevelDecl::Enum(e),
-			TopLevelDecl::Variant(v) => return TopLevelDecl::Variant(v),
-			TopLevelDecl::TypeAlias(t) => return TopLevelDecl::TypeAlias(t),
-		}
+		return Ok(match decl {
+			TopLevelDecl::Function(func) => TopLevelDecl::Function(self.desugar_function(func)?),
+			TopLevelDecl::Namespace(ns) => TopLevelDecl::Namespace(self.desugar_namespace(ns)?),
+			TopLevelDecl::Impl(impl_decl) => TopLevelDecl::Impl(self.desugar_impl(impl_decl)?),
+			TopLevelDecl::Trait(trait_decl) => TopLevelDecl::Trait(self.desugar_trait(trait_decl)?),
+			TopLevelDecl::Directive(d) => TopLevelDecl::Directive(self.desugar_directive_node(d)?),
+			TopLevelDecl::VariableDecl(var) => TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)?),
+			TopLevelDecl::Struct(s) => TopLevelDecl::Struct(s),
+			TopLevelDecl::Union(u) => TopLevelDecl::Union(u),
+			TopLevelDecl::Enum(e) => TopLevelDecl::Enum(e),
+			TopLevelDecl::Variant(v) => TopLevelDecl::Variant(v),
+			TopLevelDecl::TypeAlias(t) => TopLevelDecl::TypeAlias(t),
+		});
 	}
 
-	fn desugar_function(&mut self, mut func: FunctionDecl) -> FunctionDecl
+	fn desugar_function(&mut self, mut func: FunctionDecl) -> Result<FunctionDecl, CompileError>
 	{
 		debug_assert!(self.loop_stack.is_empty(), "loop_stack should be empty");
 
 		if let Some(body) = func.body {
-			func.body = Some(self.desugar_block(body));
+			func.body = Some(self.desugar_block(body)?);
 		}
-		return func;
+		return Ok(func);
 	}
 
-	fn desugar_namespace(&mut self, mut ns: NamespaceDecl) -> NamespaceDecl
+	fn desugar_namespace(&mut self, mut ns: NamespaceDecl) -> Result<NamespaceDecl, CompileError>
 	{
-		ns.body = self.desugar_program(ns.body);
-		return ns;
+		ns.body = self.desugar_program(ns.body)?;
+		return Ok(ns);
 	}
 
-	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> ImplDecl
+	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> Result<ImplDecl, CompileError>
 	{
 		impl_decl.body = impl_decl
 			.body
 			.into_iter()
-			.map(|item| match item {
-				ImplItem::Function(func) => return ImplItem::Function(self.desugar_function(func)),
-				ImplItem::TypeAlias(t) => return ImplItem::TypeAlias(t),
-				ImplItem::Const(c) => return ImplItem::Const(self.desugar_variable_decl(c)),
+			.map(|item| {
+				return Ok(match item {
+					ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)?),
+					ImplItem::TypeAlias(t) => ImplItem::TypeAlias(t),
+					ImplItem::Const(c) => ImplItem::Const(self.desugar_variable_decl(c)?),
+				});
 			})
-			.collect();
-		return impl_decl;
+			.collect::<Result<Vec<_>, _>>()?;
+		return Ok(impl_decl);
 	}
 
-	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> TraitDecl
+	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> Result<TraitDecl, CompileError>
 	{
 		trait_decl.items = trait_decl
 			.items
 			.into_iter()
-			.map(|item| match item {
-				TraitItem::Function { signature, body, span } => {
-					debug_assert!(self.loop_stack.is_empty());
-					let desugared_body = body.map(|b| return self.desugar_block(b));
-					return TraitItem::Function {
-						signature,
-						body: desugared_body,
-						span,
-					};
-				}
-				TraitItem::TypeAlias(t) => return TraitItem::TypeAlias(t),
-				TraitItem::Const(c) => return TraitItem::Const(self.desugar_variable_decl(c)),
+			.map(|item| {
+				return Ok(match item {
+					TraitItem::Function { signature, body, span } => {
+						debug_assert!(self.loop_stack.is_empty());
+						let desugared_body = body.map(|b| self.desugar_block(b)).transpose()?;
+						return Ok(TraitItem::Function {
+							signature,
+							body: desugared_body,
+							span,
+						});
+					}
+					TraitItem::TypeAlias(t) => TraitItem::TypeAlias(t),
+					TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)?),
+				});
 			})
-			.collect();
-		return trait_decl;
+			.collect::<Result<Vec<_>, _>>()?;
+		return Ok(trait_decl);
 	}
 
-	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> DirectiveNode
+	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> Result<DirectiveNode, CompileError>
 	{
-		directive.body = directive.body.map(|body| return self.desugar_block_content(body));
-		return directive;
+		directive.body = directive
+			.body
+			.map(|body| return self.desugar_block_content(body))
+			.transpose()?;
+		return Ok(directive);
 	}
 
-	fn desugar_block(&mut self, block: Block) -> Block
+	fn desugar_block(&mut self, block: Block) -> Result<Block, CompileError>
 	{
-		return Block {
-			stmts: block
-				.stmts
-				.into_iter()
-				.map(|stmt| return self.desugar_stmt(stmt))
-				.collect(),
-			tail_expr: block.tail_expr.map(|expr| return Box::new(self.desugar_expr(*expr))),
+		let stmts: Vec<Stmt> = block
+			.stmts
+			.into_iter()
+			.map(|stmt| return self.desugar_stmt(stmt))
+			.collect::<Result<Vec<_>, _>>()?;
+
+		let tail_expr = block
+			.tail_expr
+			.map(|expr| return Ok(Box::new(self.desugar_expr(*expr)?)))
+			.transpose()?;
+
+		return Ok(Block {
+			stmts,
+			tail_expr,
 			span: block.span,
-		};
+		});
 	}
 
-	fn desugar_block_content(&mut self, content: BlockContent) -> BlockContent
+	fn desugar_block_content(&mut self, content: BlockContent) -> Result<BlockContent, CompileError>
 	{
-		return match content {
-			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)),
-			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_program(block)),
-		};
+		return Ok(match content {
+			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)?),
+			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_program(block)?),
+		});
 	}
 
-	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
+	fn desugar_stmt(&mut self, stmt: Stmt) -> Result<Stmt, CompileError>
 	{
-		return match stmt {
+		return Ok(match stmt {
 			Stmt::For {
 				label,
 				name,
 				iter,
 				body,
 				span,
-			} => self.desugar_for_loop(label, name, iter, body, span),
+			} => self.desugar_for_loop(label, name, iter, body, span)?,
 
 			Stmt::If {
 				cond,
@@ -176,9 +223,11 @@ impl Desugarer
 				else_branch,
 				span,
 			} => Stmt::If {
-				cond: self.desugar_expr(cond),
-				then_block: self.desugar_block(then_block),
-				else_branch: else_branch.map(|stmt| return Box::new(self.desugar_stmt(*stmt))),
+				cond: self.desugar_expr(cond)?,
+				then_block: self.desugar_block(then_block)?,
+				else_branch: else_branch
+					.map(|stmt| return Ok(Box::new(self.desugar_stmt(*stmt)?)))
+					.transpose()?,
 				span,
 			},
 
@@ -188,7 +237,7 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_var(pattern, expr, then_block, else_branch, span),
+			} => self.desugar_if_var(pattern, expr, then_block, else_branch, span)?,
 
 			Stmt::While {
 				label,
@@ -199,8 +248,8 @@ impl Desugarer
 				let actual_label = self.push_loop(label);
 				let desugared = Stmt::While {
 					label: Some(actual_label),
-					cond: self.desugar_expr(cond),
-					body: self.desugar_block(body),
+					cond: self.desugar_expr(cond)?,
+					body: self.desugar_block(body)?,
 					span,
 				};
 				self.pop_loop();
@@ -211,7 +260,7 @@ impl Desugarer
 				let actual_label = self.push_loop(label);
 				let desugared = Stmt::Loop {
 					label: Some(actual_label),
-					body: self.desugar_block(body),
+					body: self.desugar_block(body)?,
 					span,
 				};
 				self.pop_loop();
@@ -224,9 +273,9 @@ impl Desugarer
 				expr,
 				body,
 				span,
-			} => self.desugar_while_var_loop(label, pattern, expr, body, span),
+			} => self.desugar_while_var_loop(label, pattern, expr, body, span)?,
 
-			Stmt::VariableDecl(var) => Stmt::VariableDecl(self.desugar_variable_decl(var)),
+			Stmt::VariableDecl(var) => Stmt::VariableDecl(self.desugar_variable_decl(var)?),
 
 			Stmt::Assignment {
 				target,
@@ -234,24 +283,24 @@ impl Desugarer
 				value,
 				span,
 			} => Stmt::Assignment {
-				target: self.desugar_expr(target),
+				target: self.desugar_expr(target)?,
 				op,
-				value: self.desugar_expr(value),
+				value: self.desugar_expr(value)?,
 				span,
 			},
 
 			Stmt::Return { value, span } => Stmt::Return {
-				value: value.map(|e| return self.desugar_expr(e)),
+				value: value.map(|e| return self.desugar_expr(e)).transpose()?,
 				span,
 			},
 
-			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)),
+			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)?),
 
 			Stmt::Break { label, value, span } => {
 				let actual_label = label.or_else(|| return self.current_loop().cloned());
 				Stmt::Break {
 					label: actual_label,
-					value: value.map(|v| return self.desugar_expr(v)),
+					value: value.map(|v| return self.desugar_expr(v)).transpose()?,
 					span,
 				}
 			}
@@ -264,44 +313,31 @@ impl Desugarer
 				}
 			}
 
-			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)),
-			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)),
+			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)?),
+			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)?),
 
-			Stmt::Directive(directive) => Stmt::Directive(self.desugar_directive_node(directive)),
+			Stmt::Directive(directive) => Stmt::Directive(self.desugar_directive_node(directive)?),
 
 			Stmt::Delete { path, span } => Stmt::Delete { path, span },
-		};
+		});
 	}
 
-	/// Desugar a for loop into a loop with iterator protocol.
-	///
-	/// ```
-	/// for name in iter { body }
-	/// ```
-	///
-	/// Becomes:
-	///
-	/// ```
-	/// {
-	///     let __iter = iter;
-	///     loop {
-	///         switch __iter.next() {
-	///             Some(name) => { body },
-	///             None => break,
-	///         }
-	///     }
-	/// }
-	/// ```
-	fn desugar_for_loop(&mut self, label: Option<String>, name: Vec<Ident>, iter: Expr, body: Block, span: Span)
-	-> Stmt
+	fn desugar_for_loop(
+		&mut self,
+		label: Option<String>,
+		name: Vec<Ident>,
+		iter: Expr,
+		body: Block,
+		span: Span,
+	) -> Result<Stmt, CompileError>
 	{
 		let iter_temp: Ident = self.gen_temp("loop");
 		let iter_span: Span = iter.span();
 
-		let desugared_iter: Expr = self.desugar_expr(iter);
+		let desugared_iter: Expr = self.desugar_expr(iter)?;
 
 		let actual_label: Ident = self.push_loop(label);
-		let desugared_body: Block = self.desugar_block(body);
+		let desugared_body: Block = self.desugar_block(body)?;
 
 		let name_pattern: Pattern = if name.len() == 1 {
 			Pattern::TypedIdentifier {
@@ -403,11 +439,11 @@ impl Desugarer
 
 		self.pop_loop();
 
-		return Stmt::Block(Block {
+		return Ok(Stmt::Block(Block {
 			stmts: vec![iter_decl, loop_stmt],
 			tail_expr: None,
 			span,
-		});
+		}));
 	}
 
 	fn desugar_if_var(
@@ -417,13 +453,13 @@ impl Desugarer
 		then_block: Block,
 		else_branch: Option<Box<Stmt>>,
 		span: Span,
-	) -> Stmt
+	) -> Result<Stmt, CompileError>
 	{
 		let temp_var: Ident = self.gen_temp("ifvar");
 		let expr_span: Span = expr.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr);
-		let desugared_then: Block = self.desugar_block(then_block);
+		let desugared_expr: Expr = self.desugar_expr(expr)?;
+		let desugared_then: Block = self.desugar_block(then_block)?;
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -445,7 +481,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern),
+			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: Span::default(),
 		};
@@ -454,20 +490,20 @@ impl Desugarer
 			pattern: Pattern::Wildcard { span: Span::default() },
 			body: else_branch.map_or_else(
 				|| {
-					return SwitchBody::Block(Block {
+					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
 						span: Span::default(),
-					});
+					}));
 				},
 				|else_stmt| {
-					return SwitchBody::Block(Block {
-						stmts: vec![self.desugar_stmt(*else_stmt)],
+					return Ok(SwitchBody::Block(Block {
+						stmts: vec![self.desugar_stmt(*else_stmt)?],
 						tail_expr: None,
 						span: Span::default(),
-					});
+					}));
 				},
-			),
+			)?,
 			span: Span::default(),
 		};
 
@@ -480,11 +516,11 @@ impl Desugarer
 			span: Span::default(),
 		};
 
-		return Stmt::Block(Block {
+		return Ok(Stmt::Block(Block {
 			stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 			tail_expr: None,
 			span,
-		});
+		}));
 	}
 
 	fn desugar_while_var_loop(
@@ -494,15 +530,15 @@ impl Desugarer
 		expr: Expr,
 		body: Block,
 		span: Span,
-	) -> Stmt
+	) -> Result<Stmt, CompileError>
 	{
 		let temp_var: Ident = self.gen_temp("whilevar");
 		let expr_span: Span = expr.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr);
+		let desugared_expr: Expr = self.desugar_expr(expr)?;
 
 		let actual_label: Ident = self.push_loop(label);
-		let desugared_body: Block = self.desugar_block(body);
+		let desugared_body: Block = self.desugar_block(body)?;
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -524,7 +560,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern),
+			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_body),
 			span: Span::default(),
 		};
@@ -564,10 +600,10 @@ impl Desugarer
 
 		self.pop_loop();
 
-		return result;
+		return Ok(result);
 	}
 
-	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
+	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> Result<VariableDecl, CompileError>
 	{
 		let needs_constructor: bool = match &var.pattern {
 			Pattern::TypedIdentifier { call_constructor, .. } => *call_constructor && var.init.is_none(),
@@ -580,7 +616,7 @@ impl Desugarer
 			} = &var.pattern
 			&& *call_constructor
 		{
-			var.init = Some(self.type_to_constructor_call(ty));
+			var.init = Some(self.type_to_constructor_call(ty)?);
 
 			if let Pattern::TypedIdentifier { name, ty, span, .. } = var.pattern.clone() {
 				var.pattern = Pattern::TypedIdentifier {
@@ -592,77 +628,83 @@ impl Desugarer
 			}
 		}
 
-		var.init = var.init.map(|init| return self.desugar_expr(init));
-		var.pattern = self.desugar_pattern(var.pattern);
-		return var;
+		var.init = var.init.map(|init| return self.desugar_expr(init)).transpose()?;
+		var.pattern = self.desugar_pattern(var.pattern)?;
+		return Ok(var);
 	}
 
-	fn desugar_expr(&mut self, expr: Expr) -> Expr
+	fn desugar_expr(&mut self, expr: Expr) -> Result<Expr, CompileError>
 	{
-		return match expr {
+		return Ok(match expr {
 			Expr::Unary { op, expr, span } => Expr::Unary {
 				op,
-				expr: Box::new(self.desugar_expr(*expr)),
+				expr: Box::new(self.desugar_expr(*expr)?),
 				span,
 			},
 
 			Expr::Binary { op, lhs, rhs, span } => Expr::Binary {
 				op,
-				lhs: Box::new(self.desugar_expr(*lhs)),
-				rhs: Box::new(self.desugar_expr(*rhs)),
+				lhs: Box::new(self.desugar_expr(*lhs)?),
+				rhs: Box::new(self.desugar_expr(*rhs)?),
 				span,
 			},
 
 			Expr::Cast { ty, expr, span } => Expr::Cast {
 				ty,
-				expr: Box::new(self.desugar_expr(*expr)),
+				expr: Box::new(self.desugar_expr(*expr)?),
 				span,
 			},
 
 			Expr::Call { callee, args, span } => Expr::Call {
-				callee: Box::new(self.desugar_expr(*callee)),
-				args: args.into_iter().map(|arg| return self.desugar_expr(arg)).collect(),
+				callee: Box::new(self.desugar_expr(*callee)?),
+				args: args
+					.into_iter()
+					.map(|arg| return self.desugar_expr(arg))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
 			Expr::Field { base, name, span } => Expr::Field {
-				base: Box::new(self.desugar_expr(*base)),
+				base: Box::new(self.desugar_expr(*base)?),
 				name,
 				span,
 			},
 
 			Expr::Index { base, index, span } => Expr::Index {
-				base: Box::new(self.desugar_expr(*base)),
-				index: Box::new(self.desugar_expr(*index)),
+				base: Box::new(self.desugar_expr(*base)?),
+				index: Box::new(self.desugar_expr(*index)?),
 				span,
 			},
 
 			Expr::Tuple { elements, span } => Expr::Tuple {
-				elements: elements.into_iter().map(|e| return self.desugar_expr(e)).collect(),
+				elements: elements
+					.into_iter()
+					.map(|e| return self.desugar_expr(e))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
-			Expr::Array(array_lit) => Expr::Array(self.desugar_array_literal(array_lit)),
+			Expr::Array(array_lit) => Expr::Array(self.desugar_array_literal(array_lit)?),
 
 			Expr::StructInit { path, fields, span } => Expr::StructInit {
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, expr)| return (name, self.desugar_expr(expr)))
-					.collect(),
+					.map(|(name, expr)| return Ok((name, self.desugar_expr(expr)?)))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
-			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block))),
+			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block)?)),
 
-			Expr::UnsafeBlock(block) => Expr::UnsafeBlock(Box::new(self.desugar_block(*block))),
+			Expr::UnsafeBlock(block) => Expr::UnsafeBlock(Box::new(self.desugar_block(*block)?)),
 
 			Expr::Switch { expr, arms, span } => Expr::Switch {
-				expr: Box::new(self.desugar_expr(*expr)),
+				expr: Box::new(self.desugar_expr(*expr)?),
 				arms: arms
 					.into_iter()
 					.map(|arm| return self.desugar_switch_arm(arm))
-					.collect(),
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
@@ -671,7 +713,7 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_expr(*cond, then_block, else_branch, span),
+			} => self.desugar_if_expr(*cond, then_block, else_branch, span)?,
 
 			Expr::IfVar {
 				pattern,
@@ -679,13 +721,13 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_var_expr(pattern, *expr, then_block, else_branch, span),
+			} => self.desugar_if_var_expr(pattern, *expr, then_block, else_branch, span)?,
 
 			Expr::Loop { label, body, span } => {
 				let actual_label = self.push_loop(label);
 				let desugared = Expr::Loop {
 					label: Some(actual_label),
-					body: Box::new(self.desugar_block(*body)),
+					body: Box::new(self.desugar_block(*body)?),
 					span,
 				};
 				self.pop_loop();
@@ -693,17 +735,25 @@ impl Desugarer
 			}
 
 			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Range(_) | Expr::Default { .. } => expr,
-		};
+		});
 	}
 
-	fn desugar_if_expr(&mut self, cond: Expr, then_block: Block, else_branch: Option<Box<Expr>>, span: Span) -> Expr
+	fn desugar_if_expr(
+		&mut self,
+		cond: Expr,
+		then_block: Block,
+		else_branch: Option<Box<Expr>>,
+		span: Span,
+	) -> Result<Expr, CompileError>
 	{
-		return Expr::If {
-			cond: Box::new(self.desugar_expr(cond)),
-			then_block: self.desugar_block(then_block),
-			else_branch: else_branch.map(|e| return Box::new(self.desugar_expr(*e))),
+		return Ok(Expr::If {
+			cond: Box::new(self.desugar_expr(cond)?),
+			then_block: self.desugar_block(then_block)?,
+			else_branch: else_branch
+				.map(|e| return Ok(Box::new(self.desugar_expr(*e)?)))
+				.transpose()?,
 			span,
-		};
+		});
 	}
 
 	fn desugar_if_var_expr(
@@ -713,13 +763,13 @@ impl Desugarer
 		then_block: Block,
 		else_branch: Option<Box<Expr>>,
 		span: Span,
-	) -> Expr
+	) -> Result<Expr, CompileError>
 	{
 		let temp_var: Ident = self.gen_temp("ifvar_expr");
 		let expr_span: Span = expr.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr);
-		let desugared_then: Block = self.desugar_block(then_block);
+		let desugared_expr: Expr = self.desugar_expr(expr)?;
+		let desugared_then: Block = self.desugar_block(then_block)?;
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -741,7 +791,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern),
+			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: Span::default(),
 		};
@@ -750,25 +800,25 @@ impl Desugarer
 			pattern: Pattern::Wildcard { span: Span::default() },
 			body: else_branch.map_or_else(
 				|| {
-					return SwitchBody::Block(Block {
+					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
 						span: Span::default(),
-					});
+					}));
 				},
 				|else_expr| {
-					let desugared_else = self.desugar_expr(*else_expr);
+					let desugared_else = self.desugar_expr(*else_expr)?;
 
-					return match desugared_else {
+					return Ok(match desugared_else {
 						Expr::Block(block) => SwitchBody::Block(*block),
 						other_expr => SwitchBody::Block(Block {
 							stmts: vec![],
 							tail_expr: Some(Box::new(other_expr)),
 							span: Span::default(),
 						}),
-					};
+					});
 				},
-			),
+			)?,
 			span: Span::default(),
 		};
 
@@ -781,24 +831,26 @@ impl Desugarer
 			span: Span::default(),
 		};
 
-		return Expr::Block(Box::new(Block {
+		return Ok(Expr::Block(Box::new(Block {
 			stmts: vec![temp_decl],
 			tail_expr: Some(Box::new(switch_expr)),
 			span,
-		}));
+		})));
 	}
 
-	fn type_to_constructor_call(&self, ty: &Type) -> Expr
+	fn type_to_constructor_call(&self, ty: &Type) -> Result<Expr, CompileError>
 	{
 		let path = match ty.core.as_ref() {
 			TypeCore::Base { path, .. } => path.clone(),
 			_ => {
-				todo!("make error, or implement later");
-				// vec!["_".to_string()]
+				return Err(CompileError::desugar_error(
+					ty.span(),
+					"Only basic types can have a new contructor",
+				));
 			}
 		};
 
-		return Expr::Call {
+		return Ok(Expr::Call {
 			callee: Box::new(Expr::Identifier {
 				path: {
 					let mut full_path: Vec<Ident> = path;
@@ -809,39 +861,45 @@ impl Desugarer
 			}),
 			args: vec![],
 			span: ty.span,
-		};
+		});
 	}
 
-	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> ArrayLiteral
+	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> Result<ArrayLiteral, CompileError>
 	{
-		return match array_lit {
+		return Ok(match array_lit {
 			ArrayLiteral::List { elements, span } => ArrayLiteral::List {
-				elements: elements.into_iter().map(|e| return self.desugar_expr(e)).collect(),
+				elements: elements
+					.into_iter()
+					.map(|e| return self.desugar_expr(e))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 			ArrayLiteral::Repeat { value, count, span } => ArrayLiteral::Repeat {
-				value: value.into_iter().map(|e| return self.desugar_expr(e)).collect(),
-				count: Box::new(self.desugar_expr(*count)),
+				value: value
+					.into_iter()
+					.map(|e| return self.desugar_expr(e))
+					.collect::<Result<Vec<_>, _>>()?,
+				count: Box::new(self.desugar_expr(*count)?),
 				span,
 			},
-		};
+		});
 	}
 
-	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> SwitchArm
+	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> Result<SwitchArm, CompileError>
 	{
-		return SwitchArm {
-			pattern: self.desugar_pattern(arm.pattern),
+		return Ok(SwitchArm {
+			pattern: self.desugar_pattern(arm.pattern)?,
 			body: match arm.body {
-				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)),
-				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)),
+				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)?),
+				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)?),
 			},
 			span: arm.span,
-		};
+		});
 	}
 
-	fn desugar_pattern(&mut self, pattern: Pattern) -> Pattern
+	fn desugar_pattern(&mut self, pattern: Pattern) -> Result<Pattern, CompileError>
 	{
-		return match pattern {
+		return Ok(match pattern {
 			Pattern::Wildcard { span } => Pattern::Wildcard { span },
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
 			Pattern::TypedIdentifier {
@@ -858,12 +916,18 @@ impl Desugarer
 
 			Pattern::Variant { path, args, span } => Pattern::Variant {
 				path,
-				args: args.into_iter().map(|p| return self.desugar_pattern(p)).collect(),
+				args: args
+					.into_iter()
+					.map(|p| return self.desugar_pattern(p))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
 			Pattern::Tuple { patterns, span } => {
-				let desugared: Vec<Pattern> = patterns.into_iter().map(|p| return self.desugar_pattern(p)).collect();
+				let desugared: Vec<Pattern> = patterns
+					.into_iter()
+					.map(|p| return self.desugar_pattern(p))
+					.collect::<Result<Vec<_>, _>>()?;
 
 				if desugared.len() == 1 {
 					desugared.into_iter().next().expect("len == 1, so should not error")
@@ -879,8 +943,8 @@ impl Desugarer
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, pat)| return (name, self.desugar_pattern(pat)))
-					.collect(),
+					.map(|(name, pat)| return Ok((name, self.desugar_pattern(pat)?)))
+					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
 
@@ -889,7 +953,7 @@ impl Desugarer
 			Pattern::Or { patterns, span } => {
 				let mut flattened: Vec<Pattern> = Vec::new();
 				for pat in patterns {
-					let desugared = self.desugar_pattern(pat);
+					let desugared = self.desugar_pattern(pat)?;
 					match desugared {
 						Pattern::Or { patterns: inner, .. } => {
 							flattened.extend(inner);
@@ -907,10 +971,11 @@ impl Desugarer
 					}
 				}
 			}
-		};
+		});
 	}
 }
 
+// NOTE: Tests should be added after this with .unwrap() added to all desugar calls
 #[cfg(test)]
 mod tests
 {
@@ -988,7 +1053,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input);
+		assert!(result.is_ok(), "desugar_stmt failed");
+		let output = result.unwrap();
 
 		match output {
 			Stmt::If {
@@ -1010,7 +1077,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input);
+		assert!(result.is_ok(), "desugar_stmt failed");
+		let output = result.unwrap();
 
 		// Should keep AddAssign, NOT desugar to Add + Assign
 		match output {
@@ -1056,7 +1125,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -1085,7 +1156,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { body, .. } => {
@@ -1150,7 +1223,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		assert_no_expr_block(&output);
 	}
@@ -1184,7 +1259,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let out = desugarer.desugar_switch_arm(arm);
+		let result = desugarer.desugar_switch_arm(arm).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let out = result.unwrap();
 
 		match out.pattern {
 			Pattern::Or { patterns, .. } => assert_eq!(patterns.len(), 2),
@@ -1209,7 +1286,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -1248,7 +1327,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		// Top-level should be a block with variable decl and switch
 		match output {
@@ -1287,7 +1368,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -1319,7 +1402,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(input);
+		let result = desugarer.desugar_expr(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		if let Expr::Call { args, .. } = output {
 			// Ensure the inner block is desugared into a Block expression
@@ -1344,8 +1429,17 @@ mod tests
 			span: Span::default(),
 		};
 
-		let desugared_list = desugarer.desugar_array_literal(list_array);
-		let desugared_repeat = desugarer.desugar_array_literal(repeat_array);
+		let result_list = desugarer
+			.desugar_array_literal(list_array)
+			.inspect_err(|e| eprintln!("{e}"));
+		assert!(result_list.is_ok());
+		let desugared_list = result_list.unwrap();
+
+		let result_repeat = desugarer
+			.desugar_array_literal(repeat_array)
+			.inspect_err(|e| eprintln!("{e}"));
+		assert!(result_repeat.is_ok());
+		let desugared_repeat = result_repeat.unwrap();
 
 		match desugared_list {
 			ArrayLiteral::List { elements, .. } => assert_eq!(elements.len(), 2),
@@ -1392,7 +1486,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let out = desugarer.desugar_switch_arm(arm);
+		let result = desugarer.desugar_switch_arm(arm).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let out = result.unwrap();
 
 		if let Pattern::Tuple { patterns, .. } = out.pattern {
 			assert_eq!(patterns.len(), 2);
@@ -1416,7 +1512,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_program(program);
+		let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 		assert_eq!(output.items.len(), 1);
 	}
 
@@ -1462,7 +1560,10 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_namespace(ns);
+		let result = desugarer.desugar_namespace(ns).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
 		// Verify the for loop inside was desugared
 		if let TopLevelDecl::Function(func) = &output.body.items[0]
 			&& let Some(body) = &func.body
@@ -1518,7 +1619,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_impl(impl_decl);
+		let result = desugarer.desugar_impl(impl_decl).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 		assert_eq!(output.body.len(), 1);
 	}
 
@@ -1563,7 +1666,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_trait(trait_decl);
+		let result = desugarer.desugar_trait(trait_decl).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 		assert_eq!(output.items.len(), 1);
 	}
 
@@ -1586,7 +1691,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Return { value: Some(_), .. } => (),
@@ -1614,7 +1721,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Assignment { .. } => (),
@@ -1648,7 +1757,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::If { then_block, .. } => {
@@ -1684,7 +1795,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::While { cond, .. } => {
@@ -1723,7 +1836,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { body, .. } => {
@@ -1756,7 +1871,9 @@ mod tests
 			span: Span::default(),
 		});
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Unsafe(block) => {
@@ -1782,7 +1899,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Call { args, .. } => {
@@ -1814,7 +1933,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::StructInit { fields, .. } => {
@@ -1853,7 +1974,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Switch { arms, .. } => {
@@ -1887,7 +2010,9 @@ mod tests
 			span: Span::default(),
 		});
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Array(ArrayLiteral::List { elements, .. }) => {
@@ -1913,7 +2038,9 @@ mod tests
 			span: Span::default(),
 		});
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Array(ArrayLiteral::Repeat { value, .. }) => {
@@ -1939,7 +2066,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Field { base, .. } => {
@@ -1965,7 +2094,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Index { index, .. } => {
@@ -1993,7 +2124,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Tuple { elements, .. } => {
@@ -2020,7 +2153,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Cast { expr, .. } => {
@@ -2046,7 +2181,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Unary { expr, .. } => {
@@ -2073,7 +2210,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_pattern(pattern);
+		let result = desugarer.desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Pattern::Variant { args, .. } => {
@@ -2105,7 +2244,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_pattern(pattern);
+		let result = desugarer.desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Pattern::Or { patterns, .. } => {
@@ -2149,7 +2290,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_block(block);
+		let result = desugarer.desugar_block(block).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		assert_eq!(output.stmts.len(), 2);
 		assert!(matches!(output.stmts[0], Stmt::Block(_)));
@@ -2174,7 +2317,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_variable_decl(var);
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output.pattern {
 			Pattern::Tuple { patterns, .. } => {
@@ -2221,7 +2366,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -2258,7 +2405,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { body, .. } => {
@@ -2285,7 +2434,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -2319,7 +2470,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { body, .. } => {
@@ -2351,7 +2504,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { body, .. } => {
@@ -2385,7 +2540,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::If { .. } => (),
@@ -2414,7 +2571,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Block(block) => {
@@ -2444,7 +2603,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Loop { label, body, .. } => {
@@ -2476,7 +2637,9 @@ mod tests
 			span: Span::default(),
 		}));
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::UnsafeBlock(block) => {
@@ -2506,7 +2669,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { label, body, .. } => {
@@ -2545,7 +2710,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::While { label, body, .. } => {
@@ -2598,7 +2765,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop {
@@ -2656,7 +2825,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { label, body, .. } => {
@@ -2699,7 +2870,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop {
@@ -2741,7 +2914,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(input);
+		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Block(block) => {
@@ -2778,7 +2953,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_stmt(stmt);
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Stmt::Loop { label, body, .. } => {
@@ -2815,7 +2992,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let output = desugarer.desugar_expr(expr);
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
 		match output {
 			Expr::Loop { label, body, .. } => {
@@ -2889,8 +3068,11 @@ mod tests
 			span: Span::default(),
 		};
 
-		let _desugared1 = desugarer.desugar_function(func1);
-		let _desugared2 = desugarer.desugar_function(func2);
+		let result1 = desugarer.desugar_function(func1).inspect_err(|e| eprintln!("{e}"));
+		assert!(result1.is_ok());
+
+		let result2 = desugarer.desugar_function(func2).inspect_err(|e| eprintln!("{e}"));
+		assert!(result2.is_ok());
 
 		// Just verify it doesn't panic - loop stack should be properly managed
 	}
@@ -2924,7 +3106,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should have generated Point::new() as the initializer
 			assert!(output.init.is_some());
@@ -2971,7 +3155,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should keep the existing initializer
 			match output.init.unwrap() {
@@ -3014,7 +3200,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should generate Vec::new()
 			assert!(output.init.is_some());
@@ -3046,7 +3234,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should still generate Config::new()
 			assert!(output.init.is_some());
@@ -3085,7 +3275,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should generate std::config::Config::new()
 			match output.init.unwrap() {
@@ -3117,7 +3309,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Should keep original initializer
 			match output.init.unwrap() {
@@ -3162,7 +3356,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_program(program);
+			let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Both should have generated constructor calls
 			assert_eq!(output.items.len(), 2);
@@ -3215,7 +3411,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_function(func);
+			let result = desugarer.desugar_function(func).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Check the variable inside the function
 			let body = output.body.unwrap();
@@ -3269,7 +3467,9 @@ mod tests
 				span: Span::default(),
 			};
 
-			let output = desugarer.desugar_variable_decl(var);
+			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+			assert!(result.is_ok());
+			let output = result.unwrap();
 
 			// Pattern should still have the type information
 			match &output.pattern {
