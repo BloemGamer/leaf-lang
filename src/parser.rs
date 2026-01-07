@@ -9000,4 +9000,28 @@ mod parser_tests
 		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
+
+	// ========== Default Expression Tests ==========
+
+	#[test]
+	fn test_parse_default_expression()
+	{
+		let result = parse_expr_from_str("default()").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Default { heap_call: false, .. } => (),
+			_ => panic!("Expected default expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_heap_expression()
+	{
+		let result = parse_expr_from_str("default!()").inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Default { heap_call: true, .. } => (),
+			_ => panic!("Expected heap-allocated default expression"),
+		}
+	}
 }
