@@ -163,7 +163,6 @@ primary_expr = path
              | if_expr
              | loop_expr
              | "default"
-             | "new"
              | "self"
              | "(" , expression , ")" ;
 
@@ -286,8 +285,8 @@ statement_kind = variable_decl_stmt
                | block_stmt
                | directive_stmt ;
 
-// Variable declaration: var x: i32 = 5; or const X: i32 = 5;
-variable_decl_stmt = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
+// Variable declaration: var x: i32 = 5; or const X: i32 = 5; or var x: i64();
+variable_decl_stmt = ( "var" | "const" ) , pattern , [ ( "(" , ")" ) | ( "=" , expression ) ] , ";" ;
 
 // Assignment: x = 5; or x += 5;
 assignment_stmt = expression , assign_op , expression , ";" ;
@@ -601,7 +600,6 @@ program = { top_level_decl } ;
 //
 // Special keywords:
 //   - default: represents default value for a value a struct
-//   - new: represents constructor call / the default value
 //   - self: current instance
 //
 // ============================================================================
