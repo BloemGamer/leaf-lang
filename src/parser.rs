@@ -9024,4 +9024,227 @@ mod parser_tests
 			_ => panic!("Expected heap-allocated default expression"),
 		}
 	}
+
+	// ========== Error Recovery & Edge Cases ==========
+
+	#[test]
+	fn test_parse_struct_field_missing_type()
+	{
+		let input = "struct Point { x: }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_function_missing_return_arrow()
+	{
+		let input = "fn foo() i32 {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_incomplete_generic()
+	{
+		let input = "Vec<";
+		let config = Config::default();
+		let lexer = Lexer::new(&config, input);
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_err());
+	}
+
+	// ========== Pattern Constructor Syntax ==========
+
+	#[test]
+	fn test_parse_pattern_with_constructor_call()
+	{
+		let input = "{ switch x { val: MyType() => true, } }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Complex Type Modifiers ==========
+
+	#[test]
+	fn test_parse_type_with_multiple_modifiers()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "const volatile i32");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_type_modifiers_on_complex_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "const Vec<i32>*");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Directive Bodies ==========
+
+	#[test]
+	fn test_parse_directive_with_top_level_block()
+	{
+		let input = "@extern { fn c_function(); }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_directive_with_regular_block()
+	{
+		let input = "@custom(arg) { var x: i32 = 5; }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Switch Arm Control Flow ==========
+
+	#[test]
+	fn test_parse_switch_with_return()
+	{
+		let input = "switch x { 1 => return 10, _ => 0, }";
+		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_switch_with_continue()
+	{
+		let input = "{ loop { switch x { 1 => continue, _ => break, } } }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Empty Constructs ==========
+
+	#[test]
+	fn test_parse_empty_impl()
+	{
+		let input = "impl MyType { }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_empty_trait()
+	{
+		let input = "trait Empty { }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_empty_enum()
+	{
+		let input = "enum Empty { }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Complex Nested Patterns ==========
+
+	#[test]
+	fn test_parse_pattern_deeply_nested_struct()
+	{
+		let input = "{ switch x { Outer { inner = Inner { value = val: i32 } } => val, } }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_pattern_tuple_in_variant()
+	{
+		let input = "{ switch x { Some((a: i32, (b: i32, c: i32))) => a, } }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Array Repeat with Complex Values ==========
+
+	#[test]
+	fn test_parse_array_repeat_multiple_values()
+	{
+		let input = "[x, y, z; 10]";
+		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Semicolon Requirements ==========
+
+	#[test]
+	fn test_block_trailing_semicolon_no_tail()
+	{
+		let input = "{ var x: i32 = 5; }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		assert!(block.tail_expr.is_none());
+	}
+
+	#[test]
+	fn test_block_semicolon_converts_to_statement()
+	{
+		let input = "{ if true { 1 } else { 2 }; }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		assert!(block.tail_expr.is_none());
+	}
+
+	// ========== Where Clause Edge Cases ==========
+
+	#[test]
+	fn test_parse_where_clause_with_qualified_types()
+	{
+		let input = "impl<T> Trait for Type<T> where std::vec::Vec<T>: Clone { }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Loop Expression vs Statement ==========
+
+	#[test]
+	fn test_loop_as_expression_in_assignment()
+	{
+		let input = "{ var x: i32 = loop { break 42; }; }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_labeled_loop_as_expression()
+	{
+		let input = "{ var x: i32 = 'outer: loop { break 'outer 42; }; }";
+		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Buffered Token Edge Cases ==========
+
+	#[test]
+	fn test_rshift_splits_correctly_in_nested_generics()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "Map<Vec<i32>, Vec<i32>>");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	// ========== Trait Default Implementations ==========
+
+	#[test]
+	fn test_parse_trait_method_with_default_body()
+	{
+		let input = "trait HasDefault { fn method(&self) { println(\"default\"); } }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
 }
