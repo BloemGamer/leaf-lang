@@ -1763,7 +1763,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			match self.peek_kind() {
-				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline => {
+				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Volatile => {
 					self.next();
 				}
 				TokenKind::Const => {
@@ -1806,7 +1806,11 @@ impl<'s, 'c> Parser<'s, 'c>
 							| TokenKind::Const => {
 								break;
 							}
-							TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Directive(_) => {
+							TokenKind::Pub
+							| TokenKind::Unsafe
+							| TokenKind::Inline
+							| TokenKind::Volatile
+							| TokenKind::Directive(_) => {
 								break;
 							}
 							_ => {
@@ -3968,6 +3972,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::Inline => {
 					ret.push(Modifier::Inline);
+					self.next();
+				}
+				TokenKind::Volatile => {
+					ret.push(Modifier::Volatile);
 					self.next();
 				}
 				TokenKind::Const => {
