@@ -87,13 +87,13 @@ impl Desugarer
 		let items: Vec<TopLevelDecl> = program
 			.items
 			.into_iter()
-			.map(|item| self.desugar_top_level_decl(item))
+			.map(|item| return self.desugar_top_level_decl(item))
 			.collect::<Result<Vec<_>, _>>()?;
 
-		Ok(Program {
+		return Ok(Program {
 			items,
 			span: program.span,
-		})
+		});
 	}
 
 	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> Result<TopLevelDecl, CompileError>
@@ -154,7 +154,7 @@ impl Desugarer
 				return Ok(match item {
 					TraitItem::Function { signature, body, span } => {
 						debug_assert!(self.loop_stack.is_empty());
-						let desugared_body = body.map(|b| self.desugar_block(b)).transpose()?;
+						let desugared_body = body.map(|b| return self.desugar_block(b)).transpose()?;
 						return Ok(TraitItem::Function {
 							signature,
 							body: desugared_body,

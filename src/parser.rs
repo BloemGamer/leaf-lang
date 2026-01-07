@@ -558,6 +558,7 @@ pub enum Expr
 
 	Default
 	{
+		heap_call: bool,
 		span: Span,
 	},
 
@@ -665,7 +666,7 @@ impl Spanned for Expr
 		return match self {
 			Expr::Identifier { span, .. } => *span,
 			Expr::Literal { span, .. } => *span,
-			Expr::Default { span } => *span,
+			Expr::Default { span, .. } => *span,
 			Expr::Unary { span, .. } => *span,
 			Expr::Binary { span, .. } => *span,
 			Expr::Cast { span, .. } => *span,
@@ -2666,8 +2667,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 			TokenKind::Default => {
-				self.next();
+				self.next(); // default
+				let heap_call: bool = self.consume(&TokenKind::Bang);
+				self.expect(&TokenKind::LeftParen)?;
+				self.expect(&TokenKind::RightParen)?;
 				return Ok(Expr::Default {
+					heap_call,
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4935,7 +4940,7 @@ impl fmt::Display for Expr
 		match self {
 			Expr::Identifier { path, .. } => return write!(f, "{}", path.join("::")),
 			Expr::Literal { value: lit, .. } => return write!(f, "{}", lit),
-			Expr::Default { .. } => return write!(f, "default"),
+			Expr::Default { heap_call, .. } => return write!(f, "default{}() ", if *heap_call { "!" } else { "" }),
 			Expr::Unary { op, expr, .. } => match op {
 				UnaryOp::Neg => return write!(f, "-{}", expr),
 				UnaryOp::Not => return write!(f, "!{}", expr),

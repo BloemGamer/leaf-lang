@@ -175,22 +175,25 @@ fn main()
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
 	let program: Result<parser::Program, CompileError> = parsed.try_into();
-	match &program {
-		Ok(ast) => {
-			println!("{ast:#?}");
-		}
-		Err(e) => {
-			println!("{e}");
-		}
-	}
+	// match &program {
+	// 	Ok(ast) => {
+	// 		println!("{ast:#?}");
+	// 	}
+	// 	Err(e) => {
+	// 		println!("{e}");
+	// 	}
+	// }
 
 	let mut desugager: Desugarer = Desugarer::new();
 
-	let desugared: Result<parser::Program, CompileError> =
-		desugager.desugar_program(program.expect("found an error in the program"));
+	let desugared: Result<parser::Program, CompileError> = desugager.desugar_program(
+		program
+			.inspect_err(|e| println!("{e}"))
+			.expect("found an error in the program"),
+	);
 	match &desugared {
 		Ok(ast) => {
-			println!("{ast:#?}");
+			println!("{ast}");
 		}
 		Err(e) => {
 			println!("{e}");

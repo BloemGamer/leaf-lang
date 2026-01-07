@@ -162,7 +162,7 @@ primary_expr = path
              | switch_expr
              | if_expr
              | loop_expr
-             | "default"
+             | "default" , [ "!" ] , "(" , ")"
              | "self"
              | "(" , expression , ")" ;
 
