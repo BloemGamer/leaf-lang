@@ -115,7 +115,7 @@ use std::{fs, process::exit};
 
 use self::desuger::Desugarer;
 use self::lexer::Lexer;
-use self::parser::Parser;
+use self::parser::{ParseError, Parser};
 
 mod desuger;
 mod lexer;
@@ -124,6 +124,27 @@ mod parser;
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 #[allow(clippy::exhaustive_structs)]
 pub struct Config {}
+
+#[allow(clippy::exhaustive_enums)]
+#[derive(Debug, Clone)]
+pub enum CompileError
+{
+	ParseError(ParseError),
+}
+
+impl std::fmt::Display for CompileError
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return match self {
+			CompileError::ParseError(error) => {
+				write!(f, "{}", error)
+			}
+		};
+	}
+}
+
+impl std::error::Error for CompileError {}
 
 fn main()
 {
@@ -138,7 +159,7 @@ fn main()
 	let lexed: Lexer = Lexer::new(&config, &file);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
-	let program: Result<parser::Program, parser::ParseError> = parsed.into();
+	let program: Result<parser::Program, CompileError> = parsed.into();
 	match &program {
 		Ok(ast) => {
 			println!("{ast:#?}");
