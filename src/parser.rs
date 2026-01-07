@@ -1672,6 +1672,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut items: Vec<TopLevelDecl> = Vec::new();
 
 		while !matches!(self.peek().kind, TokenKind::Eof | TokenKind::RightBrace) {
+			if self.consume(&TokenKind::Semicolon) {
+				continue;
+			}
 			let decl = self.parse_top_level_decl()?;
 			items.push(decl);
 		}
@@ -1691,7 +1694,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, CompileError>
 	{
-		let decl_kind = self.peek_declaration_kind()?;
+		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
 		let ret: TopLevelDecl = match decl_kind {
 			DeclKind::Function => {
@@ -3356,7 +3359,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let ret = self.parse_block_content()?;
+		let ret: Block = self.parse_block_content()?;
 
 		self.expect(&TokenKind::RightBrace)?;
 		return Ok(ret);
@@ -3381,9 +3384,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			let kind = self.peek_kind().clone();
+			let kind: TokenKind = self.peek_kind().clone();
 
 			match kind {
+				TokenKind::Semicolon => {
+					self.next(); // ;
+				}
 				TokenKind::Var | TokenKind::Const => {
 					let var_decl: VariableDecl = self.parse_var_decl()?;
 					self.expect(&TokenKind::Semicolon)?;
@@ -3802,7 +3808,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let mut span: Span = self.peek().span();
 		let signature: FunctionSignature = self.parse_function_signature()?;
-		let body: Option<Block> = if self.at(&TokenKind::Semicolon) {
+		let body: Option<Block> = if self.consume(&TokenKind::Semicolon) {
 			None
 		} else {
 			Some(self.parse_block()?)
@@ -9244,6 +9250,22 @@ mod parser_tests
 	fn test_parse_trait_method_with_default_body()
 	{
 		let input = "trait HasDefault { fn method(&self) { println(\"default\"); } }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_extra_semicolons_top_level()
+	{
+		let input = ";;;;;;";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_extra_semicolons_block()
+	{
+		let input = "fn main(){;;;;;;}";
 		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
