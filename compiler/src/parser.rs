@@ -351,6 +351,34 @@ impl Spanned for DirectiveNode
 	}
 }
 
+/// Qualified path representing a sequence of identifiers separated by `::`.
+///
+/// A path is used to reference items across module boundaries and can include
+/// generic type arguments. Paths are fundamental to the type system and are used
+/// for type names, function names, trait references, and more.
+///
+/// # Structure
+///
+/// A path consists of two parts:
+/// - **Segments**: A sequence of identifiers separated by `::` (e.g., `std::collections::Vec`)
+/// - **Generics**: Optional generic type arguments applied to the path (e.g., `::<i32, String>`)
+///
+/// # Fields
+///
+/// * `segments` - The identifier segments making up the path. Each segment is a `String`.
+///   Examples: `["std", "collections", "Vec"]` or `["MyStruct"]`
+/// * `generics` - Generic type arguments applied to the path. Empty if no generics are used.
+///   These are applied to the entire path, not individual segments.
+/// * `span` - Source location information for error reporting and debugging
+///
+/// # Syntax Examples
+///
+/// ```text
+/// std::io::File              // 3 segments, 0 generics
+/// Vec                        // 1 segment, 0 generics
+/// HashMap::<String, i32>     // 1 segment, 2 generics
+/// std::collections::Vec::<T> // 3 segments, 1 generic
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Path
 {
@@ -363,6 +391,16 @@ pub struct Path
 
 impl Path
 {
+	/// Creates a simple path without generic arguments.
+	///
+	/// # Arguments
+	/// * `segments` - The identifier segments
+	/// * `span` - Source location
+	///
+	/// # Example
+	/// ```
+	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], span);
+	/// ```
 	#[allow(dead_code)]
 	pub const fn simple(segments: Vec<Ident>, span: Span) -> Self
 	{
@@ -373,18 +411,30 @@ impl Path
 		};
 	}
 
+	/// Checks if this path has generic type arguments.
+	///
+	/// # Returns
+	/// `true` if the path has generic arguments, `false` otherwise
 	#[allow(dead_code)]
 	pub const fn has_generics(&self) -> bool
 	{
 		return !self.generics.is_empty();
 	}
 
+	/// Checks if this path is empty (no segments or generics).
+	///
+	/// # Returns
+	/// `true` if the path is empty, `false` otherwise
 	#[allow(dead_code)]
 	pub const fn is_empty(&self) -> bool
 	{
 		return !(self.segments.is_empty() && self.generics.is_empty());
 	}
 
+	/// Returns the total length (segments + generics).
+	///
+	/// # Returns
+	/// The sum of segment count and generic count
 	#[allow(dead_code)]
 	pub const fn len(&self) -> usize
 	{
@@ -399,6 +449,35 @@ pub enum PathComponent<'a>
 	Generic(&'a Type),
 }
 
+/// A single component of a path, either an identifier segment or a generic type.
+///
+/// This enum distinguishes between the two types of components that can appear
+/// in a `Path`: regular identifier segments (like `std`, `io`, `Vec`) and generic
+/// type arguments (like the `i32` in `Vec::<i32>`).
+///
+/// # Purpose
+///
+/// `PathComponent` is primarily used as the item type for `PathIter`. When
+/// iterating over a path, you get a sequence of components that can be either
+/// segments or generics, and this enum lets you distinguish between them.
+///
+/// # Variants
+///
+/// * `Segment(&'a Ident)` - A reference to an identifier segment.
+///   This represents one piece of the `::` separated path.
+///
+///   Examples: `"std"`, `"Vec"`, `"io"`, `"MyType"`
+///
+/// * `Generic(&'a Type)` - A reference to a generic type argument.
+///   This represents one type in the `::<...>` type arguments.
+///
+///   Examples: The `i32` in `Vec::<i32>`, or the `String` in `Option::<String>`
+///
+/// # Lifetime
+///
+/// The `'a` lifetime ties the component references back to the original `Path`
+/// that owns the data. Components are borrowed, not owned, so they're only
+/// valid as long as the source `Path` exists.
 pub struct PathIter<'a>
 {
 	segments: std::slice::Iter<'a, Ident>,
@@ -1654,7 +1733,19 @@ impl Spanned for WhereConstraint
 	}
 }
 
-/// Kinds of parse errors that can occur
+/// Kinds of parse errors that can occur.
+///
+/// Categorizes different types of syntax errors encountered during parsing.
+///
+/// # Variants
+/// * `UnexpectedToken` - Expected one token, found another
+/// * `UnexpectedEof` - Unexpected end of file
+/// * `InvalidPattern` - Pattern syntax error
+/// * `UnbalancedDelimiter` - Mismatched brackets/parens/braces
+/// * `InvalidType` - Type syntax error
+/// * `InvalidDeclaration` - Declaration syntax error
+/// * `UnexpectedItem` - Item in wrong context
+/// * `Generic` - Generic error with custom message
 #[derive(Debug, Clone)]
 pub enum ParseErrorKind
 {
@@ -1691,6 +1782,18 @@ pub enum ParseErrorKind
 	},
 }
 
+/// Expected token or construct description.
+///
+/// Describes what the parser expected to find at a given position.
+///
+/// # Variants
+/// * `Token` - Expected a specific token
+/// * `Identifier` - Expected an identifier
+/// * `Type` - Expected a type expression
+/// * `Pattern` - Expected a pattern
+/// * `Expression` - Expected an expression
+/// * `OneOf` - Expected one of several tokens
+/// * `Description` - Custom expectation description
 #[derive(Debug, Clone)]
 pub enum Expected
 {
@@ -1714,6 +1817,11 @@ pub struct ParseError
 
 impl ParseError
 {
+	/// Creates a new parse error.
+	///
+	/// # Arguments
+	/// * `span` - Source location of the error
+	/// * `kind` - The kind of parse error
 	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
 	{
 		return Self {
@@ -1723,42 +1831,85 @@ impl ParseError
 		};
 	}
 
+	/// Adds context information to the error.
+	///
+	/// # Arguments
+	/// * `ctx` - Context description
+	///
+	/// # Returns
+	/// The error with added context
 	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
 	{
 		self.context.push(ctx.into());
 		return self;
 	}
 
+	/// Creates an unexpected token error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `expected` - What was expected
+	/// * `found` - What was actually found
 	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
 	}
 
+	/// Creates an unexpected EOF error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
 	pub const fn unexpected_eof(span: Span) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnexpectedEof);
 	}
 
+	/// Creates an invalid pattern error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `reason` - Why the pattern is invalid
 	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(span, ParseErrorKind::InvalidPattern { reason: reason.into() });
 	}
 
+	/// Creates an unbalanced delimiter error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `delimiter` - The unbalanced delimiter character
 	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
 	}
 
+	/// Creates an invalid type error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `reason` - Why the type is invalid
 	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(span, ParseErrorKind::InvalidType { reason: reason.into() });
 	}
 
+	/// Creates an invalid declaration error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `reason` - Why the declaration is invalid
 	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(span, ParseErrorKind::InvalidDeclaration { reason: reason.into() });
 	}
 
+	/// Creates an unexpected item error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `context` - Parsing context where item was unexpected
+	/// * `found` - The unexpected token
 	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind) -> Self
 	{
 		return Self::new(
@@ -1770,6 +1921,11 @@ impl ParseError
 		);
 	}
 
+	/// Creates a generic error with custom message.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `message` - Error message
 	pub fn generic(span: Span, message: impl Into<String>) -> Self
 	{
 		return Self::new(
@@ -2601,12 +2757,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(generics);
 	}
 
-	pub fn parse_expr(&mut self) -> Result<Expr, CompileError>
+	fn parse_expr(&mut self) -> Result<Expr, CompileError>
 	{
 		return self.parse_expr_inner(true);
 	}
 
-	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, CompileError>
+	fn parse_expr_no_struct(&mut self) -> Result<Expr, CompileError>
 	{
 		return self.parse_expr_inner(false);
 	}
@@ -3746,7 +3902,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	pub fn parse_block(&mut self) -> Result<Block, CompileError>
+	fn parse_block(&mut self) -> Result<Block, CompileError>
 	{
 		self.expect(&TokenKind::LeftBrace)?;
 
