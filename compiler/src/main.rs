@@ -86,7 +86,7 @@
 #![warn(clippy::module_name_repetitions)]
 #![warn(clippy::redundant_static_lifetimes)]
 #![warn(clippy::rest_pat_in_fully_bound_structs)]
-#![warn(clippy::self_named_module_files)]
+// #![warn(clippy::self_named_module_files)]
 #![warn(clippy::shadow_reuse)]
 #![warn(clippy::semicolon_if_nothing_returned)]
 #![warn(clippy::style)]
@@ -106,6 +106,7 @@
 #![allow(clippy::needless_return)]
 #![allow(clippy::use_self)]
 #![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
+#![allow(clippy::self_named_module_files)]
 // #![allow(dead_code)]
 
 // #![warn(clippy::todo)]
