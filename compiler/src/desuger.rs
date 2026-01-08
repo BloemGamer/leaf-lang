@@ -8,12 +8,14 @@ use crate::{
 		Path, Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type,
 		TypeCore, VariableDecl,
 	},
+	source_map::SourceIndex,
 };
 
 #[derive(Debug, Default)]
 pub struct Desugarer
 {
 	tmp_counter: usize,
+	source_index: SourceIndex,
 	loop_stack: Vec<String>,
 }
 
@@ -38,16 +40,18 @@ pub enum DesugarErrorKind
 pub struct DesugarError
 {
 	pub span: Span,
+	pub source_index: SourceIndex,
 	pub kind: DesugarErrorKind,
 	pub context: Vec<String>,
 }
 
 impl DesugarError
 {
-	pub const fn new(span: Span, kind: DesugarErrorKind) -> Self
+	pub const fn new(span: Span, kind: DesugarErrorKind, source_index: SourceIndex) -> Self
 	{
 		return Self {
 			span,
+			source_index,
 			kind,
 			context: Vec::new(),
 		};
@@ -59,23 +63,42 @@ impl DesugarError
 		return self;
 	}
 
-	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>) -> Self
+	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, DesugarErrorKind::InvalidConstructorType { reason: reason.into() });
+		return Self::new(
+			span,
+			DesugarErrorKind::InvalidConstructorType { reason: reason.into() },
+			source_index,
+		);
 	}
 
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, DesugarErrorKind::InvalidPattern { reason: reason.into() });
+		return Self::new(
+			span,
+			DesugarErrorKind::InvalidPattern { reason: reason.into() },
+			source_index,
+		);
 	}
 
-	pub fn generic(span: Span, message: impl Into<String>) -> Self
+	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
 			span,
 			DesugarErrorKind::Generic {
 				message: message.into(),
 			},
+			source_index,
+		);
+	}
+
+	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return write!(
+			f,
+			"{}",
+			self.span
+				.format_error(&source_map.get(self.source_index).src, &format!("{self}"))
 		);
 	}
 }
@@ -930,6 +953,7 @@ impl Desugarer
 				return Err(CompileError::DesugarError(DesugarError::invalid_constructor_type(
 					ty.span(),
 					"only basic types can have a constructor call",
+					self.source_index,
 				)));
 			}
 		};

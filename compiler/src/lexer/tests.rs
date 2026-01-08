@@ -8,7 +8,7 @@ mod tests
 	fn lex_kinds(source: &str) -> Vec<TokenKind>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source);
+		let lexer = Lexer::new(&config, source, 0);
 		return lexer.map(|t| return t.kind).collect();
 	}
 
@@ -16,7 +16,7 @@ mod tests
 	fn lex_tokens(source: &str) -> Vec<Token>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source);
+		let lexer = Lexer::new(&config, source, 0);
 		return lexer.collect();
 	}
 
@@ -27,7 +27,7 @@ mod tests
 	{
 		let source = "var x = 42 + 3.14;";
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source);
+		let lexer = Lexer::new(&config, source, 0);
 
 		assert_eq!(lexer.into_iter().count(), 8);
 	}
@@ -757,54 +757,6 @@ mod tests
 				TokenKind::Eof,
 			]
 		);
-	}
-
-	// ===== Error Formatting Test =====
-
-	#[test]
-	fn test_format_error()
-	{
-		let source = "var x = 42;";
-		let token = Token {
-			kind: TokenKind::IntLiteral(42),
-			span: Span {
-				start: 8,
-				end: 10,
-				start_line: 1,
-				start_col: 9,
-				end_line: 1,
-				end_col: 11,
-			},
-		};
-
-		let error = token.format_error(source, "unexpected number");
-		assert!(error.contains("Error at 1:9"));
-		assert!(error.contains("unexpected number"));
-		assert!(error.contains("var x = 42;"));
-		assert!(error.contains("^^"));
-	}
-
-	#[test]
-	fn test_format_error_multiline()
-	{
-		let source = "var x = 42;\nvar y = 100;";
-		let token = Token {
-			kind: TokenKind::IntLiteral(100),
-			span: Span {
-				start: 20,
-				end: 23,
-				start_line: 2,
-				start_col: 9,
-				end_line: 2,
-				end_col: 12,
-			},
-		};
-
-		let error = token.format_error(source, "value too large");
-		assert!(error.contains("Error at 2:9"));
-		assert!(error.contains("value too large"));
-		assert!(error.contains("var y = 100;"));
-		assert!(error.contains("^^^"));
 	}
 
 	#[test]

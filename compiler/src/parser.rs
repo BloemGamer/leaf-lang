@@ -7,6 +7,7 @@ use ignorable::PartialEq;
 use crate::{
 	CompileError, Config,
 	lexer::{self, Lexer, Span, Token, TokenKind},
+	source_map::SourceIndex,
 };
 
 /// Recursive descent parser for the programming language.
@@ -32,7 +33,8 @@ pub struct Parser<'source, 'config>
 {
 	#[allow(unused)]
 	config: &'config Config,
-	source: &'source str,
+	#[allow(unused)]
+	source_index: usize,
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
 	buffered_token: Option<Token>,
@@ -59,10 +61,10 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	/// ```
 	fn from(lexer: Lexer<'s, 'c>) -> Self
 	{
-		let (config, source, lex) = lexer.into_parts();
+		let (config, source_index, lex) = lexer.into_parts();
 		return Self {
 			config,
-			source,
+			source_index,
 			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
@@ -1813,6 +1815,7 @@ pub struct ParseError
 	pub span: Span,
 	pub kind: ParseErrorKind,
 	pub context: Vec<String>,
+	pub source_index: SourceIndex,
 }
 
 impl ParseError
@@ -1822,12 +1825,13 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location of the error
 	/// * `kind` - The kind of parse error
-	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
+	pub const fn new(span: Span, kind: ParseErrorKind, source_index: SourceIndex) -> Self
 	{
 		return Self {
 			span,
 			kind,
 			context: Vec::new(),
+			source_index,
 		};
 	}
 
@@ -1850,18 +1854,18 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `expected` - What was expected
 	/// * `found` - What was actually found
-	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
+	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
+		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found }, source_index);
 	}
 
 	/// Creates an unexpected EOF error.
 	///
 	/// # Arguments
 	/// * `span` - Source location
-	pub const fn unexpected_eof(span: Span) -> Self
+	pub const fn unexpected_eof(span: Span, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedEof);
+		return Self::new(span, ParseErrorKind::UnexpectedEof, source_index);
 	}
 
 	/// Creates an invalid pattern error.
@@ -1869,9 +1873,13 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the pattern is invalid
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::InvalidPattern { reason: reason.into() });
+		return Self::new(
+			span,
+			ParseErrorKind::InvalidPattern { reason: reason.into() },
+			source_index,
+		);
 	}
 
 	/// Creates an unbalanced delimiter error.
@@ -1879,9 +1887,9 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `delimiter` - The unbalanced delimiter character
-	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
+	pub const fn unbalanced_delimiter(span: Span, delimiter: char, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
+		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter }, source_index);
 	}
 
 	/// Creates an invalid type error.
@@ -1889,9 +1897,13 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the type is invalid
-	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
+	pub fn invalid_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::InvalidType { reason: reason.into() });
+		return Self::new(
+			span,
+			ParseErrorKind::InvalidType { reason: reason.into() },
+			source_index,
+		);
 	}
 
 	/// Creates an invalid declaration error.
@@ -1899,9 +1911,13 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the declaration is invalid
-	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
+	pub fn invalid_declaration(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
-		return Self::new(span, ParseErrorKind::InvalidDeclaration { reason: reason.into() });
+		return Self::new(
+			span,
+			ParseErrorKind::InvalidDeclaration { reason: reason.into() },
+			source_index,
+		);
 	}
 
 	/// Creates an unexpected item error.
@@ -1910,7 +1926,8 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `context` - Parsing context where item was unexpected
 	/// * `found` - The unexpected token
-	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind) -> Self
+	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind, source_index: SourceIndex)
+	-> Self
 	{
 		return Self::new(
 			span,
@@ -1918,6 +1935,7 @@ impl ParseError
 				context: context.into(),
 				found,
 			},
+			source_index,
 		);
 	}
 
@@ -1926,13 +1944,24 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `message` - Error message
-	pub fn generic(span: Span, message: impl Into<String>) -> Self
+	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
 			span,
 			ParseErrorKind::Generic {
 				message: message.into(),
 			},
+			source_index,
+		);
+	}
+
+	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return write!(
+			f,
+			"{}",
+			self.span
+				.format_error(&source_map.get(self.source_index).src, &format!("{self}"))
 		);
 	}
 }
@@ -2146,6 +2175,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				err_tok.span,
 				Expected::Token(expected.clone()),
 				err_tok.kind,
+				self.source_index,
 			)));
 		}
 	}
@@ -2378,6 +2408,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						tok.span,
 						"declaration",
 						tok.kind,
+						self.source_index,
 					)));
 				}
 			}
@@ -2403,7 +2434,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next();
 				}
 				TokenKind::Eof => {
-					return Err(CompileError::ParseError(ParseError::unexpected_eof(self.peek().span)));
+					return Err(CompileError::ParseError(ParseError::unexpected_eof(
+						self.peek().span,
+						self.source_index,
+					)));
 				}
 				_ => {
 					self.next();
@@ -2474,7 +2508,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let node: Directive = match tok.kind {
 			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
-			_ => unreachable!("{}", tok.format_error(self.source, "Bug: Token should be a directive")),
+			_ => unreachable!("Bug: Token should be a directive"),
 		};
 
 		// let end: Span = self.last_span;
@@ -2498,6 +2532,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							incl.span,
 							Expected::Token(TokenKind::StringLiteral(String::new())),
 							incl.kind,
+							self.source_index,
 						)));
 					}
 				};
@@ -2629,6 +2664,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				return Err(CompileError::ParseError(ParseError::invalid_type(
 					err_tok.span,
 					"expected '&', 'mut', identifier, or '(' to start a type",
+					self.source_index,
 				)));
 			}
 		}
@@ -2671,6 +2707,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
+						self.source_index,
 					)));
 				}
 			}
@@ -2696,6 +2733,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.peek().span(),
 					Expected::Token(TokenKind::LessThan),
 					self.peek().kind.clone(),
+					self.source_index,
 				)));
 			}
 		} else {
@@ -2732,6 +2770,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
+						self.source_index,
 					)));
 				}
 			}
@@ -2746,6 +2785,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
+					self.source_index,
 				)));
 			}
 
@@ -3113,6 +3153,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							field_tok.span,
 							Expected::Identifier,
 							field_tok.kind,
+							self.source_index,
 						)));
 					};
 					expr = Expr::Field {
@@ -3301,6 +3342,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
 					tok.kind,
+					self.source_index,
 				)));
 			}
 
@@ -3398,6 +3440,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						tok.span,
 						"Expected a loop, only a loop can have a label and return a value",
 						tok.kind,
+						self.source_index,
 					)));
 				}
 			}
@@ -3407,6 +3450,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Expression,
 					tok.kind,
+					self.source_index,
 				)));
 			}
 		}
@@ -3432,6 +3476,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							return Err(CompileError::ParseError(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
+								self.source_index,
 							)));
 						}
 					},
@@ -3458,6 +3503,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							return Err(CompileError::ParseError(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
+								self.source_index,
 							)));
 						}
 					},
@@ -3531,6 +3577,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					name_tok.span,
 					Expected::Identifier,
 					name_tok.kind,
+					self.source_index,
 				)));
 			};
 
@@ -3714,6 +3761,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									self.last_span,
 									Expected::Identifier,
 									self.peek().kind.clone(),
+									self.source_index,
 								)));
 							};
 
@@ -3740,6 +3788,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									self.last_span,
 									Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
 									self.peek().kind.clone(),
+									self.source_index,
 								)));
 							};
 
@@ -3765,6 +3814,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						return Err(CompileError::ParseError(ParseError::invalid_pattern(
 							tok.span,
 							"binding patterns must be simple identifiers, not paths",
+							self.source_index,
 						)));
 					}
 
@@ -3897,6 +3947,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Pattern,
 					tok.kind,
+					self.source_index,
 				)));
 			}
 		}
@@ -4165,6 +4216,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									tok.span,
 									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
 									tok.kind,
+									self.source_index,
 								)));
 							}
 						} else if self.consume(&TokenKind::Semicolon) {
@@ -4234,6 +4286,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Description("assignment operator".to_string()),
 					tok.kind,
+					self.source_index,
 				)));
 			}
 		};
@@ -4396,6 +4449,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
+				self.source_index,
 			)));
 		};
 
@@ -4590,6 +4644,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
+				self.source_index,
 			)));
 		};
 
@@ -4609,6 +4664,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
+					self.source_index,
 				)));
 			};
 
@@ -4654,6 +4710,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
+				self.source_index,
 			)));
 		};
 
@@ -4673,6 +4730,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
+					self.source_index,
 				)));
 			};
 
@@ -4729,6 +4787,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
+				self.source_index,
 			)));
 		};
 
@@ -4748,6 +4807,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
+					self.source_index,
 				)));
 			};
 
@@ -4790,6 +4850,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
+				self.source_index,
 			)));
 		};
 
@@ -4809,6 +4870,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
+					self.source_index,
 				)));
 			};
 
@@ -4939,6 +5001,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
+					self.source_index,
 				)));
 			}
 
@@ -4975,6 +5038,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					"impl block",
 					tok.kind,
+					self.source_index,
 				)));
 			}
 		};
@@ -5149,6 +5213,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					tok.span,
 					"trait block",
 					tok.kind,
+					self.source_index,
 				)));
 			}
 		};
@@ -5172,6 +5237,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.span(),
 				Expected::Token(TokenKind::Equals),
 				tok.kind,
+				self.source_index,
 			)));
 		};
 

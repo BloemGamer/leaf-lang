@@ -1,6 +1,7 @@
 mod tests;
 
 use crate::Config;
+use crate::source_map::{SourceIndex, SourceMap};
 
 impl<'source, 'config> Lexer<'source, 'config>
 {
@@ -22,11 +23,11 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// let (config_ref, lexer) = lexer.into_parts();
 	/// // Now both config_ref and lexer can be used independently
 	/// ```
-	pub const fn into_parts(self) -> (&'config Config, &'source str, Lexer<'source, 'config>)
+	pub const fn into_parts(self) -> (&'config Config, SourceIndex, Lexer<'source, 'config>)
 	{
-		let config = self.config;
-		let source = self.source;
-		return (config, source, self);
+		let config: &'config Config = self.config;
+		let source_index: SourceIndex = self.source_index;
+		return (config, source_index, self);
 	}
 }
 
@@ -54,6 +55,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 pub struct Lexer<'source, 'config>
 {
 	source: &'source str,
+	source_index: SourceIndex,
 	config: &'config Config,
 	position: usize,
 	current_char: Option<char>,
@@ -516,10 +518,35 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// let lexer = Lexer::new(&config, source);
 	/// ```
 	#[allow(unused)]
-	pub fn new(config: &'config Config, source: &'source str) -> Self
+	pub fn new(config: &'config Config, source: &'source str, source_index: SourceIndex) -> Self
 	{
-		let mut lexer = Lexer {
+		let mut lexer: Lexer<'_, '_> = Lexer {
 			source,
+			source_index,
+			config,
+			position: 0,
+			current_char: None,
+			line: 1,
+			column: 1,
+			eof_returned: false,
+		};
+		lexer.current_char = lexer.source.chars().next();
+		return lexer;
+	}
+
+	#[allow(unused)]
+	pub fn new_add_to_source_map(
+		config: &'config Config,
+		source: impl Into<String>,
+		file_name: impl Into<String>,
+		source_map: &'source mut SourceMap,
+	) -> Self
+	{
+		let source_index: SourceIndex = source_map.add_file(file_name, source);
+		let new_source: &String = &source_map.get(source_index).src;
+		let mut lexer: Lexer<'_, '_> = Lexer {
+			source: new_source,
+			source_index,
 			config,
 			position: 0,
 			current_char: None,
@@ -1304,8 +1331,9 @@ impl Token
 	/// //   |                     ^
 	/// ```
 	#[allow(unused)]
-	pub fn format_error(&self, source: &str, message: &str) -> String
+	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
 	{
+		let source: &str = &source_map.get(source_index).src;
 		let line_start = source[..self.span.start].rfind('\n').map(|i| return i + 1).unwrap_or(0);
 		let line_end = source[self.span.start..]
 			.find('\n')

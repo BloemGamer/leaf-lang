@@ -117,11 +117,13 @@ use self::{
 	desuger::{DesugarError, Desugarer},
 	lexer::Lexer,
 	parser::{ParseError, Parser},
+	source_map::SourceMap,
 };
 
 mod desuger;
 mod lexer;
 mod parser;
+mod source_map;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Config {}
@@ -150,17 +152,39 @@ impl std::fmt::Display for CompileError
 
 impl std::error::Error for CompileError {}
 
+impl CompileError
+{
+	#[allow(clippy::missing_errors_doc)]
+	pub fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return match self {
+			CompileError::ParseError(err) => err.write(f, sm),
+			CompileError::DesugarError(err) => err.write(f, sm),
+		};
+	}
+
+	pub fn to_string_with_source(&self, sm: &crate::source_map::SourceMap) -> Result<String, std::fmt::Error>
+	{
+		let mut out: String = String::new();
+		self.fmt_with_source(&mut out, sm)?;
+		return Ok(out);
+	}
+}
+
 fn main()
 {
+	const FILE_NAME: &str = "slang-test/main.sl";
 	let config: Config = Config::default();
-	let file: String = fs::read_to_string("slang-test/main.sl").map_or_else(
+	let mut source_map: SourceMap = SourceMap::default();
+
+	let file: String = fs::read_to_string(FILE_NAME).map_or_else(
 		|_| {
 			println!("could not open file");
 			exit(1)
 		},
 		|f| return f,
 	);
-	let lexed: Lexer = Lexer::new(&config, &file);
+	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
 	let program: Result<parser::Program, CompileError> = parsed.try_into();
@@ -177,7 +201,7 @@ fn main()
 
 	let desugared: Result<parser::Program, CompileError> = desugager.desugar_program(
 		program
-			.inspect_err(|e| println!("{e}"))
+			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 			.expect("found an error in the program"),
 	);
 	match &desugared {
@@ -185,7 +209,7 @@ fn main()
 			println!("{ast}");
 		}
 		Err(e) => {
-			println!("{e}");
+			println!("{}", e.to_string_with_source(&source_map).expect(""));
 		}
 	}
 }

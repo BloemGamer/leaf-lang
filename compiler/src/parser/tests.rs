@@ -9,7 +9,7 @@ mod tests
 	fn parse_expr_from_str(input: &str) -> Result<Expr, CompileError>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, input);
+		let lexer = Lexer::new(&config, input, 0);
 		let mut parser = Parser::from(lexer);
 		return parser.parse_expr();
 	}
@@ -17,7 +17,7 @@ mod tests
 	fn parse_program_from_str(input: &str) -> Result<Program, CompileError>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, input);
+		let lexer = Lexer::new(&config, input, 0);
 		let mut parser = Parser::from(lexer);
 		return parser.parse_program();
 	}
@@ -25,7 +25,7 @@ mod tests
 	fn parse_block_from_str(input: &str) -> Result<Block, CompileError>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, input);
+		let lexer = Lexer::new(&config, input, 0);
 		let mut parser = Parser::from(lexer);
 		return parser.parse_block();
 	}
@@ -756,7 +756,7 @@ mod tests
 	fn test_parse_simple_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32");
+		let lexer = Lexer::new(&config, "i32", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -770,7 +770,7 @@ mod tests
 	fn test_parse_generic_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Vec<i32>");
+		let lexer = Lexer::new(&config, "Vec<i32>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -787,7 +787,7 @@ mod tests
 	fn test_parse_reference_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "&i32");
+		let lexer = Lexer::new(&config, "&i32", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -801,7 +801,7 @@ mod tests
 	fn test_parse_mutable_reference_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "&mut i32");
+		let lexer = Lexer::new(&config, "&mut i32", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -815,7 +815,7 @@ mod tests
 	fn test_parse_pointer_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32*");
+		let lexer = Lexer::new(&config, "i32*", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -829,7 +829,7 @@ mod tests
 	fn test_parse_array_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32[10]");
+		let lexer = Lexer::new(&config, "i32[10]", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -1246,7 +1246,7 @@ mod tests
 	fn test_parse_if_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{if true { 1 }}");
+		let lexer = Lexer::new(&config, "{if true { 1 }}", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1256,7 +1256,7 @@ mod tests
 	fn test_parse_if_else_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{if true { 1 } else { 2 };}");
+		let lexer = Lexer::new(&config, "{if true { 1 } else { 2 };}", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1266,7 +1266,7 @@ mod tests
 	fn test_parse_while_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ while true { break; } }");
+		let lexer = Lexer::new(&config, "{ while true { break; } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1276,7 +1276,7 @@ mod tests
 	fn test_parse_for_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ for i in 0..10 { } }");
+		let lexer = Lexer::new(&config, "{ for i in 0..10 { } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1286,7 +1286,7 @@ mod tests
 	fn test_parse_return_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ return 42; }");
+		let lexer = Lexer::new(&config, "{ return 42; }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1296,7 +1296,7 @@ mod tests
 	fn test_parse_break_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ break; }");
+		let lexer = Lexer::new(&config, "{ break; }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1306,7 +1306,7 @@ mod tests
 	fn test_parse_continue_statement()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ continue; }");
+		let lexer = Lexer::new(&config, "{ continue; }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1316,7 +1316,7 @@ mod tests
 	fn test_parse_assignment()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ x = 5; }");
+		let lexer = Lexer::new(&config, "{ x = 5; }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1329,7 +1329,7 @@ mod tests
 		for op in ops {
 			let input = format!("{{ x {} 5; }}", op);
 			let config = Config::default();
-			let lexer = Lexer::new(&config, &input);
+			let lexer = Lexer::new(&config, &input, 0);
 			let mut parser = Parser::from(lexer);
 			let result = parser.parse_block();
 			assert!(result.is_ok(), "Failed to parse compound assignment: {}", op);
@@ -1379,7 +1379,7 @@ mod tests
 	fn test_parse_error_invalid_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "123");
+		let lexer = Lexer::new(&config, "123", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_err());
@@ -1389,7 +1389,7 @@ mod tests
 	fn test_parse_if_var_basic()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1402,7 +1402,7 @@ mod tests
 	fn test_parse_if_var_with_else()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } else { 0 }; }");
+		let lexer = Lexer::new(&config, "{ if var Some(x: i64) = opt { x } else { 0 }; }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1415,6 +1415,7 @@ mod tests
 		let lexer = Lexer::new(
 			&config,
 			"{ if var Some(x: i32) = opt1 { x } else if var Some(y: i32) = opt2 { y } else { 0 }; }",
+			0,
 		);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
@@ -1425,7 +1426,7 @@ mod tests
 	fn test_parse_if_var_tuple_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var (x: i32, y: i32) = pair { x + y } }");
+		let lexer = Lexer::new(&config, "{ if var (x: i32, y: i32) = pair { x + y } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1435,7 +1436,7 @@ mod tests
 	fn test_parse_if_var_wildcard()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(_) = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(_) = opt { true } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1445,7 +1446,7 @@ mod tests
 	fn test_parse_if_var_wildcard_with_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(_: i64) = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(_: i64) = opt { true } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1457,7 +1458,7 @@ mod tests
 	fn test_parse_while_let()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ while var Some(x: i32) = iter.next() { process(x); } }");
+		let lexer = Lexer::new(&config, "{ while var Some(x: i32) = iter.next() { process(x); } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1472,7 +1473,7 @@ mod tests
 	fn test_parse_while_let_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ while var (a: i32, b: i32) = get_pair() { } }");
+		let lexer = Lexer::new(&config, "{ while var (a: i32, b: i32) = get_pair() { } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1484,7 +1485,7 @@ mod tests
 	fn test_parse_struct_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Point { x: i32, y: i32 } = pt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Point { x: i32, y: i32 } = pt { x } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1494,7 +1495,7 @@ mod tests
 	fn test_parse_struct_pattern_nested()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Point { x = a: i32, y = b: i32 } = pt { a } }");
+		let lexer = Lexer::new(&config, "{ if var Point { x = a: i32, y = b: i32 } = pt { a } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1504,7 +1505,7 @@ mod tests
 	fn test_parse_or_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(1) | Some(2) | Some(3) = x { true } }");
+		let lexer = Lexer::new(&config, "{ if var Some(1) | Some(2) | Some(3) = x { true } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1514,7 +1515,11 @@ mod tests
 	fn test_parse_nested_variant_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(Point { x = a: i32, y = b: i32 }) = opt { a } }");
+		let lexer = Lexer::new(
+			&config,
+			"{ if var Some(Point { x = a: i32, y = b: i32 }) = opt { a } }",
+			0,
+		);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1524,7 +1529,7 @@ mod tests
 	fn test_parse_variant_with_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some((x: i32, y: i32)) = opt { x } }");
+		let lexer = Lexer::new(&config, "{ if var Some((x: i32, y: i32)) = opt { x } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1534,7 +1539,7 @@ mod tests
 	fn test_parse_unit_variant()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var None = opt { true } }");
+		let lexer = Lexer::new(&config, "{ if var None = opt { true } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -1743,7 +1748,7 @@ mod tests
 	fn test_parse_nested_pointer_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32**");
+		let lexer = Lexer::new(&config, "i32**", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1760,7 +1765,7 @@ mod tests
 	fn test_parse_array_of_pointers()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32*[10]");
+		let lexer = Lexer::new(&config, "i32*[10]", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1777,7 +1782,7 @@ mod tests
 	fn test_parse_pointer_to_array()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "i32[10]*");
+		let lexer = Lexer::new(&config, "i32[10]*", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1787,7 +1792,7 @@ mod tests
 	fn test_parse_tuple_type_single_element()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "(i32,)");
+		let lexer = Lexer::new(&config, "(i32,)", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1801,7 +1806,7 @@ mod tests
 	fn test_parse_tuple_type_empty()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "()");
+		let lexer = Lexer::new(&config, "()", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1815,7 +1820,7 @@ mod tests
 	fn test_parse_nested_generic_types()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Vec<Vec<i32>>");
+		let lexer = Lexer::new(&config, "Vec<Vec<i32>>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1832,7 +1837,7 @@ mod tests
 	fn test_parse_multiple_generic_arguments()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Map<String, i32>");
+		let lexer = Lexer::new(&config, "Map<String, i32>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1848,7 +1853,7 @@ mod tests
 	fn test_parse_qualified_type_path()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "std::vec::Vec<i32>");
+		let lexer = Lexer::new(&config, "std::vec::Vec<i32>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1870,7 +1875,7 @@ mod tests
 	fn test_parse_reference_to_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "&(i32, i32)");
+		let lexer = Lexer::new(&config, "&(i32, i32)", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1882,7 +1887,7 @@ mod tests
 	fn test_parse_pattern_range_inclusive()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { 1..=10 => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1..=10 => true, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1892,7 +1897,7 @@ mod tests
 	fn test_parse_pattern_range_exclusive()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { 1..10 => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1..10 => true, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1902,7 +1907,7 @@ mod tests
 	fn test_parse_pattern_range_open_ended()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { 1.. => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 1.. => true, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1912,7 +1917,7 @@ mod tests
 	fn test_parse_pattern_char_literal()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { 'a' => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { 'a' => true, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1922,7 +1927,7 @@ mod tests
 	fn test_parse_pattern_string_literal()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, r#"{ switch x { "hello" => true, } }"#);
+		let lexer = Lexer::new(&config, r#"{ switch x { "hello" => true, } }"#, 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1932,7 +1937,7 @@ mod tests
 	fn test_parse_pattern_bool_literals()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { true => 1, false => 0, } }");
+		let lexer = Lexer::new(&config, "{ switch x { true => 1, false => 0, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1942,7 +1947,7 @@ mod tests
 	fn test_parse_pattern_nested_tuple()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { ((a: i32, b: i32), c: i32) => a, } }");
+		let lexer = Lexer::new(&config, "{ switch x { ((a: i32, b: i32), c: i32) => a, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1952,7 +1957,7 @@ mod tests
 	fn test_parse_pattern_variant_multiple_args()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { Some(a: i32, b: i32, c: i32) => a, } }");
+		let lexer = Lexer::new(&config, "{ switch x { Some(a: i32, b: i32, c: i32) => a, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -1962,7 +1967,7 @@ mod tests
 	fn test_parse_pattern_or_with_wildcards()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ switch x { None | Some(_) => true, } }");
+		let lexer = Lexer::new(&config, "{ switch x { None | Some(_) => true, } }", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -2580,7 +2585,7 @@ mod tests
 	fn test_parse_nested_generics_with_rshift()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Vec<Vec<i32>>");
+		let lexer = Lexer::new(&config, "Vec<Vec<i32>>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -2590,7 +2595,7 @@ mod tests
 	fn test_parse_triple_nested_generics()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Box<Vec<Option<i32>>>");
+		let lexer = Lexer::new(&config, "Box<Vec<Option<i32>>>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3399,7 +3404,7 @@ mod tests
 	{
 		let input = "Vec<";
 		let config = Config::default();
-		let lexer = Lexer::new(&config, input);
+		let lexer = Lexer::new(&config, input, 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_err());
@@ -3421,7 +3426,7 @@ mod tests
 	fn test_parse_type_with_multiple_modifiers()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "const volatile i32");
+		let lexer = Lexer::new(&config, "const volatile i32", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3431,7 +3436,7 @@ mod tests
 	fn test_parse_type_modifiers_on_complex_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "const Vec<i32>*");
+		let lexer = Lexer::new(&config, "const Vec<i32>*", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3583,7 +3588,7 @@ mod tests
 	fn test_rshift_splits_correctly_in_nested_generics()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "Map<Vec<i32>, Vec<i32>>");
+		let lexer = Lexer::new(&config, "Map<Vec<i32>, Vec<i32>>", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3619,7 +3624,7 @@ mod tests
 	fn test_parse_impl_trait_type()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "impl Clone");
+		let lexer = Lexer::new(&config, "impl Clone", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3636,7 +3641,7 @@ mod tests
 	fn test_parse_impl_trait_multiple_bounds()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "impl Clone + Debug");
+		let lexer = Lexer::new(&config, "impl Clone + Debug", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
@@ -3660,7 +3665,7 @@ mod tests
 	fn test_parse_impl_trait_reference()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "&impl Clone");
+		let lexer = Lexer::new(&config, "&impl Clone", 0);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
