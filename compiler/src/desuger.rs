@@ -1,6 +1,6 @@
 use crate::{
 	CompileError,
-	lexer::{self, ErrorFromSpan, Span},
+	lexer::Span,
 	parser::{
 		ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
 		Path, Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type,
@@ -16,32 +16,95 @@ pub struct Desugarer
 }
 
 #[derive(Debug, Clone)]
+pub enum DesugarErrorKind
+{
+	InvalidConstructorType
+	{
+		reason: String
+	},
+	InvalidPattern
+	{
+		reason: String
+	},
+	Generic
+	{
+		message: String
+	},
+}
+
+#[derive(Debug, Clone)]
 pub struct DesugarError
 {
 	pub span: Span,
-	pub message: String,
+	pub kind: DesugarErrorKind,
+	pub context: Vec<String>,
+}
+
+impl DesugarError
+{
+	pub const fn new(span: Span, kind: DesugarErrorKind) -> Self
+	{
+		return Self {
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
+
+	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, DesugarErrorKind::InvalidConstructorType { reason: reason.into() });
+	}
+
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, DesugarErrorKind::InvalidPattern { reason: reason.into() });
+	}
+
+	pub fn generic(span: Span, message: impl Into<String>) -> Self
+	{
+		return Self::new(
+			span,
+			DesugarErrorKind::Generic {
+				message: message.into(),
+			},
+		);
+	}
 }
 
 impl std::fmt::Display for DesugarError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
-		return write!(f, "Parse error at {:?}: {}", self.span, self.message);
+		write!(f, "Desugar error at {:?}: ", self.span)?;
+
+		match &self.kind {
+			DesugarErrorKind::InvalidConstructorType { reason } => {
+				write!(f, "invalid constructor type: {}", reason)?;
+			}
+			DesugarErrorKind::InvalidPattern { reason } => {
+				write!(f, "invalid pattern: {}", reason)?;
+			}
+			DesugarErrorKind::Generic { message } => {
+				write!(f, "{}", message)?;
+			}
+		}
+
+		if !self.context.is_empty() {
+			write!(f, "\n  while desugaring: {}", self.context.join(" → "))?;
+		}
+
+		return Ok(());
 	}
 }
 
 impl std::error::Error for DesugarError {}
-
-impl ErrorFromSpan for DesugarError
-{
-	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
-	{
-		return Self {
-			span: span.span(),
-			message: message.into(),
-		};
-	}
-}
 
 impl Desugarer
 {
@@ -862,10 +925,10 @@ impl Desugarer
 		let mut path = match ty.core.as_ref() {
 			TypeCore::Base { path, .. } => path.clone(),
 			_ => {
-				return Err(CompileError::desugar_error(
+				return Err(CompileError::DesugarError(DesugarError::invalid_constructor_type(
 					ty.span(),
-					"Only basic types can have a new contructor",
-				));
+					"only basic types can have a constructor call",
+				)));
 			}
 		};
 

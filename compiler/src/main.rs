@@ -114,7 +114,7 @@ use std::{fs, process::exit};
 
 use self::{
 	desuger::{DesugarError, Desugarer},
-	lexer::{ErrorFromSpan, Lexer, Span},
+	lexer::Lexer,
 	parser::{ParseError, Parser},
 };
 
@@ -148,15 +148,6 @@ impl std::fmt::Display for CompileError
 }
 
 impl std::error::Error for CompileError {}
-
-#[allow(dead_code)]
-impl CompileError
-{
-	fn desugar_error(span: Span, msg: impl Into<String>) -> Self
-	{
-		return CompileError::DesugarError(DesugarError::from_span(span, msg.into()));
-	}
-}
 
 fn main()
 {
