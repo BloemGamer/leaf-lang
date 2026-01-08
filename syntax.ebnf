@@ -229,7 +229,7 @@ tuple_pattern = "(" , [ pattern_list ] , ")" ;
 struct_pattern = path , "{" , [ struct_pattern_field_list ] , "}" ;
 
 struct_pattern_field_list = struct_pattern_field , { "," , struct_pattern_field } , [ "," ] ;
-struct_pattern_field = identifier , ":" , pattern ;
+struct_pattern_field = [ identifier , ":" ] , pattern ;
 
 range_pattern = [ expression ] , ( ".." | "..=" ) , [ expression ] ;
 

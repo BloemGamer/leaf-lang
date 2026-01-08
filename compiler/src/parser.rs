@@ -3385,9 +3385,30 @@ impl<'s, 'c> Parser<'s, 'c>
 								}));
 							};
 
-							self.expect(&TokenKind::Colon)?;
+							let pattern: Pattern = if self.consume(&TokenKind::Equals) {
+								self.parse_pattern()?
+							} else if self.consume(&TokenKind::Colon) {
+								let ty: Type = self.parse_type()?;
 
-							let pattern = self.parse_pattern()?;
+								let call_constructor: bool = if self.consume(&TokenKind::LeftParen) {
+									self.expect(&TokenKind::RightParen)?; // TODO: Still debating if this should be allowed
+									true
+								} else {
+									false
+								};
+
+								Pattern::TypedIdentifier {
+									path: Path::simple(vec![field_name.clone()], self.last_span),
+									ty,
+									call_constructor,
+									span: self.last_span,
+								}
+							} else {
+								return Err(CompileError::ParseError(ParseError {
+									span: self.last_span,
+									message: "expected '=' or ':' after field name in struct pattern".to_string(),
+								}));
+							};
 
 							fields.push((field_name, pattern));
 
@@ -7445,7 +7466,7 @@ mod parser_tests
 		let config = Config::default();
 		let lexer = Lexer::new(&config, "{ if var Point { x: i32, y: i32 } = pt { x } }");
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block();
+		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 
@@ -7453,7 +7474,7 @@ mod parser_tests
 	fn test_parse_struct_pattern_nested()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Point { x: a: i32, y: b: i32 } = pt { a } }");
+		let lexer = Lexer::new(&config, "{ if var Point { x = a: i32, y = b: i32 } = pt { a } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -7473,7 +7494,7 @@ mod parser_tests
 	fn test_parse_nested_variant_pattern()
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, "{ if var Some(Point { x: a: i32, y: b: i32 }) = opt { a } }");
+		let lexer = Lexer::new(&config, "{ if var Some(Point { x = a: i32, y = b: i32 }) = opt { a } }");
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
