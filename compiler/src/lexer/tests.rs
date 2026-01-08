@@ -8,7 +8,8 @@ mod tests
 	fn lex_kinds(source: &str) -> Vec<TokenKind>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source, 0);
+		let mut source_map = SourceMap::default();
+let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_1", &mut source_map);
 		return lexer.map(|t| return t.kind).collect();
 	}
 
@@ -16,7 +17,8 @@ mod tests
 	fn lex_tokens(source: &str) -> Vec<Token>
 	{
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source, 0);
+		let mut source_map = SourceMap::default();
+let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_2", &mut source_map);
 		return lexer.collect();
 	}
 
@@ -27,7 +29,8 @@ mod tests
 	{
 		let source = "var x = 42 + 3.14;";
 		let config = Config::default();
-		let lexer = Lexer::new(&config, source, 0);
+		let mut source_map = SourceMap::default();
+let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_3", &mut source_map);
 
 		assert_eq!(lexer.into_iter().count(), 8);
 	}
