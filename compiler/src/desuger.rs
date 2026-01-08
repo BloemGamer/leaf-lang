@@ -80,6 +80,7 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
+	#[allow(clippy::result_large_err)]
 	pub fn desugar_program(&mut self, program: Program) -> Result<Program, CompileError>
 	{
 		let items: Vec<TopLevelDecl> = program
@@ -94,6 +95,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> Result<TopLevelDecl, CompileError>
 	{
 		return Ok(match decl {
@@ -111,6 +113,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_function(&mut self, mut func: FunctionDecl) -> Result<FunctionDecl, CompileError>
 	{
 		debug_assert!(self.loop_stack.is_empty(), "loop_stack should be empty");
@@ -121,12 +124,14 @@ impl Desugarer
 		return Ok(func);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_namespace(&mut self, mut ns: NamespaceDecl) -> Result<NamespaceDecl, CompileError>
 	{
 		ns.body = self.desugar_program(ns.body)?;
 		return Ok(ns);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> Result<ImplDecl, CompileError>
 	{
 		impl_decl.body = impl_decl
@@ -143,6 +148,7 @@ impl Desugarer
 		return Ok(impl_decl);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> Result<TraitDecl, CompileError>
 	{
 		trait_decl.items = trait_decl
@@ -167,6 +173,7 @@ impl Desugarer
 		return Ok(trait_decl);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> Result<DirectiveNode, CompileError>
 	{
 		directive.body = directive
@@ -176,6 +183,7 @@ impl Desugarer
 		return Ok(directive);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_block(&mut self, block: Block) -> Result<Block, CompileError>
 	{
 		let stmts: Vec<Stmt> = block
@@ -196,6 +204,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_block_content(&mut self, content: BlockContent) -> Result<BlockContent, CompileError>
 	{
 		return Ok(match content {
@@ -204,6 +213,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_stmt(&mut self, stmt: Stmt) -> Result<Stmt, CompileError>
 	{
 		return Ok(match stmt {
@@ -323,6 +333,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_for_loop(
 		&mut self,
 		label: Option<String>,
@@ -447,6 +458,7 @@ impl Desugarer
 		}));
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_if_var(
 		&mut self,
 		pattern: Pattern,
@@ -524,6 +536,7 @@ impl Desugarer
 		}));
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_while_var_loop(
 		&mut self,
 		label: Option<String>,
@@ -604,6 +617,7 @@ impl Desugarer
 		return Ok(result);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> Result<VariableDecl, CompileError>
 	{
 		let needs_constructor: bool = match &var.pattern {
@@ -634,6 +648,7 @@ impl Desugarer
 		return Ok(var);
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_expr(&mut self, expr: Expr) -> Result<Expr, CompileError>
 	{
 		return Ok(match expr {
@@ -739,6 +754,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_if_expr(
 		&mut self,
 		cond: Expr,
@@ -757,6 +773,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_if_var_expr(
 		&mut self,
 		pattern: Pattern,
@@ -839,6 +856,7 @@ impl Desugarer
 		})));
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn type_to_constructor_call(&self, ty: &Type) -> Result<Expr, CompileError>
 	{
 		let mut path = match ty.core.as_ref() {
@@ -860,6 +878,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> Result<ArrayLiteral, CompileError>
 	{
 		return Ok(match array_lit {
@@ -881,6 +900,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> Result<SwitchArm, CompileError>
 	{
 		return Ok(SwitchArm {
@@ -893,6 +913,7 @@ impl Desugarer
 		});
 	}
 
+	#[allow(clippy::result_large_err)]
 	fn desugar_pattern(&mut self, pattern: Pattern) -> Result<Pattern, CompileError>
 	{
 		return Ok(match pattern {

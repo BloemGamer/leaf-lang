@@ -1,5 +1,4 @@
 use crate::Config;
-use crate::parser::ParseError;
 
 impl<'source, 'config> Lexer<'source, 'config>
 {
@@ -1387,35 +1386,6 @@ impl Span
 			caret_indent,
 			"^".repeat(caret_length)
 		);
-	}
-
-	#[allow(unused)]
-	/// Creates a `ParseError` in a readable style from a span
-	///
-	/// # Arguments
-	/// * `source` - The complete source code string
-	/// * `message` - The error message to display
-	///
-	/// # Returns
-	/// A `ParseError` containing a formatted string containing the error location, message, source line,
-	/// and visual indicator pointing to the error position and the span itself.
-	///
-	/// # Example
-	/// ```
-	/// let span = Span { /* ... */ };
-	/// let error = span.make_parser_error(source, "unexpected token");
-	/// println!("{}", error);
-	/// // Output:
-	/// // Error at 1:20: unexpected token
-	/// //   | var x = Vec<Vec<int>;
-	/// //   |                     ^
-	/// ```
-	pub fn make_parser_error(self, source: &str, message: &str) -> ParseError
-	{
-		return ParseError {
-			span: self,
-			message: self.format_error(source, message),
-		};
 	}
 }
 

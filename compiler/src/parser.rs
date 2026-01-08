@@ -4,7 +4,7 @@ use ignorable::PartialEq;
 
 use crate::{
 	CompileError, Config,
-	lexer::{self, ErrorFromSpan, Lexer, Span, Token, TokenKind},
+	lexer::{self, Lexer, Span, Token, TokenKind},
 };
 
 /// Recursive descent parser for the programming language.
@@ -1652,40 +1652,211 @@ impl Spanned for WhereConstraint
 	}
 }
 
-/// Parse error type.
-///
-/// Represents an error encountered during parsing with location information.
-///
-/// # Fields
-/// * `span` - Location of the error in the source
-/// * `message` - Human-readable error message
+/// Kinds of parse errors that can occur
+#[derive(Debug, Clone)]
+pub enum ParseErrorKind
+{
+	UnexpectedToken
+	{
+		expected: Expected,
+		found: TokenKind,
+	},
+	UnexpectedEof,
+	InvalidPattern
+	{
+		reason: String,
+	},
+	UnbalancedDelimiter
+	{
+		delimiter: char,
+	},
+	InvalidType
+	{
+		reason: String,
+	},
+	InvalidDeclaration
+	{
+		reason: String,
+	},
+	UnexpectedItem
+	{
+		context: String,
+		found: TokenKind,
+	},
+	Generic
+	{
+		message: String,
+	},
+}
+
+#[derive(Debug, Clone)]
+pub enum Expected
+{
+	Token(TokenKind),
+	Identifier,
+	Type,
+	Pattern,
+	Expression,
+	OneOf(Vec<TokenKind>),
+	Description(String),
+}
+
+/// Parse error with location and context information
 #[derive(Debug, Clone)]
 pub struct ParseError
 {
 	pub span: Span,
-	pub message: String,
+	pub kind: ParseErrorKind,
+	pub context: Vec<String>,
+}
+
+impl ParseError
+{
+	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
+	{
+		return Self {
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
+
+	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
+	}
+
+	pub const fn unexpected_eof(span: Span) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnexpectedEof);
+	}
+
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidPattern { reason: reason.into() });
+	}
+
+	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
+	}
+
+	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidType { reason: reason.into() });
+	}
+
+	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidDeclaration { reason: reason.into() });
+	}
+
+	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind) -> Self
+	{
+		return Self::new(
+			span,
+			ParseErrorKind::UnexpectedItem {
+				context: context.into(),
+				found,
+			},
+		);
+	}
+
+	pub fn generic(span: Span, message: impl Into<String>) -> Self
+	{
+		return Self::new(
+			span,
+			ParseErrorKind::Generic {
+				message: message.into(),
+			},
+		);
+	}
 }
 
 impl std::fmt::Display for ParseError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
-		return write!(f, "Parse error at {:?}: {}", self.span, self.message);
+		write!(f, "Parse error at {:?}: ", self.span)?;
+
+		match &self.kind {
+			ParseErrorKind::UnexpectedToken { expected, found } => {
+				write!(f, "expected {}, found {:?}", expected, found)?;
+			}
+			ParseErrorKind::UnexpectedEof => {
+				write!(f, "unexpected end of file")?;
+			}
+			ParseErrorKind::InvalidPattern { reason } => {
+				write!(f, "invalid pattern: {}", reason)?;
+			}
+			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
+				write!(f, "unbalanced delimiter '{}'", delimiter)?;
+			}
+			ParseErrorKind::InvalidType { reason } => {
+				write!(f, "invalid type: {}", reason)?;
+			}
+			ParseErrorKind::InvalidDeclaration { reason } => {
+				write!(f, "invalid declaration: {}", reason)?;
+			}
+			ParseErrorKind::UnexpectedItem { context, found } => {
+				write!(f, "unexpected item in {}: found {:?}", context, found)?;
+			}
+			ParseErrorKind::Generic { message } => {
+				write!(f, "{}", message)?;
+			}
+		}
+
+		if !self.context.is_empty() {
+			write!(f, "\n  while parsing: {}", self.context.join(" → "))?;
+		}
+
+		return Ok(());
+	}
+}
+
+impl std::fmt::Display for Expected
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return match self {
+			Expected::Token(tk) => write!(f, "{:?}", tk),
+			Expected::Identifier => write!(f, "identifier"),
+			Expected::Type => write!(f, "type"),
+			Expected::Pattern => write!(f, "pattern"),
+			Expected::Expression => write!(f, "expression"),
+			Expected::OneOf(tokens) => {
+				write!(f, "one of: ")?;
+				for (i, tk) in tokens.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{:?}", tk)?;
+				}
+				Ok(())
+			}
+			Expected::Description(s) => write!(f, "{}", s),
+		};
 	}
 }
 
 impl std::error::Error for ParseError {}
 
-impl ErrorFromSpan for ParseError
-{
-	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
-	{
-		return Self {
-			span: span.span(),
-			message: message.into(),
-		};
-	}
-}
+// impl ErrorFromSpan for ParseError
+// {
+// 	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
+// 	{
+// 		return Self {
+// 			span: span.span(),
+// 			message: message.into(),
+// 		};
+// 	}
+// }
 
 /// Type alias declaration.
 ///
@@ -1813,13 +1984,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(self.next());
 		} else {
 			let err_tok: Token = tok.clone();
-			return Err(CompileError::ParseError(ParseError {
-				span: err_tok.span,
-				message: err_tok.format_error(
-					self.source,
-					&format!("expected {:?}, found {:?}", expected, err_tok.kind),
-				),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				err_tok.span,
+				Expected::Token(expected.clone()),
+				err_tok.kind,
+			)));
 		}
 	}
 
@@ -2044,16 +2213,14 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(DeclKind::Trait);
 				}
 				_ => {
-					let tok = self.peek().clone();
+					let tok: Token = self.peek().clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Err(CompileError::ParseError(ParseError {
-						span: tok.span,
-						message: tok.format_error(
-							self.source,
-							&format!("unexpected token in declaration: got {:?}", tok.kind),
-						),
-					}));
+					return Err(CompileError::ParseError(ParseError::unexpected_item(
+						tok.span,
+						"declaration",
+						tok.kind,
+					)));
 				}
 			}
 		}
@@ -2078,10 +2245,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next();
 				}
 				TokenKind::Eof => {
-					return Err(CompileError::ParseError(ParseError {
-						span: self.peek().span,
-						message: "unexpected EOF while parsing attribute arguments".to_string(),
-					}));
+					return Err(CompileError::ParseError(ParseError::unexpected_eof(self.peek().span)));
 				}
 				_ => {
 					self.next();
@@ -2172,10 +2336,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				let ret: Directive = match &incl.kind {
 					TokenKind::StringLiteral(str) => Directive::Import(str.clone()),
 					_ => {
-						return Err(CompileError::ParseError(ParseError {
-							span: incl.span,
-							message: incl.format_error(self.source, "expected a string for @import"),
-						}));
+						return Err(CompileError::ParseError(ParseError::unexpected_token(
+							incl.span,
+							Expected::Token(TokenKind::StringLiteral(String::new())),
+							incl.kind,
+						)));
 					}
 				};
 				Ok(ret)
@@ -2303,11 +2468,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let err_tok: Token = tok.clone();
-				return Err(CompileError::ParseError(ParseError {
-					span: err_tok.span,
-					message: err_tok
-						.format_error(self.source, "Expected an ampersand, mut, identifier, or '(' for type"),
-				}));
+				return Err(CompileError::ParseError(ParseError::invalid_type(
+					err_tok.span,
+					"expected '&', 'mut', identifier, or '(' to start a type",
+				)));
 			}
 		}
 	}
@@ -2345,10 +2509,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			match &tok.kind {
 				TokenKind::Identifier(s) => segments.push(s.clone()),
 				_ => {
-					return Err(CompileError::parse_error(
+					return Err(CompileError::ParseError(ParseError::unexpected_token(
 						tok.span,
-						format!("expected identifier in path, got: {:?}", tok.kind),
-					));
+						Expected::Identifier,
+						tok.kind,
+					)));
 				}
 			}
 
@@ -2369,10 +2534,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			if self.peek().kind == TokenKind::LessThan {
 				self.parse_type_generics()?
 			} else {
-				return Err(CompileError::parse_error(
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					self.peek().span(),
-					"expected `<` after `::` for turbofish generics",
-				));
+					Expected::Token(TokenKind::LessThan),
+					self.peek().kind.clone(),
+				)));
 			}
 		} else {
 			Vec::new()
@@ -2404,13 +2570,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					generics.push(name);
 				}
 				_ => {
-					return Err(CompileError::ParseError(ParseError {
-						span: tok.span,
-						message: tok.format_error(
-							self.source,
-							&format!("expected identifier in generic parameters, got: {:?}", tok.kind),
-						),
-					}));
+					return Err(CompileError::ParseError(ParseError::unexpected_token(
+						tok.span,
+						Expected::Identifier,
+						tok.kind,
+					)));
 				}
 			}
 
@@ -2419,11 +2583,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			if !self.consume(&TokenKind::Comma) {
-				let tok = self.peek().clone();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected ',' or '>' in generic parameters"),
-				}));
+				let tok: Token = self.next();
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+					tok.kind,
+				)));
 			}
 
 			if self.consume_greater_than() {
@@ -2786,11 +2951,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 						name
 					} else {
-						return Err(CompileError::ParseError(ParseError {
-							span: field_tok.span,
-							message: field_tok
-								.format_error(self.source, &format!("expected identifier, got: {:?}", field_tok.kind)),
-						}));
+						return Err(CompileError::ParseError(ParseError::unexpected_token(
+							field_tok.span,
+							Expected::Identifier,
+							field_tok.kind,
+						)));
 					};
 					expr = Expr::Field {
 						base: Box::new(expr),
@@ -2974,10 +3139,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected ',' or ')' in tuple"),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
+					tok.kind,
+				)));
 			}
 
 			TokenKind::LeftBracket => {
@@ -3070,24 +3236,20 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else {
 					let tok: Token = self.next();
-					return Err(CompileError::ParseError(ParseError {
-						span: tok.span,
-						message: tok.format_error(
-							self.source,
-							&format!(
-								"Expected a loop, because only a loop can return a value, and have a label, got: {:?}",
-								tok.kind
-							),
-						),
-					}));
+					return Err(CompileError::ParseError(ParseError::unexpected_item(
+						tok.span,
+						"Expected a loop, only a loop can have a label and return a value",
+						tok.kind,
+					)));
 				}
 			}
 
 			_ => {
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected expression"),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Expression,
+					tok.kind,
+				)));
 			}
 		}
 	}
@@ -3109,10 +3271,10 @@ impl<'s, 'c> Parser<'s, 'c>
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(CompileError::ParseError(ParseError {
-								span: b.span(),
-								message: "Expected expression, block, or if statement in else branch".to_string(),
-							}));
+							return Err(CompileError::ParseError(ParseError::generic(
+								b.span(),
+								"expected expression, block, or if statement in else branch",
+							)));
 						}
 					},
 					None => None,
@@ -3135,10 +3297,10 @@ impl<'s, 'c> Parser<'s, 'c>
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(CompileError::ParseError(ParseError {
-								span: b.span(),
-								message: "Expected expression, block, or if statement in else branch".to_string(),
-							}));
+							return Err(CompileError::ParseError(ParseError::generic(
+								b.span(),
+								"expected expression, block, or if statement in else branch",
+							)));
 						}
 					},
 					None => None,
@@ -3207,11 +3369,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
 				str
 			} else {
-				return Err(CompileError::ParseError(ParseError {
-					span: name_tok.span,
-					message: name_tok
-						.format_error(self.source, &format!("expected identifier, got: {:?}", name_tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					name_tok.span,
+					Expected::Identifier,
+					name_tok.kind,
+				)));
 			};
 
 			self.expect(&TokenKind::Equals)?;
@@ -3390,10 +3552,11 @@ impl<'s, 'c> Parser<'s, 'c>
 							let field_name = if let TokenKind::Identifier(name) = self.next().kind {
 								name
 							} else {
-								return Err(CompileError::ParseError(ParseError {
-									span: self.last_span,
-									message: "expected field name in struct pattern".to_string(),
-								}));
+								return Err(CompileError::ParseError(ParseError::unexpected_token(
+									self.last_span,
+									Expected::Identifier,
+									self.peek().kind.clone(),
+								)));
 							};
 
 							let pattern: Pattern = if self.consume(&TokenKind::Equals) {
@@ -3415,10 +3578,11 @@ impl<'s, 'c> Parser<'s, 'c>
 									span: self.last_span,
 								}
 							} else {
-								return Err(CompileError::ParseError(ParseError {
-									span: self.last_span,
-									message: "expected '=' or ':' after field name in struct pattern".to_string(),
-								}));
+								return Err(CompileError::ParseError(ParseError::unexpected_token(
+									self.last_span,
+									Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
+									self.peek().kind.clone(),
+								)));
 							};
 
 							fields.push((field_name, pattern));
@@ -3440,11 +3604,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else if self.at(&TokenKind::Colon) {
 					if path.len() != 1 {
-						return Err(CompileError::ParseError(ParseError {
-							span: tok.span,
-							message: tok
-								.format_error(self.source, "binding patterns must be simple identifiers, not paths"),
-						}));
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok.span,
+							"binding patterns must be simple identifiers, not paths",
+						)));
 					}
 
 					self.next(); // :
@@ -3572,10 +3735,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			_ => {
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected pattern"),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Pattern,
+					tok.kind,
+				)));
 			}
 		}
 	}
@@ -3838,11 +4002,12 @@ impl<'s, 'c> Parser<'s, 'c>
 								tail_expr = Some(Box::new(expr));
 								break;
 							} else {
-								let tok: Token = self.peek().clone();
-								return Err(CompileError::ParseError(ParseError {
-									span: tok.span,
-									message: tok.format_error(self.source, "expected `;` or `}` after expression"),
-								}));
+								let tok: Token = self.next();
+								return Err(CompileError::ParseError(ParseError::unexpected_token(
+									tok.span,
+									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
+									tok.kind,
+								)));
 							}
 						} else if self.consume(&TokenKind::Semicolon) {
 							// TODO, check why 2 the same paths
@@ -3893,7 +4058,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_assign_op(&mut self) -> Result<AssignOp, CompileError>
 	{
-		let op = match self.peek_kind() {
+		let op: AssignOp = match self.peek_kind() {
 			TokenKind::Equals => AssignOp::Assign,
 			TokenKind::PlusEquals => AssignOp::AddAssign,
 			TokenKind::MinusEquals => AssignOp::SubAssign,
@@ -3906,11 +4071,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::LShiftEquals => AssignOp::ShlAssign,
 			TokenKind::RShiftEquals => AssignOp::ShrAssign,
 			_ => {
-				let tok = self.peek().clone();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected assignment operator"),
-				}));
+				let tok: Token = self.next();
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Description("assignment operator".to_string()),
+					tok.kind,
+				)));
 			}
 		};
 		self.next();
@@ -4068,10 +4234,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("Expected an identifier, got: {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+			)));
 		};
 
 		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
@@ -4261,10 +4428,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+			)));
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -4279,10 +4447,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Identifier,
+					tok.kind,
+				)));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -4323,10 +4492,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+			)));
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -4341,10 +4511,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Identifier,
+					tok.kind,
+				)));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -4396,10 +4567,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+			)));
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -4414,10 +4586,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Identifier,
+					tok.kind,
+				)));
 			};
 
 			let field_type: Option<Expr> = if self.at(&TokenKind::Equals) {
@@ -4455,10 +4628,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span,
-				message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+			)));
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -4473,10 +4647,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("expected identifier, got: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Identifier,
+					tok.kind,
+				)));
 			};
 
 			let field_type: Option<Type> = if self.at(&TokenKind::LeftParen) {
@@ -4602,10 +4777,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			if !self.consume(&TokenKind::Comma) {
 				let tok = self.peek().clone();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, "expected ',' or '>' in generic arguments"),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+					tok.kind,
+				)));
 			}
 
 			if self.consume_greater_than() {
@@ -4637,10 +4813,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok = self.peek().clone();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("unexpected item in impl block: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_item(
+					tok.span,
+					"impl block",
+					tok.kind,
+				)));
 			}
 		};
 
@@ -4810,10 +4987,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok: Token = self.next();
-				return Err(CompileError::ParseError(ParseError {
-					span: tok.span,
-					message: tok.format_error(self.source, &format!("unexpected item in trait block: {:?}", tok.kind)),
-				}));
+				return Err(CompileError::ParseError(ParseError::unexpected_item(
+					tok.span,
+					"trait block",
+					tok.kind,
+				)));
 			}
 		};
 
@@ -4832,10 +5010,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.parse_type()?
 		} else {
 			let tok: Token = self.next();
-			return Err(CompileError::ParseError(ParseError {
-				span: tok.span(),
-				message: tok.format_error(self.source, &format!("Expected = for type alias, got {:?}", tok.kind)),
-			}));
+			return Err(CompileError::ParseError(ParseError::unexpected_token(
+				tok.span(),
+				Expected::Token(TokenKind::Equals),
+				tok.kind,
+			)));
 		};
 
 		return Ok(TypeAliasDecl {

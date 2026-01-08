@@ -105,6 +105,7 @@
 // Allow
 #![allow(clippy::needless_return)]
 #![allow(clippy::use_self)]
+#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
 // #![allow(dead_code)]
 
 // #![warn(clippy::todo)]
@@ -151,10 +152,6 @@ impl std::error::Error for CompileError {}
 #[allow(dead_code)]
 impl CompileError
 {
-	fn parse_error(span: Span, msg: impl Into<String>) -> Self
-	{
-		return CompileError::ParseError(ParseError::from_span(span, msg.into()));
-	}
 	fn desugar_error(span: Span, msg: impl Into<String>) -> Self
 	{
 		return CompileError::DesugarError(DesugarError::from_span(span, msg.into()));
