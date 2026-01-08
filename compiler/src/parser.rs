@@ -593,6 +593,11 @@ pub enum TypeCore
 	},
 
 	Tuple(Vec<Type>),
+
+	ImplTrait
+	{
+		bounds: Vec<Path>,
+	},
 }
 
 /// Range expression representation.
@@ -1628,6 +1633,7 @@ pub struct WhereConstraint
 {
 	pub ty: Path,
 	pub bounds: Vec<Path>,
+	pub type_args: Vec<Type>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -2227,9 +2233,14 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let tok: &Token = self.peek();
 		match &tok.kind {
+			TokenKind::Impl => {
+				self.next(); // impl
+				let bounds: Vec<Path> = self.parse_trait_bounds()?;
+				return Ok(TypeCore::ImplTrait { bounds });
+			}
 			TokenKind::Identifier(_) => {
-				let path = self.get_path()?;
-				let generics = if self.at(&TokenKind::LessThan) {
+				let path: Path = self.get_path()?;
+				let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
 					self.parse_type_generics()?
 				} else {
 					Vec::new()
@@ -4582,14 +4593,26 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			let loop_span: Span = self.peek().span();
+
 			let ty: Path = self.get_path()?;
+
+			let type_args: Vec<Type> = if self.at(&TokenKind::LessThan) {
+				self.parse_type_generics()?
+			} else {
+				Vec::new()
+			};
 
 			self.expect(&TokenKind::Colon)?;
 
 			let mut bounds: Vec<Path> = Vec::new();
 
 			loop {
-				let bound: Path = self.get_path()?;
+				let mut bound: Path = self.get_path()?;
+
+				if self.at(&TokenKind::LessThan) {
+					bound.generics.extend(self.parse_type_generics()?);
+				}
+
 				bounds.push(bound);
 
 				if !self.consume(&TokenKind::Plus) {
@@ -4599,6 +4622,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			constraints.push(WhereConstraint {
 				ty,
+				type_args,
 				bounds,
 				span: loop_span.merge(&self.last_span),
 			});
@@ -5052,6 +5076,16 @@ impl fmt::Display for TypeCore
 					write!(f, "{}", ty)?;
 				}
 				return write!(f, ")");
+			}
+			TypeCore::ImplTrait { bounds } => {
+				write!(f, "impl ")?;
+				for (i, bound) in bounds.iter().enumerate() {
+					if i > 0 {
+						write!(f, " + ")?;
+					}
+					write!(f, "{}", bound)?;
+				}
+				return Ok(());
 			}
 		}
 	}
@@ -5900,7 +5934,20 @@ impl fmt::Display for WhereConstraint
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		write!(f, "{}: ", self.ty)?;
+		write!(f, "{}", self.ty)?;
+
+		if !self.type_args.is_empty() {
+			write!(f, "<")?;
+			for (i, arg) in self.type_args.iter().enumerate() {
+				if i > 0 {
+					write!(f, ", ")?;
+				}
+				write!(f, "{}", arg)?;
+			}
+			write!(f, ">")?;
+		}
+
+		write!(f, ": ")?;
 		for (i, bound) in self.bounds.iter().enumerate() {
 			if i > 0 {
 				write!(f, " + ")?;
@@ -9516,6 +9563,57 @@ mod parser_tests
 	{
 		let input = "fn main(){;;;;;;}";
 		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_trait_type()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "impl Clone");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::ImplTrait { bounds } => {
+				assert_eq!(bounds.len(), 1);
+				assert_eq!(bounds[0], Path::simple(vec!["Clone".to_string()], Default::default()));
+			}
+			_ => panic!("Expected impl trait type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_impl_trait_multiple_bounds()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "impl Clone + Debug");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::ImplTrait { bounds } => {
+				assert_eq!(bounds.len(), 2);
+			}
+			_ => panic!("Expected impl trait type with multiple bounds"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_returning_impl_trait()
+	{
+		let input = "fn create() -> impl Iterator { }";
+		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_trait_reference()
+	{
+		let config = Config::default();
+		let lexer = Lexer::new(&config, "&impl Clone");
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 	}
 }
