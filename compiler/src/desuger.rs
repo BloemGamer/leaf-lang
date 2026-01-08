@@ -1,12 +1,10 @@
-// Complete implementation (without tests) - corrected with CompileError propagation
-
 use crate::{
 	CompileError,
 	lexer::{self, ErrorFromSpan, Span},
 	parser::{
 		ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
-		Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
-		VariableDecl,
+		Path, Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type,
+		TypeCore, VariableDecl,
 	},
 };
 
@@ -325,7 +323,7 @@ impl Desugarer
 	fn desugar_for_loop(
 		&mut self,
 		label: Option<String>,
-		name: Vec<Ident>,
+		name: Path,
 		iter: Expr,
 		body: Block,
 		span: Span,
@@ -339,13 +337,13 @@ impl Desugarer
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body)?;
 
-		let name_pattern: Pattern = if name.len() == 1 {
+		let name_pattern: Pattern = if name.segments.len() == 1 {
 			Pattern::TypedIdentifier {
-				name: name[0].clone(),
+				path: Path::simple(vec![name.segments[0].clone()], Span::default()),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: vec!["_".to_string()],
+						path: Path::simple(vec!["_".to_string()], Span::default()),
 						generics: vec![],
 					}),
 					span: Span::default(),
@@ -363,11 +361,11 @@ impl Desugarer
 
 		let iter_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				name: iter_temp.clone(),
+				path: Path::simple(vec![iter_temp.clone()], Span::default()),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: vec!["_".to_string()],
+						path: Path::simple(vec!["_".to_string()], Span::default()),
 						generics: vec![],
 					}),
 					span: Span::default(),
@@ -383,7 +381,7 @@ impl Desugarer
 		let next_call: Expr = Expr::Call {
 			callee: Box::new(Expr::Field {
 				base: Box::new(Expr::Identifier {
-					path: vec![iter_temp],
+					path: Path::simple(vec![iter_temp], Span::default()),
 					span: Span::default(),
 				}),
 				name: "next".to_string(),
@@ -395,7 +393,7 @@ impl Desugarer
 
 		let some_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
-				path: vec!["Some".to_string()],
+				path: Path::simple(vec!["Some".to_string()], Span::default()),
 				args: vec![name_pattern],
 				span: Span::default(),
 			},
@@ -405,7 +403,7 @@ impl Desugarer
 
 		let none_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
-				path: vec!["None".to_string()],
+				path: Path::simple(vec!["None".to_string()], Span::default()),
 				args: vec![],
 				span: Span::default(),
 			},
@@ -463,11 +461,11 @@ impl Desugarer
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				name: temp_var.clone(),
+				path: Path::simple(vec![temp_var.clone()], Span::default()),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: vec!["_".to_string()],
+						path: Path::simple(vec!["_".to_string()], Span::default()),
 						generics: vec![],
 					}),
 					span: Span::default(),
@@ -509,7 +507,7 @@ impl Desugarer
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: vec![temp_var],
+				path: Path::simple(vec![temp_var], Span::default()),
 				span: Span::default(),
 			}),
 			arms: vec![match_arm, else_arm],
@@ -542,11 +540,11 @@ impl Desugarer
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				name: temp_var.clone(),
+				path: Path::simple(vec![temp_var.clone()], Span::default()),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: vec!["_".to_string()],
+						path: Path::simple(vec!["_".to_string()], Span::default()),
 						generics: vec![],
 					}),
 					span: Span::default(),
@@ -581,7 +579,7 @@ impl Desugarer
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: vec![temp_var],
+				path: Path::simple(vec![temp_var], Span::default()),
 				span: Span::default(),
 			}),
 			arms: vec![match_arm, break_arm],
@@ -618,9 +616,9 @@ impl Desugarer
 		{
 			var.init = Some(self.type_to_constructor_call(ty)?);
 
-			if let Pattern::TypedIdentifier { name, ty, span, .. } = var.pattern.clone() {
+			if let Pattern::TypedIdentifier { path, ty, span, .. } = var.pattern.clone() {
 				var.pattern = Pattern::TypedIdentifier {
-					name,
+					path,
 					ty,
 					call_constructor: false,
 					span,
@@ -773,11 +771,11 @@ impl Desugarer
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				name: temp_var.clone(),
+				path: Path::simple(vec![temp_var.clone()], Span::default()),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: vec!["_".to_string()],
+						path: Path::simple(vec!["_".to_string()], Span::default()),
 						generics: vec![],
 					}),
 					span: Span::default(),
@@ -824,7 +822,7 @@ impl Desugarer
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: vec![temp_var],
+				path: Path::simple(vec![temp_var], Span::default()),
 				span: Span::default(),
 			}),
 			arms: vec![match_arm, else_arm],
@@ -840,7 +838,7 @@ impl Desugarer
 
 	fn type_to_constructor_call(&self, ty: &Type) -> Result<Expr, CompileError>
 	{
-		let path = match ty.core.as_ref() {
+		let mut path = match ty.core.as_ref() {
 			TypeCore::Base { path, .. } => path.clone(),
 			_ => {
 				return Err(CompileError::desugar_error(
@@ -850,15 +848,11 @@ impl Desugarer
 			}
 		};
 
+		// Add "new" to the path segments
+		path.segments.push("new".to_string());
+
 		return Ok(Expr::Call {
-			callee: Box::new(Expr::Identifier {
-				path: {
-					let mut full_path: Vec<Ident> = path;
-					full_path.push("new".to_string());
-					full_path
-				},
-				span: ty.span,
-			}),
+			callee: Box::new(Expr::Identifier { path, span: ty.span }),
 			args: vec![],
 			span: ty.span,
 		});
@@ -903,12 +897,12 @@ impl Desugarer
 			Pattern::Wildcard { span } => Pattern::Wildcard { span },
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
 			Pattern::TypedIdentifier {
-				name,
+				path,
 				ty,
 				call_constructor,
 				span,
 			} => Pattern::TypedIdentifier {
-				name,
+				path,
 				ty,
 				call_constructor,
 				span,
@@ -975,18 +969,17 @@ impl Desugarer
 	}
 }
 
-// NOTE: Tests should be added after this with .unwrap() added to all desugar calls
 #[cfg(test)]
 mod tests
 {
 	use super::*;
-	use crate::parser::{AssignOp, BinaryOp, FunctionSignature, ImplTarget, Literal, UnaryOp};
+	use crate::parser::{AssignOp, BinaryOp, FunctionSignature, ImplTarget, Literal, Path, UnaryOp};
 
 	// Helper to create a simple identifier expression
 	fn ident(name: &str) -> Expr
 	{
 		return Expr::Identifier {
-			path: vec![name.to_string()],
+			path: Path::simple(vec![name.to_string()], Span::default()),
 			span: Span::default(),
 		};
 	}
@@ -1015,7 +1008,7 @@ mod tests
 		return Type {
 			modifiers: vec![],
 			core: Box::new(TypeCore::Base {
-				path: vec![name.to_string()],
+				path: Path::simple(vec![name.to_string()], Span::default()),
 				generics: vec![],
 			}),
 			span: Span::default(),
@@ -1026,7 +1019,7 @@ mod tests
 	fn typed_ident_pattern(name: &str, type_name: &str) -> Pattern
 	{
 		return Pattern::TypedIdentifier {
-			name: name.to_string(),
+			path: Path::simple(vec![name.to_string()], Span::default()),
 			ty: simple_type(type_name),
 			call_constructor: false,
 			span: Span::default(),
@@ -1239,12 +1232,12 @@ mod tests
 			pattern: Pattern::Or {
 				patterns: vec![
 					Pattern::Variant {
-						path: vec!["Some".into()],
+						path: Path::simple(vec!["Some".into()], Span::default()),
 						args: vec![Pattern::Wildcard { span: Span::default() }],
 						span: Span::default(),
 					},
 					Pattern::Variant {
-						path: vec!["None".into()],
+						path: Path::simple(vec!["None".into()], Span::default()),
 						args: vec![],
 						span: Span::default(),
 					},
@@ -1276,7 +1269,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: vec!["x".into()],
+			name: Path::simple(vec!["x".into()], Span::default()),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -1358,7 +1351,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: vec!["x".into(), "y".into()],
+			name: Path::simple(vec!["x".into(), "y".into()], Span::default()),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -1461,7 +1454,7 @@ mod tests
 			pattern: Pattern::Tuple {
 				patterns: vec![
 					Pattern::Variant {
-						path: vec!["Some".into()],
+						path: Path::simple(vec!["Some".into()], Span::default()),
 						args: vec![Pattern::Wildcard { span: Span::default() }],
 						span: Span::default(),
 					},
@@ -1525,12 +1518,12 @@ mod tests
 
 		let ns = NamespaceDecl {
 			modifiers: vec![],
-			name: vec!["test".into()],
+			name: Path::simple(vec!["test".into()], Span::default()),
 			body: Program {
 				items: vec![TopLevelDecl::Function(FunctionDecl {
 					signature: FunctionSignature {
 						modifiers: vec![],
-						name: vec!["foo".into()],
+						name: Path::simple(vec!["foo".into()], Span::default()),
 						generics: vec![],
 						params: vec![],
 						return_type: None,
@@ -1541,7 +1534,7 @@ mod tests
 					body: Some(Block {
 						stmts: vec![Stmt::For {
 							label: None,
-							name: vec!["i".into()],
+							name: Path::simple(vec!["i".into()], Span::default()),
 							iter: ident("items"),
 							body: Block {
 								stmts: vec![],
@@ -1582,7 +1575,7 @@ mod tests
 			modifiers: vec![],
 			generics: vec![],
 			target: ImplTarget {
-				path: vec!["MyType".into()],
+				path: Path::simple(vec!["MyType".into()], Span::default()),
 				generics: vec![],
 				span: Span::default(),
 			},
@@ -1591,7 +1584,7 @@ mod tests
 			body: vec![ImplItem::Function(FunctionDecl {
 				signature: FunctionSignature {
 					modifiers: vec![],
-					name: vec!["method".into()],
+					name: Path::simple(vec!["method".into()], Span::default()),
 					generics: vec![],
 					params: vec![],
 					return_type: None,
@@ -1632,13 +1625,13 @@ mod tests
 
 		let trait_decl = TraitDecl {
 			modifiers: vec![],
-			name: vec!["MyTrait".into()],
+			name: Path::simple(vec!["MyTrait".into()], Span::default()),
 			generics: vec![],
 			super_traits: vec![],
 			items: vec![TraitItem::Function {
 				signature: FunctionSignature {
 					modifiers: vec![],
-					name: vec!["method".into()],
+					name: Path::simple(vec!["method".into()], Span::default()),
 					generics: vec![],
 					params: vec![],
 					return_type: None,
@@ -1649,7 +1642,7 @@ mod tests
 				body: Some(Block {
 					stmts: vec![Stmt::For {
 						label: None,
-						name: vec!["i".into()],
+						name: Path::simple(vec!["i".into()], Span::default()),
 						iter: ident("items"),
 						body: Block {
 							stmts: vec![],
@@ -1741,7 +1734,7 @@ mod tests
 			then_block: Block {
 				stmts: vec![Stmt::For {
 					label: None,
-					name: vec!["x".into()],
+					name: Path::simple(vec!["x".into()], Span::default()),
 					iter: ident("items"),
 					body: Block {
 						stmts: vec![],
@@ -1858,7 +1851,7 @@ mod tests
 		let stmt = Stmt::Unsafe(Block {
 			stmts: vec![Stmt::For {
 				label: None,
-				name: vec!["i".into()],
+				name: Path::simple(vec!["i".into()], Span::default()),
 				iter: ident("range"),
 				body: Block {
 					stmts: vec![],
@@ -1918,7 +1911,7 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let expr = Expr::StructInit {
-			path: vec!["Point".into()],
+			path: Path::simple(vec!["Point".into()], Span::default()),
 			fields: vec![
 				(
 					"x".into(),
@@ -1957,7 +1950,7 @@ mod tests
 				body: SwitchBody::Block(Block {
 					stmts: vec![Stmt::For {
 						label: None,
-						name: vec!["i".into()],
+						name: Path::simple(vec!["i".into()], Span::default()),
 						iter: ident("items"),
 						body: Block {
 							stmts: vec![],
@@ -2199,7 +2192,7 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let pattern = Pattern::Variant {
-			path: vec!["Some".into()],
+			path: Path::simple(vec!["Some".into()], Span::default()),
 			args: vec![Pattern::Tuple {
 				patterns: vec![
 					Pattern::Wildcard { span: Span::default() },
@@ -2231,12 +2224,12 @@ mod tests
 		let pattern = Pattern::Or {
 			patterns: vec![
 				Pattern::Variant {
-					path: vec!["Some".into()],
+					path: Path::simple(vec!["Some".into()], Span::default()),
 					args: vec![Pattern::Wildcard { span: Span::default() }],
 					span: Span::default(),
 				},
 				Pattern::Variant {
-					path: vec!["None".into()],
+					path: Path::simple(vec!["None".into()], Span::default()),
 					args: vec![],
 					span: Span::default(),
 				},
@@ -2265,7 +2258,7 @@ mod tests
 			stmts: vec![
 				Stmt::For {
 					label: None,
-					name: vec!["i".into()],
+					name: Path::simple(vec!["i".into()], Span::default()),
 					iter: ident("range1"),
 					body: Block {
 						stmts: vec![],
@@ -2276,7 +2269,7 @@ mod tests
 				},
 				Stmt::For {
 					label: None,
-					name: vec!["j".into()],
+					name: Path::simple(vec!["j".into()], Span::default()),
 					iter: ident("range2"),
 					body: Block {
 						stmts: vec![],
@@ -2352,7 +2345,7 @@ mod tests
 
 		let stmt = Stmt::IfVar {
 			pattern: Pattern::Struct {
-				path: vec!["Point".into()],
+				path: Path::simple(vec!["Point".into()], Span::default()),
 				fields: vec![("x".into(), typed_ident_pattern("x_val", "i32"))],
 				span: Span::default(),
 			},
@@ -2386,7 +2379,7 @@ mod tests
 		let stmt = Stmt::WhileVarLoop {
 			label: None,
 			pattern: Pattern::Variant {
-				path: vec!["Ok".into()],
+				path: Path::simple(vec!["Ok".into()], Span::default()),
 				args: vec![Pattern::Tuple {
 					patterns: vec![
 						Pattern::Wildcard { span: Span::default() },
@@ -2424,7 +2417,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: Some("outer".into()),
-			name: vec!["x".into()],
+			name: Path::simple(vec!["x".into()], Span::default()),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -2557,7 +2550,7 @@ mod tests
 
 		let expr = Expr::IfVar {
 			pattern: Pattern::Variant {
-				path: vec!["Some".into()],
+				path: Path::simple(vec!["Some".into()], Span::default()),
 				args: vec![typed_ident_pattern("x", "i32")],
 				span: Span::default(),
 			},
@@ -2624,7 +2617,7 @@ mod tests
 		let expr = Expr::UnsafeBlock(Box::new(Block {
 			stmts: vec![Stmt::For {
 				label: None,
-				name: vec!["i".into()],
+				name: Path::simple(vec!["i".into()], Span::default()),
 				iter: ident("range"),
 				body: Block {
 					stmts: vec![],
@@ -2900,7 +2893,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: vec!["x".into()],
+			name: Path::simple(vec!["x".into()], Span::default()),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![Stmt::Break {
@@ -3017,7 +3010,7 @@ mod tests
 		let func1 = FunctionDecl {
 			signature: FunctionSignature {
 				modifiers: vec![],
-				name: vec!["func1".into()],
+				name: Path::simple(vec!["func1".into()], Span::default()),
 				generics: vec![],
 				params: vec![],
 				return_type: None,
@@ -3044,7 +3037,7 @@ mod tests
 		let func2 = FunctionDecl {
 			signature: FunctionSignature {
 				modifiers: vec![],
-				name: vec!["func2".into()],
+				name: Path::simple(vec!["func2".into()], Span::default()),
 				generics: vec![],
 				params: vec![],
 				return_type: None,
@@ -3089,11 +3082,11 @@ mod tests
 
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "x".to_string(),
+					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: Type {
 						modifiers: vec![],
 						core: Box::new(TypeCore::Base {
-							path: vec!["Point".to_string()],
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
 							generics: vec![],
 						}),
 						span: Span::default(),
@@ -3116,7 +3109,7 @@ mod tests
 				Expr::Call { callee, args, .. } => {
 					match *callee {
 						Expr::Identifier { path, .. } => {
-							assert_eq!(path, vec!["Point", "new"]);
+							assert_eq!(path.segments, vec!["Point", "new"]);
 						}
 						_ => panic!("Expected identifier in callee"),
 					}
@@ -3142,7 +3135,7 @@ mod tests
 			// If there's already an initializer, call_constructor should be ignored
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "x".to_string(),
+					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: simple_type("Point"),
 					call_constructor: true,
 					span: Span::default(),
@@ -3176,15 +3169,15 @@ mod tests
 
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "vec".to_string(),
+					path: Path::simple(vec!["vec".to_string()], Span::default()),
 					ty: Type {
 						modifiers: vec![],
 						core: Box::new(TypeCore::Base {
-							path: vec!["Vec".to_string()],
+							path: Path::simple(vec!["Vec".to_string()], Span::default()),
 							generics: vec![Type {
 								modifiers: vec![],
 								core: Box::new(TypeCore::Base {
-									path: vec!["i32".to_string()],
+									path: Path::simple(vec!["i32".to_string()], Span::default()),
 									generics: vec![],
 								}),
 								span: Span::default(),
@@ -3209,7 +3202,7 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path, vec!["Vec", "new"]);
+						assert_eq!(path.segments, vec!["Vec", "new"]);
 					}
 					_ => panic!("Expected Vec::new identifier"),
 				},
@@ -3224,7 +3217,7 @@ mod tests
 
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "CONFIG".to_string(),
+					path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
 					ty: simple_type("Config"),
 					call_constructor: true,
 					span: Span::default(),
@@ -3243,7 +3236,7 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path, vec!["Config", "new"]);
+						assert_eq!(path.segments, vec!["Config", "new"]);
 					}
 					_ => panic!("Expected Config::new identifier"),
 				},
@@ -3258,11 +3251,14 @@ mod tests
 
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "cfg".to_string(),
+					path: Path::simple(vec!["cfg".to_string()], Span::default()),
 					ty: Type {
 						modifiers: vec![],
 						core: Box::new(TypeCore::Base {
-							path: vec!["std".to_string(), "config".to_string(), "Config".to_string()],
+							path: Path::simple(
+								vec!["std".to_string(), "config".to_string(), "Config".to_string()],
+								Span::default(),
+							),
 							generics: vec![],
 						}),
 						span: Span::default(),
@@ -3283,7 +3279,7 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path, vec!["std", "config", "Config", "new"]);
+						assert_eq!(path.segments, vec!["std", "config", "Config", "new"]);
 					}
 					_ => panic!("Expected qualified path"),
 				},
@@ -3299,7 +3295,7 @@ mod tests
 			// Normal variable without constructor syntax
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "x".to_string(),
+					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: simple_type("i32"),
 					call_constructor: false,
 					span: Span::default(),
@@ -3332,7 +3328,7 @@ mod tests
 				items: vec![
 					TopLevelDecl::VariableDecl(VariableDecl {
 						pattern: Pattern::TypedIdentifier {
-							name: "a".to_string(),
+							path: Path::simple(vec!["a".to_string()], Span::default()),
 							ty: simple_type("Point"),
 							call_constructor: true,
 							span: Span::default(),
@@ -3343,7 +3339,7 @@ mod tests
 					}),
 					TopLevelDecl::VariableDecl(VariableDecl {
 						pattern: Pattern::TypedIdentifier {
-							name: "b".to_string(),
+							path: Path::simple(vec!["b".to_string()], Span::default()),
 							ty: simple_type("Config"),
 							call_constructor: true,
 							span: Span::default(),
@@ -3385,7 +3381,7 @@ mod tests
 			let func = FunctionDecl {
 				signature: FunctionSignature {
 					modifiers: vec![],
-					name: vec!["test".into()],
+					name: Path::simple(vec!["test".into()], Span::default()),
 					generics: vec![],
 					params: vec![],
 					return_type: None,
@@ -3396,7 +3392,7 @@ mod tests
 				body: Some(Block {
 					stmts: vec![Stmt::VariableDecl(VariableDecl {
 						pattern: Pattern::TypedIdentifier {
-							name: "local".to_string(),
+							path: Path::simple(vec!["local".to_string()], Span::default()),
 							ty: simple_type("LocalType"),
 							call_constructor: true,
 							span: Span::default(),
@@ -3423,7 +3419,7 @@ mod tests
 					match &var.init {
 						Some(Expr::Call { callee, .. }) => match callee.as_ref() {
 							Expr::Identifier { path, .. } => {
-								assert_eq!(path, &vec!["LocalType", "new"]);
+								assert_eq!(path.segments, vec!["LocalType", "new"]);
 							}
 							_ => panic!("Expected identifier callee"),
 						},
@@ -3442,11 +3438,11 @@ mod tests
 			let original_ty = Type {
 				modifiers: vec![],
 				core: Box::new(TypeCore::Base {
-					path: vec!["MyType".to_string()],
+					path: Path::simple(vec!["MyType".to_string()], Span::default()),
 					generics: vec![Type {
 						modifiers: vec![],
 						core: Box::new(TypeCore::Base {
-							path: vec!["String".to_string()],
+							path: Path::simple(vec!["String".to_string()], Span::default()),
 							generics: vec![],
 						}),
 						span: Span::default(),
@@ -3457,7 +3453,7 @@ mod tests
 
 			let var = VariableDecl {
 				pattern: Pattern::TypedIdentifier {
-					name: "x".to_string(),
+					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: original_ty,
 					call_constructor: true,
 					span: Span::default(),
@@ -3477,7 +3473,7 @@ mod tests
 					// Type should be preserved
 					match ty.core.as_ref() {
 						TypeCore::Base { path, generics } => {
-							assert_eq!(path, &vec!["MyType"]);
+							assert_eq!(path.segments, vec!["MyType"]);
 							assert_eq!(generics.len(), 1);
 						}
 						_ => panic!("Expected base type"),

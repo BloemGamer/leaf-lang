@@ -1,5 +1,7 @@
 use std::{convert::TryFrom, iter::Peekable};
 
+use ignorable::PartialEq;
+
 use crate::{
 	CompileError, Config,
 	lexer::{self, ErrorFromSpan, Lexer, Span, Token, TokenKind},
@@ -104,10 +106,11 @@ impl Spanned for Token
 /// # Fields
 /// * `items` - List of top-level declarations (functions, structs, traits, etc.)
 /// * `span` - Source location of the entire program
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Program
 {
 	pub items: Vec<TopLevelDecl>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -221,7 +224,7 @@ pub type TopLevelBlock = Program;
 /// * `Namespace` - Namespace/module declaration
 /// * `Impl` - Implementation block
 /// * `Directive` - Compiler directive
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopLevelDecl
 {
 	Function(FunctionDecl),
@@ -289,7 +292,7 @@ enum DeclKind
 /// * `Const` - Constant function (not used for variables)
 /// * `Volatile` - Volatile memory access
 /// * `Directive` - Custom compiler directive
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Modifier
 {
 	Pub,
@@ -309,11 +312,11 @@ pub enum Modifier
 /// * `Import` - Import a file: `@import "file.rs"`
 /// * `Use` - Use a module path: `@use std::vec`
 /// * `Custom` - Custom directive with name and arguments
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Directive
 {
 	Import(String),
-	Use(Vec<Ident>),
+	Use(Path),
 	Custom
 	{
 		name: Ident,
@@ -329,11 +332,12 @@ pub enum Directive
 /// * `directive` - The directive itself
 /// * `body` - Optional block content associated with the directive
 /// * `span` - Source location of the directive
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DirectiveNode
 {
 	pub directive: Directive,
 	pub body: Option<BlockContent>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -345,6 +349,102 @@ impl Spanned for DirectiveNode
 	}
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Path
+{
+	pub segments: Vec<Ident>,
+	pub generics: Vec<Type>,
+	#[allow(dead_code)]
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Path
+{
+	#[allow(dead_code)]
+	pub const fn simple(segments: Vec<Ident>, span: Span) -> Self
+	{
+		return Self {
+			segments,
+			generics: Vec::new(),
+			span,
+		};
+	}
+
+	#[allow(dead_code)]
+	pub const fn has_generics(&self) -> bool
+	{
+		return !self.generics.is_empty();
+	}
+
+	#[allow(dead_code)]
+	pub const fn is_empty(&self) -> bool
+	{
+		return !(self.segments.is_empty() && self.generics.is_empty());
+	}
+
+	#[allow(dead_code)]
+	pub const fn len(&self) -> usize
+	{
+		return self.segments.len() + self.generics.len();
+	}
+}
+
+#[allow(dead_code)]
+pub enum PathComponent<'a>
+{
+	Segment(&'a Ident),
+	Generic(&'a Type),
+}
+
+pub struct PathIter<'a>
+{
+	segments: std::slice::Iter<'a, Ident>,
+	generics: std::slice::Iter<'a, Type>,
+}
+
+impl<'a> Iterator for PathIter<'a>
+{
+	type Item = PathComponent<'a>;
+
+	fn next(&mut self) -> Option<Self::Item>
+	{
+		if let Some(segment) = self.segments.next() {
+			return Some(PathComponent::Segment(segment));
+		} else {
+			return self
+				.generics
+				.next()
+				.map(|generic| -> PathComponent<'_> { return PathComponent::Generic(generic) });
+		}
+	}
+
+	fn size_hint(&self) -> (usize, Option<usize>)
+	{
+		let len = self.segments.len() + self.generics.len();
+		return (len, Some(len));
+	}
+}
+
+impl<'a> ExactSizeIterator for PathIter<'a>
+{
+	fn len(&self) -> usize
+	{
+		return self.segments.len() + self.generics.len();
+	}
+}
+
+impl Path
+{
+	#[allow(dead_code)]
+	pub fn iter(&'_ self) -> PathIter<'_>
+	{
+		return PathIter {
+			segments: self.segments.iter(),
+			generics: self.generics.iter(),
+		};
+	}
+}
 /// Function declaration.
 ///
 /// Represents a complete function including its signature and optional body.
@@ -354,11 +454,12 @@ impl Spanned for DirectiveNode
 /// * `signature` - Function signature (name, parameters, return type, etc.)
 /// * `body` - Optional function body (None for prototypes)
 /// * `span` - Source location of the function
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDecl
 {
 	pub signature: FunctionSignature,
 	pub body: Option<Block>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -383,16 +484,17 @@ impl Spanned for FunctionDecl
 /// * `where_clause` - Generic constraints
 /// * `heap_func` - Whether this is a heap-allocated function (`fn!`)
 /// * `span` - Source location of the signature
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionSignature
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub generics: Vec<Ident>,
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub heap_func: bool,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -412,11 +514,12 @@ impl Spanned for FunctionSignature
 /// * `ty` - Parameter type
 /// * `name` - Parameter name (can be qualified path)
 /// * `span` - Source location of the parameter
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Param
 {
 	pub ty: Type,
-	pub name: Vec<Ident>,
+	pub name: Path,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -436,11 +539,12 @@ impl Spanned for Param
 /// * `modifiers` - Type modifiers (const, volatile, etc.)
 /// * `core` - The core type expression
 /// * `span` - Source location of the type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Type
 {
 	pub modifiers: Vec<Modifier>,
 	pub core: Box<TypeCore>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -462,12 +566,12 @@ impl Spanned for Type
 /// * `Pointer` - Raw pointer type (`T*`)
 /// * `Array` - Array type (`T[?]`)
 /// * `Tuple` - Tuple type (`(T1, T2, ...)`)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeCore
 {
 	Base
 	{
-		path: Vec<Ident>,
+		path: Path,
 		generics: Vec<Type>,
 	},
 
@@ -500,12 +604,13 @@ pub enum TypeCore
 /// * `end` - Optional end of range
 /// * `inclusive` - Whether the range is inclusive (`..=`) or exclusive (`..`)
 /// * `span` - Source location of the range
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RangeExpr
 {
 	pub start: Option<Box<Expr>>,
 	pub end: Option<Box<Expr>>,
 	pub inclusive: bool,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -541,24 +646,28 @@ impl Spanned for RangeExpr
 /// * `If` - Conditional expression
 /// * `IfVar` - Pattern matching conditional expression
 /// * `Loop` - Infinite loop expression
-#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr
 {
 	Identifier
 	{
-		path: Vec<Ident>,
+		path: Path,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	Literal
 	{
 		value: Literal,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	Default
 	{
 		heap_call: bool,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -566,6 +675,7 @@ pub enum Expr
 	{
 		op: UnaryOp,
 		expr: Box<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -574,6 +684,7 @@ pub enum Expr
 		op: BinaryOp,
 		lhs: Box<Expr>,
 		rhs: Box<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -581,6 +692,7 @@ pub enum Expr
 	{
 		ty: Box<Type>,
 		expr: Box<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -588,6 +700,7 @@ pub enum Expr
 	{
 		callee: Box<Expr>,
 		args: Vec<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -595,6 +708,7 @@ pub enum Expr
 	{
 		base: Box<Expr>,
 		name: Ident,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -602,6 +716,7 @@ pub enum Expr
 	{
 		base: Box<Expr>,
 		index: Box<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -610,6 +725,7 @@ pub enum Expr
 	Tuple
 	{
 		elements: Vec<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -617,8 +733,9 @@ pub enum Expr
 
 	StructInit
 	{
-		path: Vec<Ident>,
+		path: Path,
 		fields: Vec<(Ident, Expr)>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -630,6 +747,7 @@ pub enum Expr
 	{
 		expr: Box<Expr>,
 		arms: Vec<SwitchArm>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -638,6 +756,7 @@ pub enum Expr
 		cond: Box<Expr>,
 		then_block: Block,
 		else_branch: Option<Box<Expr>>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -647,6 +766,7 @@ pub enum Expr
 		expr: Box<Expr>,
 		then_block: Block,
 		else_branch: Option<Box<Expr>>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -654,6 +774,7 @@ pub enum Expr
 	{
 		label: Option<String>,
 		body: Box<Block>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 }
@@ -698,7 +819,7 @@ impl Spanned for Expr
 /// * `Bool` - Boolean literal
 /// * `String` - String literal
 /// * `Char` - Character literal
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal
 {
 	Int(i64),
@@ -715,17 +836,20 @@ pub enum Literal
 /// # Variants
 /// * `List` - Explicit element list: `[1, 2, 3]`
 /// * `Repeat` - Repeated value: `[0; 10]`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ArrayLiteral
 {
 	List
 	{
-		elements: Vec<Expr>, span: Span
+		elements: Vec<Expr>,
+		#[ignored(PartialEq)]
+		span: Span,
 	},
 	Repeat
 	{
 		value: Vec<Expr>,
 		count: Box<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 }
@@ -751,7 +875,7 @@ impl Spanned for ArrayLiteral
 /// * `Not` - Logical/bitwise NOT: `!x`
 /// * `Deref` - Pointer dereference: `*ptr`
 /// * `Addr` - Address-of operator: `&x` or `&mut x`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnaryOp
 {
 	Neg,
@@ -793,7 +917,7 @@ pub enum UnaryOp
 /// * `BitXor` - `^`
 /// * `Shl` - `<<`
 /// * `Shr` - `>>`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryOp
 {
 	LogicalOr,
@@ -832,7 +956,7 @@ pub enum BinaryOp
 /// * `XorAssign` - Bitwise XOR and assign: `^=`
 /// * `ShlAssign` - Left shift and assign: `<<=`
 /// * `ShrAssign` - Right shift and assign: `>>=`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssignOp
 {
 	Assign,
@@ -857,12 +981,13 @@ pub enum AssignOp
 /// * `init` - Optional initializer expression
 /// * `comp_const` - Whether this is a compile-time constant (`const` vs `var`)
 /// * `span` - Source location of the declaration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VariableDecl
 {
 	pub pattern: Pattern,
 	pub init: Option<Expr>,
 	pub comp_const: bool,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -895,7 +1020,7 @@ impl Spanned for VariableDecl
 /// * `Unsafe` - Unsafe block
 /// * `Block` - Block statement
 /// * `Directive` - Directive statement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt
 {
 	VariableDecl(VariableDecl),
@@ -905,12 +1030,14 @@ pub enum Stmt
 		target: Expr,
 		op: AssignOp,
 		value: Expr,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	Return
 	{
 		value: Option<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -920,12 +1047,14 @@ pub enum Stmt
 	{
 		label: Option<String>,
 		value: Option<Expr>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	Continue
 	{
 		label: Option<String>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -934,6 +1063,7 @@ pub enum Stmt
 		cond: Expr,
 		then_block: Block,
 		else_branch: Option<Box<Stmt>>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -943,6 +1073,7 @@ pub enum Stmt
 		expr: Expr,
 		then_block: Block,
 		else_branch: Option<Box<Stmt>>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -951,6 +1082,7 @@ pub enum Stmt
 		label: Option<String>,
 		cond: Expr,
 		body: Block,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -958,6 +1090,7 @@ pub enum Stmt
 	{
 		label: Option<String>,
 		body: Block,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -967,21 +1100,24 @@ pub enum Stmt
 		pattern: Pattern,
 		expr: Expr,
 		body: Block,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	For
 	{
 		label: Option<String>,
-		name: Vec<Ident>,
+		name: Path,
 		iter: Expr,
 		body: Block,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
 	Delete
 	{
-		path: Vec<Ident>,
+		path: Path,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 
@@ -1051,11 +1187,12 @@ impl Stmt
 ///     x + 1  // tail expression, block evaluates to 6
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Block
 {
 	pub stmts: Vec<Stmt>,
 	pub tail_expr: Option<Box<Expr>>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1074,7 +1211,7 @@ impl Spanned for Block
 /// # Variants
 /// * `Block` - Regular block with statements
 /// * `TopLevelBlock` - Top-level declarations block
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockContent
 {
 	Block(Block),
@@ -1089,11 +1226,12 @@ pub enum BlockContent
 /// * `pattern` - Pattern to match against
 /// * `body` - Code to execute if pattern matches
 /// * `span` - Source location of the arm
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SwitchArm
 {
 	pub pattern: Pattern,
 	pub body: SwitchBody,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1112,7 +1250,7 @@ impl Spanned for SwitchArm
 /// # Variants
 /// * `Expr` - Single expression (requires comma)
 /// * `Block` - Block of statements
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum SwitchBody
 {
@@ -1144,46 +1282,53 @@ impl Spanned for SwitchBody
 /// * `Struct` - Struct pattern with field matching
 /// * `Range` - Range pattern
 /// * `Or` - Or pattern: `pat1 | pat2`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Pattern
 {
 	Wildcard
 	{
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Literal
 	{
 		value: Literal,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	TypedIdentifier
 	{
-		name: Ident,
+		path: Path,
 		ty: Type,
 		call_constructor: bool,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Variant
 	{
-		path: Vec<Ident>,
+		path: Path,
 		args: Vec<Pattern>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Tuple
 	{
 		patterns: Vec<Pattern>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Struct
 	{
-		path: Vec<Ident>,
+		path: Path,
 		fields: Vec<(Ident, Pattern)>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Range(RangeExpr),
 	Or
 	{
 		patterns: Vec<Pattern>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 }
@@ -1215,12 +1360,13 @@ impl Spanned for Pattern
 /// * `name` - Struct name (can be qualified path)
 /// * `fields` - List of (`type`, `name`, `Option<default_value>`) pairs for fields
 /// * `span` - Source location of the struct
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub fields: Vec<(Type, Ident, Option<Expr>)>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1241,12 +1387,13 @@ impl Spanned for StructDecl
 /// * `name` - Struct name (can be qualified path)
 /// * `fields` - List of (type, name) pairs for fields
 /// * `span` - Source location of the struct
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnionDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub fields: Vec<(Type, Ident)>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1267,12 +1414,13 @@ impl Spanned for UnionDecl
 /// * `name` - Enum name (can be qualified path)
 /// * `variants` - List of (name, optional value) pairs
 /// * `span` - Source location of the enum
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EnumDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub variants: Vec<(Ident, Option<Expr>)>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1293,12 +1441,13 @@ impl Spanned for EnumDecl
 /// * `name` - Variant name (can be qualified path)
 /// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) pairs for variants
 /// * `span` - Source location of the variant
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VariantDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub variants: Vec<(Option<Type>, Ident, Option<Expr>)>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1321,14 +1470,15 @@ impl Spanned for VariantDecl
 /// * `super_traits` - Traits that this trait extends
 /// * `items` - Associated items (functions, types, constants)
 /// * `span` - Source location of the trait
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TraitDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub generics: Vec<Ident>,
-	pub super_traits: Vec<Vec<Ident>>,
+	pub super_traits: Vec<Path>,
 	pub items: Vec<TraitItem>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1348,13 +1498,15 @@ impl Spanned for TraitDecl
 /// * `Function` - Method signature with optional default implementation
 /// * `TypeAlias` - Associated type
 /// * `Const` - Associated constant
-#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TraitItem
 {
 	Function
 	{
 		signature: FunctionSignature,
 		body: Option<Block>,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	TypeAlias(TypeAliasDecl),
@@ -1387,7 +1539,7 @@ impl Spanned for TraitItem
 /// * `where_clause` - Generic constraints
 /// * `body` - Implementation items
 /// * `span` - Source location of the impl
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImplDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1396,6 +1548,7 @@ pub struct ImplDecl
 	pub trait_path: Option<ImplTarget>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub body: Vec<ImplItem>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1415,11 +1568,12 @@ impl Spanned for ImplDecl
 /// * `path` - Type path
 /// * `generics` - Generic arguments
 /// * `span` - Source location of the target
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImplTarget
 {
-	pub path: Vec<Ident>,
+	pub path: Path,
 	pub generics: Vec<Type>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1439,7 +1593,8 @@ impl Spanned for ImplTarget
 /// * `Function` - Method implementation
 /// * `TypeAlias` - Associated type definition
 /// * `Const` - Associated constant definition
-#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ImplItem
 {
 	Function(FunctionDecl),
@@ -1468,11 +1623,12 @@ impl Spanned for ImplItem
 /// * `ty` - Type being constrained
 /// * `bounds` - List of trait bounds
 /// * `span` - Source location of the constraint
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WhereConstraint
 {
-	pub ty: Vec<Ident>,
-	pub bounds: Vec<Vec<Ident>>,
+	pub ty: Path,
+	pub bounds: Vec<Path>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1528,12 +1684,13 @@ impl ErrorFromSpan for ParseError
 /// * `name` - Alias name (can be qualified path)
 /// * `ty` - Type being aliased
 /// * `span` - Source location of the type alias
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypeAliasDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub ty: Type,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1554,12 +1711,13 @@ impl Spanned for TypeAliasDecl
 /// * `name` - Namespace name (can be qualified path)
 /// * `body` - Declarations within the namespace
 /// * `span` - Source location of the namespace
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NamespaceDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub name: Vec<Ident>,
+	pub name: Path,
 	pub body: TopLevelBlock,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -2155,13 +2313,15 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(base);
 	}
 
-	fn get_path(&mut self) -> Result<Vec<Ident>, CompileError>
+	fn get_path(&mut self) -> Result<Path, CompileError>
 	{
-		let mut path: Vec<Ident> = Vec::new();
+		let start_span: Span = self.peek().span();
+		let mut segments: Vec<Ident> = Vec::new();
+
 		loop {
 			let tok: Token = self.next();
 			match &tok.kind {
-				TokenKind::Identifier(s) => path.push(s.clone()),
+				TokenKind::Identifier(s) => segments.push(s.clone()),
 				_ => {
 					return Err(CompileError::ParseError(ParseError {
 						span: tok.span,
@@ -2174,11 +2334,23 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			if self.peek().kind != TokenKind::DoubleColon {
-				return Ok(path);
+				break;
 			}
 
-			self.next();
+			self.next(); // ::
 		}
+
+		let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
+			self.parse_type_generics()?
+		} else {
+			Vec::new()
+		};
+
+		return Ok(Path {
+			segments,
+			generics,
+			span: start_span.merge(&self.last_span),
+		});
 	}
 
 	fn get_generics(&mut self) -> Result<Vec<Ident>, CompileError>
@@ -2682,13 +2854,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::SelfKw => {
 				self.next();
 				return Ok(Expr::Identifier {
-					path: vec!["self".to_string()],
+					path: Path::simple(vec!["self".to_string()], tok.span()),
 					span: span.merge(&self.last_span),
 				});
 			}
 
 			TokenKind::Identifier(_) => {
-				let path: Vec<String> = self.get_path()?;
+				let path: Path = self.get_path()?;
 
 				if allow_struct_init && self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
@@ -3155,7 +3327,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Identifier(_) => {
-				let path: Vec<String> = self.get_path()?;
+				let path: Path = self.get_path()?;
 
 				if self.consume(&TokenKind::LeftParen) {
 					let mut args: Vec<Pattern> = Vec::new();
@@ -3233,7 +3405,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					};
 
 					return Ok(Pattern::TypedIdentifier {
-						name: path[0].clone(),
+						path,
 						ty,
 						call_constructor,
 						span: span.merge(&self.last_span),
@@ -3779,7 +3951,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek().span();
 		self.expect(&TokenKind::For)?;
-		let name: Vec<Ident> = self.get_path()?;
+		let name: Path = self.get_path()?;
 		self.expect(&TokenKind::In)?;
 		let iter = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
@@ -3835,7 +4007,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			false
 		};
 
-		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
@@ -3897,14 +4069,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					let mutable: bool = self.consume(&TokenKind::Mut);
 
-					self.expect(&TokenKind::SelfKw)?;
+					let self_span: Span = self.expect(&TokenKind::SelfKw)?.span();
 
 					let self_type: Type = Type {
 						modifiers: Vec::new(),
 						core: Box::new(TypeCore::Reference {
 							mutable,
 							inner: Box::new(TypeCore::Base {
-								path: vec!["Self".to_string()],
+								path: Path::simple(vec!["Self".to_string()], self_span),
 								generics: Vec::new(),
 							}),
 						}),
@@ -3913,17 +4085,17 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						name: vec!["self".to_string()],
+						name: Path::simple(vec!["self".to_string()], self_span),
 						span: loop_span.merge(&self.last_span),
 					});
 				}
 				TokenKind::SelfKw => {
-					self.next(); // self
+					let self_span: Span = self.next().span(); // self
 
 					let self_type = Type {
 						modifiers: Vec::new(),
 						core: Box::new(TypeCore::Base {
-							path: vec!["Self".to_string()],
+							path: Path::simple(vec!["Self".to_string()], self_span),
 							generics: Vec::new(),
 						}),
 						span: loop_span.merge(&self.last_span),
@@ -3931,12 +4103,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						name: vec!["self".to_string()],
+						name: Path::simple(vec!["self".to_string()], self_span),
 						span: loop_span.merge(&self.last_span),
 					});
 				}
 				_ => {
-					let name: Vec<String> = self.get_path()?;
+					let name: Path = self.get_path()?;
 
 					self.expect(&TokenKind::Colon)?;
 
@@ -4004,7 +4176,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Struct)?;
 
-		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
@@ -4066,7 +4238,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Union)?;
 
-		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
@@ -4121,7 +4293,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let span: Span = self.peek().span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Namespace)?;
-		let name: Vec<Ident> = self.get_path()?;
+		let name: Path = self.get_path()?;
 		self.expect(&TokenKind::LeftBrace)?;
 		let body: TopLevelBlock = self.parse_program()?;
 		self.expect(&TokenKind::RightBrace)?;
@@ -4139,7 +4311,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Enum)?;
 
-		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
@@ -4198,7 +4370,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Variant)?;
 
-		let name: Vec<Ident> = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next();
@@ -4313,7 +4485,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_impl_target(&mut self) -> Result<ImplTarget, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let path: Vec<Ident> = self.get_path()?;
+		let path: Path = self.get_path()?;
 
 		let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
 			self.parse_type_generics()?
@@ -4400,14 +4572,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			let loop_span: Span = self.peek().span();
-			let ty: Vec<Ident> = self.get_path()?;
+			let ty: Path = self.get_path()?;
 
 			self.expect(&TokenKind::Colon)?;
 
-			let mut bounds: Vec<Vec<Ident>> = Vec::new();
+			let mut bounds: Vec<Path> = Vec::new();
 
 			loop {
-				let bound: Vec<Ident> = self.get_path()?;
+				let bound: Path = self.get_path()?;
 				bounds.push(bound);
 
 				if !self.consume(&TokenKind::Plus) {
@@ -4458,7 +4630,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Trait)?;
 
-		let name: Vec<Ident> = self.get_path()?;
+		let name: Path = self.get_path()?;
 
 		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
 			self.get_generics()?
@@ -4466,7 +4638,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			Vec::new()
 		};
 
-		let super_traits: Vec<Vec<Ident>> = if self.consume(&TokenKind::Colon) {
+		let super_traits: Vec<Path> = if self.consume(&TokenKind::Colon) {
 			self.parse_trait_bounds()?
 		} else {
 			Vec::new()
@@ -4493,12 +4665,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_trait_bounds(&mut self) -> Result<Vec<Vec<Ident>>, CompileError>
+	fn parse_trait_bounds(&mut self) -> Result<Vec<Path>, CompileError>
 	{
-		let mut bounds: Vec<Vec<Ident>> = Vec::new();
+		let mut bounds: Vec<Path> = Vec::new();
 
 		loop {
-			let bound: Vec<Ident> = self.get_path()?;
+			let bound: Path = self.get_path()?;
 			bounds.push(bound);
 
 			if !self.consume(&TokenKind::Plus) {
@@ -4560,7 +4732,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
-		let name: Vec<String> = self.get_path()?;
+		let name: Path = self.get_path()?;
 
 		let ty: Type = if self.consume(&TokenKind::Equals) {
 			self.parse_type()?
@@ -4580,7 +4752,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_delete(&mut self) -> Result<Vec<Ident>, CompileError>
+	fn parse_delete(&mut self) -> Result<Path, CompileError>
 	{
 		self.expect(&TokenKind::Delete)?;
 
@@ -4700,6 +4872,32 @@ impl std::fmt::Display for DirectiveNode
 	}
 }
 
+impl std::fmt::Display for Path
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		for (i, segment) in self.segments.iter().enumerate() {
+			if i > 0 {
+				write!(f, "::")?;
+			}
+			write!(f, "{}", segment)?;
+		}
+
+		if !self.generics.is_empty() {
+			write!(f, "::<")?;
+			for (i, generic) in self.generics.iter().enumerate() {
+				if i > 0 {
+					write!(f, ", ")?;
+				}
+				write!(f, "{}", generic)?;
+			}
+			write!(f, ">")?;
+		}
+
+		return Ok(());
+	}
+}
+
 impl std::fmt::Display for Directive
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -4708,12 +4906,7 @@ impl std::fmt::Display for Directive
 			Directive::Import(path) => return write!(f, "@import \"{}\"", path),
 			Directive::Use(path) => {
 				write!(f, "@use ")?;
-				for (i, segment) in path.iter().enumerate() {
-					if i > 0 {
-						write!(f, "::")?;
-					}
-					write!(f, "{}", segment)?;
-				}
+				write!(f, "{}", path)?;
 				return Ok(());
 			}
 			Directive::Custom { name, args } => {
@@ -4760,7 +4953,7 @@ fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, s
 		write!(f, "!")?;
 	}
 
-	write!(f, " {}", sig.name.join("::"))?;
+	write!(f, " {}", sig.name)?;
 
 	if !sig.generics.is_empty() {
 		write!(f, "<{}>", sig.generics.join(", "))?;
@@ -4796,7 +4989,7 @@ impl fmt::Display for Param
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		return write!(f, "{}: {}", self.name.join("::"), self.ty);
+		return write!(f, "{}: {}", self.name, self.ty);
 	}
 }
 
@@ -4818,7 +5011,7 @@ impl fmt::Display for TypeCore
 	{
 		match self {
 			TypeCore::Base { path, generics } => {
-				write!(f, "{}", path.join("::"))?;
+				write!(f, "{}", path)?;
 				if !generics.is_empty() {
 					write!(f, "<")?;
 					for (i, generic) in generics.iter().enumerate() {
@@ -4880,19 +5073,19 @@ impl fmt::Display for Pattern
 			Pattern::Wildcard { .. } => return write!(f, "_"),
 			Pattern::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Pattern::TypedIdentifier {
-				name,
+				path,
 				ty,
 				call_constructor,
 				..
 			} => {
-				write!(f, "{}: {}", name, ty)?;
+				write!(f, "{}: {}", path, ty)?;
 				if *call_constructor {
 					write!(f, "()")?;
 				}
 				return Ok(());
 			}
 			Pattern::Variant { path, args, .. } => {
-				write!(f, "{}", path.join("::"))?;
+				write!(f, "{}", path)?;
 				if !args.is_empty() {
 					write!(f, "(")?;
 					for (i, arg) in args.iter().enumerate() {
@@ -4916,7 +5109,7 @@ impl fmt::Display for Pattern
 				return write!(f, ")");
 			}
 			Pattern::Struct { path, fields, .. } => {
-				write!(f, "{} {{", path.join("::"))?;
+				write!(f, "{} {{", path)?;
 				for (i, (name, pat)) in fields.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
@@ -4944,7 +5137,7 @@ impl fmt::Display for Expr
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Expr::Identifier { path, .. } => return write!(f, "{}", path.join("::")),
+			Expr::Identifier { path, .. } => return write!(f, "{}", path),
 			Expr::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Expr::Default { heap_call, .. } => return write!(f, "default{}() ", if *heap_call { "!" } else { "" }),
 			Expr::Unary { op, expr, .. } => match op {
@@ -4986,7 +5179,7 @@ impl fmt::Display for Expr
 			}
 			Expr::Array(arr) => return write!(f, "{}", arr),
 			Expr::StructInit { path, fields, .. } => {
-				write!(f, "{} {{", path.join("::"))?;
+				write!(f, "{} {{", path)?;
 				for (i, (name, expr)) in fields.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
@@ -5389,12 +5582,12 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			if let Some(lbl) = label {
 				write!(f, "'{}: ", lbl)?;
 			}
-			write!(f, "for {} in ", name.join("::"))?;
+			write!(f, "for {} in ", name)?;
 			write_expr(f, w, iter)?;
 			write!(f, " ")?;
 			return write_block(f, w, body);
 		}
-		Stmt::Delete { path, .. } => return write!(f, "delete {};", path.join("::")),
+		Stmt::Delete { path, .. } => return write!(f, "delete {};", path),
 		Stmt::Unsafe(block) => {
 			write!(f, "unsafe ")?;
 			return write_block(f, w, block);
@@ -5438,7 +5631,7 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "struct {} {{", s.name.join("::"))?;
+	writeln!(f, "struct {} {{", s.name)?;
 	w.indent();
 
 	for (ty, name, default_value) in &s.fields {
@@ -5461,7 +5654,7 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "union {} {{", u.name.join("::"))?;
+	writeln!(f, "union {} {{", u.name)?;
 	w.indent();
 
 	for (ty, name) in &u.fields {
@@ -5480,7 +5673,7 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "enum {} {{", e.name.join("::"))?;
+	writeln!(f, "enum {} {{", e.name)?;
 	w.indent();
 
 	for (name, value) in &e.variants {
@@ -5504,7 +5697,7 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "variant {} {{", v.name.join("::"))?;
+	writeln!(f, "variant {} {{", v.name)?;
 	w.indent();
 
 	for (ty, name, value) in &v.variants {
@@ -5531,7 +5724,7 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &
 		write!(f, "{} ", modifier)?;
 	}
 
-	return write!(f, "type {} = {}", t.name.join("::"), t.ty);
+	return write!(f, "type {} = {}", t.name, t.ty);
 }
 
 fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result
@@ -5540,7 +5733,7 @@ fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Na
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "namespace {} {{", n.name.join("::"))?;
+	writeln!(f, "namespace {} {{", n.name)?;
 	w.indent();
 
 	for item in &n.body.items {
@@ -5561,7 +5754,7 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 		write!(f, "{} ", modifier)?;
 	}
 
-	write!(f, "trait {}", t.name.join("::"))?;
+	write!(f, "trait {}", t.name)?;
 
 	if !t.generics.is_empty() {
 		write!(f, "<{}>", t.generics.join(", "))?;
@@ -5573,7 +5766,7 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 			if i > 0 {
 				write!(f, " + ")?;
 			}
-			write!(f, "{}", st.join("::"))?;
+			write!(f, "{}", st)?;
 		}
 	}
 
@@ -5676,7 +5869,7 @@ impl fmt::Display for ImplTarget
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		write!(f, "{}", self.path.join("::"))?;
+		write!(f, "{}", self.path)?;
 
 		if !self.generics.is_empty() {
 			write!(f, "<")?;
@@ -5697,12 +5890,12 @@ impl fmt::Display for WhereConstraint
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		write!(f, "{}: ", self.ty.join("::"))?;
+		write!(f, "{}: ", self.ty)?;
 		for (i, bound) in self.bounds.iter().enumerate() {
 			if i > 0 {
 				write!(f, " + ")?;
 			}
-			write!(f, "{}", bound.join("::"))?;
+			write!(f, "{}", bound)?;
 		}
 		return Ok(());
 	}
@@ -5833,7 +6026,8 @@ mod parser_tests
 		let result = parse_expr_from_str("variable");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Identifier { path, .. } if path == vec!["variable"] => (),
+			Expr::Identifier { path, .. } if path == Path::simple(vec!["variable".to_string()], Default::default()) => {
+			}
 			_ => panic!("Expected simple identifier"),
 		}
 	}
@@ -5844,7 +6038,12 @@ mod parser_tests
 		let result = parse_expr_from_str("std::vec::Vec");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Identifier { path, .. } if path == vec!["std", "vec", "Vec"] => (),
+			Expr::Identifier { path, .. }
+				if path
+					== Path::simple(
+						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
+						Default::default(),
+					) => {}
 			_ => panic!("Expected path identifier"),
 		}
 	}
@@ -5855,7 +6054,7 @@ mod parser_tests
 		let result = parse_expr_from_str("self");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Identifier { path, .. } if path == vec!["self"] => (),
+			Expr::Identifier { path, .. } if path == Path::simple(vec!["self".to_string()], Default::default()) => (),
 			_ => panic!("Expected self identifier"),
 		}
 	}
@@ -6099,7 +6298,8 @@ mod parser_tests
 		match result.unwrap() {
 			Expr::Cast { ty, expr, .. } => {
 				match *ty.core {
-					TypeCore::Base { ref path, .. } if path == &vec!["i32"] => (),
+					TypeCore::Base { ref path, .. }
+						if path == &Path::simple(vec!["i32".to_string()], Default::default()) => {}
 					_ => panic!("Expected i32 type"),
 				}
 				match *expr {
@@ -6174,7 +6374,8 @@ mod parser_tests
 		match result.unwrap() {
 			Expr::Call { callee, args, .. } => {
 				match *callee {
-					Expr::Identifier { ref path, .. } if path == &vec!["foo"] => (),
+					Expr::Identifier { ref path, .. }
+						if path == &Path::simple(vec!["foo".to_string()], Default::default()) => {}
 					_ => panic!("Expected foo identifier"),
 				}
 				assert_eq!(args.len(), 0);
@@ -6191,7 +6392,8 @@ mod parser_tests
 		match result.unwrap() {
 			Expr::Call { callee, args, .. } => {
 				match *callee {
-					Expr::Identifier { ref path, .. } if path == &vec!["foo"] => (),
+					Expr::Identifier { ref path, .. }
+						if path == &Path::simple(vec!["foo".to_string()], Default::default()) => {}
 					_ => panic!("Expected foo identifier"),
 				}
 				assert_eq!(args.len(), 3);
@@ -6210,7 +6412,8 @@ mod parser_tests
 		match result.unwrap() {
 			Expr::Field { base, name, .. } => {
 				match *base {
-					Expr::Identifier { ref path, .. } if path == &vec!["obj"] => (),
+					Expr::Identifier { ref path, .. }
+						if path == &Path::simple(vec!["obj".to_string()], Default::default()) => {}
 					_ => panic!("Expected obj identifier"),
 				}
 				assert_eq!(name, "field");
@@ -6250,7 +6453,8 @@ mod parser_tests
 		match result.unwrap() {
 			Expr::Index { base, index, .. } => {
 				match *base {
-					Expr::Identifier { ref path, .. } if path == &vec!["arr"] => (),
+					Expr::Identifier { ref path, .. }
+						if path == &Path::simple(vec!["arr".to_string()], Default::default()) => {}
 					_ => panic!("Expected arr identifier"),
 				}
 				match *index {
@@ -6366,7 +6570,7 @@ mod parser_tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { path, fields, .. } => {
-				assert_eq!(path, vec!["Point"]);
+				assert_eq!(path, Path::simple(vec!["Point".to_string()], Default::default()));
 				assert_eq!(fields.len(), 0);
 			}
 			_ => panic!("Expected struct init"),
@@ -6380,7 +6584,7 @@ mod parser_tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { path, fields, .. } => {
-				assert_eq!(path, vec!["Point"]);
+				assert_eq!(path, Path::simple(vec!["Point".to_string()], Default::default()));
 				assert_eq!(fields.len(), 2);
 				assert_eq!(fields[0].0, "x");
 				assert_eq!(fields[1].0, "y");
@@ -6459,7 +6663,7 @@ mod parser_tests
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
-			TypeCore::Base { path, .. } if path == &vec!["i32"] => (),
+			TypeCore::Base { path, .. } if path == &Path::simple(vec!["i32".to_string()], Default::default()) => (),
 			_ => panic!("Expected i32 type"),
 		}
 	}
@@ -6474,7 +6678,7 @@ mod parser_tests
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, generics } => {
-				assert_eq!(path, &vec!["Vec"]);
+				assert_eq!(path, &Path::simple(vec!["Vec".to_string()], Default::default()));
 				assert_eq!(generics.len(), 1);
 			}
 			_ => panic!("Expected generic type"),
@@ -6575,7 +6779,10 @@ mod parser_tests
 		assert_eq!(program.items.len(), 1);
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert_eq!(func.signature.name, vec!["foo"]);
+				assert_eq!(
+					func.signature.name,
+					Path::simple(vec!["foo".to_string()], Default::default())
+				);
 				assert_eq!(func.signature.params.len(), 0);
 				assert!(func.body.is_some());
 			}
@@ -6687,7 +6894,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
-				assert_eq!(s.name, vec!["Empty"]);
+				assert_eq!(s.name, Path::simple(vec!["Empty".to_string()], Default::default()));
 				assert_eq!(s.fields.len(), 0);
 			}
 			_ => panic!("Expected struct declaration"),
@@ -6737,7 +6944,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Union(u) => {
-				assert_eq!(u.name, vec!["Data"]);
+				assert_eq!(u.name, Path::simple(vec!["Data".to_string()], Default::default()));
 				assert_eq!(u.fields.len(), 2);
 			}
 			_ => panic!("Expected union declaration"),
@@ -6755,7 +6962,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Enum(e) => {
-				assert_eq!(e.name, vec!["Color"]);
+				assert_eq!(e.name, Path::simple(vec!["Color".to_string()], Default::default()));
 				assert_eq!(e.variants.len(), 3);
 			}
 			_ => panic!("Expected enum declaration"),
@@ -6789,7 +6996,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Variant(v) => {
-				assert_eq!(v.name, vec!["Option"]);
+				assert_eq!(v.name, Path::simple(vec!["Option".to_string()], Default::default()));
 				assert_eq!(v.variants.len(), 2);
 			}
 			_ => panic!("Expected variant declaration"),
@@ -6807,7 +7014,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::TypeAlias(t) => {
-				assert_eq!(t.name, vec!["Int"]);
+				assert_eq!(t.name, Path::simple(vec!["Int".to_string()], Default::default()));
 			}
 			_ => panic!("Expected type alias declaration"),
 		}
@@ -6824,7 +7031,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Namespace(n) => {
-				assert_eq!(n.name, vec!["std"]);
+				assert_eq!(n.name, Path::simple(vec!["std".to_string()], Default::default()));
 				assert_eq!(n.body.items.len(), 1);
 			}
 			_ => panic!("Expected namespace declaration"),
@@ -6842,7 +7049,7 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Trait(t) => {
-				assert_eq!(t.name, vec!["Display"]);
+				assert_eq!(t.name, Path::simple(vec!["Display".to_string()], Default::default()));
 				assert_eq!(t.items.len(), 1);
 			}
 			_ => panic!("Expected trait declaration"),
@@ -6890,7 +7097,10 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Impl(i) => {
-				assert_eq!(i.target.path, vec!["MyStruct"]);
+				assert_eq!(
+					i.target.path,
+					Path::simple(vec!["MyStruct".to_string()], Default::default())
+				);
 				assert!(i.trait_path.is_none());
 				assert_eq!(i.body.len(), 1);
 			}
@@ -6908,7 +7118,10 @@ mod parser_tests
 		match &program.items[0] {
 			TopLevelDecl::Impl(i) => {
 				assert!(i.trait_path.is_some());
-				assert_eq!(i.target.path, vec!["MyStruct"]);
+				assert_eq!(
+					i.target.path,
+					Path::simple(vec!["MyStruct".to_string()], Default::default())
+				);
 			}
 			_ => panic!("Expected impl declaration"),
 		}
@@ -7278,7 +7491,7 @@ mod parser_tests
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
-			Stmt::Delete { path, .. } => assert_eq!(path, &vec!["ptr"]),
+			Stmt::Delete { path, .. } => assert_eq!(path, &Path::simple(vec!["ptr".to_string()], Default::default())),
 			_ => panic!("Expected delete statement"),
 		}
 	}
@@ -7290,7 +7503,12 @@ mod parser_tests
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
-			Stmt::Delete { path, .. } => assert_eq!(path, &vec!["std", "ptr"]),
+			Stmt::Delete { path, .. } => {
+				assert_eq!(
+					path,
+					&Path::simple(vec!["std".to_string(), "ptr".to_string()], Default::default())
+				);
+			}
 			_ => panic!("Expected delete statement"),
 		}
 	}
@@ -7327,7 +7545,13 @@ mod parser_tests
 				directive: Directive::Use(path),
 				..
 			}) => {
-				assert_eq!(path, &vec!["std", "vec", "Vec"]);
+				assert_eq!(
+					path,
+					&Path::simple(
+						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
+						Default::default()
+					)
+				);
 			}
 			_ => panic!("Expected use directive"),
 		}
@@ -7491,7 +7715,7 @@ mod parser_tests
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, generics } => {
-				assert_eq!(path, &vec!["Vec"]);
+				assert_eq!(path, &Path::simple(vec!["Vec".to_string()], Default::default()));
 				assert_eq!(generics.len(), 1);
 			}
 			_ => panic!("Expected generic type"),
@@ -7524,7 +7748,13 @@ mod parser_tests
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, .. } => {
-				assert_eq!(path, &vec!["std", "vec", "Vec"]);
+				assert_eq!(
+					path,
+					&Path::simple(
+						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
+						Default::default()
+					)
+				);
 			}
 			_ => panic!("Expected qualified type"),
 		}
@@ -7898,7 +8128,10 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Namespace(n) => {
-				assert_eq!(n.name, vec!["std", "vec"]);
+				assert_eq!(
+					n.name,
+					Path::simple(vec!["std".to_string(), "vec".to_string()], Default::default())
+				);
 			}
 			_ => panic!("Expected namespace"),
 		}
@@ -7967,7 +8200,10 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert_eq!(func.signature.params[0].name, vec!["ns", "name"]);
+				assert_eq!(
+					func.signature.params[0].name,
+					Path::simple(vec!["ns".to_string(), "name".to_string()], Default::default())
+				);
 			}
 			_ => panic!("Expected function"),
 		}
@@ -8054,7 +8290,10 @@ mod parser_tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
-				assert_eq!(s.name, vec!["ns", "Name"]);
+				assert_eq!(
+					s.name,
+					Path::simple(vec!["ns".to_string(), "Name".to_string()], Default::default())
+				);
 			}
 			_ => panic!("Expected struct"),
 		}
