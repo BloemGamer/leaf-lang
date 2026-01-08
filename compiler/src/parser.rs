@@ -519,6 +519,7 @@ pub struct Param
 {
 	pub ty: Type,
 	pub name: Path,
+	pub mutable: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -578,6 +579,11 @@ pub enum TypeCore
 	Reference
 	{
 		mutable: bool,
+		inner: Box<TypeCore>,
+	},
+
+	Mutable
+	{
 		inner: Box<TypeCore>,
 	},
 
@@ -2237,6 +2243,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				self.next(); // impl
 				let bounds: Vec<Path> = self.parse_trait_bounds()?;
 				return Ok(TypeCore::ImplTrait { bounds });
+			}
+			TokenKind::Mut => {
+				self.next(); // mut
+				let inner = Box::new(self.parse_type_core()?);
+				return Ok(TypeCore::Mutable { inner });
 			}
 			TokenKind::Identifier(_) => {
 				let path: Path = self.get_path()?;
@@ -4131,6 +4142,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
+						mutable,
 						name: Path::simple(vec!["self".to_string()], self_span),
 						span: loop_span.merge(&self.last_span),
 					});
@@ -4149,10 +4161,32 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
+						mutable: false,
 						name: Path::simple(vec!["self".to_string()], self_span),
 						span: loop_span.merge(&self.last_span),
 					});
 				}
+				TokenKind::Mut => {
+					let self_span: Span = self.next().span(); // mut
+					self.expect(&TokenKind::SelfKw)?;
+
+					let self_type = Type {
+						modifiers: Vec::new(),
+						core: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Self".to_string()], self_span),
+							generics: Vec::new(),
+						}),
+						span: loop_span.merge(&self.last_span),
+					};
+
+					params.push(Param {
+						ty: self_type,
+						mutable: false,
+						name: Path::simple(vec!["self".to_string()], self_span),
+						span: loop_span.merge(&self.last_span),
+					});
+				}
+
 				_ => {
 					let name: Path = self.get_path()?;
 
@@ -4161,6 +4195,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					let ty: Type = self.parse_type()?;
 
 					params.push(Param {
+						mutable: false,
 						ty,
 						name,
 						span: loop_span.merge(&self.last_span),
@@ -5048,6 +5083,9 @@ impl fmt::Display for Param
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
+		if self.mutable {
+			write!(f, "mut ")?;
+		}
 		return write!(f, "{}: {}", self.name, self.ty);
 	}
 }
@@ -5089,6 +5127,9 @@ impl fmt::Display for TypeCore
 					write!(f, "mut ")?;
 				}
 				return write!(f, "{}", inner);
+			}
+			TypeCore::Mutable { inner } => {
+				return write!(f, "mut {}", inner);
 			}
 			TypeCore::Pointer { inner } => return write!(f, "{}*", inner),
 			TypeCore::Array { inner, size } => return write!(f, "{}[{}]", inner, size),
