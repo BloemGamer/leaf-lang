@@ -316,7 +316,10 @@ impl Desugarer
 
 			Stmt::Directive(directive) => Stmt::Directive(self.desugar_directive_node(directive)?),
 
-			Stmt::Delete { path, span } => Stmt::Delete { path, span },
+			Stmt::Delete { expr, span } => Stmt::Delete {
+				expr: self.desugar_expr(expr)?,
+				span,
+			},
 		});
 	}
 

@@ -1121,7 +1121,7 @@ pub enum Stmt
 
 	Delete
 	{
-		path: Path,
+		expr: Expr,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -3763,8 +3763,9 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Delete => {
+					let expr = self.parse_delete()?;
 					stmts.push(Stmt::Delete {
-						path: self.parse_delete()?,
+						expr,
 						span: span.merge(&self.last_span),
 					});
 					self.expect(&TokenKind::Semicolon)?;
@@ -4051,11 +4052,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
 			self.get_path()?
+		} else if self.at(&TokenKind::Delete) {
+			let tok = self.next();
+			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next();
 			return Err(CompileError::ParseError(ParseError {
 				span: tok.span,
-				message: tok.format_error(self.source, &format!("Expected an identefier, got: {:?}", tok.kind)),
+				message: tok.format_error(self.source, &format!("Expected an identifier, got: {:?}", tok.kind)),
 			}));
 		};
 
@@ -4807,11 +4811,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_delete(&mut self) -> Result<Path, CompileError>
+	fn parse_delete(&mut self) -> Result<Expr, CompileError>
 	{
 		self.expect(&TokenKind::Delete)?;
 
-		return self.get_path();
+		return self.parse_expr();
 	}
 }
 
@@ -5652,7 +5656,11 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			write!(f, " ")?;
 			return write_block(f, w, body);
 		}
-		Stmt::Delete { path, .. } => return write!(f, "delete {};", path),
+		Stmt::Delete { expr, .. } => {
+			write!(f, "delete ")?;
+			write_expr(f, w, expr)?;
+			return write!(f, ";");
+		}
 		Stmt::Unsafe(block) => {
 			write!(f, "unsafe ")?;
 			return write_block(f, w, block);
@@ -7569,7 +7577,12 @@ mod parser_tests
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
-			Stmt::Delete { path, .. } => assert_eq!(path, &Path::simple(vec!["ptr".to_string()], Default::default())),
+			Stmt::Delete { expr, .. } => match expr {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(path, &Path::simple(vec!["ptr".to_string()], Default::default()));
+				}
+				_ => panic!("Expected identifier expression"),
+			},
 			_ => panic!("Expected delete statement"),
 		}
 	}
@@ -7581,12 +7594,15 @@ mod parser_tests
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
-			Stmt::Delete { path, .. } => {
-				assert_eq!(
-					path,
-					&Path::simple(vec!["std".to_string(), "ptr".to_string()], Default::default())
-				);
-			}
+			Stmt::Delete { expr, .. } => match expr {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path,
+						&Path::simple(vec!["std".to_string(), "ptr".to_string()], Default::default())
+					);
+				}
+				_ => panic!("Expected identifier expression"),
+			},
 			_ => panic!("Expected delete statement"),
 		}
 	}
