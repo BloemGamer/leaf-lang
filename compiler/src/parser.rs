@@ -2323,13 +2323,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			match &tok.kind {
 				TokenKind::Identifier(s) => segments.push(s.clone()),
 				_ => {
-					return Err(CompileError::ParseError(ParseError {
-						span: tok.span,
-						message: tok.format_error(
-							self.source,
-							&format!("expected identifier in path, got: {:?}", tok.kind),
-						),
-					}));
+					return Err(CompileError::parse_error(
+						tok.span,
+						format!("expected identifier in path, got: {:?}", tok.kind),
+					));
 				}
 			}
 
@@ -2337,11 +2334,24 @@ impl<'s, 'c> Parser<'s, 'c>
 				break;
 			}
 
-			self.next(); // ::
+			let double_colon = self.next(); // ::
+			if !matches!(self.peek().kind, TokenKind::Identifier(_)) {
+				self.buffered_token = Some(double_colon);
+				break;
+			}
 		}
 
-		let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
-			self.parse_type_generics()?
+		let generics: Vec<Type> = if self.peek().kind == TokenKind::DoubleColon {
+			self.next(); // ::
+
+			if self.peek().kind == TokenKind::LessThan {
+				self.parse_type_generics()?
+			} else {
+				return Err(CompileError::parse_error(
+					self.peek().span(),
+					"expected `<` after `::` for turbofish generics",
+				));
+			}
 		} else {
 			Vec::new()
 		};
