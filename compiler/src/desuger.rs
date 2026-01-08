@@ -848,8 +848,7 @@ impl Desugarer
 			}
 		};
 
-		// Add "new" to the path segments
-		path.segments.push("new".to_string());
+		path.segments.push("create".to_string());
 
 		return Ok(Expr::Call {
 			callee: Box::new(Expr::Identifier { path, span: ty.span }),
@@ -3109,11 +3108,11 @@ mod tests
 				Expr::Call { callee, args, .. } => {
 					match *callee {
 						Expr::Identifier { path, .. } => {
-							assert_eq!(path.segments, vec!["Point", "new"]);
+							assert_eq!(path.segments, vec!["Point", "create"]);
 						}
 						_ => panic!("Expected identifier in callee"),
 					}
-					assert_eq!(args.len(), 0); // new() takes no arguments
+					assert_eq!(args.len(), 0); // create() takes no arguments
 				}
 				_ => panic!("Expected call expression"),
 			}
@@ -3197,12 +3196,12 @@ mod tests
 			assert!(result.is_ok());
 			let output = result.unwrap();
 
-			// Should generate Vec::new()
+			// Should generate Vec::create()
 			assert!(output.init.is_some());
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Vec", "new"]);
+						assert_eq!(path.segments, vec!["Vec", "create"]);
 					}
 					_ => panic!("Expected Vec::new identifier"),
 				},
@@ -3236,9 +3235,9 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Config", "new"]);
+						assert_eq!(path.segments, vec!["Config", "create"]);
 					}
-					_ => panic!("Expected Config::new identifier"),
+					_ => panic!("Expected Config::create identifier"),
 				},
 				_ => panic!("Expected call expression"),
 			}
@@ -3279,7 +3278,7 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["std", "config", "Config", "new"]);
+						assert_eq!(path.segments, vec!["std", "config", "Config", "create"]);
 					}
 					_ => panic!("Expected qualified path"),
 				},
@@ -3419,7 +3418,7 @@ mod tests
 					match &var.init {
 						Some(Expr::Call { callee, .. }) => match callee.as_ref() {
 							Expr::Identifier { path, .. } => {
-								assert_eq!(path.segments, vec!["LocalType", "new"]);
+								assert_eq!(path.segments, vec!["LocalType", "create"]);
 							}
 							_ => panic!("Expected identifier callee"),
 						},

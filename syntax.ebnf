@@ -187,7 +187,7 @@ switch_arm_body = expression , ","      // expression arm
                 | block_expr , [ "," ] ; // block arm
 
 // If expression: if cond { } else { }
-if_expr = "if" , [ "var" ] , if_condition , block_expr , 
+if_expr = "if" , [ "var" ] , if_condition , block_expr ,
           [ "else" , ( block_expr | if_expr ) ] ;
 
 if_condition = pattern , "=" , expression  // if var pattern = expr
