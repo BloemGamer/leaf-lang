@@ -964,7 +964,7 @@ pub enum ArrayLiteral
 	},
 	Repeat
 	{
-		value: Vec<Expr>,
+		value: Box<Expr>,
 		count: Box<Expr>,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -3412,22 +3412,23 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				let first: Expr = self.parse_expr()?;
 
+				if self.consume(&TokenKind::Semicolon) {
+					let count: Expr = self.parse_expr()?;
+					self.expect(&TokenKind::RightBracket)?;
+					return Ok(Expr::Array(ArrayLiteral::Repeat {
+						value: Box::new(first),
+						count: Box::new(count),
+						span: span.merge(&self.last_span),
+					}));
+				}
+
 				let mut elements: Vec<Expr> = vec![first];
+
 				while self.consume(&TokenKind::Comma) {
 					if self.at(&TokenKind::RightBracket) {
 						break;
 					}
 					elements.push(self.parse_expr()?);
-				}
-
-				if self.consume(&TokenKind::Semicolon) {
-					let count: Expr = self.parse_expr()?;
-					self.expect(&TokenKind::RightBracket)?;
-					return Ok(Expr::Array(ArrayLiteral::Repeat {
-						value: elements,
-						count: Box::new(count),
-						span: span.merge(&self.last_span),
-					}));
 				}
 
 				self.expect(&TokenKind::RightBracket)?;
@@ -5876,12 +5877,7 @@ impl fmt::Display for ArrayLiteral
 			}
 			ArrayLiteral::Repeat { value, count, .. } => {
 				write!(f, "[")?;
-				for (i, expr) in value.iter().enumerate() {
-					if i > 0 {
-						write!(f, ", ")?;
-					}
-					write!(f, "{}", expr)?;
-				}
+				write!(f, "{}", value)?;
 				return write!(f, "; {}]", count);
 			}
 		}

@@ -1023,10 +1023,7 @@ impl Desugarer
 				span,
 			},
 			ArrayLiteral::Repeat { value, count, span } => ArrayLiteral::Repeat {
-				value: value
-					.into_iter()
-					.map(|e| return self.desugar_expr(e))
-					.collect::<Result<Vec<_>, _>>()?,
+				value: Box::new(self.desugar_expr(*value)?),
 				count: Box::new(self.desugar_expr(*count)?),
 				span,
 			},

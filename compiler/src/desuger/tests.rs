@@ -447,7 +447,7 @@ mod tests
 			span: Span::default(),
 		};
 		let repeat_array = ArrayLiteral::Repeat {
-			value: vec![ident("z")],
+			value: Box::new(ident("z")),
 			count: Box::new(ident("n")),
 			span: Span::default(),
 		};
@@ -470,7 +470,7 @@ mod tests
 		}
 
 		match desugared_repeat {
-			ArrayLiteral::Repeat { value, .. } => assert_eq!(value.len(), 1),
+			ArrayLiteral::Repeat { .. } => {}
 			ArrayLiteral::List { .. } => panic!("Expected Repeat variant"),
 		}
 	}
@@ -1057,12 +1057,12 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let expr = Expr::Array(ArrayLiteral::Repeat {
-			value: vec![Expr::Binary {
+			value: Box::new(Expr::Binary {
 				op: BinaryOp::Mul,
 				lhs: Box::new(ident("x")),
 				rhs: Box::new(int_lit(2)),
 				span: Span::default(),
-			}],
+			}),
 			count: Box::new(int_lit(10)),
 			span: Span::default(),
 		});
@@ -1073,8 +1073,7 @@ mod tests
 
 		match output {
 			Expr::Array(ArrayLiteral::Repeat { value, .. }) => {
-				assert_eq!(value.len(), 1);
-				assert!(matches!(value[0], Expr::Binary { .. }));
+				assert!(matches!(*value, Expr::Binary { .. }));
 			}
 			_ => panic!("Expected array repeat"),
 		}

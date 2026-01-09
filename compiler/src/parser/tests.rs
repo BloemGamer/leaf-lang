@@ -650,13 +650,18 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
-				assert_eq!(value.len(), 1);
 				match *count {
 					Expr::Literal {
 						value: Literal::Int(10),
 						..
 					} => (),
 					_ => panic!("Expected count of 10"),
+				}
+				match *value {
+					Expr::Literal {
+						value: Literal::Int(0), ..
+					} => (),
+					_ => panic!("Expected count of 0"),
 				}
 			}
 			_ => panic!("Expected array repeat"),
@@ -3689,8 +3694,8 @@ mod tests
 	fn test_parse_array_repeat_multiple_values()
 	{
 		let input = "[x, y, z; 10]";
-		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
-		assert!(result.is_ok());
+		let result = parse_expr_from_str(input).inspect(|e| println!("{e}"));
+		assert!(result.is_err());
 	}
 
 	// ========== Semicolon Requirements ==========
