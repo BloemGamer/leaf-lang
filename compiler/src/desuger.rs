@@ -340,17 +340,7 @@ impl Desugarer
 				cond,
 				body,
 				span,
-			} => {
-				let actual_label = self.push_loop(label);
-				let desugared = Stmt::While {
-					label: Some(actual_label),
-					cond: self.desugar_expr(cond)?,
-					body: self.desugar_block(body)?,
-					span,
-				};
-				self.pop_loop();
-				desugared
-			}
+			} => self.desugar_while_loop(label, cond, body, span)?,
 
 			Stmt::Loop { label, body, span } => {
 				let actual_label = self.push_loop(label);
@@ -695,6 +685,60 @@ impl Desugarer
 			body: Block {
 				stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 				tail_expr: None,
+				span: Span::default(),
+			},
+			span,
+		};
+
+		self.pop_loop();
+
+		return Ok(result);
+	}
+
+	fn desugar_while_loop(
+		&mut self,
+		label: Option<String>,
+		cond: Expr,
+		body: Block,
+		span: Span,
+	) -> Result<Stmt, CompileError>
+	{
+		let cond_span: Span = cond.span();
+
+		let desugared_cond: Expr = self.desugar_expr(cond)?;
+
+		let actual_label: Ident = self.push_loop(label);
+		let desugared_body: Block = self.desugar_block(body)?;
+
+		let negated_cond = Expr::Unary {
+			op: crate::parser::UnaryOp::Not,
+			expr: Box::new(desugared_cond),
+			span: cond_span,
+		};
+
+		let if_break: Stmt = Stmt::If {
+			cond: negated_cond,
+			then_block: Block {
+				stmts: vec![Stmt::Break {
+					label: Some(actual_label.clone()),
+					value: None,
+					span: Span::default(),
+				}],
+				tail_expr: None,
+				span: Span::default(),
+			},
+			else_branch: None,
+			span: cond_span,
+		};
+
+		let mut loop_body_stmts: Vec<Stmt> = vec![if_break];
+		loop_body_stmts.extend(desugared_body.stmts);
+
+		let result = Stmt::Loop {
+			label: Some(actual_label),
+			body: Block {
+				stmts: loop_body_stmts,
+				tail_expr: desugared_body.tail_expr,
 				span: Span::default(),
 			},
 			span,

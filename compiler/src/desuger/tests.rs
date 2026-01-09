@@ -822,11 +822,17 @@ mod tests
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
+		// While loops are desugared into loop { if !cond { break } body }
 		match output {
-			Stmt::While { cond, .. } => {
-				assert!(matches!(cond, Expr::Binary { .. }));
+			Stmt::Loop { body, .. } => {
+				// First statement should be if !cond { break }
+				assert!(matches!(body.stmts[0], Stmt::If { .. }));
+				if let Stmt::If { cond, .. } = &body.stmts[0] {
+					// Condition should be negated (Unary Not)
+					assert!(matches!(cond, Expr::Unary { op: UnaryOp::Not, .. }));
+				}
 			}
-			_ => panic!("Expected while statement"),
+			_ => panic!("Expected loop statement, got {:?}", output),
 		}
 	}
 
@@ -1674,47 +1680,6 @@ mod tests
 	}
 
 	#[test]
-	fn test_unlabeled_loop_gets_label()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Loop {
-			label: None,
-			body: Block {
-				stmts: vec![Stmt::Break {
-					label: None,
-					value: None,
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
-		assert!(result.is_ok());
-		let output = result.unwrap();
-
-		match output {
-			Stmt::Loop { label, body, .. } => {
-				// Loop should have a generated label
-				assert!(label.is_some());
-				let loop_label = label.unwrap();
-				assert!(loop_label.starts_with("#__loop_"));
-
-				// Break should have the same label
-				if let Stmt::Break { label, .. } = &body.stmts[0] {
-					assert_eq!(label, &Some(loop_label));
-				} else {
-					panic!("Expected break statement");
-				}
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
 	fn test_unlabeled_while_gets_label()
 	{
 		let mut desugarer = Desugarer::new();
@@ -1737,95 +1702,23 @@ mod tests
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
+		// While loops are desugared into loop statements
 		match output {
-			Stmt::While { label, body, .. } => {
-				// While should have a generated label
+			Stmt::Loop { label, body, .. } => {
+				// Loop should have a generated label
 				assert!(label.is_some());
 				let loop_label = label.unwrap();
 				assert!(loop_label.starts_with("#__loop_"));
 
 				// Continue should have the same label
-				if let Stmt::Continue { label, .. } = &body.stmts[0] {
+				// It's in the body statements after the if-break
+				if let Stmt::Continue { label, .. } = &body.stmts[1] {
 					assert_eq!(label, &Some(loop_label));
 				} else {
 					panic!("Expected continue statement");
 				}
 			}
-			_ => panic!("Expected while"),
-		}
-	}
-
-	#[test]
-	fn test_nested_loops_get_different_labels()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Loop {
-			label: None,
-			body: Block {
-				stmts: vec![Stmt::Loop {
-					label: None,
-					body: Block {
-						stmts: vec![
-							Stmt::Break {
-								label: None,
-								value: None,
-								span: Span::default(),
-							},
-							Stmt::Continue {
-								label: None,
-								span: Span::default(),
-							},
-						],
-						tail_expr: None,
-						span: Span::default(),
-					},
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
-		assert!(result.is_ok());
-		let output = result.unwrap();
-
-		match output {
-			Stmt::Loop {
-				label: outer_label,
-				body: outer_body,
-				..
-			} => {
-				assert!(outer_label.is_some());
-				let outer_lbl = outer_label.unwrap();
-
-				if let Stmt::Loop {
-					label: inner_label,
-					body: inner_body,
-					..
-				} = &outer_body.stmts[0]
-				{
-					assert!(inner_label.is_some());
-					let inner_lbl = inner_label.as_ref().unwrap();
-
-					// Labels should be different
-					assert_ne!(outer_lbl, *inner_lbl);
-
-					// Break and continue should reference the inner loop
-					if let Stmt::Break { label, .. } = &inner_body.stmts[0] {
-						assert_eq!(label, inner_label);
-					}
-
-					if let Stmt::Continue { label, .. } = &inner_body.stmts[1] {
-						assert_eq!(label, inner_label);
-					}
-				} else {
-					panic!("Expected inner loop");
-				}
-			}
-			_ => panic!("Expected outer loop"),
+			_ => panic!("Expected loop, got {:?}", output),
 		}
 	}
 

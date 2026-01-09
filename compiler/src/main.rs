@@ -163,6 +163,7 @@ impl CompileError
 		};
 	}
 
+	#[allow(clippy::missing_errors_doc)]
 	pub fn to_string_with_source(&self, sm: &crate::source_map::SourceMap) -> Result<String, std::fmt::Error>
 	{
 		let mut out: String = String::new();
