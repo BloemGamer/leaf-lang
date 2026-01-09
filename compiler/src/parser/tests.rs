@@ -13,7 +13,9 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_1", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		return parser.parse_expr();
+		return parser
+			.parse_expr()
+			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
 	fn parse_program_from_str(input: &str) -> Result<Program, CompileError>
@@ -22,7 +24,9 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_2", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		return parser.parse_program();
+		return parser
+			.parse_program()
+			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
 	fn parse_block_from_str(input: &str) -> Result<Block, CompileError>
@@ -31,7 +35,9 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_3", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		return parser.parse_block();
+		return parser
+			.parse_block()
+			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
 	// ========== Literal Tests ==========
@@ -464,6 +470,486 @@ mod tests
 			}) => (),
 			_ => panic!("Expected open-ended range"),
 		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_full()
+	{
+		let result = parse_expr_from_str("..;");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: None,
+				inclusive: false,
+				..
+			}) => (),
+			_ => panic!("Expected empty range (..)"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_to_end()
+	{
+		let result = parse_expr_from_str("..10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(_),
+				inclusive: false,
+				..
+			}) => (),
+			_ => panic!("Expected range from start to 10 (..10)"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_to_end_inclusive()
+	{
+		let result = parse_expr_from_str("..=10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(_),
+				inclusive: true,
+				..
+			}) => (),
+			_ => panic!("Expected range from start to 10 inclusive (..=10)"),
+		}
+	}
+
+	#[test]
+	fn test_parse_range_with_start_no_end()
+	{
+		let result = parse_expr_from_str("5..;");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: None,
+				inclusive: false,
+				..
+			}) => (),
+			_ => panic!("Expected range from 5 to end (5..)"),
+		}
+	}
+
+	#[test]
+	fn test_parse_range_full_with_start_and_end()
+	{
+		let result = parse_expr_from_str("5..10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: Some(_),
+				inclusive: false,
+				..
+			}) => (),
+			_ => panic!("Expected range from 5 to 10 (5..10)"),
+		}
+	}
+
+	#[test]
+	fn test_parse_range_inclusive_with_start_and_end()
+	{
+		let result = parse_expr_from_str("5..=10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: Some(_),
+				end: Some(_),
+				inclusive: true,
+				..
+			}) => (),
+			_ => panic!("Expected range from 5 to 10 inclusive (5..=10)"),
+		}
+	}
+
+	// ========== Empty Range in Context Tests ==========
+
+	#[test]
+	fn test_parse_empty_range_in_for_loop()
+	{
+		let result = parse_block_from_str("{ for i in ..10 { } }");
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::For { iter, .. } => match iter {
+				Expr::Range(RangeExpr {
+					start: None,
+					end: Some(_),
+					..
+				}) => (),
+				_ => panic!("Expected range without start in for loop"),
+			},
+			_ => panic!("Expected for statement"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_array_index()
+	{
+		let result = parse_expr_from_str("arr[..5]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Index { index, .. } => match index.as_ref() {
+				Expr::Range(RangeExpr {
+					start: None,
+					end: Some(_),
+					..
+				}) => (),
+				_ => panic!("Expected range without start in index"),
+			},
+			_ => panic!("Expected index expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_function_call()
+	{
+		let result = parse_expr_from_str("slice(..10)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { args, .. } => {
+				assert_eq!(args.len(), 1);
+				match &args[0] {
+					Expr::Range(RangeExpr {
+						start: None,
+						end: Some(_),
+						..
+					}) => (),
+					_ => panic!("Expected range without start as argument"),
+				}
+			}
+			_ => panic!("Expected function call"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_tuple()
+	{
+		let result = parse_expr_from_str("(..10, 5..15)");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Tuple { elements, .. } => {
+				assert_eq!(elements.len(), 2);
+				match &elements[0] {
+					Expr::Range(RangeExpr {
+						start: None,
+						end: Some(_),
+						..
+					}) => (),
+					_ => panic!("Expected range without start in first tuple element"),
+				}
+				match &elements[1] {
+					Expr::Range(RangeExpr {
+						start: Some(_),
+						end: Some(_),
+						..
+					}) => (),
+					_ => panic!("Expected normal range in second tuple element"),
+				}
+			}
+			_ => panic!("Expected tuple expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_array_literal()
+	{
+		let result = parse_expr_from_str("[..10, 5..15]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::List { elements, .. }) => {
+				assert_eq!(elements.len(), 2);
+				match &elements[0] {
+					Expr::Range(RangeExpr {
+						start: None,
+						end: Some(_),
+						..
+					}) => (),
+					_ => panic!("Expected range without start in array"),
+				}
+			}
+			_ => panic!("Expected array literal"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_struct_init()
+	{
+		let result = parse_expr_from_str("Range { value = ..10 }");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::StructInit { fields, .. } => {
+				assert_eq!(fields.len(), 1);
+				match &fields[0].1 {
+					Expr::Range(RangeExpr {
+						start: None,
+						end: Some(_),
+						..
+					}) => (),
+					_ => panic!("Expected range without start in struct field"),
+				}
+			}
+			_ => panic!("Expected struct init"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_assignment()
+	{
+		let result = parse_block_from_str("{ range = ..10; }");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_return()
+	{
+		let result = parse_block_from_str("{ return ..10; }");
+		assert!(result.is_ok());
+	}
+
+	// ========== Empty Range with Expressions Tests ==========
+
+	#[test]
+	fn test_parse_empty_range_with_complex_end()
+	{
+		let result = parse_expr_from_str("..x + 10");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(end),
+				inclusive: false,
+				..
+			}) => match end.as_ref() {
+				Expr::Binary { op: BinaryOp::Add, .. } => (),
+				_ => panic!("Expected addition in end expression"),
+			},
+			_ => panic!("Expected range with complex end"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_with_function_call_end()
+	{
+		let result = parse_expr_from_str("..get_max()");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(end),
+				..
+			}) => match end.as_ref() {
+				Expr::Call { .. } => (),
+				_ => panic!("Expected function call in end"),
+			},
+			_ => panic!("Expected range with function call end"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_with_field_access_end()
+	{
+		let result = parse_expr_from_str("..obj.field");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(end),
+				..
+			}) => match end.as_ref() {
+				Expr::Field { .. } => (),
+				_ => panic!("Expected field access in end"),
+			},
+			_ => panic!("Expected range with field access end"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_with_index_end()
+	{
+		let result = parse_expr_from_str("..arr[5]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Range(RangeExpr {
+				start: None,
+				end: Some(end),
+				..
+			}) => match end.as_ref() {
+				Expr::Index { .. } => (),
+				_ => panic!("Expected index in end"),
+			},
+			_ => panic!("Expected range with index end"),
+		}
+	}
+
+	// ========== Empty Range Pattern Tests ==========
+
+	#[test]
+	fn test_parse_pattern_range_no_start()
+	{
+		let result = parse_block_from_str("{ switch x { ..10 => true, } }");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_pattern_range_no_start_inclusive()
+	{
+		let result = parse_block_from_str("{ switch x { ..=10 => true, } }");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_pattern_full_empty_range()
+	{
+		let result = parse_block_from_str("{ switch x { .. => true, } }");
+		assert!(result.is_ok());
+	}
+
+	// ========== Edge Cases ==========
+
+	#[test]
+	fn test_parse_empty_range_trailing_comma()
+	{
+		let result = parse_expr_from_str("(..10,)");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_multiple_empty_ranges()
+	{
+		let result = parse_expr_from_str("[.., .., ..]");
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::List { elements, .. }) => {
+				assert_eq!(elements.len(), 3);
+				for elem in elements {
+					match elem {
+						Expr::Range(RangeExpr {
+							start: None,
+							end: None,
+							inclusive: false,
+							..
+						}) => (),
+						_ => panic!("Expected empty range"),
+					}
+				}
+			}
+			_ => panic!("Expected array"),
+		}
+	}
+
+	#[test]
+	fn test_parse_empty_range_in_nested_expression()
+	{
+		let result = parse_expr_from_str("foo(bar(..10))");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_empty_range_with_cast()
+	{
+		let result = parse_expr_from_str("(Range)..(i32)10;");
+		assert!(result.is_ok());
+	}
+
+	// ========== Display Tests ==========
+
+	#[test]
+	fn test_display_empty_range_to_end()
+	{
+		let result = parse_expr_from_str("..10").unwrap();
+		let display = format!("{}", result);
+		assert!(display.contains(".."));
+		assert!(display.contains("10"));
+	}
+
+	#[test]
+	fn test_display_empty_range_full()
+	{
+		let result = parse_expr_from_str("..;").unwrap();
+		let display = format!("{}", result);
+		assert!(display.contains(".."));
+	}
+
+	#[test]
+	fn test_display_empty_range_inclusive()
+	{
+		let result = parse_expr_from_str("..=10").unwrap();
+		let display = format!("{}", result);
+		assert!(display.contains("..="));
+		assert!(display.contains("10"));
+	}
+
+	// ========== Real-World Usage Tests ==========
+
+	#[test]
+	fn test_parse_slice_from_beginning()
+	{
+		let input = "{ var slice: &i32[] = arr[..5]; }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_range_iterator_from_zero()
+	{
+		let input = "{ for i in ..100 { println(i); } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_range_match_less_than()
+	{
+		let input = r#"{
+		switch age {
+			..18 => "minor",
+			18..65 => "adult",
+			65.. => "senior",
+		}
+	}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_range_inclusive_boundary()
+	{
+		let input = r#"{
+		switch score {
+			..=59 => "F",
+			60..=69 => "D",
+			70..=79 => "C",
+			80..=89 => "B",
+			90.. => "A",
+		}
+	}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Error Cases ==========
+
+	#[test]
+	fn test_empty_inclusive_range_without_end_error()
+	{
+		// This should be an error: can't have ..= without an end
+		// The parser should handle this gracefully
+		let result = parse_expr_from_str("..=");
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_whitespace_in_empty_range()
+	{
+		let result = parse_expr_from_str(".. 10");
+		assert!(result.is_ok());
 	}
 
 	// ========== Call Tests ==========
@@ -1423,7 +1909,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert_eq!(block.stmts.len(), 0);
@@ -1442,7 +1928,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -1456,7 +1942,7 @@ mod tests
 			0,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -1472,7 +1958,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -1561,7 +2047,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -1659,7 +2145,7 @@ mod tests
 	#[test]
 	fn test_parse_loop_basic()
 	{
-		let result = parse_block_from_str("{ loop { break; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert_eq!(block.stmts.len(), 1);
@@ -1672,14 +2158,14 @@ mod tests
 	#[test]
 	fn test_parse_loop_with_continue()
 	{
-		let result = parse_block_from_str("{ loop { if x { continue; } break; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { if x { continue; } break; } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_nested_loops()
 	{
-		let result = parse_block_from_str("{ loop { loop { break; } break; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { loop { break; } break; } }");
 		assert!(result.is_ok());
 	}
 
@@ -1688,7 +2174,7 @@ mod tests
 	#[test]
 	fn test_parse_delete_simple()
 	{
-		let result = parse_block_from_str("{ delete ptr; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ delete ptr; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -1705,7 +2191,7 @@ mod tests
 	#[test]
 	fn test_parse_delete_qualified_path()
 	{
-		let result = parse_block_from_str("{ delete std::ptr; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ delete std::ptr; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -1728,7 +2214,7 @@ mod tests
 	fn test_parse_import_directive()
 	{
 		let input = r#"@import "file.rs";"#;
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1746,7 +2232,7 @@ mod tests
 	fn test_parse_use_directive()
 	{
 		let input = "@use std::vec::Vec;";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1770,7 +2256,7 @@ mod tests
 	fn test_parse_custom_directive_no_args()
 	{
 		let input = "@custom;";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -1778,7 +2264,7 @@ mod tests
 	fn test_parse_custom_directive_with_args()
 	{
 		let input = "@custom(1, 2, 3);";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1799,7 +2285,7 @@ mod tests
 	fn test_parse_function_with_inline_modifier()
 	{
 		let input = "inline fn fast() {}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1814,7 +2300,7 @@ mod tests
 	fn test_parse_function_with_const_modifier()
 	{
 		let input = "const fn compile_time() {}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1829,7 +2315,7 @@ mod tests
 	fn test_parse_function_with_multiple_modifiers()
 	{
 		let input = "pub unsafe inline fn complex() {}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -1849,7 +2335,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32**", "test_file_32", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Pointer { inner } => match inner.as_ref() {
@@ -1867,7 +2353,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32*[10]", "test_file_33", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Array { inner, .. } => match inner.as_ref() {
@@ -1885,7 +2371,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32[10]*", "test_file_34", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -1896,7 +2382,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "(i32,)", "test_file_35", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Tuple(types) => assert_eq!(types.len(), 1),
@@ -1911,7 +2397,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "()", "test_file_36", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Tuple(types) => assert_eq!(types.len(), 0),
@@ -1926,7 +2412,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Vec<Vec<i32>>", "test_file_37", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, generics } => {
@@ -1944,7 +2430,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Map<String, i32>", "test_file_38", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { generics, .. } => {
@@ -1961,7 +2447,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "std::vec::Vec<i32>", "test_file_39", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, .. } => {
@@ -1984,7 +2470,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&(i32, i32)", "test_file_40", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -2002,7 +2488,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2018,7 +2504,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2034,7 +2520,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2050,7 +2536,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2066,7 +2552,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2082,7 +2568,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2098,7 +2584,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2114,7 +2600,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2130,7 +2616,7 @@ mod tests
 			&mut source_map,
 		);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_block().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
 
@@ -2139,77 +2625,77 @@ mod tests
 	#[test]
 	fn test_parse_nested_struct_init()
 	{
-		let result = parse_expr_from_str("Outer { inner = Inner { x = 1 } }").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("Outer { inner = Inner { x = 1 } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_array_of_tuples()
 	{
-		let result = parse_expr_from_str("[(1, 2), (3, 4), (5, 6)]").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("[(1, 2), (3, 4), (5, 6)]");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_tuple_of_arrays()
 	{
-		let result = parse_expr_from_str("([1, 2], [3, 4])").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("([1, 2], [3, 4])");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_array_repeat_with_expression()
 	{
-		let result = parse_expr_from_str("[x + 1; 10]").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("[x + 1; 10]");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_struct_init_with_computed_fields()
 	{
-		let result = parse_expr_from_str("Point { x = a + b, y = c * d }").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("Point { x = a + b, y = c * d }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_call_with_struct_init()
 	{
-		let result = parse_expr_from_str("foo(Point { x = 1, y = 2 })").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("foo(Point { x = 1, y = 2 })");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_index_chain()
 	{
-		let result = parse_expr_from_str("arr[0][1][2]").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("arr[0][1][2]");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_mixed_postfix_operations()
 	{
-		let result = parse_expr_from_str("obj.method()[0].field").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("obj.method()[0].field");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_cast_in_expression()
 	{
-		let result = parse_expr_from_str("(i64)x + (i64)y").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("(i64)x + (i64)y");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_address_of_field()
 	{
-		let result = parse_expr_from_str("&obj.field").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("&obj.field");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_dereference_chain()
 	{
-		let result = parse_expr_from_str("***ptr").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("***ptr");
 		assert!(result.is_ok());
 	}
 
@@ -2218,7 +2704,7 @@ mod tests
 	#[test]
 	fn test_parse_block_with_only_tail_expr()
 	{
-		let result = parse_block_from_str("{ 42 }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 42 }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert_eq!(block.stmts.len(), 0);
@@ -2228,7 +2714,7 @@ mod tests
 	#[test]
 	fn test_parse_block_tail_expr_after_semicolons()
 	{
-		let result = parse_block_from_str("{ var x: i32 = 1; var y: i32 = 2; x + y }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ var x: i32 = 1; var y: i32 = 2; x + y }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert_eq!(block.stmts.len(), 2);
@@ -2238,14 +2724,14 @@ mod tests
 	#[test]
 	fn test_parse_nested_blocks_with_tail()
 	{
-		let result = parse_block_from_str("{ { { 42 } } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ { { 42 } } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_if_as_tail_expr()
 	{
-		let result = parse_block_from_str("{ if true { 1 } else { 2 } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ if true { 1 } else { 2 } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_some());
@@ -2254,7 +2740,7 @@ mod tests
 	#[test]
 	fn test_parse_switch_as_tail_expr()
 	{
-		let result = parse_block_from_str("{ switch x { 1 => 10, _ => 0, } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ switch x { 1 => 10, _ => 0, } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_some());
@@ -2272,7 +2758,7 @@ mod tests
 	fn test_parse_function_new()
 	{
 		let input = "fn new() -> Self { Self::new() }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2288,7 +2774,7 @@ mod tests
 	fn test_parse_trait_with_associated_const()
 	{
 		let input = "trait HasMax { const MAX: i32; }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2296,7 +2782,7 @@ mod tests
 	fn test_parse_trait_with_multiple_supertraits()
 	{
 		let input = "trait Sub: Super1 + Super2 + Super3 { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2313,7 +2799,7 @@ mod tests
 	fn test_parse_impl_with_associated_type()
 	{
 		let input = "impl Iterator for Counter { type Item = i32; }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2321,7 +2807,7 @@ mod tests
 	fn test_parse_impl_with_associated_const()
 	{
 		let input = "impl HasMax for MyType { const MAX: i32 = 100; }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2329,7 +2815,7 @@ mod tests
 	fn test_parse_impl_with_where_clause()
 	{
 		let input = "impl<T> MyTrait for MyType<T> where T: Clone { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2344,7 +2830,7 @@ mod tests
 	fn test_parse_impl_with_multiple_where_constraints()
 	{
 		let input = "impl<T, U> Trait for Type<T, U> where T: Clone, U: Debug { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2359,7 +2845,7 @@ mod tests
 	fn test_parse_impl_with_multiple_bounds()
 	{
 		let input = "impl<T> Trait for Type<T> where T: Clone + Debug + Display { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2376,7 +2862,7 @@ mod tests
 	fn test_parse_nested_namespace()
 	{
 		let input = "namespace outer { namespace inner { fn foo() {} } }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2395,7 +2881,7 @@ mod tests
 	fn test_parse_qualified_namespace_name()
 	{
 		let input = "namespace std::vec { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2414,8 +2900,7 @@ mod tests
 	#[test]
 	fn test_parse_if_else_if_chain()
 	{
-		let result = parse_block_from_str("{ if a { 1 } else if b { 2 } else if c { 3 } else { 4 }; }")
-			.inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ if a { 1 } else if b { 2 } else if c { 3 } else { 4 }; }");
 		assert!(result.is_ok());
 	}
 
@@ -2423,8 +2908,7 @@ mod tests
 	fn test_parse_if_var_else_if_chain()
 	{
 		let result =
-			parse_block_from_str("{ if var Some(x: i32) = a { x } else if var Some(y: i32) = b { y } else { 0 }; }")
-				.inspect_err(|e| println!("{e}"));
+			parse_block_from_str("{ if var Some(x: i32) = a { x } else if var Some(y: i32) = b { y } else { 0 }; }");
 		assert!(result.is_ok());
 	}
 
@@ -2432,16 +2916,14 @@ mod tests
 	fn test_parse_mixed_if_if_var_chain()
 	{
 		let result =
-			parse_block_from_str("{ if a { 1 } else if var Some(x: i32) = b { x } else if c { 3 } else { 4 }; }")
-				.inspect_err(|e| println!("{e}"));
+			parse_block_from_str("{ if a { 1 } else if var Some(x: i32) = b { x } else if c { 3 } else { 4 }; }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_nested_if_statements()
 	{
-		let result =
-			parse_block_from_str("{ if a { if b { 1 } else { 2 } } else { 3 }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ if a { if b { 1 } else { 2 } } else { 3 }; }");
 		assert!(result.is_ok());
 	}
 
@@ -2450,14 +2932,14 @@ mod tests
 	#[test]
 	fn test_parse_var_without_init()
 	{
-		let result = parse_block_from_str("{ var x: i32; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ var x: i32; }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_const_with_complex_expr()
 	{
-		let result = parse_block_from_str("{ const X: i32 = 2 + 3 * 4; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ const X: i32 = 2 + 3 * 4; }");
 		assert!(result.is_ok());
 	}
 
@@ -2467,7 +2949,7 @@ mod tests
 	fn test_parse_function_with_qualified_param_name()
 	{
 		let input = "fn foo(ns::name: i32) {}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2485,7 +2967,7 @@ mod tests
 	fn test_parse_function_with_trailing_comma()
 	{
 		let input = "fn foo(x: i32, y: i32,) {}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2495,7 +2977,7 @@ mod tests
 	fn test_parse_switch_with_block_arms()
 	{
 		let input = "switch x { 1 => { println(1); }, 2 => { println(2); }, }";
-		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Switch { arms, .. } => {
@@ -2514,7 +2996,7 @@ mod tests
 	fn test_parse_switch_mixed_arms()
 	{
 		let input = "switch x { 1 => 10, 2 => { println(2); 20 }, }";
-		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2522,7 +3004,7 @@ mod tests
 	fn test_parse_nested_switch()
 	{
 		let input = "switch x { 1 => switch y { 2 => 3, _ => 4, }, _ => 0, }";
-		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2531,21 +3013,21 @@ mod tests
 	#[test]
 	fn test_parse_unsafe_block_as_statement()
 	{
-		let result = parse_block_from_str("{ unsafe { ptr.write(42); } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ unsafe { ptr.write(42); } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_unsafe_block_as_expr()
 	{
-		let result = parse_block_from_str("{ var x: i32 = unsafe { *ptr }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ var x: i32 = unsafe { *ptr }; }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_unsafe_block_as_tail()
 	{
-		let result = parse_block_from_str("{ unsafe { *ptr } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ unsafe { *ptr } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_some());
@@ -2557,7 +3039,7 @@ mod tests
 	fn test_parse_struct_with_qualified_name()
 	{
 		let input = "struct ns::Name { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -2575,7 +3057,7 @@ mod tests
 	fn test_parse_struct_with_trailing_comma()
 	{
 		let input = "struct Point { x: i32, y: i32, }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2583,7 +3065,7 @@ mod tests
 	fn test_parse_variant_with_qualified_types()
 	{
 		let input = "variant Result { Ok(std::string::String), Err(std::error::Error) }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -2592,7 +3074,7 @@ mod tests
 	#[test]
 	fn test_parse_precedence_bitwise_vs_comparison()
 	{
-		let result = parse_expr_from_str("a & b == c").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("a & b == c");
 		assert!(result.is_ok());
 		// & has lower precedence than ==, so should parse as (a & (b == c))
 		match result.unwrap() {
@@ -2606,7 +3088,7 @@ mod tests
 	#[test]
 	fn test_parse_precedence_shift_vs_addition()
 	{
-		let result = parse_expr_from_str("a + b << c").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("a + b << c");
 		assert!(result.is_ok());
 		// << has lower precedence than +, so should parse as ((a + b) << c)
 		match result.unwrap() {
@@ -2618,7 +3100,7 @@ mod tests
 	#[test]
 	fn test_parse_precedence_logical_and_or()
 	{
-		let result = parse_expr_from_str("a || b && c").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("a || b && c");
 		assert!(result.is_ok());
 		// && has higher precedence than ||, so should parse as (a || (b && c))
 		match result.unwrap() {
@@ -2643,7 +3125,7 @@ mod tests
 	fn test_display_program()
 	{
 		let input = "fn foo() { return 42; }";
-		let program = parse_program_from_str(input).inspect_err(|e| println!("{e}")).unwrap();
+		let program = parse_program_from_str(input).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("fn"));
 		assert!(output.contains("foo"));
@@ -2653,7 +3135,7 @@ mod tests
 	fn test_display_preserves_structure()
 	{
 		let input = "struct Point { x: i32, y: i32 }";
-		let program = parse_program_from_str(input).inspect_err(|e| println!("{e}")).unwrap();
+		let program = parse_program_from_str(input).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("Point"));
 		assert!(output.contains("x"));
@@ -2695,7 +3177,7 @@ mod tests
 	#[test]
 	fn test_parse_empty_program()
 	{
-		let result = parse_program_from_str("").inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str("");
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		assert_eq!(program.items.len(), 0);
@@ -2704,15 +3186,14 @@ mod tests
 	#[test]
 	fn test_parse_deeply_nested_expressions()
 	{
-		let result = parse_expr_from_str("((((((((42))))))))").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("((((((((42))))))))");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_long_operator_chain()
 	{
-		let result =
-			parse_expr_from_str("a + b - c * d / e % f & g | h ^ i << j >> k").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("a + b - c * d / e % f & g | h ^ i << j >> k");
 		assert!(result.is_ok());
 	}
 
@@ -2720,7 +3201,7 @@ mod tests
 	fn test_parse_struct_init_ambiguity()
 	{
 		// Should parse as struct init, not block
-		let result = parse_expr_from_str("Foo {}").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("Foo {}");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { .. } => (),
@@ -2732,7 +3213,7 @@ mod tests
 	fn test_parse_identifier_vs_struct_init()
 	{
 		// Should parse as identifier when no brace follows
-		let result = parse_expr_from_str("Foo").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("Foo");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Identifier { .. } => (),
@@ -2749,7 +3230,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Vec<Vec<i32>>", "test_file_50", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -2760,7 +3241,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Box<Vec<Option<i32>>>", "test_file_51", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -2769,7 +3250,7 @@ mod tests
 	#[test]
 	fn test_parse_break_with_value()
 	{
-		let result = parse_block_from_str("{ loop { break 42; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break 42; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2788,7 +3269,7 @@ mod tests
 	#[test]
 	fn test_parse_break_without_value()
 	{
-		let result = parse_block_from_str("{ loop { break; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { break; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2807,7 +3288,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_loop()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2821,7 +3302,7 @@ mod tests
 	#[test]
 	fn test_parse_break_with_label()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break 'outer; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2844,7 +3325,7 @@ mod tests
 	#[test]
 	fn test_parse_break_with_label_and_value()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { break 'outer 42; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { break 'outer 42; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2865,7 +3346,7 @@ mod tests
 	#[test]
 	fn test_parse_continue_with_label()
 	{
-		let result = parse_block_from_str("{ 'outer: loop { continue 'outer; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: loop { continue 'outer; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2882,7 +3363,7 @@ mod tests
 	#[test]
 	fn test_parse_continue_without_label()
 	{
-		let result = parse_block_from_str("{ loop { continue; }; }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ loop { continue; }; }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2897,7 +3378,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_while_loop()
 	{
-		let result = parse_block_from_str("{ 'outer: while true { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: while true { break 'outer; } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2911,8 +3392,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_for_loop()
 	{
-		let result =
-			parse_block_from_str("{ 'outer: for i in 0..10 { break 'outer; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: for i in 0..10 { break 'outer; } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2926,8 +3406,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_while_var_loop()
 	{
-		let result = parse_block_from_str("{ 'outer: while var Some(x: i32) = opt { break 'outer; } }")
-			.inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer: while var Some(x: i32) = opt { break 'outer; } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2948,7 +3427,7 @@ mod tests
 			};
 		};
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -2984,7 +3463,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3000,7 +3479,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3014,7 +3493,7 @@ mod tests
 			}
 		};
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3028,7 +3507,7 @@ mod tests
 			}
 		};
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3040,7 +3519,7 @@ mod tests
 			break x * 2 + y;
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3052,22 +3531,21 @@ mod tests
 			break compute_result();
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_label_with_underscore()
 	{
-		let result =
-			parse_block_from_str("{ 'outer_loop: loop { break 'outer_loop; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'outer_loop: loop { break 'outer_loop; } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_label_with_numbers()
 	{
-		let result = parse_block_from_str("{ 'loop1: loop { break 'loop1; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'loop1: loop { break 'loop1; } }");
 		assert!(result.is_ok());
 	}
 
@@ -3082,7 +3560,7 @@ mod tests
 			break 'second;
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3100,7 +3578,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3115,7 +3593,7 @@ mod tests
 			};
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3127,7 +3605,7 @@ mod tests
 			break if condition { 1 } else { 2 };
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3143,21 +3621,21 @@ mod tests
 			};
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_label_similar_to_lifetime()
 	{
-		let result = parse_block_from_str("{ 'a: loop { break 'a; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'a: loop { break 'a; } }");
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_char_literal_still_works()
 	{
-		let result = parse_expr_from_str("'x'").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("'x'");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
@@ -3179,14 +3657,14 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_parse_single_char_label()
 	{
-		let result = parse_block_from_str("{ 'a: loop { break 'a; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'a: loop { break 'a; } }");
 		assert!(result.is_ok());
 	}
 
@@ -3198,7 +3676,7 @@ mod tests
 			break 42;
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3212,7 +3690,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3229,7 +3707,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3248,7 +3726,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3256,9 +3734,7 @@ mod tests
 	fn test_display_labeled_loop()
 	{
 		let input = "'outer: loop { break 'outer; }";
-		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
-			.inspect_err(|e| println!("{e}"))
-			.unwrap();
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input)).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("'outer"));
 	}
@@ -3267,9 +3743,7 @@ mod tests
 	fn test_display_break_with_value()
 	{
 		let input = "loop { break 42; }";
-		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
-			.inspect_err(|e| println!("{e}"))
-			.unwrap();
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input)).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("break"));
 		assert!(output.contains("42"));
@@ -3279,9 +3753,7 @@ mod tests
 	fn test_display_break_with_label_and_value()
 	{
 		let input = "'outer: loop { break 'outer 42; }";
-		let program = parse_program_from_str(&format!("fn test() {{{}}}", input))
-			.inspect_err(|e| println!("{e}"))
-			.unwrap();
+		let program = parse_program_from_str(&format!("fn test() {{{}}}", input)).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("'outer"));
 		assert!(output.contains("break"));
@@ -3311,7 +3783,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3327,7 +3799,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3354,7 +3826,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3370,7 +3842,7 @@ mod tests
 			}
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3378,7 +3850,7 @@ mod tests
 	fn test_parse_label_name_like_keyword()
 	{
 		// Labels named after keywords should work
-		let result = parse_block_from_str("{ 'while: loop { break 'while; } }").inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str("{ 'while: loop { break 'while; } }");
 		assert!(result.is_ok());
 	}
 
@@ -3387,8 +3859,7 @@ mod tests
 	{
 		let result = parse_block_from_str(
 			"{ 'this_is_a_very_long_label_name_for_testing: loop { break 'this_is_a_very_long_label_name_for_testing; } }",
-		)
-		.inspect_err(|e| println!("{e}"));
+		);
 		assert!(result.is_ok());
 	}
 
@@ -3400,7 +3871,7 @@ mod tests
 			break (1, 2, 3);
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3412,7 +3883,7 @@ mod tests
 			break [1, 2, 3];
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3424,7 +3895,7 @@ mod tests
 			break Point { x = 1, y = 2 };
 		}
 	}"#;
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3432,7 +3903,7 @@ mod tests
 	fn test_parse_struct_with_default_values()
 	{
 		let input = "struct Point { x: i32 = 0, y: i32 = 0 }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -3449,7 +3920,7 @@ mod tests
 	fn test_parse_struct_mixed_defaults()
 	{
 		let input = "struct Person { name: String, age: i32 = 0 }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -3466,7 +3937,7 @@ mod tests
 	fn test_parse_struct_default_complex_expr()
 	{
 		let input = "struct Config { timeout: i32 = 30 * 1000 }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3474,7 +3945,7 @@ mod tests
 	fn test_parse_variant_with_values()
 	{
 		let input = "variant Status { Success = 0, Error = 1, Pending = 2 }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -3492,7 +3963,7 @@ mod tests
 	fn test_parse_variant_mixed_types_and_values()
 	{
 		let input = "variant Mixed { Unit = 0, WithData(i32) = 1, Other }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -3516,7 +3987,7 @@ mod tests
 	fn test_parse_variant_with_complex_values()
 	{
 		let input = "variant Flags { A = 1 << 0, B = 1 << 1, C = 1 << 2 }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3525,7 +3996,7 @@ mod tests
 	#[test]
 	fn test_parse_default_expression()
 	{
-		let result = parse_expr_from_str("default()").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("default()");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Default { heap_call: false, .. } => (),
@@ -3536,7 +4007,7 @@ mod tests
 	#[test]
 	fn test_parse_default_heap_expression()
 	{
-		let result = parse_expr_from_str("default!()").inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str("default!()");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Default { heap_call: true, .. } => (),
@@ -3580,7 +4051,7 @@ mod tests
 	fn test_parse_pattern_with_constructor_call()
 	{
 		let input = "{ switch x { val: MyType() => true, } }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3593,7 +4064,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "const volatile i32", "test_file_53", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -3604,7 +4075,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "const Vec<i32>*", "test_file_54", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -3614,7 +4085,7 @@ mod tests
 	fn test_parse_directive_with_top_level_block()
 	{
 		let input = "@extern { fn c_function(); }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3622,7 +4093,7 @@ mod tests
 	fn test_parse_directive_with_regular_block()
 	{
 		let input = "@custom(arg) { var x: i32 = 5; }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3632,7 +4103,7 @@ mod tests
 	fn test_parse_switch_with_return()
 	{
 		let input = "switch x { 1 => return 10, _ => 0, }";
-		let result = parse_expr_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3640,7 +4111,7 @@ mod tests
 	fn test_parse_switch_with_continue()
 	{
 		let input = "{ loop { switch x { 1 => continue, _ => break, } } }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3650,7 +4121,7 @@ mod tests
 	fn test_parse_empty_impl()
 	{
 		let input = "impl MyType { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3658,7 +4129,7 @@ mod tests
 	fn test_parse_empty_trait()
 	{
 		let input = "trait Empty { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3666,7 +4137,7 @@ mod tests
 	fn test_parse_empty_enum()
 	{
 		let input = "enum Empty { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3676,7 +4147,7 @@ mod tests
 	fn test_parse_pattern_deeply_nested_struct()
 	{
 		let input = "{ switch x { Outer { inner = Inner { value = val: i32 } } => val, } }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3684,7 +4155,7 @@ mod tests
 	fn test_parse_pattern_tuple_in_variant()
 	{
 		let input = "{ switch x { Some((a: i32, (b: i32, c: i32))) => a, } }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3704,7 +4175,7 @@ mod tests
 	fn test_block_trailing_semicolon_no_tail()
 	{
 		let input = "{ var x: i32 = 5; }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_none());
@@ -3714,7 +4185,7 @@ mod tests
 	fn test_block_semicolon_converts_to_statement()
 	{
 		let input = "{ if true { 1 } else { 2 }; }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		assert!(block.tail_expr.is_none());
@@ -3726,7 +4197,7 @@ mod tests
 	fn test_parse_where_clause_with_qualified_types()
 	{
 		let input = "impl<T> Trait for Type<T> where std::vec::Vec<T>: Clone { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3736,7 +4207,7 @@ mod tests
 	fn test_loop_as_expression_in_assignment()
 	{
 		let input = "{ var x: i32 = loop { break 42; }; }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3744,7 +4215,7 @@ mod tests
 	fn test_labeled_loop_as_expression()
 	{
 		let input = "{ var x: i32 = 'outer: loop { break 'outer 42; }; }";
-		let result = parse_block_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3757,7 +4228,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Map<Vec<i32>, Vec<i32>>", "test_file_55", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 
@@ -3767,7 +4238,7 @@ mod tests
 	fn test_parse_trait_method_with_default_body()
 	{
 		let input = "trait HasDefault { fn method(&self) { println(\"default\"); } }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3775,7 +4246,7 @@ mod tests
 	fn test_parse_extra_semicolons_top_level()
 	{
 		let input = ";;;;;;";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3783,7 +4254,7 @@ mod tests
 	fn test_parse_extra_semicolons_block()
 	{
 		let input = "fn main(){;;;;;;}";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3794,7 +4265,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "impl Clone", "test_file_56", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::ImplTrait { bounds } => {
@@ -3812,7 +4283,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "impl Clone + Debug", "test_file_57", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::ImplTrait { bounds } => {
@@ -3826,7 +4297,7 @@ mod tests
 	fn test_parse_function_returning_impl_trait()
 	{
 		let input = "fn create() -> impl Iterator { }";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{e}"));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 
@@ -3837,7 +4308,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&impl Clone", "test_file_58", &mut source_map);
 		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type().inspect_err(|e| println!("{e}"));
+		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
 }

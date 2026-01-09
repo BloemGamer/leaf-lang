@@ -3039,6 +3039,25 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_range(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
+
+		if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEquals) {
+			let inclusive = self.at(&TokenKind::DotDotEquals);
+			self.next(); // .. | ..=
+
+			let end: Option<Box<Expr>> = if self.is_range_end() {
+				None
+			} else {
+				Some(Box::new(self.parse_additive(allow_struct_init)?))
+			};
+
+			return Ok(Expr::Range(RangeExpr {
+				start: None,
+				end,
+				inclusive,
+				span: span.merge(&self.last_span),
+			}));
+		}
+
 		let start: Expr = self.parse_additive(allow_struct_init)?;
 
 		match self.peek_kind() {
@@ -3139,11 +3158,20 @@ impl<'s, 'c> Parser<'s, 'c>
 		let span: Span = self.peek().span();
 		if self.at(&TokenKind::LeftParen) {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+			let checkpoint_buffered = self.buffered_token.clone();
 			self.next(); // (
 
 			if let Ok(ty) = self.parse_type()
 				&& self.consume(&TokenKind::RightParen)
 			{
+				let next_tok = self.peek_kind();
+
+				if matches!(next_tok, TokenKind::DotDot | TokenKind::DotDotEquals) {
+					self.lexer = checkpoint;
+					self.buffered_token = checkpoint_buffered;
+					return self.parse_unary(allow_struct_init);
+				}
+
 				let expr: Expr = self.parse_cast(allow_struct_init)?;
 				return Ok(Expr::Cast {
 					ty: Box::new(ty),
@@ -3153,6 +3181,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			self.lexer = checkpoint;
+			self.buffered_token = checkpoint_buffered;
 		}
 
 		return self.parse_unary(allow_struct_init);
@@ -3778,6 +3807,24 @@ impl<'s, 'c> Parser<'s, 'c>
 					let _ignored_type = self.parse_type()?;
 				}
 				return Ok(Pattern::Wildcard { span });
+			}
+
+			TokenKind::DotDot | TokenKind::DotDotEquals => {
+				let inclusive = self.at(&TokenKind::DotDotEquals);
+				self.next(); // .. | ..=
+
+				let end = if self.is_range_end() {
+					None
+				} else {
+					Some(Box::new(self.parse_expr()?))
+				};
+
+				return Ok(Pattern::Range(RangeExpr {
+					start: None,
+					end,
+					inclusive,
+					span: span.merge(&self.last_span),
+				}));
 			}
 
 			TokenKind::Identifier(_) => {
