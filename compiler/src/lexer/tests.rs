@@ -9,7 +9,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_1", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_1", &mut source_map);
 		return lexer.map(|t| return t.kind).collect();
 	}
 
@@ -18,7 +18,7 @@ let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_1", &mut so
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_2", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_2", &mut source_map);
 		return lexer.collect();
 	}
 
@@ -30,7 +30,7 @@ let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_2", &mut so
 		let source = "var x = 42 + 3.14;";
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_3", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_3", &mut source_map);
 
 		assert_eq!(lexer.into_iter().count(), 8);
 	}
