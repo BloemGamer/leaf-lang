@@ -22,8 +22,8 @@ use crate::{
 ///
 /// # Example
 /// ```no_run
-/// # use your_crate::{Config, Parser, SourceIndex};
-/// # use your_crate::lexer::Lexer;
+/// # use crate::{Config, Parser, SourceIndex};
+/// # use crate::lexer::Lexer;
 /// let config = Config::default();
 /// let source = "fn main() { var x = 42; }";
 /// let source_index = SourceIndex(0);
@@ -59,8 +59,8 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	///
 	/// # Example
 	/// ```no_run
-	/// # use your_crate::{Parser, Config, SourceIndex};
-	/// # use your_crate::lexer::Lexer;
+	/// # use crate::{Parser, Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
 	/// # let config = Config::default();
 	/// # let source = "fn main() {}";
 	/// # let source_index = SourceIndex(0);
@@ -152,8 +152,8 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
 	///
 	/// # Example
 	/// ```no_run
-	/// # use your_crate::{Parser, Program, CompileError, Config, SourceIndex};
-	/// # use your_crate::lexer::Lexer;
+	/// # use crate::{Parser, Program, CompileError, Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
 	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
@@ -193,8 +193,8 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 	///
 	/// # Example
 	/// ```no_run
-	/// # use your_crate::lexer::Lexer;
-	/// # use your_crate::{Parser, Program, Config, CompileError, SourceIndex};
+	/// # use crate::lexer::Lexer;
+	/// # use crate::{Parser, Program, Config, CompileError, SourceIndex};
 	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
@@ -414,7 +414,7 @@ impl Path
 	/// # Example
 	/// # Example
 	/// ```no_run
-	/// # use your_crate::parser::{Path, Span};
+	/// # use crate::parser::{Path, Span};
 	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], Span::default());
 	/// ```
 	#[allow(dead_code)]
@@ -2241,7 +2241,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	///
 	/// # Example
 	/// ```no_run
-	/// # use your_crate::{Parser, Program, CompileError};
+	/// # use crate::{Parser, Program, CompileError};
 	/// # fn example(parser: &mut Parser) -> Result<(), CompileError> {
 	/// let program = parser.parse_program()?;
 	/// println!("Parsed {} items", program.items.len());
