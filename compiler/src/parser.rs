@@ -700,7 +700,7 @@ pub enum TypeCore
 	Array
 	{
 		inner: Box<TypeCore>,
-		size: Box<Expr>,
+		size: Option<Box<Expr>>,
 	},
 
 	Tuple(Vec<Type>),
@@ -2658,7 +2658,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::Mut => {
 				self.next(); // mut
-				let inner = Box::new(self.parse_type_core()?);
+				let inner: Box<TypeCore> = Box::new(self.parse_type_core()?);
 				return Ok(TypeCore::Mutable { inner });
 			}
 			TokenKind::Identifier(_) => {
@@ -2734,11 +2734,15 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::LeftBracket => {
 					self.next(); // [
-					let size_expr: Expr = self.parse_expr()?;
+					let size_expr = if !self.at(&TokenKind::RightBracket) {
+						Some(Box::new(self.parse_expr()?))
+					} else {
+						None
+					};
 					self.expect(&TokenKind::RightBracket)?; // ]
 					base = TypeCore::Array {
 						inner: Box::new(base),
-						size: Box::new(size_expr),
+						size: size_expr,
 					};
 				}
 				_ => break,
@@ -5637,7 +5641,15 @@ impl fmt::Display for TypeCore
 				return write!(f, "mut {}", inner);
 			}
 			TypeCore::Pointer { inner } => return write!(f, "{}*", inner),
-			TypeCore::Array { inner, size } => return write!(f, "{}[{}]", inner, size),
+			TypeCore::Array { inner, size } => {
+				return {
+					write!(f, "{}[", inner)?;
+					if let Some(s) = size {
+						write!(f, "{}", s)?;
+					}
+					write!(f, "]")
+				};
+			}
 			TypeCore::Tuple(types) => {
 				write!(f, "(")?;
 				for (i, ty) in types.iter().enumerate() {
