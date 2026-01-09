@@ -2405,4 +2405,367 @@ mod tests
 			}
 		}
 	}
+
+	#[test]
+	fn test_desugar_range_full()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test a..b (exclusive end)
+		let range = RangeExpr {
+			start: Some(Box::new(int_lit(1))),
+			end: Some(Box::new(int_lit(10))),
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become Range::new(1, 10)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["Range", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 2);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_inclusive()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test a..=b (inclusive end)
+		let range = RangeExpr {
+			start: Some(Box::new(int_lit(1))),
+			end: Some(Box::new(int_lit(10))),
+			inclusive: true,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become RangeInclusive::new(1, 10)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["RangeInclusive", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 2);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_from()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test a.. (no end)
+		let range = RangeExpr {
+			start: Some(Box::new(int_lit(5))),
+			end: None,
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become RangeFrom::new(5)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["RangeFrom", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 1);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_to()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test ..b (no start, exclusive end)
+		let range = RangeExpr {
+			start: None,
+			end: Some(Box::new(int_lit(10))),
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become RangeTo::new(10)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["RangeTo", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 1);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_to_inclusive()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test ..=b (no start, inclusive end)
+		let range = RangeExpr {
+			start: None,
+			end: Some(Box::new(int_lit(10))),
+			inclusive: true,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become RangeToInclusive::new(10)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["RangeToInclusive", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 1);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_full_unbounded()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test .. (no start, no end)
+		let range = RangeExpr {
+			start: None,
+			end: None,
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become RangeFull::new()
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["RangeFull", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 0);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_with_complex_expressions()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test (a + 1)..(b * 2)
+		let range = RangeExpr {
+			start: Some(Box::new(Expr::Binary {
+				op: BinaryOp::Add,
+				lhs: Box::new(ident("a")),
+				rhs: Box::new(int_lit(1)),
+				span: Span::default(),
+			})),
+			end: Some(Box::new(Expr::Binary {
+				op: BinaryOp::Mul,
+				lhs: Box::new(ident("b")),
+				rhs: Box::new(int_lit(2)),
+				span: Span::default(),
+			})),
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become Range::new(a + 1, b * 2)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["Range", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 2);
+				// Both args should be binary expressions
+				assert!(matches!(args[0], Expr::Binary { .. }));
+				assert!(matches!(args[1], Expr::Binary { .. }));
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_with_identifiers()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test start..end
+		let range = RangeExpr {
+			start: Some(Box::new(ident("start"))),
+			end: Some(Box::new(ident("end"))),
+			inclusive: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should become Range::new(start, end)
+		match output {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments, vec!["Range", "new"]);
+					}
+					_ => panic!("Expected identifier callee"),
+				}
+				assert_eq!(args.len(), 2);
+				assert!(matches!(args[0], Expr::Identifier { .. }));
+				assert!(matches!(args[1], Expr::Identifier { .. }));
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_in_for_loop()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test for i in 0..10 { }
+		let stmt = Stmt::For {
+			label: None,
+			name: Path::simple(vec!["i".into()], Span::default()),
+			iter: Expr::Range(RangeExpr {
+				start: Some(Box::new(int_lit(0))),
+				end: Some(Box::new(int_lit(10))),
+				inclusive: false,
+				span: Span::default(),
+			}),
+			body: Block {
+				stmts: vec![],
+				tail_expr: None,
+				span: Span::default(),
+			},
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// The for loop should be desugared and the range should become Range::new(0, 10)
+		match output {
+			Stmt::Block(block) => {
+				// First statement should be the iterator variable declaration
+				if let Stmt::VariableDecl(var_decl) = &block.stmts[0] {
+					// The init should be the desugared range
+					match &var_decl.init {
+						Some(Expr::Call { callee, args, .. }) => {
+							match callee.as_ref() {
+								Expr::Identifier { path, .. } => {
+									assert_eq!(path.segments, vec!["Range", "new"]);
+								}
+								_ => panic!("Expected Range::new identifier"),
+							}
+							assert_eq!(args.len(), 2);
+						}
+						_ => panic!("Expected Range::new call"),
+					}
+				} else {
+					panic!("Expected variable declaration");
+				}
+			}
+			_ => panic!("Expected block"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_range_in_array_index()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Test arr[0..5]
+		let expr = Expr::Index {
+			base: Box::new(ident("arr")),
+			index: Box::new(Expr::Range(RangeExpr {
+				start: Some(Box::new(int_lit(0))),
+				end: Some(Box::new(int_lit(5))),
+				inclusive: false,
+				span: Span::default(),
+			})),
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// The range should be desugared to Range::new(0, 5)
+		match output {
+			Expr::Index { index, .. } => match index.as_ref() {
+				Expr::Call { callee, args, .. } => {
+					match callee.as_ref() {
+						Expr::Identifier { path, .. } => {
+							assert_eq!(path.segments, vec!["Range", "new"]);
+						}
+						_ => panic!("Expected Range::new"),
+					}
+					assert_eq!(args.len(), 2);
+				}
+				_ => panic!("Expected call expression"),
+			},
+			_ => panic!("Expected index expression"),
+		}
+	}
 }

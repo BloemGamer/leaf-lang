@@ -5,8 +5,8 @@ use crate::{
 	lexer::Span,
 	parser::{
 		ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
-		Path, Pattern, Program, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type,
-		TypeCore, VariableDecl,
+		Path, Pattern, Program, RangeExpr, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem,
+		Type, TypeCore, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -882,7 +882,9 @@ impl Desugarer
 				desugared
 			}
 
-			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Range(_) | Expr::Default { .. } => expr,
+			Expr::Range(range_expr) => self.desugar_range(range_expr)?,
+
+			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Default { .. } => expr,
 		});
 	}
 
@@ -1118,6 +1120,49 @@ impl Desugarer
 					}
 				}
 			}
+		});
+	}
+
+	fn desugar_range(&mut self, expr: RangeExpr) -> Result<Expr, CompileError>
+	{
+		fn call(path: &[&str], args: Vec<Expr>, span: Span) -> Expr
+		{
+			return Expr::Call {
+				callee: Box::new(Expr::Identifier {
+					path: Path {
+						segments: path.iter().map(|s| return s.to_string()).collect(),
+						generics: Vec::new(),
+						span,
+					},
+					span,
+				}),
+				args,
+				span,
+			};
+		}
+		let span: Span = expr.span;
+
+		let start: Option<Expr> = expr.start.map(|x| return self.desugar_expr(*x)).transpose()?;
+		let end: Option<Expr> = expr.end.map(|x| return self.desugar_expr(*x)).transpose()?;
+
+		return Ok(match (start, end, expr.inclusive) {
+			// a..b
+			(Some(a), Some(b), false) => call(&["Range", "new"], vec![a, b], span),
+
+			// a..=b
+			(Some(a), Some(b), true) => call(&["RangeInclusive", "new"], vec![a, b], span),
+
+			// a..
+			(Some(a), None, _) => call(&["RangeFrom", "new"], vec![a], span),
+
+			// ..b
+			(None, Some(b), false) => call(&["RangeTo", "new"], vec![b], span),
+
+			// ..=b
+			(None, Some(b), true) => call(&["RangeToInclusive", "new"], vec![b], span),
+
+			// ..
+			(None, None, _) => call(&["RangeFull", "new"], vec![], span),
 		});
 	}
 }
