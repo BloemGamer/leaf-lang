@@ -21,12 +21,15 @@ use crate::{
 /// * `'config` - Lifetime of the configuration object
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use your_crate::{Config, Parser, SourceIndex};
+/// # use your_crate::lexer::Lexer;
 /// let config = Config::default();
 /// let source = "fn main() { var x = 42; }";
-/// let lexer = Lexer::new(&config, source);
+/// let source_index = SourceIndex(0);
+/// let lexer = Lexer::new(&config, source, source_index);
 /// let mut parser = Parser::from(lexer);
-/// let program = parser.parse_program()?;
+/// let program = parser.parse_program().unwrap();
 /// ```
 #[derive(Debug, Clone)]
 pub struct Parser<'source, 'config>
@@ -55,8 +58,13 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	/// A new `Parser` instance ready to parse the token stream
 	///
 	/// # Example
-	/// ```
-	/// let lexer = Lexer::new(&config, source);
+	/// ```no_run
+	/// # use your_crate::{Parser, Config, SourceIndex};
+	/// # use your_crate::lexer::Lexer;
+	/// # let config = Config::default();
+	/// # let source = "fn main() {}";
+	/// # let source_index = SourceIndex(0);
+	/// let lexer = Lexer::new(&config, source, source_index);
 	/// let mut parser = Parser::from(lexer);
 	/// ```
 	fn from(lexer: Lexer<'s, 'c>) -> Self
@@ -143,21 +151,23 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
-	/// ```
-	/// use parser::{Parser, Program, CompileError};
-	/// use lexer::Lexer;
-	/// use config::Config;
-	///
+	/// ```no_run
+	/// # use your_crate::{Parser, Program, CompileError, Config, SourceIndex};
+	/// # use your_crate::lexer::Lexer;
+	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
-	/// let lexer = Lexer::new(&config, source);
+	/// let source_index = SourceIndex(0);
+	/// let lexer = Lexer::new(&config, source, source_index);
 	/// let parser = Parser::from(lexer);
 	///
 	/// // Convert parser to Program using TryFrom
 	/// let program = Program::try_from(parser)?;
 	///
 	/// // Or more idiomatically in a single chain:
-	/// let program = Program::try_from(Parser::from(Lexer::new(&config, source)))?;
+	/// let program = Program::try_from(Parser::from(Lexer::new(&config, source, source_index)))?;
+	/// # Ok(())
+	/// # }
 	/// ```
 	fn try_from(mut parser: Parser<'s, 'c>) -> Result<Self, Self::Error>
 	{
@@ -182,20 +192,22 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
-	/// ```
-	/// use lexer::Lexer;
-	/// use parser::{Parser, Program};
-	/// use config::Config;
-	///
+	/// ```no_run
+	/// # use your_crate::lexer::Lexer;
+	/// # use your_crate::{Parser, Program, Config, CompileError, SourceIndex};
+	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
-	/// let lexer = Lexer::new(&config, source);
+	/// let source_index = SourceIndex(0);
+	/// let lexer = Lexer::new(&config, source, source_index);
 	///
 	/// // Convert lexer directly to a Program
 	/// let program = Program::try_from(lexer)?;
 	///
 	/// // Or in a single chain:
-	/// let program = Program::try_from(Lexer::new(&config, source))?;
+	/// let program = Program::try_from(Lexer::new(&config, source, source_index))?;
+	/// # Ok(())
+	/// # }
 	/// ```
 	fn try_from(lexer: Lexer<'s, 'c>) -> Result<Self, Self::Error>
 	{
@@ -400,8 +412,10 @@ impl Path
 	/// * `span` - Source location
 	///
 	/// # Example
-	/// ```
-	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], span);
+	/// # Example
+	/// ```no_run
+	/// # use your_crate::parser::{Path, Span};
+	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], Span::default());
 	/// ```
 	#[allow(dead_code)]
 	pub const fn simple(segments: Vec<Ident>, span: Span) -> Self
@@ -451,11 +465,11 @@ pub enum PathComponent<'a>
 	Generic(&'a Type),
 }
 
-/// A single component of a path, either an identifier segment or a generic type.
+/// Iterator over path components (segments and generics).
 ///
-/// This enum distinguishes between the two types of components that can appear
-/// in a `Path`: regular identifier segments (like `std`, `io`, `Vec`) and generic
-/// type arguments (like the `i32` in `Vec::<i32>`).
+/// `PathIter` is primarily used as the item type for iterating over a `Path`.
+/// When iterating over a path, you get a sequence of components that can be either
+/// segments or generics, distinguished by the `PathComponent` enum.
 ///
 /// # Purpose
 ///
@@ -519,6 +533,11 @@ impl<'a> ExactSizeIterator for PathIter<'a>
 
 impl Path
 {
+	/// Returns an iterator over the path's components.
+	///
+	/// # Returns
+	/// An iterator that yields `PathComponent` items representing
+	/// segments and generic type arguments in order.
 	#[allow(dead_code)]
 	pub fn iter(&'_ self) -> PathIter<'_>
 	{
@@ -596,6 +615,7 @@ impl Spanned for FunctionSignature
 /// # Fields
 /// * `ty` - Parameter type
 /// * `name` - Parameter name (can be qualified path)
+/// * `mutable` - Whether the parameter is mutable
 /// * `span` - Source location of the parameter
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param
@@ -647,9 +667,11 @@ impl Spanned for Type
 /// # Variants
 /// * `Base` - Named type with optional generic arguments
 /// * `Reference` - Reference type (`&T` or `&mut T`)
+/// * `Mutable` - Mutable type wrapper
 /// * `Pointer` - Raw pointer type (`T*`)
-/// * `Array` - Array type (`T[?]`)
+/// * `Array` - Array type with size expression (`T[size]`)
 /// * `Tuple` - Tuple type (`(T1, T2, ...)`)
+/// * `ImplTrait` - Impl trait type (`impl Trait`)
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeCore
 {
@@ -724,6 +746,7 @@ impl Spanned for RangeExpr
 /// # Variants
 /// * `Identifier` - Variable or constant reference
 /// * `Literal` - Literal value (integer, string, etc.)
+/// * `Default` - Default value constructor
 /// * `Unary` - Unary operation (negation, dereference, etc.)
 /// * `Binary` - Binary operation (addition, comparison, etc.)
 /// * `Cast` - Type cast expression
@@ -1274,7 +1297,7 @@ impl Stmt
 /// * `span` - Source location of the block
 ///
 /// # Example
-/// ```
+/// ```text
 /// // Block with tail expression:
 /// {
 ///     var x = 5;
@@ -1452,7 +1475,7 @@ impl Spanned for Pattern
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Struct name (can be qualified path)
-/// * `fields` - List of (`type`, `name`, `Option<default_value>`) pairs for fields
+/// * `fields` - List of (`type`, `name`, `Option<default_value>`) tuples for fields
 /// * `span` - Source location of the struct
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDecl
@@ -1472,15 +1495,15 @@ impl Spanned for StructDecl
 	}
 }
 
-/// Structure type declaration.
+/// Union type declaration.
 ///
 /// Represents a union with named fields.
 ///
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
-/// * `name` - Struct name (can be qualified path)
-/// * `fields` - List of (type, name) pairs for fields
-/// * `span` - Source location of the struct
+/// * `name` - Union name (can be qualified path)
+/// * `fields` - List of (type, name) tuples for fields
+/// * `span` - Source location of the union
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDecl
 {
@@ -1506,7 +1529,7 @@ impl Spanned for UnionDecl
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Enum name (can be qualified path)
-/// * `variants` - List of (name, optional value) pairs
+/// * `variants` - List of (`name`, `Option<value>`) tuples
 /// * `span` - Source location of the enum
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDecl
@@ -1533,7 +1556,7 @@ impl Spanned for EnumDecl
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Variant name (can be qualified path)
-/// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) pairs for variants
+/// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) tuples for variants
 /// * `span` - Source location of the variant
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariantDecl
@@ -1716,6 +1739,7 @@ impl Spanned for ImplItem
 /// # Fields
 /// * `ty` - Type being constrained
 /// * `bounds` - List of trait bounds
+/// * `type_args` - Type arguments for the constraint
 /// * `span` - Source location of the constraint
 #[derive(Debug, Clone, PartialEq)]
 pub struct WhereConstraint
@@ -1808,7 +1832,16 @@ pub enum Expected
 	Description(String),
 }
 
-/// Parse error with location and context information
+/// Parse error with location and context information.
+///
+/// Contains detailed information about a syntax error including its location,
+/// kind, and contextual information about what was being parsed.
+///
+/// # Fields
+/// * `span` - Source location of the error
+/// * `kind` - The kind of parse error
+/// * `context` - Stack of parsing contexts (e.g., "while parsing function declaration")
+/// * `source_index` - Index into the source map
 #[derive(Debug, Clone)]
 pub struct ParseError
 {
@@ -1825,6 +1858,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location of the error
 	/// * `kind` - The kind of parse error
+	/// * `source_index` - Index into the source map
 	pub const fn new(span: Span, kind: ParseErrorKind, source_index: SourceIndex) -> Self
 	{
 		return Self {
@@ -1854,6 +1888,7 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `expected` - What was expected
 	/// * `found` - What was actually found
+	/// * `source_index` - Index into the source map
 	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind, source_index: SourceIndex) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found }, source_index);
@@ -1863,6 +1898,7 @@ impl ParseError
 	///
 	/// # Arguments
 	/// * `span` - Source location
+	/// * `source_index` - Index into the source map
 	pub const fn unexpected_eof(span: Span, source_index: SourceIndex) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnexpectedEof, source_index);
@@ -1873,6 +1909,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the pattern is invalid
+	/// * `source_index` - Index into the source map
 	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -1887,6 +1924,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `delimiter` - The unbalanced delimiter character
+	/// * `source_index` - Index into the source map
 	pub const fn unbalanced_delimiter(span: Span, delimiter: char, source_index: SourceIndex) -> Self
 	{
 		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter }, source_index);
@@ -1897,6 +1935,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the type is invalid
+	/// * `source_index` - Index into the source map
 	pub fn invalid_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -1911,6 +1950,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `reason` - Why the declaration is invalid
+	/// * `source_index` - Index into the source map
 	pub fn invalid_declaration(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -1926,6 +1966,7 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `context` - Parsing context where item was unexpected
 	/// * `found` - The unexpected token
+	/// * `source_index` - Index into the source map
 	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind, source_index: SourceIndex)
 	-> Self
 	{
@@ -1944,6 +1985,7 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `message` - Error message
+	/// * `source_index` - Index into the source map
 	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -1955,6 +1997,14 @@ impl ParseError
 		);
 	}
 
+	/// Writes the error to a formatter with source context.
+	///
+	/// # Arguments
+	/// * `f` - The formatter to write to
+	/// * `source_map` - Source map for looking up source text
+	///
+	/// # Returns
+	/// Result of the formatting operation
 	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
 	{
 		return write!(
@@ -2190,9 +2240,13 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// * `Err(CompileError)` - If a syntax error is encountered
 	///
 	/// # Example
-	/// ```
+	/// ```no_run
+	/// # use your_crate::{Parser, Program, CompileError};
+	/// # fn example(parser: &mut Parser) -> Result<(), CompileError> {
 	/// let program = parser.parse_program()?;
 	/// println!("Parsed {} items", program.items.len());
+	/// # Ok(())
+	/// # }
 	/// ```
 	pub fn parse_program(&mut self) -> Result<Program, CompileError>
 	{

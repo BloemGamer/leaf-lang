@@ -14,14 +14,18 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// # Returns
 	/// A tuple containing:
 	/// * `&'config Config` - Reference to the configuration object
+	/// * `SourceIndex` - Index into the source map
 	/// * `Lexer<'source, 'config>` - The lexer itself, moved out and ready to be consumed
 	///
 	/// # Example
-	/// ```
+	/// ```no_run
+	/// # use crate::{Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
 	/// let config = Config::default();
-	/// let lexer = Lexer::new(&config, "func main() {}");
-	/// let (config_ref, lexer) = lexer.into_parts();
-	/// // Now both config_ref and lexer can be used independently
+	/// let source_index = SourceIndex(0);
+	/// let lexer = Lexer::new(&config, "fn main() {}", source_index);
+	/// let (config_ref, idx, lexer) = lexer.into_parts();
+	/// // Now config_ref, idx, and lexer can be used independently
 	/// ```
 	pub const fn into_parts(self) -> (&'config Config, SourceIndex, Lexer<'source, 'config>)
 	{
@@ -42,10 +46,13 @@ impl<'source, 'config> Lexer<'source, 'config>
 /// * `'config` - Lifetime of the configuration object
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use crate::{Config, SourceIndex};
+/// # use crate::lexer::Lexer;
 /// let config = Config::default();
-/// let source = "func main() { var x = 42; }";
-/// let mut lexer = Lexer::new(&config, source);
+/// let source = "fn main() { var x = 42; }";
+/// let source_index = SourceIndex(0);
+/// let mut lexer = Lexer::new(&config, source, source_index);
 ///
 /// while let Some(token) = lexer.next() {
 ///     println!("{:?}", token);
@@ -74,7 +81,8 @@ pub struct Lexer<'source, 'config>
 /// * `span` - Position information for error reporting and source mapping
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use crate::lexer::{Token, TokenKind, Span};
 /// let token = Token {
 ///     kind: TokenKind::IntLiteral(42),
 ///     span: Span {
@@ -120,7 +128,8 @@ pub trait ErrorFromSpan
 /// * `end_col` - Column number where the span ends (1-indexed)
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use crate::lexer::Span;
 /// let span = Span {
 ///     start: 0,
 ///     end: 5,
@@ -151,6 +160,14 @@ impl Spanned for Span
 
 impl Span
 {
+	/// Creates an error from this span.
+	///
+	/// # Arguments
+	/// * `source` - The source code string
+	/// * `message` - The error message
+	///
+	/// # Returns
+	/// An error of type `E` constructed from the span and formatted message
 	pub fn make_error<E: ErrorFromSpan>(self, source: &str, message: &str) -> E
 	{
 		return E::from_span(self, self.format_error(source, message));
@@ -159,19 +176,24 @@ impl Span
 
 impl Span
 {
-	/// Merges to Spans together
+	/// Merges two Spans together.
+	///
+	/// Creates a new span that encompasses both input spans, from the start of the
+	/// earlier span to the end of the later span.
 	///
 	/// # Arguments
-	/// * `self` - Self
-	/// * `other` - Other Span
+	/// * `self` - The first span
+	/// * `other` - The second span to merge with
 	///
 	/// # Returns
-	/// A new Span ranging from the start of the first span, and the end of the second one
-	///
+	/// A new Span ranging from the start of the first span to the end of the second one
 	///
 	/// # Example
-	/// ```
-	/// let new_span: Span = old_span1.merge(old_span2);
+	/// ```no_run
+	/// # use crate::lexer::Span;
+	/// # let old_span1 = Span::default();
+	/// # let old_span2 = Span::default();
+	/// let new_span: Span = old_span1.merge(&old_span2);
 	/// ```
 	pub fn merge(&self, other: &Span) -> Self
 	{
@@ -202,7 +224,8 @@ impl Span
 /// - **End/Error**: EOF and invalid tokens
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use crate::lexer::TokenKind;
 /// let kind = TokenKind::IntLiteral(42);
 /// let kind = TokenKind::Identifier("my_var".to_string());
 /// let kind = TokenKind::Plus;
@@ -403,7 +426,7 @@ pub enum TokenKind
 	// ===== Punctuation =====
 	/// Statement terminator: `;`
 	Semicolon,
-	/// To be determined: `:`
+	/// Type annotation: `:`
 	Colon,
 	/// Path separator/namespaces: `::`
 	DoubleColon,
@@ -413,7 +436,7 @@ pub enum TokenKind
 	Dot,
 	/// Range: `..`
 	DotDot,
-	/// Range: `..=`
+	/// Inclusive range: `..=`
 	DotDotEquals,
 	/// Variadic: `...`
 	Ellipsis,
@@ -423,7 +446,7 @@ pub enum TokenKind
 	FatArrow,
 	/// Optional/error propagation: `?`
 	QuestionMark,
-	/// To be determined: `#`
+	/// Attribute marker: `#`
 	Hash,
 	/// Escape character: `\`
 	Backslash,
@@ -460,7 +483,8 @@ pub enum TokenKind
 /// * `Custom` - User-defined directive: `@custom_name`
 ///
 /// # Example
-/// ```
+/// ```no_run
+/// # use crate::lexer::Directive;
 /// let dir = Directive::Use;          // @use
 /// let dir = Directive::Import;       // @import
 /// let dir = Directive::Custom("cfg".to_string()); // @cfg
@@ -507,15 +531,19 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// # Arguments
 	/// * `config` - Reference to the lexer configuration
 	/// * `source` - Source code string to tokenize
+	/// * `source_index` - Index into the source map
 	///
 	/// # Returns
 	/// A new `Lexer` instance initialized at position 0, line 1, column 1
 	///
 	/// # Example
-	/// ```
+	/// ```no_run
+	/// # use crate::{Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
 	/// let config = Config::default();
 	/// let source = "var x = 42;";
-	/// let lexer = Lexer::new(&config, source);
+	/// let source_index = SourceIndex(0);
+	/// let lexer = Lexer::new(&config, source, source_index);
 	/// ```
 	#[allow(unused)]
 	pub fn new(config: &'config Config, source: &'source str, source_index: SourceIndex) -> Self
@@ -534,6 +562,33 @@ impl<'source, 'config> Lexer<'source, 'config>
 		return lexer;
 	}
 
+	/// Creates a new lexer and adds the source to the source map.
+	///
+	/// This is a convenience method that adds the source code to a source map
+	/// and creates a lexer that references it.
+	///
+	/// # Arguments
+	/// * `config` - Reference to the lexer configuration
+	/// * `source` - Source code to tokenize (will be moved into the source map)
+	/// * `file_name` - Name of the source file for error reporting
+	/// * `source_map` - Mutable reference to the source map
+	///
+	/// # Returns
+	/// A new `Lexer` instance
+	///
+	/// # Example
+	/// ```no_run
+	/// # use crate::{Config, SourceMap};
+	/// # use crate::lexer::Lexer;
+	/// let config = Config::default();
+	/// let mut source_map = SourceMap::new();
+	/// let lexer = Lexer::new_add_to_source_map(
+	///     &config,
+	///     "var x = 42;",
+	///     "main.src",
+	///     &mut source_map
+	/// );
+	/// ```
 	#[allow(unused)]
 	pub fn new_add_to_source_map(
 		config: &'config Config,
@@ -568,8 +623,12 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// Returns a token with `TokenKind::Eof` when the end of the source is reached.
 	///
 	/// # Example
-	/// ```
-	/// let mut lexer = Lexer::new(&config, "x + 42");
+	/// ```no_run
+	/// # use crate::{Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
+	/// # let config = Config::default();
+	/// # let source_index = SourceIndex(0);
+	/// let mut lexer = Lexer::new(&config, "x + 42", source_index);
 	/// let token = lexer.next_token(); // Returns Identifier("x")
 	/// let token = lexer.next_token(); // Returns Plus
 	/// let token = lexer.next_token(); // Returns IntLiteral(42)
@@ -1313,7 +1372,8 @@ impl Token
 	/// (caret) pointing to the location of the error.
 	///
 	/// # Arguments
-	/// * `source` - The complete source code string
+	/// * `source_index` - Index into the source map
+	/// * `source_map` - Reference to the source map containing all source files
 	/// * `message` - The error message to display
 	///
 	/// # Returns
@@ -1321,9 +1381,13 @@ impl Token
 	/// and visual indicator pointing to the error position.
 	///
 	/// # Example
-	/// ```
-	/// let token = Token { /* ... */ };
-	/// let error = token.format_error(source, "unexpected token");
+	/// ```no_run
+	/// # use crate::lexer::Token;
+	/// # use crate::{SourceIndex, SourceMap};
+	/// # let token = Token { kind: crate::lexer::TokenKind::Invalid, span: crate::lexer::Span::default() };
+	/// # let source_index = SourceIndex(0);
+	/// # let source_map = SourceMap::new();
+	/// let error = token.format_error(source_index, &source_map, "unexpected token");
 	/// println!("{}", error);
 	/// // Output:
 	/// // Error at 1:20: unexpected token
@@ -1379,8 +1443,10 @@ impl Span
 	/// and visual indicator pointing to the error position.
 	///
 	/// # Example
-	/// ```
-	/// let span = Span { /* ... */ };
+	/// ```no_run
+	/// # use crate::lexer::Span;
+	/// # let span = Span::default();
+	/// # let source = "var x = 42;";
 	/// let error = span.format_error(source, "unexpected token");
 	/// println!("{}", error);
 	/// // Output:
