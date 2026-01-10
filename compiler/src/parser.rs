@@ -37,7 +37,7 @@ pub struct Parser<'source, 'config>
 	#[allow(unused)]
 	config: &'config Config,
 	#[allow(unused)]
-	source_index: usize,
+	source_index: SourceIndex,
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
 	buffered_token: Option<Token>,
@@ -623,7 +623,7 @@ impl Spanned for FunctionSignature
 pub struct GenericParam
 {
 	pub name: Ident,
-	pub bounds: Vec<Path>,
+	pub bounds: Vec<WhereBound>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -755,7 +755,7 @@ pub enum TypeCore
 
 	ImplTrait
 	{
-		bounds: Vec<Path>,
+		bounds: Vec<WhereBound>,
 	},
 }
 
@@ -1699,7 +1699,7 @@ pub struct TraitDecl
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
-	pub super_traits: Vec<Path>,
+	pub super_traits: Vec<WhereBound>,
 	pub items: Vec<TraitItem>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1877,7 +1877,7 @@ pub enum FuncBound
 {
 	Fn
 	{
-		args: Vec<Type>
+		args: Vec<Type>, ret: Option<Type>
 	},
 }
 
@@ -2775,7 +2775,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		match &tok.kind {
 			TokenKind::Impl => {
 				self.next(); // impl
-				let bounds: Vec<Path> = self.parse_trait_bounds()?;
+				let bounds: Vec<WhereBound> = self.parse_trait_bounds()?;
 				return Ok(TypeCore::ImplTrait { bounds });
 			}
 			TokenKind::Mut => {
@@ -2955,7 +2955,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			};
 
-			let bounds: Vec<Path> = if self.consume(&TokenKind::Colon) {
+			let bounds: Vec<WhereBound> = if self.consume(&TokenKind::Colon) {
 				self.parse_trait_bounds()?
 			} else {
 				Vec::new()
@@ -5426,35 +5426,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			let mut bounds: Vec<WhereBound> = Vec::new();
 
 			loop {
-				let bound: WhereBound = if matches!(self.peek_kind(), TokenKind::Identifier(s) if *s == "Fn") {
-					self.next(); // Fn
-					let mut params: Vec<Type> = Vec::new();
-
-					self.expect(&TokenKind::LeftParen)?;
-					loop {
-						if self.at(&TokenKind::RightParen) {
-							break;
-						}
-						params.push(self.parse_type()?);
-						if !self.consume(&TokenKind::Comma) {
-							break;
-						}
-						if self.at(&TokenKind::RightParen) {
-							break;
-						}
-					}
-					self.expect(&TokenKind::RightParen)?;
-					WhereBound::Func(FuncBound::Fn { args: params })
-				} else {
-					let mut bound_path: Path = self.get_path()?;
-
-					if self.at(&TokenKind::LessThan) {
-						bound_path.generics.extend(self.parse_type_generics()?);
-					}
-					WhereBound::Path(bound_path)
-				};
-
-				bounds.push(bound);
+				bounds.push(self.parse_where_bound()?);
 
 				if !self.consume(&TokenKind::Plus) {
 					break;
@@ -5513,7 +5485,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			Vec::new()
 		};
 
-		let super_traits: Vec<Path> = if self.consume(&TokenKind::Colon) {
+		let super_traits: Vec<WhereBound> = if self.consume(&TokenKind::Colon) {
 			self.parse_trait_bounds()?
 		} else {
 			Vec::new()
@@ -5540,12 +5512,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_trait_bounds(&mut self) -> Result<Vec<Path>, CompileError>
+	fn parse_trait_bounds(&mut self) -> Result<Vec<WhereBound>, CompileError>
 	{
-		let mut bounds: Vec<Path> = Vec::new();
+		let mut bounds: Vec<WhereBound> = Vec::new();
 
 		loop {
-			let bound: Path = self.get_path()?;
+			let bound: WhereBound = self.parse_where_bound()?;
 			bounds.push(bound);
 
 			if !self.consume(&TokenKind::Plus) {
@@ -5554,6 +5526,49 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		return Ok(bounds);
+	}
+
+	fn parse_where_bound(&mut self) -> Result<WhereBound, CompileError>
+	{
+		let bound: WhereBound = if matches!(self.peek_kind(), TokenKind::Identifier(s) if *s == "Fn") {
+			self.next(); // Fn
+			let mut params: Vec<Type> = Vec::new();
+
+			self.expect(&TokenKind::LeftParen)?;
+			loop {
+				if self.at(&TokenKind::RightParen) {
+					break;
+				}
+				params.push(self.parse_type()?);
+				if !self.consume(&TokenKind::Comma) {
+					break;
+				}
+				if self.at(&TokenKind::RightParen) {
+					break;
+				}
+			}
+			self.expect(&TokenKind::RightParen)?;
+
+			let return_type: Option<Type> = if self.at(&TokenKind::Arrow) {
+				self.next(); // ->
+				Some(self.parse_type()?)
+			} else {
+				None
+			};
+			WhereBound::Func(FuncBound::Fn {
+				args: params,
+				ret: return_type,
+			})
+		} else {
+			let mut bound_path: Path = self.get_path()?;
+
+			if self.at(&TokenKind::LessThan) {
+				bound_path.generics.extend(self.parse_type_generics()?);
+			}
+			WhereBound::Path(bound_path)
+		};
+
+		return Ok(bound);
 	}
 
 	fn parse_trait_item(&mut self) -> Result<TraitItem, CompileError>
@@ -6913,15 +6928,19 @@ impl fmt::Display for FuncBound
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		return match self {
-			FuncBound::Fn { args } => {
+			FuncBound::Fn { args, ret } => {
 				write!(f, "Fn(")?;
 				for (i, a) in args.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
 					}
 					write!(f, "{},", a)?;
+					write!(f, ")")?;
 				}
-				write!(f, ")")
+				if let Some(ty) = ret {
+					write!(f, "-> {}", ty)?;
+				}
+				Ok(())
 			}
 		};
 	}
