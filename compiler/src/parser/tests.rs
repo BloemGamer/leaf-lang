@@ -1445,7 +1445,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -4332,7 +4332,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -4347,7 +4347,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 				assert_eq!(func.signature.params.len(), 1);
 				assert!(func.signature.return_type.is_some());
 			}
@@ -4364,7 +4364,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 				assert_eq!(func.signature.generics.len(), 1);
 			}
 			_ => panic!("Expected function declaration"),
@@ -4380,7 +4380,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 				assert!(func.signature.modifiers.len() >= 3);
 			}
 			_ => panic!("Expected function declaration"),
@@ -4401,14 +4401,14 @@ mod tests
 
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(!func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::Regular);
 			}
 			_ => panic!("Expected regular function"),
 		}
 
 		match &program.items[1] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 			}
 			_ => panic!("Expected heap function"),
 		}
@@ -5282,7 +5282,7 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
 				assert_eq!(func.signature.generics[0].bounds.len(), 2);
 			}
 			_ => panic!("Expected heap function declaration"),

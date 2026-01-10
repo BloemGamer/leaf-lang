@@ -89,7 +89,7 @@ pub type Ident = String;
 /// Trait for types that have source location information.
 ///
 /// Provides a unified way to extract span information from various AST nodes.
-pub trait Spanned
+pub trait Spanned // TODO: Why do I have this also defined here????
 {
 	fn span(&self) -> Span;
 }
@@ -595,7 +595,8 @@ pub struct FunctionSignature
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub heap_func: bool,
+	pub call_type: CallType,
+	pub heap_generics: Vec<GenericParam>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -4729,11 +4730,18 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::FuncDef)?;
 
-		let heap_func = if self.at(&TokenKind::Bang) {
-			self.next(); // !
-			true
+		let call_type = if self.consume(&TokenKind::Bang) {
+			CallType::UserHeap
+		} else if self.consume(&TokenKind::QuestionMark) {
+			CallType::UserMaybeHeap
 		} else {
-			false
+			CallType::Regular
+		};
+
+		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan) {
+			self.get_generics()?
+		} else {
+			Vec::new()
 		};
 
 		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
@@ -4756,7 +4764,6 @@ impl<'s, 'c> Parser<'s, 'c>
 		} else {
 			Vec::new()
 		};
-
 		let params: Vec<Param> = self.parse_function_arguments()?;
 
 		let return_type: Option<Type> = if self.at(&TokenKind::Arrow) {
@@ -4788,7 +4795,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			params,
 			return_type,
 			where_clause,
-			heap_func,
+			call_type,
+			heap_generics,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5843,8 +5851,21 @@ fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, s
 
 	write!(f, "fn")?;
 
-	if sig.heap_func {
-		write!(f, "!")?;
+	match sig.call_type {
+		CallType::UserHeap => write!(f, "!")?,
+		CallType::UserMaybeHeap | CallType::CompilerHeap => write!(f, "?")?,
+		CallType::Regular => {}
+	}
+
+	if !sig.heap_generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic_param) in sig.heap_generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic_param)?;
+		}
+		write!(f, ">")?;
 	}
 
 	write!(f, " {}", sig.name)?;

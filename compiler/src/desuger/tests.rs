@@ -560,7 +560,8 @@ mod tests
 						params: vec![],
 						return_type: None,
 						where_clause: vec![],
-						heap_func: false,
+						call_type: CallType::Regular,
+						heap_generics: Vec::new(),
 						span: Span::default(),
 					},
 					body: Some(Block {
@@ -621,7 +622,8 @@ mod tests
 					params: vec![],
 					return_type: None,
 					where_clause: vec![],
-					heap_func: false,
+					call_type: CallType::Regular,
+					heap_generics: Vec::new(),
 					span: Span::default(),
 				},
 				body: Some(Block {
@@ -668,7 +670,8 @@ mod tests
 					params: vec![],
 					return_type: None,
 					where_clause: vec![],
-					heap_func: false,
+					call_type: CallType::Regular,
+					heap_generics: Vec::new(),
 					span: Span::default(),
 				},
 				body: Some(Block {
@@ -1943,7 +1946,8 @@ mod tests
 				params: vec![],
 				return_type: None,
 				where_clause: vec![],
-				heap_func: false,
+				call_type: CallType::Regular,
+				heap_generics: Vec::new(),
 				span: Span::default(),
 			},
 			body: Some(Block {
@@ -1970,7 +1974,8 @@ mod tests
 				params: vec![],
 				return_type: None,
 				where_clause: vec![],
-				heap_func: false,
+				call_type: CallType::Regular,
+				heap_generics: Vec::new(),
 				span: Span::default(),
 			},
 			body: Some(Block {
@@ -2314,7 +2319,8 @@ mod tests
 					params: vec![],
 					return_type: None,
 					where_clause: vec![],
-					heap_func: false,
+					call_type: CallType::Regular,
+					heap_generics: Vec::new(),
 					span: Span::default(),
 				},
 				body: Some(Block {
