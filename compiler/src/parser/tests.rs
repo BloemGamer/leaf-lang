@@ -4365,7 +4365,7 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.call_type, CallType::UserHeap);
-				assert_eq!(func.signature.generics.len(), 1);
+				assert_eq!(func.signature.heap_generics.len(), 1);
 			}
 			_ => panic!("Expected function declaration"),
 		}
