@@ -591,7 +591,7 @@ pub struct FunctionSignature
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
-	pub generics: Vec<Ident>,
+	pub generics: Vec<GenericParam>,
 	pub params: Vec<Param>,
 	pub return_type: Option<Type>,
 	pub where_clause: Vec<WhereConstraint>,
@@ -601,6 +601,54 @@ pub struct FunctionSignature
 }
 
 impl Spanned for FunctionSignature
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
+/// Generic parameter with optional trait bounds.
+///
+/// Represents a generic type parameter that can optionally have trait bounds
+/// specified inline using the `:` syntax.
+///
+/// # Examples
+/// ```text
+/// T              // No bounds
+/// T: Clone       // Single bound
+/// T: Clone + Debug  // Multiple bounds
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenericParam
+{
+	pub name: Ident,
+	pub bounds: Vec<Path>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+#[allow(dead_code)]
+impl GenericParam
+{
+	/// Creates a generic parameter without bounds
+	pub const fn simple(name: Ident, span: Span) -> Self
+	{
+		return Self {
+			name,
+			bounds: Vec::new(),
+			span,
+		};
+	}
+
+	/// Returns true if this parameter has trait bounds
+	pub const fn has_bounds(&self) -> bool
+	{
+		return !self.bounds.is_empty();
+	}
+}
+
+impl Spanned for GenericParam
 {
 	fn span(&self) -> Span
 	{
@@ -1650,7 +1698,7 @@ pub struct TraitDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
-	pub generics: Vec<Ident>,
+	pub generics: Vec<GenericParam>,
 	pub super_traits: Vec<Path>,
 	pub items: Vec<TraitItem>,
 	#[ignored(PartialEq)]
@@ -1718,7 +1766,7 @@ impl Spanned for TraitItem
 pub struct ImplDecl
 {
 	pub modifiers: Vec<Modifier>,
-	pub generics: Vec<Ident>,
+	pub generics: Vec<GenericParam>,
 	pub target: ImplTarget,
 	pub trait_path: Option<ImplTarget>,
 	pub where_clause: Vec<WhereConstraint>,
@@ -2863,24 +2911,24 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn get_generics(&mut self) -> Result<Vec<Ident>, CompileError>
+	fn get_generics(&mut self) -> Result<Vec<GenericParam>, CompileError>
 	{
 		if !self.consume(&TokenKind::LessThan) {
 			return Ok(Vec::new());
 		}
 
-		let mut generics: Vec<Ident> = Vec::new();
+		let mut generics: Vec<GenericParam> = Vec::new();
 
 		if self.consume_greater_than() {
 			return Ok(generics);
 		}
 
 		loop {
-			let tok = self.next();
-			match tok.kind {
-				TokenKind::Identifier(name) => {
-					generics.push(name);
-				}
+			let start_span: Span = self.peek().span;
+			let tok: Token = self.next();
+
+			let name: Ident = match tok.kind {
+				TokenKind::Identifier(name) => name,
 				_ => {
 					return Err(CompileError::ParseError(ParseError::unexpected_token(
 						tok.span,
@@ -2889,7 +2937,19 @@ impl<'s, 'c> Parser<'s, 'c>
 						self.source_index,
 					)));
 				}
-			}
+			};
+
+			let bounds: Vec<Path> = if self.consume(&TokenKind::Colon) {
+				self.parse_trait_bounds()?
+			} else {
+				Vec::new()
+			};
+
+			generics.push(GenericParam {
+				name,
+				bounds,
+				span: start_span.merge(&self.last_span),
+			});
 
 			if self.consume_greater_than() {
 				break;
@@ -4675,7 +4735,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			)));
 		};
 
-		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
 			self.get_generics()?
 		} else {
 			Vec::new()
@@ -5136,7 +5196,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Impl)?;
 
-		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
 			self.get_generics()?
 		} else {
 			Vec::new()
@@ -5400,7 +5460,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let name: Path = self.get_path()?;
 
-		let generics: Vec<Ident> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
 			self.get_generics()?
 		} else {
 			Vec::new()
@@ -5728,7 +5788,14 @@ fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, s
 	write!(f, " {}", sig.name)?;
 
 	if !sig.generics.is_empty() {
-		write!(f, "<{}>", sig.generics.join(", "))?;
+		write!(f, "<")?;
+		for (i, generic) in sig.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
 	}
 
 	write!(f, "(")?;
@@ -5765,6 +5832,24 @@ impl fmt::Display for Param
 			write!(f, "mut ")?;
 		}
 		return write!(f, "{}: {}", self.name, self.ty);
+	}
+}
+
+impl fmt::Display for GenericParam
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}", self.name)?;
+		if !self.bounds.is_empty() {
+			write!(f, ": ")?;
+			for (i, bound) in self.bounds.iter().enumerate() {
+				if i > 0 {
+					write!(f, " + ")?;
+				}
+				write!(f, "{}", bound)?;
+			}
+		}
+		return Ok(());
 	}
 }
 
@@ -6590,7 +6675,14 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 	write!(f, "trait {}", t.name)?;
 
 	if !t.generics.is_empty() {
-		write!(f, "<{}>", t.generics.join(", "))?;
+		write!(f, "<")?;
+		for (i, generic) in t.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
 	}
 
 	if !t.super_traits.is_empty() {
@@ -6649,7 +6741,14 @@ fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDec
 	write!(f, "impl")?;
 
 	if !i.generics.is_empty() {
-		write!(f, "<{}>", i.generics.join(", "))?;
+		write!(f, "<")?;
+		for (i, generic) in i.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
 	}
 
 	if let Some(trait_path) = &i.trait_path {

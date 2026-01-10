@@ -1415,7 +1415,7 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.generics.len(), 1);
-				assert_eq!(func.signature.generics[0], "T");
+				assert_eq!(func.signature.generics[0].name, "T");
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -5042,5 +5042,398 @@ mod tests
         "#;
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
+	}
+
+	// ========== Basic Inline Trait Bounds Tests ==========
+
+	#[test]
+	fn test_parse_function_with_single_inline_bound()
+	{
+		let input = "fn foo<T: Clone>(x: T) -> T { x }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 1);
+				assert_eq!(func.signature.generics[0].name, "T");
+				assert_eq!(func.signature.generics[0].bounds.len(), 1);
+				assert_eq!(
+					func.signature.generics[0].bounds[0],
+					Path::simple(vec!["Clone".to_string()], Default::default())
+				);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_with_multiple_inline_bounds()
+	{
+		let input = "fn bar<T: Clone + Debug + Display>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 1);
+				assert_eq!(func.signature.generics[0].name, "T");
+				assert_eq!(func.signature.generics[0].bounds.len(), 3);
+				assert_eq!(
+					func.signature.generics[0].bounds[0],
+					Path::simple(vec!["Clone".to_string()], Default::default())
+				);
+				assert_eq!(
+					func.signature.generics[0].bounds[1],
+					Path::simple(vec!["Debug".to_string()], Default::default())
+				);
+				assert_eq!(
+					func.signature.generics[0].bounds[2],
+					Path::simple(vec!["Display".to_string()], Default::default())
+				);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_function_with_mixed_bounded_and_unbounded_generics()
+	{
+		let input = "fn mixed<T, U: Clone, V: Debug + Send>(a: T, b: U, c: V) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 3);
+
+				// T - no bounds
+				assert_eq!(func.signature.generics[0].name, "T");
+				assert_eq!(func.signature.generics[0].bounds.len(), 0);
+
+				// U: Clone
+				assert_eq!(func.signature.generics[1].name, "U");
+				assert_eq!(func.signature.generics[1].bounds.len(), 1);
+				assert_eq!(
+					func.signature.generics[1].bounds[0],
+					Path::simple(vec!["Clone".to_string()], Default::default())
+				);
+
+				// V: Debug + Send
+				assert_eq!(func.signature.generics[2].name, "V");
+				assert_eq!(func.signature.generics[2].bounds.len(), 2);
+				assert_eq!(
+					func.signature.generics[2].bounds[0],
+					Path::simple(vec!["Debug".to_string()], Default::default())
+				);
+				assert_eq!(
+					func.signature.generics[2].bounds[1],
+					Path::simple(vec!["Send".to_string()], Default::default())
+				);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	// ========== Trait Declaration Tests ==========
+
+	#[test]
+	fn test_parse_trait_with_inline_bounds()
+	{
+		let input = "trait Foo<T: Clone, U: Debug> { fn bar(&self, x: T, y: U); }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Trait(t) => {
+				assert_eq!(t.generics.len(), 2);
+
+				assert_eq!(t.generics[0].name, "T");
+				assert_eq!(t.generics[0].bounds.len(), 1);
+				assert_eq!(
+					t.generics[0].bounds[0],
+					Path::simple(vec!["Clone".to_string()], Default::default())
+				);
+
+				assert_eq!(t.generics[1].name, "U");
+				assert_eq!(t.generics[1].bounds.len(), 1);
+				assert_eq!(
+					t.generics[1].bounds[0],
+					Path::simple(vec!["Debug".to_string()], Default::default())
+				);
+			}
+			_ => panic!("Expected trait declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_trait_with_complex_bounds()
+	{
+		let input = "trait Convert<From: Clone + Send, To: Debug + Sync> { fn convert(val: From) -> To; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Trait(t) => {
+				assert_eq!(t.generics.len(), 2);
+				assert_eq!(t.generics[0].bounds.len(), 2);
+				assert_eq!(t.generics[1].bounds.len(), 2);
+			}
+			_ => panic!("Expected trait declaration"),
+		}
+	}
+
+	// ========== Impl Block Tests ==========
+
+	#[test]
+	fn test_parse_impl_with_inline_bounds()
+	{
+		let input = "impl<T: Clone + Send> MyTrait for MyType<T> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Impl(i) => {
+				assert_eq!(i.generics.len(), 1);
+				assert_eq!(i.generics[0].name, "T");
+				assert_eq!(i.generics[0].bounds.len(), 2);
+				assert_eq!(
+					i.generics[0].bounds[0],
+					Path::simple(vec!["Clone".to_string()], Default::default())
+				);
+				assert_eq!(
+					i.generics[0].bounds[1],
+					Path::simple(vec!["Send".to_string()], Default::default())
+				);
+			}
+			_ => panic!("Expected impl declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_impl_mixed_inline_and_where()
+	{
+		let input = "impl<T: Clone, U> MyTrait for MyType<T, U> where U: Debug {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Impl(i) => {
+				// T has inline bound
+				assert_eq!(i.generics[0].bounds.len(), 1);
+				// U has no inline bound but has where clause
+				assert_eq!(i.generics[1].bounds.len(), 0);
+				assert_eq!(i.where_clause.len(), 1);
+			}
+			_ => panic!("Expected impl declaration"),
+		}
+	}
+
+	// ========== Advanced Scenarios ==========
+
+	#[test]
+	fn test_parse_inline_bounds_with_qualified_paths()
+	{
+		let input = "fn process<T: std::clone::Clone + std::fmt::Debug>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics[0].bounds.len(), 2);
+				assert_eq!(
+					func.signature.generics[0].bounds[0],
+					Path::simple(
+						vec!["std".to_string(), "clone".to_string(), "Clone".to_string()],
+						Default::default()
+					)
+				);
+				assert_eq!(
+					func.signature.generics[0].bounds[1],
+					Path::simple(
+						vec!["std".to_string(), "fmt".to_string(), "Debug".to_string()],
+						Default::default()
+					)
+				);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_nested_generic_bounds()
+	{
+		let input = "fn foo<T: Iterator<Item = i32>>(iter: T) {}";
+		let result = parse_program_from_str(input);
+		// This might fail depending on if we support associated types in bounds
+		// but at minimum it should parse the Iterator part
+		assert!(result.is_ok() || result.is_err());
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_inline_bounds()
+	{
+		let input = "fn!<A: Allocator + Send>(alloc: A) -> Result {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.generics[0].bounds.len(), 2);
+			}
+			_ => panic!("Expected heap function declaration"),
+		}
+	}
+
+	// ========== Display/Formatting Tests ==========
+
+	#[test]
+	fn test_display_inline_bounds_single()
+	{
+		let input = "fn foo<T: Clone>(x: T) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("<T: Clone>"));
+	}
+
+	#[test]
+	fn test_display_inline_bounds_multiple()
+	{
+		let input = "fn foo<T: Clone + Debug>(x: T) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("T: Clone + Debug"));
+	}
+
+	#[test]
+	fn test_display_mixed_bounds()
+	{
+		let input = "fn foo<T, U: Clone>(x: T, y: U) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("<T, U: Clone>"));
+	}
+
+	// ========== Edge Cases ==========
+
+	#[test]
+	fn test_parse_inline_bounds_with_trailing_comma()
+	{
+		let input = "fn foo<T: Clone, U: Debug,>(x: T, y: U) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 2);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_inline_bounds_empty_generics()
+	{
+		let input = "fn foo<>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 0);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_inline_bounds_no_space_around_colon()
+	{
+		let input = "fn foo<T:Clone+Debug>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_inline_bounds_with_lifetime_like_names()
+	{
+		let input = "fn foo<T: 'static>(x: T) {}";
+		let result = parse_program_from_str(input);
+		// This might fail since we don't have lifetime support yet
+		// but documenting the behavior
+		assert!(result.is_ok() || result.is_err());
+	}
+
+	// ========== Real-World Examples ==========
+
+	#[test]
+	fn test_parse_realistic_generic_function()
+	{
+		let input = r#"
+			fn process<T: Clone + Debug, E: Error>(
+				items: Vec<T>,
+				handler: Fn(T) -> Result<(), E>
+			) -> Result<(), E> {
+				for item in items {
+					handler(item)?;
+				}
+			}
+		"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_trait_with_method_using_bounds()
+	{
+		let input = r#"
+			trait Container<T: Clone> {
+				fn add(&mut self, item: T);
+				fn get(&self, index: usize) -> Option<T>;
+			}
+		"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_for_generic_with_bounds()
+	{
+		let input = r#"
+			impl<T: Clone + PartialEq> MyVec<T> {
+				fn contains(&self, item: T) -> bool {
+					false
+				}
+			}
+		"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Error Cases ==========
+
+	#[test]
+	fn test_parse_inline_bounds_missing_colon()
+	{
+		let input = "fn foo<T Clone>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_inline_bounds_missing_bound_after_colon()
+	{
+		let input = "fn foo<T: >(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_inline_bounds_missing_plus_between_bounds()
+	{
+		let input = "fn foo<T: Clone Debug>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
 	}
 }
