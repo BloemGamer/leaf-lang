@@ -4751,7 +4751,16 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 
 		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where) {
-			todo!("parse where constraint is not made, this does not work for now")
+			self.next(); // where
+			if !matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					self.peek().span(),
+					Expected::Identifier,
+					self.next().kind,
+					self.source_index,
+				)));
+			}
+			self.parse_where_clause()?
 		} else {
 			Vec::new()
 		};
