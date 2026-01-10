@@ -5276,14 +5276,14 @@ mod tests
 	#[test]
 	fn test_parse_heap_function_with_inline_bounds()
 	{
-		let input = "fn!<A: Allocator + Send>(alloc: A) -> Result {}";
+		let input = "fn!<A: Allocator + Send>func(alloc: A) -> Result {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.call_type, CallType::UserHeap);
-				assert_eq!(func.signature.generics[0].bounds.len(), 2);
+				assert_eq!(func.signature.heap_generics[0].bounds.len(), 2);
 			}
 			_ => panic!("Expected heap function declaration"),
 		}
