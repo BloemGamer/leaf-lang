@@ -3999,7 +3999,10 @@ mod tests
 		let result = parse_expr_from_str("default()");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Default { heap_call: false, .. } => (),
+			Expr::Default {
+				heap_call: CallType::Regular,
+				..
+			} => (),
 			_ => panic!("Expected default expression"),
 		}
 	}
@@ -4010,7 +4013,10 @@ mod tests
 		let result = parse_expr_from_str("default!()");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Default { heap_call: true, .. } => (),
+			Expr::Default {
+				heap_call: CallType::UserHeap,
+				..
+			} => (),
 			_ => panic!("Expected heap-allocated default expression"),
 		}
 	}
@@ -4309,6 +4315,732 @@ mod tests
 		let lexer = Lexer::new_add_to_source_map(&config, "&impl Clone", "test_file_58", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
+		assert!(result.is_ok());
+	}
+
+	// ========== Heap Function Declaration Tests ==========
+
+	#[test]
+	fn test_parse_heap_function_declaration()
+	{
+		let input = "fn! allocate_memory() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_params()
+	{
+		let input = "fn! allocate(size: usize) -> u8* {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.params.len(), 1);
+				assert!(func.signature.return_type.is_some());
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_generics()
+	{
+		let input = "fn!<Alloc> create() -> Box<T> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+				assert_eq!(func.signature.generics.len(), 1);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_modifiers()
+	{
+		let input = "pub unsafe inline fn! dangerous_alloc() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+				assert!(func.signature.modifiers.len() >= 3);
+			}
+			_ => panic!("Expected function declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_regular_vs_heap_function()
+	{
+		let input = r#"
+            fn regular() {}
+            fn! heap() {}
+        "#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		assert_eq!(program.items.len(), 2);
+
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(!func.signature.heap_func);
+			}
+			_ => panic!("Expected regular function"),
+		}
+
+		match &program.items[1] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.heap_func);
+			}
+			_ => panic!("Expected heap function"),
+		}
+	}
+
+	// ========== Heap Function Call Tests ==========
+
+	#[test]
+	fn test_parse_user_heap_call()
+	{
+		let input = "allocate!()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, .. } => {
+				assert_eq!(call_type, CallType::UserHeap);
+				assert!(call_type.is_heap_call());
+				assert!(call_type.is_user_call());
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_user_maybe_heap_call()
+	{
+		let input = "allocate?()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, .. } => {
+				assert_eq!(call_type, CallType::UserMaybeHeap);
+				assert!(call_type.is_user_maybe_call());
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_regular_call()
+	{
+		let input = "allocate()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, .. } => {
+				assert_eq!(call_type, CallType::Regular);
+				assert!(call_type.is_regular());
+				assert!(!call_type.is_heap_call());
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_call_with_args()
+	{
+		let input = "allocate!(1024, true)";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, args, .. } => {
+				assert_eq!(call_type, CallType::UserHeap);
+				assert_eq!(args.len(), 2);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_call_with_named_generics()
+	{
+		let input = "allocate!<Allocator: MyAlloc>(size)";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call {
+				call_type,
+				named_generics,
+				args,
+				..
+			} => {
+				assert_eq!(call_type, CallType::UserHeap);
+				assert_eq!(named_generics.len(), 1);
+				assert_eq!(named_generics[0].0, "Allocator");
+				assert_eq!(args.len(), 1);
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_maybe_heap_call_with_named_generics()
+	{
+		let input = "allocate?<IO: StdIO>(data)";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call {
+				call_type,
+				named_generics,
+				..
+			} => {
+				assert_eq!(call_type, CallType::UserMaybeHeap);
+				assert_eq!(named_generics.len(), 1);
+				assert_eq!(named_generics[0].0, "IO");
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_call_multiple_named_generics()
+	{
+		let input = "create!<Alloc: System, Error: MyError>()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call {
+				call_type,
+				named_generics,
+				..
+			} => {
+				assert_eq!(call_type, CallType::UserHeap);
+				assert_eq!(named_generics.len(), 2);
+				assert_eq!(named_generics[0].0, "Alloc");
+				assert_eq!(named_generics[1].0, "Error");
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_call_qualified_path()
+	{
+		let input = "std::alloc::allocate!(1024)";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { callee, call_type, .. } => {
+				assert_eq!(call_type, CallType::UserHeap);
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(path.segments.len(), 3);
+						assert_eq!(path.segments[0], "std");
+						assert_eq!(path.segments[1], "alloc");
+						assert_eq!(path.segments[2], "allocate");
+					}
+					_ => panic!("Expected identifier"),
+				}
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_chained_heap_call()
+	{
+		let input = "builder!().build!().finalize()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		// Should parse as ((builder!()).build!()).finalize()
+	}
+
+	#[test]
+	fn test_parse_heap_call_in_expression()
+	{
+		let input = "var ptr: u8* = allocate!(size);";
+		let result = parse_block_from_str(&format!("{{{}}}", input));
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_heap_call_as_argument()
+	{
+		let input = "process(allocate!(1024))";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { args, .. } => {
+				assert_eq!(args.len(), 1);
+				match &args[0] {
+					Expr::Call { call_type, .. } => {
+						assert_eq!(*call_type, CallType::UserHeap);
+					}
+					_ => panic!("Expected inner heap call"),
+				}
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	// ========== Default Expression Tests ==========
+
+	#[test]
+	fn test_parse_default_regular()
+	{
+		let input = "default()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Default { heap_call, .. } => {
+				assert_eq!(heap_call, CallType::Regular);
+			}
+			_ => panic!("Expected default expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_heap()
+	{
+		let input = "default!()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Default { heap_call, .. } => {
+				assert_eq!(heap_call, CallType::UserHeap);
+			}
+			_ => panic!("Expected heap default expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_maybe_heap()
+	{
+		let input = "default?()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Default { heap_call, .. } => {
+				assert_eq!(heap_call, CallType::UserMaybeHeap);
+			}
+			_ => panic!("Expected maybe-heap default expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_in_variable_init()
+	{
+		let input = "{ var x: MyType = default!(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => match &var.init {
+				Some(Expr::Default { heap_call, .. }) => {
+					assert_eq!(*heap_call, CallType::UserHeap);
+				}
+				_ => panic!("Expected default expression"),
+			},
+			_ => panic!("Expected variable declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_in_struct_field()
+	{
+		let input = "Point { x = default!(), y = default!() }";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::StructInit { fields, .. } => {
+				assert_eq!(fields.len(), 2);
+				for (_, expr) in fields {
+					match expr {
+						Expr::Default { heap_call, .. } => {
+							assert_eq!(heap_call, CallType::UserHeap);
+						}
+						_ => panic!("Expected default expression"),
+					}
+				}
+			}
+			_ => panic!("Expected struct init"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_as_return_value()
+	{
+		let input = "{ return default!(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::Return { value: Some(expr), .. } => match expr {
+				Expr::Default { heap_call, .. } => {
+					assert_eq!(*heap_call, CallType::UserHeap);
+				}
+				_ => panic!("Expected default expression"),
+			},
+			_ => panic!("Expected return statement"),
+		}
+	}
+
+	#[test]
+	fn test_parse_default_in_array()
+	{
+		let input = "[default!(), default!(), default!()]";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Array(ArrayLiteral::List { elements, .. }) => {
+				assert_eq!(elements.len(), 3);
+				for elem in elements {
+					match elem {
+						Expr::Default { heap_call, .. } => {
+							assert_eq!(heap_call, CallType::UserHeap);
+						}
+						_ => panic!("Expected default expression"),
+					}
+				}
+			}
+			_ => panic!("Expected array literal"),
+		}
+	}
+
+	// ========== Pattern Constructor Call Tests ==========
+
+	#[test]
+	fn test_parse_pattern_typed_identifier_regular_constructor()
+	{
+		let input = "{ switch x { val: MyType() => true, } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::Switch { arms, .. } => match &arms[0].pattern {
+					Pattern::TypedIdentifier { call_constructor, .. } => {
+						assert_eq!(*call_constructor, Some(CallType::Regular));
+					}
+					_ => panic!("Expected typed identifier pattern"),
+				},
+				_ => panic!("Expected switch expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pattern_typed_identifier_heap_constructor()
+	{
+		let input = "{ switch x { val: MyType!() => true, } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::Switch { arms, .. } => match &arms[0].pattern {
+					Pattern::TypedIdentifier { call_constructor, .. } => {
+						assert_eq!(*call_constructor, Some(CallType::UserHeap));
+					}
+					_ => panic!("Expected typed identifier pattern"),
+				},
+				_ => panic!("Expected switch expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pattern_typed_identifier_maybe_heap_constructor()
+	{
+		let input = "{ switch x { val: MyType?() => true, } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::Switch { arms, .. } => match &arms[0].pattern {
+					Pattern::TypedIdentifier { call_constructor, .. } => {
+						assert_eq!(*call_constructor, Some(CallType::UserMaybeHeap));
+					}
+					_ => panic!("Expected typed identifier pattern"),
+				},
+				_ => panic!("Expected switch expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pattern_typed_identifier_no_constructor()
+	{
+		let input = "{ switch x { val: MyType => true, } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::Switch { arms, .. } => match &arms[0].pattern {
+					Pattern::TypedIdentifier { call_constructor, .. } => {
+						assert_eq!(*call_constructor, None);
+					}
+					_ => panic!("Expected typed identifier pattern"),
+				},
+				_ => panic!("Expected switch expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pattern_in_if_var_with_constructor()
+	{
+		let input = "{ if var x: MyType!() = value { x } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::IfVar { pattern, .. } => match pattern {
+					Pattern::TypedIdentifier { call_constructor, .. } => {
+						assert_eq!(*call_constructor, Some(CallType::UserHeap));
+					}
+					_ => panic!("Expected typed identifier pattern"),
+				},
+				_ => panic!("Expected if var expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_pattern_in_struct_field_with_constructor()
+	{
+		let input = "{ switch x { Point { x: i32!(), y: i32?() } => true, } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Mixed Heap Call Scenarios ==========
+
+	#[test]
+	fn test_parse_heap_and_regular_calls_mixed()
+	{
+		let input = "regular(heap!(data), maybe?(other))";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, args, .. } => {
+				assert_eq!(call_type, CallType::Regular);
+				assert_eq!(args.len(), 2);
+
+				match &args[0] {
+					Expr::Call { call_type, .. } => {
+						assert_eq!(*call_type, CallType::UserHeap);
+					}
+					_ => panic!("Expected heap call"),
+				}
+
+				match &args[1] {
+					Expr::Call { call_type, .. } => {
+						assert_eq!(*call_type, CallType::UserMaybeHeap);
+					}
+					_ => panic!("Expected maybe heap call"),
+				}
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_call_with_default_arg()
+	{
+		let input = "allocate!(default!())";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+		match result.unwrap() {
+			Expr::Call { call_type, args, .. } => {
+				assert_eq!(call_type, CallType::UserHeap);
+				match &args[0] {
+					Expr::Default { heap_call, .. } => {
+						assert_eq!(*heap_call, CallType::UserHeap);
+					}
+					_ => panic!("Expected default expression"),
+				}
+			}
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	// ========== Function Signature Display Tests ==========
+
+	#[test]
+	fn test_display_heap_function()
+	{
+		let input = "fn! allocate(size: usize) -> u8* {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("fn!"));
+		assert!(output.contains("allocate"));
+	}
+
+	#[test]
+	fn test_display_heap_call()
+	{
+		let input = "allocate!(1024)";
+		let expr = parse_expr_from_str(input).unwrap();
+		let output = format!("{}", expr);
+		assert!(output.contains("allocate"));
+		assert!(output.contains("!"));
+	}
+
+	#[test]
+	fn test_display_default_heap()
+	{
+		let input = "default!()";
+		let expr = parse_expr_from_str(input).unwrap();
+		let output = format!("{}", expr);
+		assert!(output.contains("default"));
+		assert!(output.contains("!"));
+	}
+
+	// ========== Error Cases ==========
+
+	#[test]
+	fn test_parse_heap_call_missing_parens()
+	{
+		let input = "allocate!";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_default_missing_parens()
+	{
+		let input = "default!";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_default_with_args_error()
+	{
+		let input = "default!(arg)";
+		let result = parse_expr_from_str(input);
+		// Should error - default takes no arguments
+		assert!(result.is_err());
+	}
+
+	// ========== Complex Real-World Scenarios ==========
+
+	#[test]
+	fn test_parse_allocator_pattern()
+	{
+		let input = r#"
+            fn! create_buffer<A: Allocator>(allocator: A, size: usize) -> Buffer {
+                var ptr: u8* = allocator.allocate!(size);
+                Buffer { ptr, size }
+            }
+        "#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_conditional_heap_allocation()
+	{
+		let input = r#"{
+            if should_heap {
+                create!<Alloc: Heap>(data)
+            } else {
+                create(data)
+            }
+        }"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_nested_heap_calls()
+	{
+		let input = "create!(build!(allocate!()))";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_heap_call_in_match_arm()
+	{
+		let input = r#"{
+            switch val {
+                Some(x: i32) => process!(x),
+                None => default!(),
+            }
+        }"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_heap_method_call()
+	{
+		let input = "builder.build!().finalize!()";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_function_returning_heap_allocated()
+	{
+		let input = r#"
+            fn! create_vec<T>() -> Vec<T> {
+                Vec!<Alloc: System>()
+            }
+        "#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_trait_with_heap_methods()
+	{
+		let input = r#"
+            trait Allocator {
+                fn! allocate(&self, size: usize) -> u8*;
+                fn! deallocate(&self, ptr: u8*);
+            }
+        "#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_with_heap_methods()
+	{
+		let input = r#"
+            impl Allocator for SystemAlloc {
+                fn! allocate(&self, size: usize) -> u8* {
+                    system_alloc!(size)
+                }
+            }
+        "#;
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
 }

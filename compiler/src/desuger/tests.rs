@@ -51,7 +51,7 @@ mod tests
 		return Pattern::TypedIdentifier {
 			path: Path::simple(vec![name.to_string()], Span::default()),
 			ty: simple_type(type_name),
-			call_constructor: false,
+			call_constructor: None,
 			span: Span::default(),
 		};
 	}
@@ -412,6 +412,8 @@ mod tests
 
 		let input = Expr::Call {
 			callee: Box::new(ident("foo")),
+			call_type: CallType::Regular,
+			named_generics: Vec::new(),
 			args: vec![Expr::Block(Box::new(Block {
 				stmts: vec![Stmt::VariableDecl(VariableDecl {
 					pattern: typed_ident_pattern("x", "i32"),
@@ -804,6 +806,8 @@ mod tests
 				op: BinaryOp::Lt,
 				lhs: Box::new(Expr::Call {
 					callee: Box::new(ident("get_count")),
+					call_type: CallType::Regular,
+					named_generics: Vec::new(),
 					args: vec![],
 					span: Span::default(),
 				}),
@@ -920,6 +924,8 @@ mod tests
 
 		let expr = Expr::Call {
 			callee: Box::new(ident("foo")),
+			call_type: CallType::Regular,
+			named_generics: Vec::new(),
 			args: vec![Expr::Block(Box::new(Block {
 				stmts: vec![],
 				tail_expr: Some(Box::new(int_lit(1))),
@@ -2013,7 +2019,7 @@ mod tests
 						}),
 						span: Span::default(),
 					},
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: None,
@@ -2043,7 +2049,7 @@ mod tests
 			// call_constructor should be set to false after processing
 			match output.pattern {
 				Pattern::TypedIdentifier { call_constructor, .. } => {
-					assert!(!call_constructor);
+					assert!(call_constructor.is_none());
 				}
 				_ => panic!("Expected TypedIdentifier pattern"),
 			}
@@ -2059,7 +2065,7 @@ mod tests
 				pattern: Pattern::TypedIdentifier {
 					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: simple_type("Point"),
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: Some(Expr::Literal {
@@ -2107,7 +2113,7 @@ mod tests
 						}),
 						span: Span::default(),
 					},
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: None,
@@ -2141,7 +2147,7 @@ mod tests
 				pattern: Pattern::TypedIdentifier {
 					path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
 					ty: simple_type("Config"),
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: None,
@@ -2185,7 +2191,7 @@ mod tests
 						}),
 						span: Span::default(),
 					},
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: None,
@@ -2219,7 +2225,7 @@ mod tests
 				pattern: Pattern::TypedIdentifier {
 					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: simple_type("i32"),
-					call_constructor: false,
+					call_constructor: None,
 					span: Span::default(),
 				},
 				init: Some(int_lit(42)),
@@ -2252,7 +2258,7 @@ mod tests
 						pattern: Pattern::TypedIdentifier {
 							path: Path::simple(vec!["a".to_string()], Span::default()),
 							ty: simple_type("Point"),
-							call_constructor: true,
+							call_constructor: Some(CallType::Regular),
 							span: Span::default(),
 						},
 						init: None,
@@ -2263,7 +2269,7 @@ mod tests
 						pattern: Pattern::TypedIdentifier {
 							path: Path::simple(vec!["b".to_string()], Span::default()),
 							ty: simple_type("Config"),
-							call_constructor: true,
+							call_constructor: Some(CallType::Regular),
 							span: Span::default(),
 						},
 						init: None,
@@ -2316,7 +2322,7 @@ mod tests
 						pattern: Pattern::TypedIdentifier {
 							path: Path::simple(vec!["local".to_string()], Span::default()),
 							ty: simple_type("LocalType"),
-							call_constructor: true,
+							call_constructor: Some(CallType::Regular),
 							span: Span::default(),
 						},
 						init: None,
@@ -2377,7 +2383,7 @@ mod tests
 				pattern: Pattern::TypedIdentifier {
 					path: Path::simple(vec!["x".to_string()], Span::default()),
 					ty: original_ty,
-					call_constructor: true,
+					call_constructor: Some(CallType::Regular),
 					span: Span::default(),
 				},
 				init: None,

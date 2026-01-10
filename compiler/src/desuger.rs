@@ -4,9 +4,9 @@ use crate::{
 	CompileError,
 	lexer::Span,
 	parser::{
-		ArrayLiteral, Block, BlockContent, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem, NamespaceDecl,
-		Path, Pattern, Program, RangeExpr, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem,
-		Type, TypeCore, VariableDecl,
+		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem,
+		NamespaceDecl, Path, Pattern, Program, RangeExpr, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl,
+		TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -440,7 +440,7 @@ impl Desugarer
 					}),
 					span: Span::default(),
 				},
-				call_constructor: false,
+				call_constructor: None,
 				span: Span::default(),
 			}
 		} else {
@@ -462,7 +462,7 @@ impl Desugarer
 					}),
 					span: Span::default(),
 				},
-				call_constructor: false,
+				call_constructor: None,
 				span: Span::default(),
 			},
 			init: Some(desugared_iter),
@@ -479,6 +479,8 @@ impl Desugarer
 				name: "next".to_string(),
 				span: Span::default(),
 			}),
+			call_type: CallType::CompilerHeap,
+			named_generics: Vec::new(),
 			args: vec![],
 			span: Span::default(),
 		};
@@ -563,7 +565,7 @@ impl Desugarer
 					}),
 					span: Span::default(),
 				},
-				call_constructor: false,
+				call_constructor: None,
 				span: Span::default(),
 			},
 			init: Some(desugared_expr),
@@ -643,7 +645,7 @@ impl Desugarer
 					}),
 					span: Span::default(),
 				},
-				call_constructor: false,
+				call_constructor: None,
 				span: Span::default(),
 			},
 			init: Some(desugared_expr),
@@ -753,7 +755,7 @@ impl Desugarer
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> Result<VariableDecl, CompileError>
 	{
 		let needs_constructor: bool = match &var.pattern {
-			Pattern::TypedIdentifier { call_constructor, .. } => *call_constructor && var.init.is_none(),
+			Pattern::TypedIdentifier { call_constructor, .. } => call_constructor.is_some() && var.init.is_none(),
 			_ => false,
 		};
 
@@ -761,15 +763,18 @@ impl Desugarer
 			&& let Pattern::TypedIdentifier {
 				ty, call_constructor, ..
 			} = &var.pattern
-			&& *call_constructor
+			&& call_constructor.is_some()
 		{
-			var.init = Some(self.type_to_constructor_call(ty)?);
+			var.init = Some(self.type_to_constructor_call(
+				ty,
+				call_constructor.expect("Because of the checks before this, this should not be none"),
+			)?);
 
 			if let Pattern::TypedIdentifier { path, ty, span, .. } = var.pattern.clone() {
 				var.pattern = Pattern::TypedIdentifier {
 					path,
 					ty,
-					call_constructor: false,
+					call_constructor: None,
 					span,
 				};
 			}
@@ -803,8 +808,16 @@ impl Desugarer
 				span,
 			},
 
-			Expr::Call { callee, args, span } => Expr::Call {
+			Expr::Call {
+				callee,
+				call_type,
+				named_generics,
+				args,
+				span,
+			} => Expr::Call {
 				callee: Box::new(self.desugar_expr(*callee)?),
+				call_type,
+				named_generics,
 				args: args
 					.into_iter()
 					.map(|arg| return self.desugar_expr(arg))
@@ -934,7 +947,7 @@ impl Desugarer
 					}),
 					span: Span::default(),
 				},
-				call_constructor: false,
+				call_constructor: None,
 				span: Span::default(),
 			},
 			init: Some(desugared_expr),
@@ -991,7 +1004,7 @@ impl Desugarer
 	}
 
 	#[allow(clippy::result_large_err)]
-	fn type_to_constructor_call(&self, ty: &Type) -> Result<Expr, CompileError>
+	fn type_to_constructor_call(&self, ty: &Type, call_type: CallType) -> Result<Expr, CompileError>
 	{
 		let mut path = match ty.core.as_ref() {
 			TypeCore::Base { path, .. } => path.clone(),
@@ -1008,6 +1021,8 @@ impl Desugarer
 
 		return Ok(Expr::Call {
 			callee: Box::new(Expr::Identifier { path, span: ty.span }),
+			call_type,
+			named_generics: Vec::new(),
 			args: vec![],
 			span: ty.span,
 		});
@@ -1136,6 +1151,8 @@ impl Desugarer
 					},
 					span,
 				}),
+				call_type: CallType::Regular,
+				named_generics: Vec::new(),
 				args,
 				span,
 			};

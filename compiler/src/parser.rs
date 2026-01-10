@@ -783,7 +783,7 @@ pub enum Expr
 
 	Default
 	{
-		heap_call: bool,
+		heap_call: CallType,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -816,6 +816,8 @@ pub enum Expr
 	Call
 	{
 		callee: Box<Expr>,
+		call_type: CallType,
+		named_generics: Vec<(Ident, Type)>, // used for heap and allocators
 		args: Vec<Expr>,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -923,6 +925,62 @@ impl Spanned for Expr
 			Expr::IfVar { span, .. } => *span,
 			Expr::Loop { span, .. } => *span,
 		};
+	}
+}
+
+/// Type of function call
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum CallType
+{
+	/// Regular function call: `func()`
+	Regular,
+	/// User-written heap call: `func!<IO: x>()`
+	UserHeap,
+	/// User-written for templates call: `func?<IO: x>()`
+	UserMaybeHeap,
+	/// Compiler-generated call: `func?<IO: x>()`
+	CompilerHeap,
+}
+
+impl CallType
+{
+	/// Returns true if this is a heap call (either user or compiler-generated)
+	#[allow(dead_code)]
+	pub const fn is_heap_call(self) -> bool
+	{
+		return matches!(
+			self,
+			CallType::UserHeap | CallType::CompilerHeap | CallType::UserMaybeHeap
+		);
+	}
+
+	/// Returns true if this is a compiler-generated call
+	#[allow(dead_code)]
+	pub const fn is_compiler_generated(self) -> bool
+	{
+		return matches!(self, CallType::CompilerHeap);
+	}
+
+	/// Returns true if this is a user-generated maybe call
+	#[allow(dead_code)]
+	pub const fn is_user_maybe_call(self) -> bool
+	{
+		return matches!(self, CallType::UserMaybeHeap);
+	}
+
+	/// Returns true if this is a user-written call
+	#[allow(dead_code)]
+	pub const fn is_user_call(self) -> bool
+	{
+		return !matches!(self, CallType::CompilerHeap);
+	}
+
+	/// Returns true if this is a regular (non-heap) call
+	#[allow(dead_code)]
+	pub const fn is_regular(self) -> bool
+	{
+		return matches!(self, CallType::Regular);
 	}
 }
 
@@ -1417,7 +1475,7 @@ pub enum Pattern
 	{
 		path: Path,
 		ty: Type,
-		call_constructor: bool,
+		call_constructor: Option<CallType>,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -3265,6 +3323,8 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.expect(&TokenKind::RightParen)?;
 					expr = Expr::Call {
 						callee: Box::new(expr),
+						call_type: CallType::Regular,
+						named_generics: Vec::new(),
 						args,
 						span: span.merge(&self.last_span),
 					};
@@ -3326,11 +3386,20 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::Default => {
 				self.next(); // default
-				let heap_call: bool = self.consume(&TokenKind::Bang);
+
+				let call_type = if self.consume(&TokenKind::Bang) {
+					CallType::UserHeap
+				} else if self.consume(&TokenKind::QuestionMark) {
+					CallType::UserMaybeHeap
+				} else {
+					CallType::Regular
+				};
+
 				self.expect(&TokenKind::LeftParen)?;
 				self.expect(&TokenKind::RightParen)?;
+
 				return Ok(Expr::Default {
-					heap_call,
+					heap_call: call_type,
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -3345,6 +3414,37 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Identifier(_) => {
 				let path: Path = self.get_path()?;
 
+				let call_type = if self.consume(&TokenKind::Bang) {
+					Some(CallType::UserHeap)
+				} else if self.consume(&TokenKind::QuestionMark) {
+					Some(CallType::UserMaybeHeap)
+				} else {
+					None
+				};
+
+				if let Some(ct) = call_type {
+					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan) {
+						self.parse_named_generics()?
+					} else {
+						Vec::new()
+					};
+
+					self.expect(&TokenKind::LeftParen)?;
+					let args: Vec<Expr> = self.parse_argument_list()?;
+					self.expect(&TokenKind::RightParen)?;
+
+					return Ok(Expr::Call {
+						callee: Box::new(Expr::Identifier {
+							path,
+							span: span.merge(&self.last_span),
+						}),
+						call_type: ct,
+						named_generics,
+						args,
+						span: span.merge(&self.last_span),
+					});
+				}
+
 				if allow_struct_init && self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
 					let checkpoint_span = self.last_span;
@@ -3352,7 +3452,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					self.next(); // {
 
-					let is_struct = self.at(&TokenKind::RightBrace)
+					let is_struct: bool = self.at(&TokenKind::RightBrace)
 						|| (matches!(self.peek_kind(), TokenKind::Identifier(_)) && self.lookahead_for_struct_field());
 
 					self.lexer = checkpoint;
@@ -3876,11 +3976,19 @@ impl<'s, 'c> Parser<'s, 'c>
 							} else if self.consume(&TokenKind::Colon) {
 								let ty: Type = self.parse_type()?;
 
-								let call_constructor: bool = if self.consume(&TokenKind::LeftParen) {
-									self.expect(&TokenKind::RightParen)?; // TODO: Still debating if this should be allowed
-									true
+								let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang) {
+									self.expect(&TokenKind::LeftParen)?;
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::UserHeap)
+								} else if self.consume(&TokenKind::QuestionMark) {
+									self.expect(&TokenKind::LeftParen)?;
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::UserMaybeHeap)
+								} else if self.consume(&TokenKind::LeftParen) {
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::Regular)
 								} else {
-									false
+									None
 								};
 
 								Pattern::TypedIdentifier {
@@ -3927,11 +4035,19 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next(); // :
 					let ty: Type = self.parse_type()?;
 
-					let call_constructor: bool = if self.consume(&TokenKind::LeftParen) {
+					let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang) {
+						self.expect(&TokenKind::LeftParen)?;
 						self.expect(&TokenKind::RightParen)?;
-						true
+						Some(CallType::UserHeap)
+					} else if self.consume(&TokenKind::QuestionMark) {
+						self.expect(&TokenKind::LeftParen)?;
+						self.expect(&TokenKind::RightParen)?;
+						Some(CallType::UserMaybeHeap)
+					} else if self.consume(&TokenKind::LeftParen) {
+						self.expect(&TokenKind::RightParen)?;
+						Some(CallType::Regular)
 					} else {
-						false
+						None
 					};
 
 					return Ok(Pattern::TypedIdentifier {
@@ -5119,6 +5235,59 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(generics);
 	}
 
+	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, CompileError>
+	{
+		if !self.consume(&TokenKind::LessThan) {
+			return Ok(Vec::new());
+		}
+
+		let mut named_generics: Vec<(Ident, Type)> = Vec::new();
+
+		if self.consume_greater_than() {
+			return Ok(named_generics);
+		}
+
+		loop {
+			let name = if let TokenKind::Identifier(name) = self.next().kind {
+				name
+			} else {
+				let tok: Token = self.peek().clone();
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::Identifier,
+					tok.kind,
+					self.source_index,
+				)));
+			};
+
+			self.expect(&TokenKind::Colon)?;
+
+			let ty: Type = self.parse_type()?;
+
+			named_generics.push((name, ty));
+
+			if self.consume_greater_than() {
+				break;
+			}
+
+			if !self.consume(&TokenKind::Comma) {
+				let tok = self.peek().clone();
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+					tok.kind,
+					self.source_index,
+				)));
+			}
+
+			if self.consume_greater_than() {
+				break;
+			}
+		}
+
+		return Ok(named_generics);
+	}
+
 	fn parse_impl_item(&mut self) -> Result<ImplItem, CompileError>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
@@ -5706,8 +5875,12 @@ impl fmt::Display for Pattern
 				..
 			} => {
 				write!(f, "{}: {}", path, ty)?;
-				if *call_constructor {
-					write!(f, "()")?;
+				if let Some(ct) = call_constructor {
+					match ct {
+						CallType::Regular => write!(f, "()")?,
+						CallType::UserHeap => write!(f, "!()")?,
+						CallType::UserMaybeHeap | CallType::CompilerHeap => write!(f, "?()")?,
+					}
 				}
 				return Ok(());
 			}
@@ -5766,7 +5939,16 @@ impl fmt::Display for Expr
 		match self {
 			Expr::Identifier { path, .. } => return write!(f, "{}", path),
 			Expr::Literal { value: lit, .. } => return write!(f, "{}", lit),
-			Expr::Default { heap_call, .. } => return write!(f, "default{}() ", if *heap_call { "!" } else { "" }),
+			Expr::Default { heap_call, .. } => {
+				return {
+					write!(f, "default")?;
+					match *heap_call {
+						CallType::Regular => write!(f, "()"),
+						CallType::UserHeap => write!(f, "!()"),
+						CallType::UserMaybeHeap | CallType::CompilerHeap => write!(f, "?()"),
+					}
+				};
+			}
 			Expr::Unary { op, expr, .. } => match op {
 				UnaryOp::Neg => return write!(f, "-{}", expr),
 				UnaryOp::Not => return write!(f, "!{}", expr),
@@ -5781,8 +5963,33 @@ impl fmt::Display for Expr
 			},
 			Expr::Binary { op, lhs, rhs, .. } => return write!(f, "({} {} {})", lhs, op, rhs),
 			Expr::Cast { ty, expr, .. } => return write!(f, "({}) {}", ty, expr),
-			Expr::Call { callee, args, .. } => {
-				write!(f, "{}(", callee)?;
+			Expr::Call {
+				callee,
+				call_type,
+				named_generics,
+				args,
+				..
+			} => {
+				write!(f, "{}", callee)?;
+
+				match call_type {
+					CallType::UserHeap => write!(f, "!")?,
+					CallType::CompilerHeap | CallType::UserMaybeHeap => write!(f, "?")?,
+					CallType::Regular => {}
+				}
+
+				if !named_generics.is_empty() {
+					write!(f, "<")?;
+					for (i, (name, ty)) in named_generics.iter().enumerate() {
+						if i > 0 {
+							write!(f, ", ")?;
+						}
+						write!(f, "{}: {}", name, ty)?;
+					}
+					write!(f, ">")?;
+				}
+
+				write!(f, "(")?;
 				for (i, arg) in args.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
