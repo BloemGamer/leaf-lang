@@ -1851,7 +1851,7 @@ impl Spanned for ImplItem
 pub struct WhereConstraint
 {
 	pub ty: Path,
-	pub bounds: Vec<Path>,
+	pub bounds: Vec<WhereBound>,
 	pub type_args: Vec<Type>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1863,6 +1863,22 @@ impl Spanned for WhereConstraint
 	{
 		return self.span;
 	}
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum WhereBound
+{
+	Path(Path),
+	Func(FuncBound),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FuncBound
+{
+	Fn
+	{
+		args: Vec<Type>
+	},
 }
 
 /// Kinds of parse errors that can occur.
@@ -4743,7 +4759,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let params: Vec<Param> = self.parse_function_arguments()?;
 
-		let return_type = if self.at(&TokenKind::Arrow) {
+		let return_type: Option<Type> = if self.at(&TokenKind::Arrow) {
 			self.next(); // ->
 			Some(self.parse_type()?)
 		} else {
@@ -5407,14 +5423,36 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			self.expect(&TokenKind::Colon)?;
 
-			let mut bounds: Vec<Path> = Vec::new();
+			let mut bounds: Vec<WhereBound> = Vec::new();
 
 			loop {
-				let mut bound: Path = self.get_path()?;
+				let bound: WhereBound = if matches!(self.peek_kind(), TokenKind::Identifier(s) if *s == "Fn") {
+					self.next(); // Fn
+					let mut params: Vec<Type> = Vec::new();
 
-				if self.at(&TokenKind::LessThan) {
-					bound.generics.extend(self.parse_type_generics()?);
-				}
+					self.expect(&TokenKind::LeftParen)?;
+					loop {
+						if self.at(&TokenKind::RightParen) {
+							break;
+						}
+						params.push(self.parse_type()?);
+						if !self.consume(&TokenKind::Comma) {
+							break;
+						}
+						if self.at(&TokenKind::RightParen) {
+							break;
+						}
+					}
+					self.expect(&TokenKind::RightParen)?;
+					WhereBound::Func(FuncBound::Fn { args: params })
+				} else {
+					let mut bound_path: Path = self.get_path()?;
+
+					if self.at(&TokenKind::LessThan) {
+						bound_path.generics.extend(self.parse_type_generics()?);
+					}
+					WhereBound::Path(bound_path)
+				};
 
 				bounds.push(bound);
 
@@ -6852,5 +6890,39 @@ impl fmt::Display for WhereConstraint
 			write!(f, "{}", bound)?;
 		}
 		return Ok(());
+	}
+}
+
+impl fmt::Display for WhereBound
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match self {
+			WhereBound::Path(path) => {
+				write!(f, "{}", path)
+			}
+			WhereBound::Func(func_bound) => {
+				write!(f, "{}", func_bound)
+			}
+		};
+	}
+}
+
+impl fmt::Display for FuncBound
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match self {
+			FuncBound::Fn { args } => {
+				write!(f, "Fn(")?;
+				for (i, a) in args.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{},", a)?;
+				}
+				write!(f, ")")
+			}
+		};
 	}
 }

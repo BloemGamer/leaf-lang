@@ -186,7 +186,7 @@ fn main()
 		|f| return f,
 	);
 	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
-	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
 	let program: Result<parser::Program, CompileError> = parsed.try_into();
 	// match &program {
