@@ -2272,6 +2272,23 @@ impl Spanned for NamespaceDecl
 	}
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Restrictions
+{
+	pub no_struct_literal: bool,
+}
+
+impl Restrictions
+{
+	const NONE: Self = Self {
+		no_struct_literal: false,
+	};
+
+	const NO_STRUCT_LITERAL: Self = Self {
+		no_struct_literal: true,
+	};
+}
+
 impl<'s, 'c> Parser<'s, 'c>
 {
 	fn peek(&mut self) -> &Token
@@ -2992,26 +3009,26 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_expr(&mut self) -> Result<Expr, CompileError>
 	{
-		return self.parse_expr_inner(true);
+		return self.parse_expr_with_restrictions(Restrictions::NONE);
 	}
 
 	fn parse_expr_no_struct(&mut self) -> Result<Expr, CompileError>
 	{
-		return self.parse_expr_inner(false);
+		return self.parse_expr_with_restrictions(Restrictions::NO_STRUCT_LITERAL);
 	}
 
-	fn parse_expr_inner(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_expr_with_restrictions(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		return self.parse_logical_or(allow_struct_init);
+		return self.parse_logical_or(restrictions);
 	}
 
-	fn parse_logical_or(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_logical_and(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_logical_and(restrictions)?;
 
 		while self.consume(&TokenKind::Or) {
-			let rhs: Expr = self.parse_logical_and(allow_struct_init)?;
+			let rhs: Expr = self.parse_logical_and(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalOr,
 				lhs: Box::new(lhs),
@@ -3023,13 +3040,13 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_logical_and(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_bitwise_or(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_bitwise_or(restrictions)?;
 
 		while self.consume(&TokenKind::And) {
-			let rhs: Expr = self.parse_bitwise_or(allow_struct_init)?;
+			let rhs: Expr = self.parse_bitwise_or(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalAnd,
 				lhs: Box::new(lhs),
@@ -3041,14 +3058,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_or(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_bitwise_xor(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_bitwise_xor(restrictions)?;
 
 		while self.at(&TokenKind::Pipe) {
 			self.next();
-			let rhs: Expr = self.parse_bitwise_xor(allow_struct_init)?;
+			let rhs: Expr = self.parse_bitwise_xor(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitOr,
 				lhs: Box::new(lhs),
@@ -3060,14 +3077,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_xor(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_bitwise_and(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_bitwise_and(restrictions)?;
 
 		while self.at(&TokenKind::Caret) {
 			self.next();
-			let rhs: Expr = self.parse_bitwise_and(allow_struct_init)?;
+			let rhs: Expr = self.parse_bitwise_and(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitXor,
 				lhs: Box::new(lhs),
@@ -3079,14 +3096,14 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_and(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_equality(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_equality(restrictions)?;
 
 		while self.at(&TokenKind::Ampersand) {
 			self.next();
-			let rhs: Expr = self.parse_equality(allow_struct_init)?;
+			let rhs: Expr = self.parse_equality(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitAnd,
 				lhs: Box::new(lhs),
@@ -3098,10 +3115,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_equality(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_relational(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_relational(restrictions)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -3111,7 +3128,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_relational(allow_struct_init)?;
+			let rhs: Expr = self.parse_relational(restrictions)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -3123,10 +3140,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_relational(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_shift(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_shift(restrictions)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -3138,7 +3155,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_shift(allow_struct_init)?;
+			let rhs: Expr = self.parse_shift(restrictions)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -3150,10 +3167,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_shift(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_range(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_range(restrictions)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -3163,7 +3180,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_range(allow_struct_init)?;
+			let rhs: Expr = self.parse_range(restrictions)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -3175,7 +3192,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_range(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
 
@@ -3186,7 +3203,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			let end: Option<Box<Expr>> = if self.is_range_end() {
 				None
 			} else {
-				Some(Box::new(self.parse_additive(allow_struct_init)?))
+				Some(Box::new(self.parse_additive(restrictions)?))
 			};
 
 			return Ok(Expr::Range(RangeExpr {
@@ -3197,7 +3214,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}));
 		}
 
-		let start: Expr = self.parse_additive(allow_struct_init)?;
+		let start: Expr = self.parse_additive(restrictions)?;
 
 		match self.peek_kind() {
 			TokenKind::DotDot => {
@@ -3205,7 +3222,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let end: Option<Box<Expr>> = if self.is_range_end() {
 					None
 				} else {
-					Some(Box::new(self.parse_additive(allow_struct_init)?))
+					Some(Box::new(self.parse_additive(restrictions)?))
 				};
 				return Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
@@ -3216,7 +3233,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			TokenKind::DotDotEquals => {
 				self.next();
-				let end: Box<Expr> = Box::new(self.parse_additive(allow_struct_init)?);
+				let end: Box<Expr> = Box::new(self.parse_additive(restrictions)?);
 				return Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
 					end: Some(end),
@@ -3241,10 +3258,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		);
 	}
 
-	fn parse_additive(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_multiplicative(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_multiplicative(restrictions)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -3254,7 +3271,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_multiplicative(allow_struct_init)?;
+			let rhs: Expr = self.parse_multiplicative(restrictions)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -3266,10 +3283,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_multiplicative(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut lhs: Expr = self.parse_cast(allow_struct_init)?;
+		let mut lhs: Expr = self.parse_cast(restrictions)?;
 
 		loop {
 			let op: BinaryOp = match self.peek_kind() {
@@ -3280,7 +3297,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			self.next();
-			let rhs: Expr = self.parse_cast(allow_struct_init)?;
+			let rhs: Expr = self.parse_cast(restrictions)?;
 			lhs = Expr::Binary {
 				op,
 				lhs: Box::new(lhs),
@@ -3292,7 +3309,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_cast(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
 		if self.at(&TokenKind::LeftParen) {
@@ -3308,10 +3325,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				if matches!(next_tok, TokenKind::DotDot | TokenKind::DotDotEquals) {
 					self.lexer = checkpoint;
 					self.buffered_token = checkpoint_buffered;
-					return self.parse_unary(allow_struct_init);
+					return self.parse_unary(restrictions);
 				}
 
-				let expr: Expr = self.parse_cast(allow_struct_init)?;
+				let expr: Expr = self.parse_cast(restrictions)?;
 				return Ok(Expr::Cast {
 					ty: Box::new(ty),
 					expr: Box::new(expr),
@@ -3323,10 +3340,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.buffered_token = checkpoint_buffered;
 		}
 
-		return self.parse_unary(allow_struct_init);
+		return self.parse_unary(restrictions);
 	}
 
-	fn parse_unary(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
 		let op: UnaryOp = match self.peek_kind() {
@@ -3347,10 +3364,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				let mutable: bool = self.consume(&TokenKind::Mut);
 				UnaryOp::Addr { mutable }
 			}
-			_ => return self.parse_postfix(allow_struct_init),
+			_ => return self.parse_postfix(restrictions),
 		};
 
-		let expr: Expr = self.parse_unary(allow_struct_init)?;
+		let expr: Expr = self.parse_unary(restrictions)?;
 		return Ok(Expr::Unary {
 			op,
 			expr: Box::new(expr),
@@ -3358,10 +3375,10 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_postfix(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let span: Span = self.peek().span();
-		let mut expr: Expr = self.parse_primary(allow_struct_init)?;
+		let mut expr: Expr = self.parse_primary(restrictions)?;
 
 		loop {
 			match self.peek_kind() {
@@ -3394,19 +3411,8 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 					};
 				}
-				TokenKind::LeftParen => {
-					self.next();
-					let args: Vec<Expr> = self.parse_argument_list()?;
-					self.expect(&TokenKind::RightParen)?;
-					expr = Expr::Call {
-						callee: Box::new(expr),
-						call_type: CallType::Regular,
-						named_generics: Vec::new(),
-						args,
-						span: span.merge(&self.last_span),
-					};
-				}
 				TokenKind::Bang | TokenKind::QuestionMark => {
+					// Handle heap call operators in postfix position
 					let call_type = if self.consume(&TokenKind::Bang) {
 						CallType::UserHeap
 					} else if self.consume(&TokenKind::QuestionMark) {
@@ -3433,6 +3439,18 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 					};
 				}
+				TokenKind::LeftParen => {
+					self.next();
+					let args: Vec<Expr> = self.parse_argument_list()?;
+					self.expect(&TokenKind::RightParen)?;
+					expr = Expr::Call {
+						callee: Box::new(expr),
+						call_type: CallType::Regular,
+						named_generics: Vec::new(),
+						args,
+						span: span.merge(&self.last_span),
+					};
+				}
 				_ => break,
 			}
 		}
@@ -3440,7 +3458,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(expr);
 	}
 
-	fn parse_primary(&mut self, allow_struct_init: bool) -> Result<Expr, CompileError>
+	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
 		let tok: Token = self.peek().clone();
 		let span: Span = tok.span();
@@ -3549,7 +3567,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 
-				if allow_struct_init && self.at(&TokenKind::LeftBrace) {
+				if !restrictions.no_struct_literal && self.at(&TokenKind::LeftBrace) {
 					let checkpoint = self.lexer.clone();
 					let checkpoint_span = self.last_span;
 					let checkpoint_buffered = self.buffered_token.clone();
@@ -3826,9 +3844,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		if let TokenKind::Identifier(_) = self.peek_kind() {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
 			self.next(); // identifier(_)
-			let has_equals = self.at(&TokenKind::Equals);
+
+			let is_struct_field: bool =
+				self.at(&TokenKind::Equals) || self.at(&TokenKind::Comma) || self.at(&TokenKind::RightBrace);
+
 			self.lexer = checkpoint;
-			return has_equals;
+			return is_struct_field;
 		} else {
 			return false;
 		}
@@ -3873,8 +3894,14 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			self.expect(&TokenKind::Equals)?;
-			let value: Expr = self.parse_expr()?;
+			let value: Expr = if self.consume(&TokenKind::Equals) {
+				self.parse_expr()?
+			} else {
+				Expr::Identifier {
+					path: Path::simple(vec![name.clone()], name_tok.span),
+					span: name_tok.span,
+				}
+			};
 
 			fields.push((name, value));
 
@@ -4424,7 +4451,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					if self.consume(&TokenKind::Var) {
 						let pattern: Pattern = self.parse_pattern()?;
 						self.expect(&TokenKind::Equals)?;
-						let expr: Expr = self.parse_expr()?;
+						let expr: Expr = self.parse_expr_no_struct()?;
 						let then_block: Block = self.parse_block()?;
 
 						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
@@ -4628,7 +4655,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return if self.consume(&TokenKind::Var) {
 			let pattern: Pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
-			let expr: Expr = self.parse_expr()?;
+			let expr: Expr = self.parse_expr_no_struct()?;
 			let then_block: Block = self.parse_block()?;
 
 			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
@@ -4681,7 +4708,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		if self.consume(&TokenKind::Var) {
 			let pattern: Pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
-			let expr: Expr = self.parse_expr()?;
+			let expr: Expr = self.parse_expr_no_struct()?;
 			let body: Block = self.parse_block()?;
 
 			return Ok(Stmt::WhileVarLoop {

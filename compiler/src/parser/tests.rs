@@ -4958,7 +4958,7 @@ mod tests
 		let input = r#"
             fn! create_buffer<A: Allocator>(allocator: A, size: usize) -> Buffer {
                 var ptr: u8* = allocator.allocate!(size);
-                Buffer { ptr, size }
+                return Buffer { ptr, size };
             }
         "#;
 		let result = parse_program_from_str(input);
