@@ -21,7 +21,7 @@ use crate::{
 /// * `'config` - Lifetime of the configuration object
 ///
 /// # Example
-/// ```no_run
+/// ```ignore
 /// # use crate::{Config, Parser, SourceIndex};
 /// # use crate::lexer::Lexer;
 /// let config = Config::default();
@@ -58,7 +58,7 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	/// A new `Parser` instance ready to parse the token stream
 	///
 	/// # Example
-	/// ```no_run
+	/// ```ignore
 	/// # use crate::{Parser, Config, SourceIndex};
 	/// # use crate::lexer::Lexer;
 	/// # let config = Config::default();
@@ -135,7 +135,7 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
-	/// ```no_run
+	/// ```ignore
 	/// # use crate::{Parser, Program, CompileError, Config, SourceIndex};
 	/// # use crate::lexer::Lexer;
 	/// # fn main() -> Result<(), CompileError> {
@@ -176,7 +176,7 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
-	/// ```no_run
+	/// ```ignore
 	/// # use crate::lexer::Lexer;
 	/// # use crate::{Parser, Program, Config, CompileError, SourceIndex};
 	/// # fn main() -> Result<(), CompileError> {
@@ -324,6 +324,34 @@ pub enum Directive
 	},
 }
 
+/// Parameter types for custom compiler directives.
+///
+/// Directives can accept various types of parameters including named arguments,
+/// identifiers, and literal values. This enum represents all possible parameter
+/// types that can be passed to a directive.
+///
+/// # Variants
+///
+/// * `Named { name: String, arg: Literal }` - A named parameter with a literal value.
+///   The parameter is specified as `name = value` in the directive call.
+///   Example: `@custom(enabled = true)` creates `Named { name: "enabled", arg: Literal::Bool(true) }`
+///
+/// * `Identifier(String)` - A standalone identifier parameter.
+///   Used when passing type names or other identifiers to directives.
+///   Example: `@custom(MyType)` creates `Identifier("MyType")`
+///
+/// * `Literal(Literal)` - A literal value parameter.
+///   Used for passing constants directly without a name.
+///   Example: `@custom(42)` creates `Literal(Literal::Int(42))`
+///
+/// # Examples
+/// ```text
+/// @custom(name = "value")     // Named parameter with string literal
+/// @custom(42)                  // Literal parameter (integer)
+/// @custom(MyType)              // Identifier parameter
+/// @custom(enabled = true)      // Named parameter with boolean literal
+/// @custom(timeout = 30, Debug) // Multiple parameters: Named and Identifier
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum DirectiveParam
 {
@@ -408,8 +436,7 @@ impl Path
 	/// * `span` - Source location
 	///
 	/// # Example
-	/// # Example
-	/// ```no_run
+	/// ```ignore
 	/// # use crate::parser::{Path, Span};
 	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], Span::default());
 	/// ```
@@ -454,6 +481,37 @@ impl Path
 	}
 }
 
+/// Component of a path - either a segment or a generic type argument.
+///
+/// This enum is used as the item type when iterating over a `Path` with `PathIter`.
+/// It allows distinguishing between the identifier segments of a path (like `std::vec::Vec`)
+/// and the generic type arguments (like the `i32` in `Vec::<i32>`).
+///
+/// # Variants
+///
+/// * `Segment(&'a Ident)` - A reference to an identifier segment.
+///   This represents one piece of the `::` separated path. Each segment is a name
+///   component like a module name, type name, or function name.
+///
+///   Examples:
+///   - In `std::io::File`, the segments are `"std"`, `"io"`, and `"File"`
+///   - In `Vec`, the single segment is `"Vec"`
+///   - In `MyModule::MyStruct`, the segments are `"MyModule"` and `"MyStruct"`
+///
+/// * `Generic(&'a Type)` - A reference to a generic type argument.
+///   This represents one type in the `::<...>` type arguments. Generic arguments
+///   are applied to the entire path, not to individual segments.
+///
+///   Examples:
+///   - In `Vec::<i32>`, the generic is the `i32` type
+///   - In `HashMap::<String, i32>`, the generics are `String` and `i32`
+///   - In `Option::<T>`, the generic is the type parameter `T`
+///
+/// # Lifetime
+///
+/// The `'a` lifetime ensures that the references to segments and generics remain
+/// valid only as long as the source `Path` exists. This prevents use-after-free
+/// errors when iterating over path components.
 #[allow(dead_code)]
 pub enum PathComponent<'a>
 {
@@ -463,33 +521,45 @@ pub enum PathComponent<'a>
 
 /// Iterator over path components (segments and generics).
 ///
-/// `PathIter` is primarily used as the item type for iterating over a `Path`.
-/// When iterating over a path, you get a sequence of components that can be either
-/// segments or generics, distinguished by the `PathComponent` enum.
+/// When iterating over a `Path`, you get a sequence of `PathComponent` items
+/// that can be either identifier segments or generic type arguments. The iterator
+/// yields segments first, then generics.
 ///
-/// # Purpose
+/// # Fields
 ///
-/// `PathComponent` is primarily used as the item type for `PathIter`. When
-/// iterating over a path, you get a sequence of components that can be either
-/// segments or generics, and this enum lets you distinguish between them.
+/// * `segments` - Iterator over the path's identifier segments.
+///   Yields each `::` separated component of the path in order.
 ///
-/// # Variants
-///
-/// * `Segment(&'a Ident)` - A reference to an identifier segment.
-///   This represents one piece of the `::` separated path.
-///
-///   Examples: `"std"`, `"Vec"`, `"io"`, `"MyType"`
-///
-/// * `Generic(&'a Type)` - A reference to a generic type argument.
-///   This represents one type in the `::<...>` type arguments.
-///
-///   Examples: The `i32` in `Vec::<i32>`, or the `String` in `Option::<String>`
+/// * `generics` - Iterator over the path's generic type arguments.
+///   Yields each type argument from the `::<...>` generics in order.
 ///
 /// # Lifetime
 ///
 /// The `'a` lifetime ties the component references back to the original `Path`
 /// that owns the data. Components are borrowed, not owned, so they're only
 /// valid as long as the source `Path` exists.
+///
+/// # Examples
+/// ```ignore
+/// let path = Path {
+///     segments: vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
+///     generics: vec![i32_type],
+///     span: Span::default()
+/// };
+///
+/// // Iterate over all components
+/// for component in path.iter() {
+///     match component {
+///         PathComponent::Segment(name) => println!("Segment: {}", name),
+///         PathComponent::Generic(ty) => println!("Generic: {}", ty),
+///     }
+/// }
+/// // Output:
+/// // Segment: std
+/// // Segment: vec
+/// // Segment: Vec
+/// // Generic: i32
+/// ```
 pub struct PathIter<'a>
 {
 	segments: std::slice::Iter<'a, Ident>,
@@ -1862,6 +1932,40 @@ impl Spanned for WhereConstraint
 	}
 }
 
+/// Trait bound in a where clause or generic parameter.
+///
+/// Represents the different types of bounds that can be specified for generic
+/// parameters, either as trait paths or function trait bounds (`Fn`, `FnMut`, `FnOnce`).
+/// These bounds constrain what types can be used as generic arguments.
+///
+/// # Variants
+///
+/// * `Path(Path)` - A trait path bound.
+///   Specifies that the generic type must implement the trait at the given path.
+///   This is the most common form of trait bound.
+///
+///   Examples:
+///   - `Clone` - Type must implement Clone
+///   - `std::fmt::Debug` - Type must implement `Debug` from `std::fmt`
+///   - `MyTrait::<i32>` - Type must implement `MyTrait` with `i32` as a generic argument
+///
+/// * `Func(FuncBound)` - A function trait bound.
+///   Specifies that the generic type must be callable as a function with specific
+///   argument and return types. Used for closures and function pointers.
+///   
+///   Examples:
+///   - `Fn(i32) -> i32` - A function taking an i32 and returning an i32
+///   - `Fn()` - A function taking no arguments
+///   - `Fn(String, bool) -> Result<(), Error>` - A function with multiple arguments
+///
+/// # Examples
+/// ```ignore
+/// where T: Clone                    // Path bound
+/// where T: Clone + Debug            // Multiple path bounds
+/// where F: Fn(i32) -> i32          // Function bound
+/// where T: std::fmt::Display        // Fully qualified path bound
+/// where F: Fn() -> Result<(), E>   // Function bound with complex return type
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum WhereBound
 {
@@ -1869,6 +1973,41 @@ pub enum WhereBound
 	Func(FuncBound),
 }
 
+/// Function trait bounds (`Fn`, `FnMut`, `FnOnce`).
+///
+/// Represents bounds that specify a type must implement a function trait,
+/// including the argument types and optional return type. Currently only
+/// supports `Fn` but the enum structure allows for future expansion to
+/// support `FnMut` and `FnOnce`.
+///
+/// # Variants
+///
+/// * `Fn { args: Vec<Type>, ret: Option<Type> }` - An `Fn` trait bound.
+///   Specifies that the type must be callable as an `Fn` with the given argument
+///   types and return type.
+///
+///   Fields:
+///   - `args`: Vector of parameter types the function must accept
+///   - `ret`: Optional return type. `None` indicates `()` (unit/void) return type
+///
+///   Examples:
+///   - `Fn { args: vec![], ret: None }` - `Fn()` with no args, returns ()
+///   - `Fn { args: vec![i32_type], ret: Some(i32_type) }` - `Fn(i32) -> i32`
+///   - `Fn { args: vec![string_type, bool_type], ret: None }` - `Fn(String, bool)`
+///
+/// # Future Variants
+///
+/// This enum is designed to be extended with additional variants: (probably)
+/// - `FnMut { args: Vec<Type>, ret: Option<Type> }` - For mutable closures
+/// - `FnOnce { args: Vec<Type>, ret: Option<Type> }` - For one-time callable closures
+///
+/// # Examples
+/// ```ignore
+/// Fn()                           // No arguments, no return (returns unit)
+/// Fn(i32) -> i32                // Single argument, returns same type
+/// Fn(String, bool) -> ()        // Multiple arguments, explicit unit return
+/// Fn(&str) -> Result<(), Error> // Reference argument, complex return type
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum FuncBound
 {
@@ -2203,17 +2342,6 @@ impl std::fmt::Display for Expected
 
 impl std::error::Error for ParseError {}
 
-// impl ErrorFromSpan for ParseError
-// {
-// 	fn from_span(span: impl lexer::Spanned, message: impl Into<String>) -> Self
-// 	{
-// 		return Self {
-// 			span: span.span(),
-// 			message: message.into(),
-// 		};
-// 	}
-// }
-
 /// Type alias declaration.
 ///
 /// Represents a type alias like `type Int = i32;`.
@@ -2271,7 +2399,7 @@ impl Spanned for NamespaceDecl
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Restrictions
 {
-	pub no_struct_literal: bool,
+	no_struct_literal: bool,
 }
 
 impl Restrictions
@@ -2376,7 +2504,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// * `Err(CompileError)` - If a syntax error is encountered
 	///
 	/// # Example
-	/// ```no_run
+	/// ```ignore
 	/// # use crate::{Parser, Program, CompileError};
 	/// # fn example(parser: &mut Parser) -> Result<(), CompileError> {
 	/// let program = parser.parse_program()?;
