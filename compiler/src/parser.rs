@@ -4572,9 +4572,6 @@ impl<'s, 'c> Parser<'s, 'c>
 									self.source_index,
 								)));
 							}
-						} else if self.consume(&TokenKind::Semicolon) {
-							// TODO, check why 2 the same paths
-							stmts.push(Stmt::Expr(expr));
 						} else if self.at(&TokenKind::RightBrace) {
 							tail_expr = Some(Box::new(expr));
 							break;
