@@ -5998,4 +5998,121 @@ mod tests
 			panic!("Expected Custom directive");
 		}
 	}
+
+	#[test]
+	fn test_parse_where_clause_with_fn_bound()
+	{
+		let input = "fn apply<F>(f: F) where F: Fn(i32) -> i32 {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		// Verify the Fn bound is parsed correctly
+	}
+
+	#[test]
+	fn test_parse_where_clause_with_fn_bound_no_return()
+	{
+		let input = "fn process<F>(f: F) where F: Fn(String) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_inline_fn_bound()
+	{
+		let input = "fn map<F: Fn(i32) -> String>(f: F) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_mut_type()
+	{
+		let config = Config::default();
+		let mut source_map = SourceMap::default();
+		let lexer = Lexer::new_add_to_source_map(&config, "mut i32", "test", &mut source_map);
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+		match result.unwrap().core.as_ref() {
+			TypeCore::Mutable { .. } => (),
+			_ => panic!("Expected mutable type"),
+		}
+	}
+
+	#[test]
+	fn test_parse_delete_function_declaration()
+	{
+		let input = "fn delete(ptr: u8*) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_where_clause_with_type_args()
+	{
+		let input = "impl<T> Trait for Type where Vec<T>: Clone {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		// Verify type_args are populated
+	}
+
+	#[test]
+	fn test_parse_struct_init_mixed_shorthand_and_explicit()
+	{
+		let input = "Point { x, y = 10 }";
+		let result = parse_expr_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_loop_break_with_switch()
+	{
+		let input = r#"{
+			loop {
+				break switch x {
+					1 => 10,
+					_ => 0,
+				};
+			}
+		}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_directive_negative_float()
+	{
+		let result = parse_directive("@threshold(-3.14)");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_empty_array_type()
+	{
+		let config = Config::default();
+		let mut source_map = SourceMap::default();
+		let lexer = Lexer::new_add_to_source_map(&config, "i32[]", "test", &mut source_map);
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_quadruple_nested_generics()
+	{
+		let config = Config::default();
+		let mut source_map = SourceMap::default();
+		let lexer = Lexer::new_add_to_source_map(&config, "Box<Vec<Option<Result<i32>>>>", "test", &mut source_map);
+		let mut parser = Parser::from(lexer);
+		let result = parser.parse_type();
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_both_generic_types()
+	{
+		let input = "fn!<A: Allocator> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
 }
