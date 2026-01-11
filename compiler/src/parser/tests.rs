@@ -4098,23 +4098,23 @@ mod tests
 
 	// ========== Directive Bodies ==========
 
-	// NOTE: blocks for directives are not supported
-	// #[test]
-	// fn test_parse_directive_with_top_level_block()
-	// {
-	// 	let input = "@extern { fn c_function(); }";
-	// 	let result = parse_program_from_str(input);
-	// 	assert!(result.is_ok());
-	// }
+	#[test]
+	#[ignore = "blocks for directives are not yet supported"]
+	fn test_parse_directive_with_top_level_block()
+	{
+		let input = "@extern { fn c_function(); }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
 
-	// NOTE: blocks for directives are not supported
-	// #[test]
-	// fn test_parse_directive_with_regular_block()
-	// {
-	// 	let input = "@custom(arg) { var x: i32 = 5; }";
-	// 	let result = parse_program_from_str(input);
-	// 	assert!(result.is_ok());
-	// }
+	#[test]
+	#[ignore = "blocks for directives are not yet supported"]
+	fn test_parse_directive_with_regular_block()
+	{
+		let input = "@custom(arg) { var x: i32 = 5; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
 
 	// ========== Switch Arm Control Flow ==========
 
