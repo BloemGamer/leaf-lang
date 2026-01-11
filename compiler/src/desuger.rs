@@ -2,11 +2,11 @@ mod tests;
 
 use crate::{
 	CompileError,
-	lexer::Span,
+	lexer::{Span, Spanned},
 	parser::{
 		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem,
-		NamespaceDecl, Path, Pattern, Program, RangeExpr, Spanned, Stmt, SwitchArm, SwitchBody, TopLevelDecl,
-		TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
+		NamespaceDecl, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl,
+		TraitItem, Type, TypeCore, VariableDecl,
 	},
 	source_map::SourceIndex,
 };

@@ -6,7 +6,7 @@ use ignorable::PartialEq;
 
 use crate::{
 	CompileError, Config,
-	lexer::{self, Lexer, Span, Token, TokenKind},
+	lexer::{self, Lexer, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
 
@@ -85,22 +85,6 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 /// Represents variable names, function names, type names, and other identifiers
 /// throughout the AST.
 pub type Ident = String;
-
-/// Trait for types that have source location information.
-///
-/// Provides a unified way to extract span information from various AST nodes.
-pub trait Spanned // TODO: Why do I have this also defined here????
-{
-	fn span(&self) -> Span;
-}
-
-impl Spanned for Span
-{
-	fn span(&self) -> Span
-	{
-		return *self;
-	}
-}
 
 impl Spanned for Token
 {
