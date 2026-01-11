@@ -3406,6 +3406,33 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 					};
 				}
+				TokenKind::Bang | TokenKind::QuestionMark => {
+					let call_type = if self.consume(&TokenKind::Bang) {
+						CallType::UserHeap
+					} else if self.consume(&TokenKind::QuestionMark) {
+						CallType::UserMaybeHeap
+					} else {
+						unreachable!()
+					};
+
+					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan) {
+						self.parse_named_generics()?
+					} else {
+						Vec::new()
+					};
+
+					self.expect(&TokenKind::LeftParen)?;
+					let args: Vec<Expr> = self.parse_argument_list()?;
+					self.expect(&TokenKind::RightParen)?;
+
+					expr = Expr::Call {
+						callee: Box::new(expr),
+						call_type,
+						named_generics,
+						args,
+						span: span.merge(&self.last_span),
+					};
+				}
 				_ => break,
 			}
 		}
