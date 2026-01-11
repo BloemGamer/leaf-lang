@@ -714,7 +714,7 @@ impl Spanned for Type
 /// * `Reference` - Reference type (`&T` or `&mut T`)
 /// * `Mutable` - Mutable type wrapper
 /// * `Pointer` - Raw pointer type (`T*`)
-/// * `Array` - Array type with size expression (`T[size]`)
+/// * `Array` - Array type with size expression (`[T;size]`)
 /// * `Tuple` - Tuple type (`(T1, T2, ...)`)
 /// * `ImplTrait` - Impl trait type (`impl Trait`)
 #[derive(Debug, Clone, PartialEq)]
@@ -2938,7 +2938,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
 			modifiers,
-			core: Box::new(self.parse_type_suffix(core)?),
+			core: Box::new(self.parse_type_suffix(core)),
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -3009,42 +3009,44 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(*ty.core);
 				}
 			}
+			TokenKind::LeftBracket => {
+				self.next(); // consume the [
+
+				let base_type = self.parse_type_core()?;
+
+				let complete_type = self.parse_type_suffix(base_type);
+
+				let size = if self.consume(&TokenKind::Semicolon) {
+					Some(Box::new(self.parse_expr()?))
+				} else {
+					None
+				};
+
+				self.expect(&TokenKind::RightBracket)?;
+
+				return Ok(TypeCore::Array {
+					inner: Box::new(complete_type),
+					size,
+				});
+			}
 			_ => {
 				let err_tok: Token = tok.clone();
 				return Err(CompileError::ParseError(ParseError::invalid_type(
 					err_tok.span,
-					"expected '&', 'mut', identifier, or '(' to start a type",
+					"expected '&', 'mut', identifier, '[' or '(' to start a type",
 					self.source_index,
 				)));
 			}
 		}
 	}
 
-	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, CompileError>
+	fn parse_type_suffix(&mut self, mut base: TypeCore) -> TypeCore
 	{
-		loop {
-			match self.peek_kind() {
-				TokenKind::Star => {
-					self.next(); // *
-					base = TypeCore::Pointer { inner: Box::new(base) };
-				}
-				TokenKind::LeftBracket => {
-					self.next(); // [
-					let size_expr = if !self.at(&TokenKind::RightBracket) {
-						Some(Box::new(self.parse_expr()?))
-					} else {
-						None
-					};
-					self.expect(&TokenKind::RightBracket)?; // ]
-					base = TypeCore::Array {
-						inner: Box::new(base),
-						size: size_expr,
-					};
-				}
-				_ => break,
-			}
+		while matches!(self.peek_kind(), TokenKind::Star) {
+			self.next(); // *
+			base = TypeCore::Pointer { inner: Box::new(base) };
 		}
-		return Ok(base);
+		return base;
 	}
 
 	fn get_path(&mut self) -> Result<Path, CompileError>
@@ -6198,13 +6200,12 @@ impl fmt::Display for TypeCore
 			}
 			TypeCore::Pointer { inner } => return write!(f, "{}*", inner),
 			TypeCore::Array { inner, size } => {
-				return {
-					write!(f, "{}[", inner)?;
-					if let Some(s) = size {
-						write!(f, "{}", s)?;
-					}
-					write!(f, "]")
-				};
+				write!(f, "[")?;
+				write!(f, "{}", inner)?;
+				if let Some(s) = size {
+					write!(f, "; {}", s)?;
+				}
+				return write!(f, "]");
 			}
 			TypeCore::Tuple(types) => {
 				write!(f, "(")?;

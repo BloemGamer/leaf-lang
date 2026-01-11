@@ -902,7 +902,7 @@ mod tests
 	#[test]
 	fn test_parse_slice_from_beginning()
 	{
-		let input = "{ var slice: &i32[] = arr[..5]; }";
+		let input = "{ var slice: [&i32] = arr[..5]; }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -1341,7 +1341,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "i32[10]", "test_file_9", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "[i32; 10]", "test_file_9", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -2362,7 +2362,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "i32*[10]", "test_file_33", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "[i32*; 10]", "test_file_33", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_type();
 		assert!(result.is_ok());
