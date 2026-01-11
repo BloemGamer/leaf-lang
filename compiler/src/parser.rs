@@ -320,8 +320,20 @@ pub enum Directive
 	Custom
 	{
 		name: Ident,
-		args: Vec<Expr>,
+		params: Vec<DirectiveParam>,
 	},
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DirectiveParam
+{
+	Named
+	{
+		name: String,
+		arg: Literal,
+	},
+	Identifier(String),
+	Literal(Literal),
 }
 
 /// Directive node with optional body.
@@ -2664,14 +2676,9 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn should_parse_as_top_level_block(&self, directive: &Directive) -> bool // TODO, find out why I have this funcition
+	fn should_parse_as_top_level_block(&self, _directive: &Directive) -> bool
 	{
-		match directive {
-			Directive::Custom { name, .. } => {
-				return matches!(name.as_str(), "extern" | "cfg" | "module" | "namespace");
-			}
-			_ => return false,
-		}
+		todo!("Directives with blocks are not supported yet")
 	}
 
 	fn parse_directive(&mut self) -> Result<Directive, CompileError>
@@ -2717,17 +2724,182 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(ret)
 			}
 			lexer::Directive::Custom(name) => {
-				let args: Vec<Expr> = if self.at(&TokenKind::LeftParen) {
-					self.next(); // (
-					let args: Vec<Expr> = self.parse_argument_list()?;
-					self.expect(&TokenKind::RightParen)?;
+				let params: Vec<DirectiveParam> = if self.at(&TokenKind::LeftParen) {
+					let args: Vec<DirectiveParam> = self.parse_directive_params()?;
 					args
 				} else {
 					Vec::new()
 				};
-				Ok(Directive::Custom { name, args })
+				Ok(Directive::Custom { name, params })
 			}
 		};
+	}
+
+	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, CompileError>
+	{
+		if !self.consume(&TokenKind::LeftParen) {
+			return Ok(Vec::new());
+		}
+		let mut params: Vec<DirectiveParam> = Vec::new();
+		loop {
+			if self.at(&TokenKind::RightParen) {
+				break;
+			}
+
+			let is_negative = self.consume(&TokenKind::Minus);
+
+			let tok_span = self.peek().span();
+			let tok_kind = self.peek_kind().clone();
+
+			let tok = self.next();
+
+			let arg: DirectiveParam = match tok.kind {
+				TokenKind::StringLiteral(s) => {
+					if is_negative {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok_span,
+							"A string can't be negative",
+							self.source_index,
+						)));
+					}
+					DirectiveParam::Literal(Literal::String(s))
+				}
+				TokenKind::IntLiteral(i) => {
+					let value = if is_negative { -i } else { i };
+					DirectiveParam::Literal(Literal::Int(value))
+				}
+				TokenKind::FloatLiteral(f) => {
+					let value = if is_negative { -f } else { f };
+					DirectiveParam::Literal(Literal::Float(value))
+				}
+				TokenKind::CharLiteral(c) => {
+					if is_negative {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok_span,
+							"A character can't be negative",
+							self.source_index,
+						)));
+					}
+					DirectiveParam::Literal(Literal::Char(c))
+				}
+				TokenKind::True => {
+					if is_negative {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok_span,
+							"A bool can't be negative",
+							self.source_index,
+						)));
+					}
+					DirectiveParam::Literal(Literal::Bool(true))
+				}
+				TokenKind::False => {
+					if is_negative {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok_span,
+							"A bool can't be negative",
+							self.source_index,
+						)));
+					}
+					DirectiveParam::Literal(Literal::Bool(false))
+				}
+				TokenKind::Identifier(ident) => {
+					if is_negative {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							tok_span,
+							"An identifier can't be negative",
+							self.source_index,
+						)));
+					}
+
+					match self.peek_kind() {
+						TokenKind::Equals => {
+							self.next(); // =
+
+							let value_is_negative = self.consume(&TokenKind::Minus);
+
+							let token_span = self.peek().span();
+							let token = self.next();
+
+							let lit: Literal = match token.kind {
+								TokenKind::StringLiteral(s) => {
+									if value_is_negative {
+										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+											token_span,
+											"Cannot negate a string literal",
+											self.source_index,
+										)));
+									}
+									Literal::String(s)
+								}
+								TokenKind::IntLiteral(i) => {
+									let value = if value_is_negative { -i } else { i };
+									Literal::Int(value)
+								}
+								TokenKind::FloatLiteral(f) => {
+									let value = if value_is_negative { -f } else { f };
+									Literal::Float(value)
+								}
+								TokenKind::CharLiteral(c) => {
+									if value_is_negative {
+										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+											token_span,
+											"Cannot negate a character literal",
+											self.source_index,
+										)));
+									}
+									Literal::Char(c)
+								}
+								TokenKind::True => {
+									if value_is_negative {
+										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+											token_span,
+											"Cannot negate a boolean literal",
+											self.source_index,
+										)));
+									}
+									Literal::Bool(true)
+								}
+								TokenKind::False => {
+									if value_is_negative {
+										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+											token_span,
+											"Cannot negate a boolean literal",
+											self.source_index,
+										)));
+									}
+									Literal::Bool(false)
+								}
+								_ => {
+									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										token_span,
+										format!("Expected an identifier or a literal, got {:?}", tok_kind),
+										self.source_index,
+									)));
+								}
+							};
+							DirectiveParam::Named { name: ident, arg: lit }
+						}
+						_ => DirectiveParam::Identifier(ident),
+					}
+				}
+				_ => {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						tok_span,
+						format!("Expected an identifier or a literal, got {:?}", tok_kind),
+						self.source_index,
+					)));
+				}
+			};
+			params.push(arg);
+			if self.at(&TokenKind::RightParen) {
+				break;
+			}
+			if !self.consume(&TokenKind::Comma) {
+				break;
+			}
+		}
+		self.expect(&TokenKind::RightParen)?;
+		return Ok(params);
 	}
 
 	fn parse_var_decl(&mut self) -> Result<VariableDecl, CompileError>
@@ -5846,11 +6018,11 @@ impl std::fmt::Display for Directive
 				write!(f, "{}", path)?;
 				return Ok(());
 			}
-			Directive::Custom { name, args } => {
+			Directive::Custom { name, params } => {
 				write!(f, "@{}", name)?;
-				if !args.is_empty() {
+				if !params.is_empty() {
 					write!(f, "(")?;
-					for (i, arg) in args.iter().enumerate() {
+					for (i, arg) in params.iter().enumerate() {
 						if i > 0 {
 							write!(f, ", ")?;
 						}
@@ -5861,6 +6033,18 @@ impl std::fmt::Display for Directive
 				return Ok(());
 			}
 		}
+	}
+}
+
+impl fmt::Display for DirectiveParam
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match self {
+			DirectiveParam::Literal(lit) => write!(f, "{}", lit),
+			DirectiveParam::Identifier(ident) => write!(f, "{}", ident),
+			DirectiveParam::Named { name, arg } => write!(f, "{} = {}", name, arg),
+		};
 	}
 }
 

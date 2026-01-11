@@ -11,7 +11,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_1", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, input, "expr", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_expr()
@@ -22,7 +22,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_2", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, input, "program", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_program()
@@ -33,10 +33,21 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_3", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, input, "block", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_block()
+			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
+	}
+
+	fn parse_directive(input: &str) -> Result<DirectiveNode, CompileError>
+	{
+		let config = Config::default();
+		let mut source_map = SourceMap::default();
+		let lexer = Lexer::new_add_to_source_map(&config, input, "directive", &mut source_map);
+		let mut parser = Parser::from(lexer);
+		return parser
+			.parse_directive_node()
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -2269,11 +2280,11 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Directive(DirectiveNode {
-				directive: Directive::Custom { name, args },
+				directive: Directive::Custom { name, params },
 				..
 			}) => {
 				assert_eq!(name, "custom");
-				assert_eq!(args.len(), 3);
+				assert_eq!(params.len(), 3);
 			}
 			_ => panic!("Expected custom directive"),
 		}
@@ -4087,21 +4098,23 @@ mod tests
 
 	// ========== Directive Bodies ==========
 
-	#[test]
-	fn test_parse_directive_with_top_level_block()
-	{
-		let input = "@extern { fn c_function(); }";
-		let result = parse_program_from_str(input);
-		assert!(result.is_ok());
-	}
+	// NOTE: blocks for directives are not supported
+	// #[test]
+	// fn test_parse_directive_with_top_level_block()
+	// {
+	// 	let input = "@extern { fn c_function(); }";
+	// 	let result = parse_program_from_str(input);
+	// 	assert!(result.is_ok());
+	// }
 
-	#[test]
-	fn test_parse_directive_with_regular_block()
-	{
-		let input = "@custom(arg) { var x: i32 = 5; }";
-		let result = parse_program_from_str(input);
-		assert!(result.is_ok());
-	}
+	// NOTE: blocks for directives are not supported
+	// #[test]
+	// fn test_parse_directive_with_regular_block()
+	// {
+	// 	let input = "@custom(arg) { var x: i32 = 5; }";
+	// 	let result = parse_program_from_str(input);
+	// 	assert!(result.is_ok());
+	// }
 
 	// ========== Switch Arm Control Flow ==========
 
@@ -5438,5 +5451,551 @@ mod tests
 		let input = "fn foo<T: Clone Debug>(x: T) {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_err());
+	}
+
+	// ===== Basic Literal Parameters =====
+
+	#[test]
+	fn test_directive_single_string_literal()
+	{
+		let result = parse_directive(r#"@test("hello")"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "test");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::String(s)) if s == "hello"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_single_int_literal()
+	{
+		let result = parse_directive("@version(42)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "version");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Int(42))));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_single_float_literal()
+	{
+		let result = parse_directive("@scale(3.16)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "scale");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::Float(f)) if (*f - 3.16).abs() < 0.001
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_single_char_literal()
+	{
+		let result = parse_directive("@delimiter('|')");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "delimiter");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Char('|'))));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_bool_true_literal()
+	{
+		let result = parse_directive("@enabled(true)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "enabled");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Bool(true))));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_bool_false_literal()
+	{
+		let result = parse_directive("@disabled(false)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "disabled");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Bool(false))));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	// ===== Identifier Parameters =====
+
+	#[test]
+	fn test_directive_single_identifier()
+	{
+		let result = parse_directive("@target(x86_64)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "target");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "x86_64"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_multiple_identifiers()
+	{
+		let result = parse_directive("@cfg(unix, debug)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "cfg");
+			assert_eq!(params.len(), 2);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "unix"
+			));
+			assert!(matches!(
+				&params[1],
+				DirectiveParam::Identifier(id) if id == "debug"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	// ===== Named Parameters =====
+
+	#[test]
+	fn test_directive_named_string_param()
+	{
+		let result = parse_directive(r#"@link(name = "mylib")"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "link");
+			assert_eq!(params.len(), 1);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "name");
+				assert!(matches!(arg, Literal::String(s) if s == "mylib"));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_named_int_param()
+	{
+		let result = parse_directive("@optimize(level = 3)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "optimize");
+			assert_eq!(params.len(), 1);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "level");
+				assert!(matches!(arg, Literal::Int(3)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_named_bool_param()
+	{
+		let result = parse_directive("@feature(enabled = true)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "feature");
+			assert_eq!(params.len(), 1);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "enabled");
+				assert!(matches!(arg, Literal::Bool(true)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_named_float_param()
+	{
+		let result = parse_directive("@threshold(value = 0.5)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "threshold");
+			assert_eq!(params.len(), 1);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "value");
+				if let Literal::Float(f) = arg {
+					assert!((*f - 0.5).abs() < 0.001);
+				} else {
+					panic!("Expected Float literal");
+				}
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_named_char_param()
+	{
+		let result = parse_directive("@separator(char = ',')");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "separator");
+			assert_eq!(params.len(), 1);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "char");
+				assert!(matches!(arg, Literal::Char(',')));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	// ===== Mixed Parameters =====
+
+	#[test]
+	fn test_directive_mixed_literal_and_identifier()
+	{
+		let result = parse_directive(r#"@config("path/to/file", debug)"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "config");
+			assert_eq!(params.len(), 2);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::String(s)) if s == "path/to/file"
+			));
+			assert!(matches!(
+				&params[1],
+				DirectiveParam::Identifier(id) if id == "debug"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_mixed_identifier_and_named()
+	{
+		let result = parse_directive(r#"@plugin(logger, level = 2)"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "plugin");
+			assert_eq!(params.len(), 2);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "logger"
+			));
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[1] {
+				assert_eq!(param_name, "level");
+				assert!(matches!(arg, Literal::Int(2)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_multiple_named_params()
+	{
+		let result = parse_directive(r#"@database(host = "localhost", port = 5432, debug = true)"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "database");
+			assert_eq!(params.len(), 3);
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
+				assert_eq!(param_name, "host");
+				assert!(matches!(arg, Literal::String(s) if s == "localhost"));
+			} else {
+				panic!("Expected Named parameter");
+			}
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[1] {
+				assert_eq!(param_name, "port");
+				assert!(matches!(arg, Literal::Int(5432)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[2] {
+				assert_eq!(param_name, "debug");
+				assert!(matches!(arg, Literal::Bool(true)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_complex_mixed_params()
+	{
+		let result = parse_directive(r#"@server("0.0.0.0", 8080, workers = 4, ssl = false)"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "server");
+			assert_eq!(params.len(), 4);
+
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::String(s)) if s == "0.0.0.0"
+			));
+
+			assert!(matches!(&params[1], DirectiveParam::Literal(Literal::Int(8080))));
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[2] {
+				assert_eq!(param_name, "workers");
+				assert!(matches!(arg, Literal::Int(4)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+
+			if let DirectiveParam::Named { name: param_name, arg } = &params[3] {
+				assert_eq!(param_name, "ssl");
+				assert!(matches!(arg, Literal::Bool(false)));
+			} else {
+				panic!("Expected Named parameter");
+			}
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	// ===== Edge Cases =====
+
+	#[test]
+	fn test_directive_no_params()
+	{
+		let result = parse_directive("@inline()");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "inline");
+			assert_eq!(params.len(), 0);
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_trailing_comma()
+	{
+		let result = parse_directive("@test(foo, bar,)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "test");
+			assert_eq!(params.len(), 2);
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_negative_int()
+	{
+		let result = parse_directive("@offset(-10)");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_directive_string_with_escapes()
+	{
+		let result = parse_directive(r#"@message("Hello\nWorld")"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "message");
+			assert_eq!(params.len(), 1);
+			// The actual escape sequence handling depends on your lexer
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_underscore_identifier()
+	{
+		let result = parse_directive("@cfg(_private_flag)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "cfg");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "_private_flag"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_numeric_identifier()
+	{
+		let result = parse_directive("@version(v1_0_0)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "version");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "v1_0_0"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	// ===== Real-World Scenarios =====
+
+	#[test]
+	fn test_directive_repr()
+	{
+		let result = parse_directive("@repr(C)");
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "repr");
+			assert_eq!(params.len(), 1);
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Identifier(id) if id == "C"
+			));
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_deprecated()
+	{
+		let result = parse_directive(r#"@deprecated(since = "1.0.0", note = "Use new_func instead")"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "deprecated");
+			assert_eq!(params.len(), 2);
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_test_case()
+	{
+		let result = parse_directive(r#"@test_case(input = 42, expected = 84)"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "test_case");
+			assert_eq!(params.len(), 2);
+		} else {
+			panic!("Expected Custom directive");
+		}
+	}
+
+	#[test]
+	fn test_directive_cfg_attr()
+	{
+		let result = parse_directive(r#"@cfg_attr(unix, link = "pthread")"#);
+		assert!(result.is_ok());
+		let directive = result.unwrap();
+
+		if let Directive::Custom { name, params } = directive.directive {
+			assert_eq!(name, "cfg_attr");
+			assert_eq!(params.len(), 2);
+		} else {
+			panic!("Expected Custom directive");
+		}
 	}
 }
