@@ -222,14 +222,6 @@ impl Span
 /// - **Punctuation**: Semicolons, colons, commas, dots, arrows, etc.
 /// - **Special**: Macros, directives, comments
 /// - **End/Error**: EOF and invalid tokens
-///
-/// # Example
-/// ```no_run
-/// # use crate::lexer::TokenKind;
-/// let kind = TokenKind::IntLiteral(42);
-/// let kind = TokenKind::Identifier("my_var".to_string());
-/// let kind = TokenKind::Plus;
-/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind
 {
@@ -481,14 +473,6 @@ pub enum TokenKind
 /// * `Use` - Import directive: `@use`
 /// * `Import` - Import directive: `@import`
 /// * `Custom` - User-defined directive: `@custom_name`
-///
-/// # Example
-/// ```no_run
-/// # use crate::lexer::Directive;
-/// let dir = Directive::Use;          // @use
-/// let dir = Directive::Import;       // @import
-/// let dir = Directive::Custom("cfg".to_string()); // @cfg
-/// ```
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Directive
 {
@@ -1096,11 +1080,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 			'\'' => '\'',
 			'"' => '"',
 			'x' => {
-				// Hexadecimal escape sequence: \xHH
 				self.advance();
 				let mut hex_str = String::new();
 
-				// Read up to 2 hex digits
 				for _ in 0..2 {
 					if let Some(ch) = self.current_char {
 						if ch.is_ascii_hexdigit() {
@@ -1118,16 +1100,13 @@ impl<'source, 'config> Lexer<'source, 'config>
 					return None;
 				}
 
-				// Parse hex string to u8, then convert to char
 				if let Ok(value) = u8::from_str_radix(&hex_str, 16) {
-					// Don't advance here - we already advanced while reading hex digits
 					return Some(value as char);
 				} else {
 					return None;
 				}
 			}
 			'u' => {
-				// Unicode escape sequence: \u{HHHHHH}
 				self.advance();
 
 				if self.current_char != Some('{') {
@@ -1137,7 +1116,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 				let mut hex_str = String::new();
 
-				// Read hex digits until we hit '}'
 				while let Some(ch) = self.current_char {
 					if ch == '}' {
 						break;
@@ -1158,7 +1136,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 					return None;
 				}
 
-				// Parse hex string to u32, then convert to char
 				if let Ok(value) = u32::from_str_radix(&hex_str, 16) {
 					return char::from_u32(value);
 				} else {
@@ -1168,7 +1145,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 			_ => return None,
 		};
 
-		// For simple escape sequences, advance past the escape character
 		if escaped != '\0' || self.current_char == Some('0') {
 			self.advance();
 		}
