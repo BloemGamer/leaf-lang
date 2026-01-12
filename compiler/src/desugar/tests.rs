@@ -2,7 +2,7 @@
 #[allow(clippy::module_inception)]
 mod tests
 {
-	use crate::desuger::*;
+	use crate::desugar::*;
 	use crate::parser::{AssignOp, BinaryOp, FunctionSignature, ImplTarget, Literal, Path, UnaryOp};
 
 	// Helper to create a simple identifier expression

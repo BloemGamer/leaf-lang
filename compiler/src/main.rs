@@ -114,13 +114,13 @@
 use std::{fs, process::exit};
 
 use self::{
-	desuger::{DesugarError, Desugarer},
+	desugar::{DesugarError, Desugarer},
 	lexer::Lexer,
 	parser::{ParseError, Parser},
 	source_map::SourceMap,
 };
 
-mod desuger;
+mod desugar;
 mod lexer;
 mod parser;
 mod source_map;
