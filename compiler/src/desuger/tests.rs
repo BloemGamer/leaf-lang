@@ -56,6 +56,16 @@ mod tests
 		};
 	}
 
+	// Helper to create a simple for loop pattern (variant with no args)
+	fn simple_for_pattern(name: &str) -> Pattern
+	{
+		return Pattern::Variant {
+			path: Path::simple(vec![name.to_string()], Span::default()),
+			args: vec![],
+			span: Span::default(),
+		};
+	}
+
 	#[test]
 	fn test_desugar_if_with_else_unchanged()
 	{
@@ -299,7 +309,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: Path::simple(vec!["x".into()], Span::default()),
+			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -381,7 +391,10 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: Path::simple(vec!["x".into(), "y".into()], Span::default()),
+			pattern: Pattern::Tuple {
+				patterns: vec![simple_for_pattern("x"), simple_for_pattern("y")],
+				span: Span::default(),
+			},
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -567,7 +580,7 @@ mod tests
 					body: Some(Block {
 						stmts: vec![Stmt::For {
 							label: None,
-							name: Path::simple(vec!["i".into()], Span::default()),
+							pattern: simple_for_pattern("i"),
 							iter: ident("items"),
 							body: Block {
 								stmts: vec![],
@@ -677,7 +690,7 @@ mod tests
 				body: Some(Block {
 					stmts: vec![Stmt::For {
 						label: None,
-						name: Path::simple(vec!["i".into()], Span::default()),
+						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
 							stmts: vec![],
@@ -769,7 +782,7 @@ mod tests
 			then_block: Block {
 				stmts: vec![Stmt::For {
 					label: None,
-					name: Path::simple(vec!["x".into()], Span::default()),
+					pattern: simple_for_pattern("x"),
 					iter: ident("items"),
 					body: Block {
 						stmts: vec![],
@@ -894,7 +907,7 @@ mod tests
 		let stmt = Stmt::Unsafe(Block {
 			stmts: vec![Stmt::For {
 				label: None,
-				name: Path::simple(vec!["i".into()], Span::default()),
+				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
 					stmts: vec![],
@@ -995,7 +1008,7 @@ mod tests
 				body: SwitchBody::Block(Block {
 					stmts: vec![Stmt::For {
 						label: None,
-						name: Path::simple(vec!["i".into()], Span::default()),
+						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
 							stmts: vec![],
@@ -1302,7 +1315,7 @@ mod tests
 			stmts: vec![
 				Stmt::For {
 					label: None,
-					name: Path::simple(vec!["i".into()], Span::default()),
+					pattern: simple_for_pattern("i"),
 					iter: ident("range1"),
 					body: Block {
 						stmts: vec![],
@@ -1313,7 +1326,7 @@ mod tests
 				},
 				Stmt::For {
 					label: None,
-					name: Path::simple(vec!["j".into()], Span::default()),
+					pattern: simple_for_pattern("j"),
 					iter: ident("range2"),
 					body: Block {
 						stmts: vec![],
@@ -1461,7 +1474,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: Some("outer".into()),
-			name: Path::simple(vec!["x".into()], Span::default()),
+			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![],
@@ -1661,7 +1674,7 @@ mod tests
 		let expr = Expr::UnsafeBlock(Box::new(Block {
 			stmts: vec![Stmt::For {
 				label: None,
-				name: Path::simple(vec!["i".into()], Span::default()),
+				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
 					stmts: vec![],
@@ -1824,7 +1837,7 @@ mod tests
 
 		let input = Stmt::For {
 			label: None,
-			name: Path::simple(vec!["x".into()], Span::default()),
+			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
 				stmts: vec![Stmt::Break {
@@ -2697,7 +2710,7 @@ mod tests
 		// Test for i in 0..10 { }
 		let stmt = Stmt::For {
 			label: None,
-			name: Path::simple(vec!["i".into()], Span::default()),
+			pattern: simple_for_pattern("i"),
 			iter: Expr::Range(RangeExpr {
 				start: Some(Box::new(int_lit(0))),
 				end: Some(Box::new(int_lit(10))),

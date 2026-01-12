@@ -584,7 +584,7 @@ mod tests
 	#[test]
 	fn test_parse_empty_range_in_for_loop()
 	{
-		let result = parse_block_from_str("{ for i in ..10 { } }");
+		let result = parse_block_from_str("{ for i: i32 in ..10 { } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -910,7 +910,7 @@ mod tests
 	#[test]
 	fn test_parse_range_iterator_from_zero()
 	{
-		let input = "{ for i in ..100 { println(i); } }";
+		let input = "{ for i: i64 in ..100 { println(i); } }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -1793,7 +1793,8 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "{ for i in 0..10 { } }", "test_file_13", &mut source_map);
+		let lexer =
+			Lexer::new_add_to_source_map(&config, "{ for i: i64 in 0..10 { } }", "test_file_13", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
 		assert!(result.is_ok());
@@ -3403,7 +3404,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_for_loop()
 	{
-		let result = parse_block_from_str("{ 'outer: for i in 0..10 { break 'outer; } }");
+		let result = parse_block_from_str("{ 'outer: for i: usize in 0..10 { break 'outer; } }");
 		assert!(result.is_ok());
 		let block = result.unwrap();
 		match &block.stmts[0] {
@@ -3482,8 +3483,8 @@ mod tests
 	fn test_parse_continue_to_outer_loop()
 	{
 		let input = r#"{
-		'outer: for i in 0..10 {
-			'inner: for j in 0..10 {
+		'outer: for i: i32 in 0..10 {
+			'inner: for j: i32 in 0..10 {
 				if j == 5 {
 					continue 'outer;
 				}
@@ -3581,7 +3582,7 @@ mod tests
 		let input = r#"{
 		'level1: loop {
 			'level2: while true {
-				'level3: for i in 0..10 {
+				'level3: for i: i32 in 0..10 {
 					'level4: loop {
 						break 'level1;
 					}
@@ -3695,7 +3696,7 @@ mod tests
 	fn test_parse_for_with_break_value()
 	{
 		let input = r#"{
-		for i in 0..10 {
+		for i: i64 in 0..10 {
 			if i == 5 {
 				break i;
 			}
@@ -3709,7 +3710,7 @@ mod tests
 	fn test_parse_labeled_for_with_continue_and_break()
 	{
 		let input = r#"{
-		'outer: for i in 0..10 {
+		'outer: for i: i32 in 0..10 {
 			if i == 3 {
 				continue 'outer;
 			}
@@ -3788,7 +3789,7 @@ mod tests
 	fn test_parse_real_world_example_search()
 	{
 		let input = r#"{
-		'search: for item in collection {
+		'search: for item: CollectItem in collection {
 			if item.matches(target) {
 				break 'search item.value;
 			}
@@ -3802,8 +3803,8 @@ mod tests
 	fn test_parse_real_world_example_nested_iteration()
 	{
 		let input = r#"{
-		'outer: for row in 0..height {
-			'inner: for col in 0..width {
+		'outer: for row: Height in 0..height {
+			'inner: for col: Width in 0..width {
 				if grid[row][col] == target {
 					break 'outer (row, col);
 				}
@@ -5391,7 +5392,7 @@ mod tests
 				items: Vec<T>,
 				handler: impl Fn(T) -> Result<(), E>
 			) -> Result<(), E> {
-				for item in items {
+				for item: Item in items {
 					handler(item);
 				}
 			}

@@ -1363,7 +1363,7 @@ pub enum Stmt
 	For
 	{
 		label: Option<String>,
-		name: Path,
+		pattern: Pattern,
 		iter: Expr,
 		body: Block,
 		#[ignored(PartialEq)]
@@ -4938,14 +4938,14 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::For)?;
-		let name: Path = self.get_path()?;
+		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::In)?;
 		let iter = self.parse_expr_no_struct()?;
 		let body = self.parse_block()?;
 
 		return Ok(Stmt::For {
 			label: None,
-			name,
+			pattern,
 			iter,
 			body,
 			span: span.merge(&self.last_span),
@@ -6839,7 +6839,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 		}
 		Stmt::For {
 			label,
-			name,
+			pattern,
 			iter,
 			body,
 			..
@@ -6847,7 +6847,7 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			if let Some(lbl) = label {
 				write!(f, "'{}: ", lbl)?;
 			}
-			write!(f, "for {} in ", name)?;
+			write!(f, "for {} in ", pattern)?;
 			write_expr(f, w, iter)?;
 			write!(f, " ")?;
 			return write_block(f, w, body);

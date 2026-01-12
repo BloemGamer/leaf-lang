@@ -307,11 +307,11 @@ impl Desugarer
 		return Ok(match stmt {
 			Stmt::For {
 				label,
-				name,
+				pattern,
 				iter,
 				body,
 				span,
-			} => self.desugar_for_loop(label, name, iter, body, span)?,
+			} => self.desugar_for_loop(label, pattern, iter, body, span)?,
 
 			Stmt::If {
 				cond,
@@ -415,7 +415,7 @@ impl Desugarer
 	fn desugar_for_loop(
 		&mut self,
 		label: Option<String>,
-		name: Path,
+		pattern: Pattern,
 		iter: Expr,
 		body: Block,
 		span: Span,
@@ -429,27 +429,7 @@ impl Desugarer
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body)?;
 
-		let name_pattern: Pattern = if name.segments.len() == 1 {
-			Pattern::TypedIdentifier {
-				path: Path::simple(vec![name.segments[0].clone()], Span::default()),
-				ty: Type {
-					modifiers: vec![],
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], Span::default()),
-						generics: vec![],
-					}),
-					span: Span::default(),
-				},
-				call_constructor: None,
-				span: Span::default(),
-			}
-		} else {
-			Pattern::Variant {
-				path: name,
-				args: vec![],
-				span: Span::default(),
-			}
-		};
+		let desugared_pattern: Pattern = self.desugar_pattern(pattern)?;
 
 		let iter_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -488,7 +468,7 @@ impl Desugarer
 		let some_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
 				path: Path::simple(vec!["Some".to_string()], Span::default()),
-				args: vec![name_pattern],
+				args: vec![desugared_pattern],
 				span: Span::default(),
 			},
 			body: SwitchBody::Block(desugared_body),
