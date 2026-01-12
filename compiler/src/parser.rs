@@ -2415,74 +2415,81 @@ impl Restrictions
 
 impl<'s, 'c> Parser<'s, 'c>
 {
-	fn peek(&mut self) -> &Token
+	fn peek(&mut self) -> Result<&Token, CompileError>
 	{
-		return self
-			.buffered_token
-			.as_ref()
-			.unwrap_or_else(|| return self.lexer.peek().expect("lexer exhausted unexpectedly"));
+		if let Some(token) = self.buffered_token.as_ref() {
+			return Ok(token);
+		}
+
+		return self.lexer.peek().ok_or_else(|| {
+			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
+		});
 	}
 
-	fn next(&mut self) -> Token
+	fn next(&mut self) -> Result<Token, CompileError>
 	{
 		if let Some(tok) = self.buffered_token.take() {
 			self.last_span = tok.span;
-			return tok;
+			return Ok(tok);
 		}
-		let tok: Token = self.lexer.next().expect("lexer exhausted unexpectedly");
+
+		let tok = self.lexer.next().ok_or_else(|| {
+			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
+		})?;
+
 		self.last_span = tok.span;
-		return tok;
+		return Ok(tok);
 	}
 
-	fn peek_kind(&mut self) -> &TokenKind
+	fn peek_kind(&mut self) -> Result<&TokenKind, CompileError>
 	{
-		return &self.peek().kind;
+		return Ok(&self.peek()?.kind);
 	}
 
-	fn at(&mut self, kind: &TokenKind) -> bool
+	fn at(&mut self, kind: &TokenKind) -> Result<bool, CompileError>
 	{
-		return self.peek_kind() == kind;
+		return Ok(self.peek_kind()? == kind);
 	}
 
-	fn consume(&mut self, kind: &TokenKind) -> bool
+	fn consume(&mut self, kind: &TokenKind) -> Result<bool, CompileError>
 	{
-		if self.at(kind) {
-			self.next();
-			return true;
+		if self.at(kind)? {
+			self.next()?;
+			return Ok(true);
 		} else {
-			return false;
+			return Ok(false);
 		}
 	}
 
-	fn consume_greater_than(&mut self) -> bool
+	fn consume_greater_than(&mut self) -> Result<bool, CompileError>
 	{
-		if self.at(&TokenKind::GreaterThan) {
-			self.next();
-			return true;
+		if self.at(&TokenKind::GreaterThan)? {
+			self.next()?;
+			return Ok(true);
 		}
 
-		if self.at(&TokenKind::RShift) {
-			let rshift_tok = self.next();
+		if self.at(&TokenKind::RShift)? {
+			let rshift_tok: Token = self.next()?;
 
-			let virtual_gt = Token {
+			let virtual_gt: Token = Token {
 				kind: TokenKind::GreaterThan,
 				span: rshift_tok.span,
 			};
 
 			self.buffered_token = Some(virtual_gt);
 
-			return true;
+			return Ok(true);
 		}
 
-		return false;
+		return Ok(false);
 	}
 
 	fn expect(&mut self, expected: &TokenKind) -> Result<Token, CompileError>
 	{
-		let tok: &Token = self.peek();
+		let tok: &Token = self.peek()?;
 
 		if &tok.kind == expected {
-			return Ok(self.next());
+			return self.next();
 		} else {
 			let err_tok: Token = tok.clone();
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
@@ -2516,8 +2523,8 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let mut items: Vec<TopLevelDecl> = Vec::new();
 
-		while !matches!(self.peek().kind, TokenKind::Eof | TokenKind::RightBrace) {
-			if self.consume(&TokenKind::Semicolon) {
+		while !matches!(self.peek()?.kind, TokenKind::Eof | TokenKind::RightBrace) {
+			if self.consume(&TokenKind::Semicolon)? {
 				continue;
 			}
 			let decl = self.parse_top_level_decl()?;
@@ -2611,13 +2618,13 @@ impl<'s, 'c> Parser<'s, 'c>
 		let checkpoint_span: Span = self.last_span;
 
 		loop {
-			match self.peek_kind() {
+			match self.peek_kind()? {
 				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Volatile => {
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Const => {
-					self.next();
-					if self.at(&TokenKind::FuncDef) {
+					self.next()?;
+					if self.at(&TokenKind::FuncDef)? {
 						self.lexer = checkpoint;
 						self.last_span = checkpoint_span;
 						return Ok(DeclKind::Function);
@@ -2628,15 +2635,15 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 				}
 				TokenKind::Directive(_) => {
-					self.next();
+					self.next()?;
 
-					if self.at(&TokenKind::LeftParen) {
+					if self.at(&TokenKind::LeftParen)? {
 						self.skip_until_balanced_paren()?;
 					}
 
 					loop {
 						#[allow(clippy::match_same_arms)]
-						match self.peek_kind() {
+						match self.peek_kind()? {
 							TokenKind::Semicolon | TokenKind::LeftBrace => {
 								self.lexer = checkpoint;
 								self.last_span = checkpoint_span;
@@ -2663,7 +2670,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								break;
 							}
 							_ => {
-								self.next();
+								self.next()?;
 							}
 						}
 					}
@@ -2719,7 +2726,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(DeclKind::Trait);
 				}
 				_ => {
-					let tok: Token = self.peek().clone();
+					let tok: Token = self.peek()?.clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Err(CompileError::ParseError(ParseError::unexpected_item(
@@ -2735,30 +2742,30 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn skip_until_balanced_paren(&mut self) -> Result<(), CompileError>
 	{
-		if !self.at(&TokenKind::LeftParen) {
+		if !self.at(&TokenKind::LeftParen)? {
 			return Ok(());
 		}
-		self.next(); // (
+		self.next()?; // (
 
 		let mut depth = 1;
 		while depth > 0 {
-			match self.peek_kind() {
+			match self.peek_kind()? {
 				TokenKind::LeftParen => {
 					depth += 1;
-					self.next();
+					self.next()?;
 				}
 				TokenKind::RightParen => {
 					depth -= 1;
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Eof => {
 					return Err(CompileError::ParseError(ParseError::unexpected_eof(
-						self.peek().span,
+						self.peek()?.span,
 						self.source_index,
 					)));
 				}
 				_ => {
-					self.next();
+					self.next()?;
 				}
 			}
 		}
@@ -2769,10 +2776,10 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		#[allow(clippy::debug_assert_with_mut_call)]
 		{
-			debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+			debug_assert!(matches!(self.peek()?.kind, TokenKind::Directive(_)));
 		}
 
-		let tok: Token = self.next();
+		let tok: Token = self.next()?;
 		let start: Span = tok.span;
 
 		let directive: Directive = match tok.kind {
@@ -2780,8 +2787,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			_ => unreachable!("Bug: Token should be a directive"),
 		};
 
-		let body: Option<BlockContent> = if self.at(&TokenKind::LeftBrace) {
-			self.next(); // {
+		let body: Option<BlockContent> = if self.at(&TokenKind::LeftBrace)? {
+			self.next()?; // {
 
 			let content: BlockContent = if self.should_parse_as_top_level_block(&directive) {
 				BlockContent::TopLevelBlock(self.parse_program()?)
@@ -2813,10 +2820,10 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		#[allow(clippy::debug_assert_with_mut_call)]
 		{
-			debug_assert!(matches!(self.peek().kind, TokenKind::Directive(_)));
+			debug_assert!(matches!(self.peek()?.kind, TokenKind::Directive(_)));
 		}
 
-		let tok: Token = self.next();
+		let tok: Token = self.next()?;
 		// let start: Span = tok.span;
 
 		let node: Directive = match tok.kind {
@@ -2837,7 +2844,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(ret)
 			}
 			lexer::Directive::Import => {
-				let incl: Token = self.next();
+				let incl: Token = self.next()?;
 				let ret: Directive = match &incl.kind {
 					TokenKind::StringLiteral(str) => Directive::Import(str.clone()),
 					_ => {
@@ -2852,7 +2859,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(ret)
 			}
 			lexer::Directive::Custom(name) => {
-				let params: Vec<DirectiveParam> = if self.at(&TokenKind::LeftParen) {
+				let params: Vec<DirectiveParam> = if self.at(&TokenKind::LeftParen)? {
 					let args: Vec<DirectiveParam> = self.parse_directive_params()?;
 					args
 				} else {
@@ -2865,21 +2872,21 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, CompileError>
 	{
-		if !self.consume(&TokenKind::LeftParen) {
+		if !self.consume(&TokenKind::LeftParen)? {
 			return Ok(Vec::new());
 		}
 		let mut params: Vec<DirectiveParam> = Vec::new();
 		loop {
-			if self.at(&TokenKind::RightParen) {
+			if self.at(&TokenKind::RightParen)? {
 				break;
 			}
 
-			let is_negative = self.consume(&TokenKind::Minus);
+			let is_negative = self.consume(&TokenKind::Minus)?;
 
-			let tok_span = self.peek().span();
-			let tok_kind = self.peek_kind().clone();
+			let tok_span = self.peek()?.span();
+			let tok_kind = self.peek_kind()?.clone();
 
-			let tok = self.next();
+			let tok = self.next()?;
 
 			let arg: DirectiveParam = match tok.kind {
 				TokenKind::StringLiteral(s) => {
@@ -2939,14 +2946,14 @@ impl<'s, 'c> Parser<'s, 'c>
 						)));
 					}
 
-					match self.peek_kind() {
+					match self.peek_kind()? {
 						TokenKind::Equals => {
-							self.next(); // =
+							self.next()?; // =
 
-							let value_is_negative = self.consume(&TokenKind::Minus);
+							let value_is_negative = self.consume(&TokenKind::Minus)?;
 
-							let token_span = self.peek().span();
-							let token = self.next();
+							let token_span = self.peek()?.span();
+							let token = self.next()?;
 
 							let lit: Literal = match token.kind {
 								TokenKind::StringLiteral(s) => {
@@ -3019,10 +3026,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			};
 			params.push(arg);
-			if self.at(&TokenKind::RightParen) {
+			if self.at(&TokenKind::RightParen)? {
 				break;
 			}
-			if !self.consume(&TokenKind::Comma) {
+			if !self.consume(&TokenKind::Comma)? {
 				break;
 			}
 		}
@@ -3032,7 +3039,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_var_decl(&mut self) -> Result<VariableDecl, CompileError>
 	{
-		let tok: Token = self.next();
+		let tok: Token = self.next()?;
 		let span: Span = tok.span;
 		if !matches!(tok.kind, TokenKind::Const | TokenKind::Var) {
 			unreachable!(
@@ -3044,8 +3051,8 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let pattern: Pattern = self.parse_pattern()?;
 
-		let init: Option<Expr> = if self.at(&TokenKind::Equals) {
-			self.next();
+		let init: Option<Expr> = if self.at(&TokenKind::Equals)? {
+			self.next()?;
 			Some(self.parse_expr()?)
 		} else {
 			None
@@ -3061,33 +3068,33 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type(&mut self) -> Result<Type, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
 			modifiers,
-			core: Box::new(self.parse_type_suffix(core)),
+			core: Box::new(self.parse_type_suffix(core)?),
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_type_core(&mut self) -> Result<TypeCore, CompileError>
 	{
-		let tok: &Token = self.peek();
+		let tok: &Token = self.peek()?;
 		match &tok.kind {
 			TokenKind::Impl => {
-				self.next(); // impl
+				self.next()?; // impl
 				let bounds: Vec<WhereBound> = self.parse_trait_bounds()?;
 				return Ok(TypeCore::ImplTrait { bounds });
 			}
 			TokenKind::Mut => {
-				self.next(); // mut
+				self.next()?; // mut
 				let inner: Box<TypeCore> = Box::new(self.parse_type_core()?);
 				return Ok(TypeCore::Mutable { inner });
 			}
 			TokenKind::Identifier(_) => {
 				let path: Path = self.get_path()?;
-				let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
+				let generics: Vec<Type> = if self.at(&TokenKind::LessThan)? {
 					self.parse_type_generics()?
 				} else {
 					Vec::new()
@@ -3096,10 +3103,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				return Ok(TypeCore::Base { path, generics });
 			}
 			TokenKind::Ampersand => {
-				self.next();
-				let mutable: bool = self.at(&TokenKind::Mut);
+				self.next()?;
+				let mutable: bool = self.at(&TokenKind::Mut)?;
 				if mutable {
-					self.next();
+					self.next()?;
 				}
 				return Ok(TypeCore::Reference {
 					mutable,
@@ -3107,22 +3114,22 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 			TokenKind::LeftParen => {
-				self.next(); // (
+				self.next()?; // (
 
-				if self.consume(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::RightParen)? {
 					return Ok(TypeCore::Tuple(Vec::new()));
 				}
 
 				let mut types: Vec<Type> = vec![self.parse_type()?];
 
-				if self.consume(&TokenKind::Comma) {
-					if !self.at(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::Comma)? {
+					if !self.at(&TokenKind::RightParen)? {
 						loop {
 							types.push(self.parse_type()?);
-							if !self.consume(&TokenKind::Comma) {
+							if !self.consume(&TokenKind::Comma)? {
 								break;
 							}
-							if self.at(&TokenKind::RightParen) {
+							if self.at(&TokenKind::RightParen)? {
 								break;
 							}
 						}
@@ -3138,13 +3145,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 			TokenKind::LeftBracket => {
-				self.next(); // consume the [
+				self.next()?; // consume the [
 
-				let base_type = self.parse_type_core()?;
+				let base_type: TypeCore = self.parse_type_core()?;
 
-				let complete_type = self.parse_type_suffix(base_type);
+				let complete_type: TypeCore = self.parse_type_suffix(base_type)?;
 
-				let size = if self.consume(&TokenKind::Semicolon) {
+				let size: Option<Box<Expr>> = if self.consume(&TokenKind::Semicolon)? {
 					Some(Box::new(self.parse_expr()?))
 				} else {
 					None
@@ -3168,22 +3175,22 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn parse_type_suffix(&mut self, mut base: TypeCore) -> TypeCore
+	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, CompileError>
 	{
-		while matches!(self.peek_kind(), TokenKind::Star) {
-			self.next(); // *
+		while matches!(self.peek_kind()?, TokenKind::Star) {
+			self.next()?; // *
 			base = TypeCore::Pointer { inner: Box::new(base) };
 		}
-		return base;
+		return Ok(base);
 	}
 
 	fn get_path(&mut self) -> Result<Path, CompileError>
 	{
-		let start_span: Span = self.peek().span();
+		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<Ident> = Vec::new();
 
 		loop {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			match &tok.kind {
 				TokenKind::Identifier(s) => segments.push(s.clone()),
 				_ => {
@@ -3196,27 +3203,27 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 
-			if self.peek().kind != TokenKind::DoubleColon {
+			if self.peek()?.kind != TokenKind::DoubleColon {
 				break;
 			}
 
-			let double_colon = self.next(); // ::
-			if !matches!(self.peek().kind, TokenKind::Identifier(_)) {
+			let double_colon = self.next()?; // ::
+			if !matches!(self.peek()?.kind, TokenKind::Identifier(_)) {
 				self.buffered_token = Some(double_colon);
 				break;
 			}
 		}
 
-		let generics: Vec<Type> = if self.peek().kind == TokenKind::DoubleColon {
-			self.next(); // ::
+		let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
+			self.next()?; // ::
 
-			if self.peek().kind == TokenKind::LessThan {
+			if self.peek()?.kind == TokenKind::LessThan {
 				self.parse_type_generics()?
 			} else {
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
-					self.peek().span(),
+					self.peek()?.span(),
 					Expected::Token(TokenKind::LessThan),
-					self.peek().kind.clone(),
+					self.peek()?.kind.clone(),
 					self.source_index,
 				)));
 			}
@@ -3233,19 +3240,19 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn get_generics(&mut self) -> Result<Vec<GenericParam>, CompileError>
 	{
-		if !self.consume(&TokenKind::LessThan) {
+		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
 		}
 
 		let mut generics: Vec<GenericParam> = Vec::new();
 
-		if self.consume_greater_than() {
+		if self.consume_greater_than()? {
 			return Ok(generics);
 		}
 
 		loop {
-			let start_span: Span = self.peek().span;
-			let tok: Token = self.next();
+			let start_span: Span = self.peek()?.span;
+			let tok: Token = self.next()?;
 
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(name) => name,
@@ -3259,7 +3266,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			};
 
-			let bounds: Vec<WhereBound> = if self.consume(&TokenKind::Colon) {
+			let bounds: Vec<WhereBound> = if self.consume(&TokenKind::Colon)? {
 				self.parse_trait_bounds()?
 			} else {
 				Vec::new()
@@ -3271,12 +3278,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				span: start_span.merge(&self.last_span),
 			});
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 
-			if !self.consume(&TokenKind::Comma) {
-				let tok: Token = self.next();
+			if !self.consume(&TokenKind::Comma)? {
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
@@ -3285,7 +3292,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			}
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 		}
@@ -3310,10 +3317,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_logical_and(restrictions)?;
 
-		while self.consume(&TokenKind::Or) {
+		while self.consume(&TokenKind::Or)? {
 			let rhs: Expr = self.parse_logical_and(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalOr,
@@ -3328,10 +3335,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_or(restrictions)?;
 
-		while self.consume(&TokenKind::And) {
+		while self.consume(&TokenKind::And)? {
 			let rhs: Expr = self.parse_bitwise_or(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::LogicalAnd,
@@ -3346,11 +3353,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_xor(restrictions)?;
 
-		while self.at(&TokenKind::Pipe) {
-			self.next();
+		while self.at(&TokenKind::Pipe)? {
+			self.next()?;
 			let rhs: Expr = self.parse_bitwise_xor(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitOr,
@@ -3365,11 +3372,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_and(restrictions)?;
 
-		while self.at(&TokenKind::Caret) {
-			self.next();
+		while self.at(&TokenKind::Caret)? {
+			self.next()?;
 			let rhs: Expr = self.parse_bitwise_and(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitXor,
@@ -3384,11 +3391,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_equality(restrictions)?;
 
-		while self.at(&TokenKind::Ampersand) {
-			self.next();
+		while self.at(&TokenKind::Ampersand)? {
+			self.next()?;
 			let rhs: Expr = self.parse_equality(restrictions)?;
 			lhs = Expr::Binary {
 				op: BinaryOp::BitAnd,
@@ -3403,17 +3410,17 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_relational(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind() {
+			let op: BinaryOp = match self.peek_kind()? {
 				TokenKind::EqualsEquals => BinaryOp::Eq,
 				TokenKind::BangEquals => BinaryOp::Ne,
 				_ => break,
 			};
 
-			self.next();
+			self.next()?;
 			let rhs: Expr = self.parse_relational(restrictions)?;
 			lhs = Expr::Binary {
 				op,
@@ -3428,11 +3435,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_shift(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind() {
+			let op: BinaryOp = match self.peek_kind()? {
 				TokenKind::LessThan => BinaryOp::Lt,
 				TokenKind::GreaterThan => BinaryOp::Gt,
 				TokenKind::LessEquals => BinaryOp::Le,
@@ -3440,7 +3447,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				_ => break,
 			};
 
-			self.next();
+			self.next()?;
 			let rhs: Expr = self.parse_shift(restrictions)?;
 			lhs = Expr::Binary {
 				op,
@@ -3455,17 +3462,17 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_range(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind() {
+			let op: BinaryOp = match self.peek_kind()? {
 				TokenKind::LShift => BinaryOp::Shl,
 				TokenKind::RShift => BinaryOp::Shr,
 				_ => break,
 			};
 
-			self.next();
+			self.next()?;
 			let rhs: Expr = self.parse_range(restrictions)?;
 			lhs = Expr::Binary {
 				op,
@@ -3480,11 +3487,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 
-		if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEquals) {
-			let inclusive = self.at(&TokenKind::DotDotEquals);
-			self.next(); // .. | ..=
+		if self.at(&TokenKind::DotDot)? || self.at(&TokenKind::DotDotEquals)? {
+			let inclusive = self.at(&TokenKind::DotDotEquals)?;
+			self.next()?; // .. | ..=
 
 			let end: Option<Box<Expr>> = if self.is_range_end() {
 				None
@@ -3502,9 +3509,9 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let start: Expr = self.parse_additive(restrictions)?;
 
-		match self.peek_kind() {
+		match self.peek_kind()? {
 			TokenKind::DotDot => {
-				self.next();
+				self.next()?;
 				let end: Option<Box<Expr>> = if self.is_range_end() {
 					None
 				} else {
@@ -3518,7 +3525,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}));
 			}
 			TokenKind::DotDotEquals => {
-				self.next();
+				self.next()?;
 				let end: Box<Expr> = Box::new(self.parse_additive(restrictions)?);
 				return Ok(Expr::Range(RangeExpr {
 					start: Some(Box::new(start)),
@@ -3535,28 +3542,28 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		return matches!(
 			self.peek_kind(),
-			TokenKind::Comma
+			Ok(TokenKind::Comma
 				| TokenKind::RightParen
 				| TokenKind::RightBracket
 				| TokenKind::RightBrace
 				| TokenKind::Semicolon
-				| TokenKind::FatArrow
+				| TokenKind::FatArrow)
 		);
 	}
 
 	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_multiplicative(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind() {
+			let op: BinaryOp = match self.peek_kind()? {
 				TokenKind::Plus => BinaryOp::Add,
 				TokenKind::Minus => BinaryOp::Sub,
 				_ => break,
 			};
 
-			self.next();
+			self.next()?;
 			let rhs: Expr = self.parse_multiplicative(restrictions)?;
 			lhs = Expr::Binary {
 				op,
@@ -3571,18 +3578,18 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_cast(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind() {
+			let op: BinaryOp = match self.peek_kind()? {
 				TokenKind::Star => BinaryOp::Mul,
 				TokenKind::Slash => BinaryOp::Div,
 				TokenKind::Mod => BinaryOp::Mod,
 				_ => break,
 			};
 
-			self.next();
+			self.next()?;
 			let rhs: Expr = self.parse_cast(restrictions)?;
 			lhs = Expr::Binary {
 				op,
@@ -3597,16 +3604,16 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
-		if self.at(&TokenKind::LeftParen) {
+		let span: Span = self.peek()?.span();
+		if self.at(&TokenKind::LeftParen)? {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
 			let checkpoint_buffered = self.buffered_token.clone();
-			self.next(); // (
+			self.next()?; // (
 
 			if let Ok(ty) = self.parse_type()
-				&& self.consume(&TokenKind::RightParen)
+				&& self.consume(&TokenKind::RightParen)?
 			{
-				let next_tok = self.peek_kind();
+				let next_tok = self.peek_kind()?;
 
 				if matches!(next_tok, TokenKind::DotDot | TokenKind::DotDotEquals) {
 					self.lexer = checkpoint;
@@ -3631,23 +3638,23 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
-		let op: UnaryOp = match self.peek_kind() {
+		let span: Span = self.peek()?.span();
+		let op: UnaryOp = match self.peek_kind()? {
 			TokenKind::Bang => {
-				self.next();
+				self.next()?;
 				UnaryOp::Not
 			}
 			TokenKind::Minus => {
-				self.next();
+				self.next()?;
 				UnaryOp::Neg
 			}
 			TokenKind::Star => {
-				self.next();
+				self.next()?;
 				UnaryOp::Deref
 			}
 			TokenKind::Ampersand => {
-				self.next();
-				let mutable: bool = self.consume(&TokenKind::Mut);
+				self.next()?;
+				let mutable: bool = self.consume(&TokenKind::Mut)?;
 				UnaryOp::Addr { mutable }
 			}
 			_ => return self.parse_postfix(restrictions),
@@ -3663,14 +3670,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut expr: Expr = self.parse_primary(restrictions)?;
 
 		loop {
-			match self.peek_kind() {
+			match self.peek_kind()? {
 				TokenKind::Dot => {
-					self.next();
-					let field_tok: Token = self.next();
+					self.next()?;
+					let field_tok: Token = self.next()?;
 					let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 						name
 					} else {
@@ -3688,7 +3695,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					};
 				}
 				TokenKind::LeftBracket => {
-					self.next();
+					self.next()?;
 					let index: Expr = self.parse_expr()?; // Always allow struct init inside []
 					self.expect(&TokenKind::RightBracket)?;
 					expr = Expr::Index {
@@ -3699,15 +3706,15 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::Bang | TokenKind::QuestionMark => {
 					// Handle heap call operators in postfix position
-					let call_type = if self.consume(&TokenKind::Bang) {
+					let call_type = if self.consume(&TokenKind::Bang)? {
 						CallType::UserHeap
-					} else if self.consume(&TokenKind::QuestionMark) {
+					} else if self.consume(&TokenKind::QuestionMark)? {
 						CallType::UserMaybeHeap
 					} else {
 						unreachable!()
 					};
 
-					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan) {
+					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan)? {
 						self.parse_named_generics()?
 					} else {
 						Vec::new()
@@ -3726,7 +3733,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					};
 				}
 				TokenKind::LeftParen => {
-					self.next();
+					self.next()?;
 					let args: Vec<Expr> = self.parse_argument_list()?;
 					self.expect(&TokenKind::RightParen)?;
 					expr = Expr::Call {
@@ -3746,58 +3753,58 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
 	{
-		let tok: Token = self.peek().clone();
+		let tok: Token = self.peek()?.clone();
 		let span: Span = tok.span();
 
 		match &tok.kind {
 			TokenKind::IntLiteral(n) => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::Int(*n),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::FloatLiteral(f) => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::Float(*f),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::StringLiteral(s) => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::String(s.clone()),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::CharLiteral(c) => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::Char(*c),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::True => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::Bool(true),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::False => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Literal {
 					value: Literal::Bool(false),
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::Default => {
-				self.next(); // default
+				self.next()?; // default
 
-				let call_type = if self.consume(&TokenKind::Bang) {
+				let call_type = if self.consume(&TokenKind::Bang)? {
 					CallType::UserHeap
-				} else if self.consume(&TokenKind::QuestionMark) {
+				} else if self.consume(&TokenKind::QuestionMark)? {
 					CallType::UserMaybeHeap
 				} else {
 					CallType::Regular
@@ -3812,7 +3819,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 			TokenKind::SelfKw => {
-				self.next();
+				self.next()?;
 				return Ok(Expr::Identifier {
 					path: Path::simple(vec!["self".to_string()], tok.span()),
 					span: span.merge(&self.last_span),
@@ -3822,16 +3829,16 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Identifier(_) => {
 				let path: Path = self.get_path()?;
 
-				let call_type = if self.consume(&TokenKind::Bang) {
+				let call_type = if self.consume(&TokenKind::Bang)? {
 					Some(CallType::UserHeap)
-				} else if self.consume(&TokenKind::QuestionMark) {
+				} else if self.consume(&TokenKind::QuestionMark)? {
 					Some(CallType::UserMaybeHeap)
 				} else {
 					None
 				};
 
 				if let Some(ct) = call_type {
-					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan) {
+					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan)? {
 						self.parse_named_generics()?
 					} else {
 						Vec::new()
@@ -3853,22 +3860,23 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 
-				if !restrictions.no_struct_literal && self.at(&TokenKind::LeftBrace) {
+				if !restrictions.no_struct_literal && self.at(&TokenKind::LeftBrace)? {
 					let checkpoint = self.lexer.clone();
 					let checkpoint_span = self.last_span;
 					let checkpoint_buffered = self.buffered_token.clone();
 
-					self.next(); // {
+					self.next()?; // {
 
-					let is_struct: bool = self.at(&TokenKind::RightBrace)
-						|| (matches!(self.peek_kind(), TokenKind::Identifier(_)) && self.lookahead_for_struct_field());
+					let is_struct: bool = self.at(&TokenKind::RightBrace)?
+						|| (matches!(self.peek_kind()?, TokenKind::Identifier(_))
+							&& self.lookahead_for_struct_field()?);
 
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					self.buffered_token = checkpoint_buffered;
 
 					if is_struct {
-						self.next(); // {
+						self.next()?; // {
 						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
 						self.expect(&TokenKind::RightBrace)?;
 						return Ok(Expr::StructInit {
@@ -3891,9 +3899,9 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::LeftParen => {
-				self.next();
+				self.next()?;
 
-				if self.consume(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::RightParen)? {
 					return Ok(Expr::Tuple {
 						elements: Vec::new(),
 						span: span.merge(&self.last_span),
@@ -3902,14 +3910,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				let first: Expr = self.parse_expr()?; // Always allow struct init inside ()
 
-				if self.consume(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::RightParen)? {
 					return Ok(first);
 				}
 
-				if self.consume(&TokenKind::Comma) {
+				if self.consume(&TokenKind::Comma)? {
 					let mut elements = vec![first];
 
-					if self.consume(&TokenKind::RightParen) {
+					if self.consume(&TokenKind::RightParen)? {
 						return Ok(Expr::Tuple {
 							elements,
 							span: span.merge(&self.last_span),
@@ -3918,10 +3926,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					loop {
 						elements.push(self.parse_expr()?);
-						if !self.consume(&TokenKind::Comma) {
+						if !self.consume(&TokenKind::Comma)? {
 							break;
 						}
-						if self.at(&TokenKind::RightParen) {
+						if self.at(&TokenKind::RightParen)? {
 							break;
 						}
 					}
@@ -3942,9 +3950,9 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::LeftBracket => {
-				self.next();
+				self.next()?;
 
-				if self.consume(&TokenKind::RightBracket) {
+				if self.consume(&TokenKind::RightBracket)? {
 					return Ok(Expr::Array(ArrayLiteral::List {
 						elements: Vec::new(),
 						span: span.merge(&self.last_span),
@@ -3953,7 +3961,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				let first: Expr = self.parse_expr()?;
 
-				if self.consume(&TokenKind::Semicolon) {
+				if self.consume(&TokenKind::Semicolon)? {
 					let count: Expr = self.parse_expr()?;
 					self.expect(&TokenKind::RightBracket)?;
 					return Ok(Expr::Array(ArrayLiteral::Repeat {
@@ -3965,8 +3973,8 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				let mut elements: Vec<Expr> = vec![first];
 
-				while self.consume(&TokenKind::Comma) {
-					if self.at(&TokenKind::RightBracket) {
+				while self.consume(&TokenKind::Comma)? {
+					if self.at(&TokenKind::RightBracket)? {
 						break;
 					}
 					elements.push(self.parse_expr()?);
@@ -3985,18 +3993,18 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Unsafe => {
-				self.next(); // unsafe
+				self.next()?; // unsafe
 				let block: Block = self.parse_block()?;
 				return Ok(Expr::UnsafeBlock(Box::new(block)));
 			}
 
 			TokenKind::Switch => {
-				self.next(); // switch
+				self.next()?; // switch
 				let expr: Expr = self.parse_expr_no_struct()?; // Use no_struct for switch expression
 				self.expect(&TokenKind::LeftBrace)?;
 
 				let mut arms: Vec<SwitchArm> = Vec::new();
-				while !self.at(&TokenKind::RightBrace) {
+				while !self.at(&TokenKind::RightBrace)? {
 					arms.push(self.parse_switch_arm()?);
 				}
 
@@ -4019,11 +4027,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::Label(label) => {
-				self.next(); // label
+				self.next()?; // label
 				self.expect(&TokenKind::Colon)?; // :
 
-				if self.at(&TokenKind::Loop) {
-					self.next(); // loop
+				if self.at(&TokenKind::Loop)? {
+					self.next()?; // loop
 					let body = self.parse_block()?;
 					return Ok(Expr::Loop {
 						label: Some(label.to_owned()),
@@ -4031,7 +4039,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 					});
 				} else {
-					let tok: Token = self.next();
+					let tok: Token = self.next()?;
 					return Err(CompileError::ParseError(ParseError::unexpected_item(
 						tok.span,
 						"Expected a loop, only a loop can have a label and return a value",
@@ -4125,32 +4133,32 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn lookahead_for_struct_field(&mut self) -> bool
+	fn lookahead_for_struct_field(&mut self) -> Result<bool, CompileError>
 	{
-		if let TokenKind::Identifier(_) = self.peek_kind() {
+		if let TokenKind::Identifier(_) = self.peek_kind()? {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
-			self.next(); // identifier(_)
+			self.next()?; // identifier(_)
 
 			let is_struct_field: bool =
-				self.at(&TokenKind::Equals) || self.at(&TokenKind::Comma) || self.at(&TokenKind::RightBrace);
+				self.at(&TokenKind::Equals)? || self.at(&TokenKind::Comma)? || self.at(&TokenKind::RightBrace)?;
 
 			self.lexer = checkpoint;
-			return is_struct_field;
+			return Ok(is_struct_field);
 		} else {
-			return false;
+			return Ok(false);
 		}
 	}
 
 	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, CompileError>
 	{
-		if self.at(&TokenKind::RightParen) {
+		if self.at(&TokenKind::RightParen)? {
 			return Ok(Vec::new());
 		}
 
 		let mut args: Vec<Expr> = vec![self.parse_expr()?];
 
-		while self.consume(&TokenKind::Comma) {
-			if self.at(&TokenKind::RightParen) {
+		while self.consume(&TokenKind::Comma)? {
+			if self.at(&TokenKind::RightParen)? {
 				break;
 			}
 			args.push(self.parse_expr()?);
@@ -4161,14 +4169,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, CompileError>
 	{
-		if self.at(&TokenKind::RightBrace) {
+		if self.at(&TokenKind::RightBrace)? {
 			return Ok(Vec::new());
 		}
 
 		let mut fields: Vec<(String, Expr)> = Vec::new();
 
 		loop {
-			let name_tok: Token = self.next();
+			let name_tok: Token = self.next()?;
 			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
 				str
 			} else {
@@ -4180,7 +4188,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let value: Expr = if self.consume(&TokenKind::Equals) {
+			let value: Expr = if self.consume(&TokenKind::Equals)? {
 				self.parse_expr()?
 			} else {
 				Expr::Identifier {
@@ -4191,10 +4199,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			fields.push((name, value));
 
-			if !self.consume(&TokenKind::Comma) {
+			if !self.consume(&TokenKind::Comma)? {
 				break;
 			}
-			if self.at(&TokenKind::RightBrace) {
+			if self.at(&TokenKind::RightBrace)? {
 				break;
 			}
 		}
@@ -4204,27 +4212,27 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_switch_arm(&mut self) -> Result<SwitchArm, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 
 		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::FatArrow)?; // =>
 
-		let body: SwitchBody = if self.at(&TokenKind::LeftBrace) {
+		let body: SwitchBody = if self.at(&TokenKind::LeftBrace)? {
 			let switch: SwitchBody = SwitchBody::Block(self.parse_block()?);
-			self.consume(&TokenKind::Comma);
+			self.consume(&TokenKind::Comma)?;
 			switch
 		} else {
 			let is_stmt = matches!(
-				self.peek_kind(),
+				self.peek_kind()?,
 				TokenKind::Break | TokenKind::Continue | TokenKind::Return
 			);
 
 			if is_stmt {
-				let stmt = match self.peek_kind() {
+				let stmt = match self.peek_kind()? {
 					TokenKind::Break => {
-						self.next(); // break
-						let label: Option<String> = if matches!(self.peek_kind(), TokenKind::Label(_)) {
-							let tok: Token = self.next();
+						self.next()?; // break
+						let label: Option<String> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+							let tok: Token = self.next()?;
 							if let TokenKind::Label(l) = tok.kind {
 								Some(l)
 							} else {
@@ -4233,7 +4241,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						} else {
 							None
 						};
-						let value: Option<Expr> = if self.at(&TokenKind::Comma) {
+						let value: Option<Expr> = if self.at(&TokenKind::Comma)? {
 							None
 						} else {
 							Some(self.parse_expr()?)
@@ -4245,9 +4253,9 @@ impl<'s, 'c> Parser<'s, 'c>
 						}
 					}
 					TokenKind::Continue => {
-						self.next(); // continue
-						let label = if matches!(self.peek_kind(), TokenKind::Label(_)) {
-							let tok = self.next();
+						self.next()?; // continue
+						let label = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+							let tok = self.next()?;
 							if let TokenKind::Label(l) = tok.kind {
 								Some(l)
 							} else {
@@ -4262,8 +4270,8 @@ impl<'s, 'c> Parser<'s, 'c>
 						}
 					}
 					TokenKind::Return => {
-						self.next(); // return
-						let ret_expr = if self.at(&TokenKind::Comma) {
+						self.next()?; // return
+						let ret_expr = if self.at(&TokenKind::Comma)? {
 							None
 						} else {
 							Some(self.parse_expr()?)
@@ -4299,10 +4307,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_pattern(&mut self) -> Result<Pattern, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut patterns: Vec<Pattern> = vec![self.parse_pattern_no_or()?];
 
-		while self.consume(&TokenKind::Pipe) {
+		while self.consume(&TokenKind::Pipe)? {
 			patterns.push(self.parse_pattern_no_or()?);
 		}
 
@@ -4318,21 +4326,21 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_pattern_no_or(&mut self) -> Result<Pattern, CompileError>
 	{
-		let span: Span = self.peek().span();
-		let tok: Token = self.peek().clone();
+		let span: Span = self.peek()?.span();
+		let tok: Token = self.peek()?.clone();
 
 		match &tok.kind {
 			TokenKind::Underscore => {
-				self.next();
-				if self.consume(&TokenKind::Colon) {
+				self.next()?;
+				if self.consume(&TokenKind::Colon)? {
 					let _ignored_type = self.parse_type()?;
 				}
 				return Ok(Pattern::Wildcard { span });
 			}
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
-				let inclusive = self.at(&TokenKind::DotDotEquals);
-				self.next(); // .. | ..=
+				let inclusive = self.at(&TokenKind::DotDotEquals)?;
+				self.next()?; // .. | ..=
 
 				let end = if self.is_range_end() {
 					None
@@ -4351,16 +4359,16 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::Identifier(_) => {
 				let path: Path = self.get_path()?;
 
-				if self.consume(&TokenKind::LeftParen) {
+				if self.consume(&TokenKind::LeftParen)? {
 					let mut args: Vec<Pattern> = Vec::new();
 
-					if !self.at(&TokenKind::RightParen) {
+					if !self.at(&TokenKind::RightParen)? {
 						loop {
 							args.push(self.parse_pattern()?);
-							if !self.consume(&TokenKind::Comma) {
+							if !self.consume(&TokenKind::Comma)? {
 								break;
 							}
-							if self.at(&TokenKind::RightParen) {
+							if self.at(&TokenKind::RightParen)? {
 								break;
 							}
 						}
@@ -4372,36 +4380,36 @@ impl<'s, 'c> Parser<'s, 'c>
 						args,
 						span: span.merge(&self.last_span),
 					});
-				} else if self.consume(&TokenKind::LeftBrace) {
+				} else if self.consume(&TokenKind::LeftBrace)? {
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
 
-					if !self.at(&TokenKind::RightBrace) {
+					if !self.at(&TokenKind::RightBrace)? {
 						loop {
-							let field_name = if let TokenKind::Identifier(name) = self.next().kind {
+							let field_name = if let TokenKind::Identifier(name) = self.next()?.kind {
 								name
 							} else {
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
 									self.last_span,
 									Expected::Identifier,
-									self.peek().kind.clone(),
+									self.peek()?.kind.clone(),
 									self.source_index,
 								)));
 							};
 
-							let pattern: Pattern = if self.consume(&TokenKind::Equals) {
+							let pattern: Pattern = if self.consume(&TokenKind::Equals)? {
 								self.parse_pattern()?
-							} else if self.consume(&TokenKind::Colon) {
+							} else if self.consume(&TokenKind::Colon)? {
 								let ty: Type = self.parse_type()?;
 
-								let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang) {
+								let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
 									self.expect(&TokenKind::LeftParen)?;
 									self.expect(&TokenKind::RightParen)?;
 									Some(CallType::UserHeap)
-								} else if self.consume(&TokenKind::QuestionMark) {
+								} else if self.consume(&TokenKind::QuestionMark)? {
 									self.expect(&TokenKind::LeftParen)?;
 									self.expect(&TokenKind::RightParen)?;
 									Some(CallType::UserMaybeHeap)
-								} else if self.consume(&TokenKind::LeftParen) {
+								} else if self.consume(&TokenKind::LeftParen)? {
 									self.expect(&TokenKind::RightParen)?;
 									Some(CallType::Regular)
 								} else {
@@ -4418,17 +4426,17 @@ impl<'s, 'c> Parser<'s, 'c>
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
 									self.last_span,
 									Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
-									self.peek().kind.clone(),
+									self.peek()?.kind.clone(),
 									self.source_index,
 								)));
 							};
 
 							fields.push((field_name, pattern));
 
-							if !self.consume(&TokenKind::Comma) {
+							if !self.consume(&TokenKind::Comma)? {
 								break;
 							}
-							if self.at(&TokenKind::RightBrace) {
+							if self.at(&TokenKind::RightBrace)? {
 								break;
 							}
 						}
@@ -4440,7 +4448,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						fields,
 						span: span.merge(&self.last_span),
 					});
-				} else if self.at(&TokenKind::Colon) {
+				} else if self.at(&TokenKind::Colon)? {
 					if path.len() != 1 {
 						return Err(CompileError::ParseError(ParseError::invalid_pattern(
 							tok.span,
@@ -4449,18 +4457,18 @@ impl<'s, 'c> Parser<'s, 'c>
 						)));
 					}
 
-					self.next(); // :
+					self.next()?; // :
 					let ty: Type = self.parse_type()?;
 
-					let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang) {
+					let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
 						self.expect(&TokenKind::LeftParen)?;
 						self.expect(&TokenKind::RightParen)?;
 						Some(CallType::UserHeap)
-					} else if self.consume(&TokenKind::QuestionMark) {
+					} else if self.consume(&TokenKind::QuestionMark)? {
 						self.expect(&TokenKind::LeftParen)?;
 						self.expect(&TokenKind::RightParen)?;
 						Some(CallType::UserMaybeHeap)
-					} else if self.consume(&TokenKind::LeftParen) {
+					} else if self.consume(&TokenKind::LeftParen)? {
 						self.expect(&TokenKind::RightParen)?;
 						Some(CallType::Regular)
 					} else {
@@ -4483,9 +4491,9 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::LeftParen => {
-				self.next(); // (
+				self.next()?; // (
 
-				if self.consume(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::RightParen)? {
 					return Ok(Pattern::Tuple {
 						patterns: Vec::new(),
 						span: span.merge(&self.last_span),
@@ -4494,14 +4502,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				let mut patterns: Vec<Pattern> = vec![self.parse_pattern()?];
 
-				if self.consume(&TokenKind::Comma) {
-					if !self.at(&TokenKind::RightParen) {
+				if self.consume(&TokenKind::Comma)? {
+					if !self.at(&TokenKind::RightParen)? {
 						loop {
 							patterns.push(self.parse_pattern()?);
-							if !self.consume(&TokenKind::Comma) {
+							if !self.consume(&TokenKind::Comma)? {
 								break;
 							}
-							if self.at(&TokenKind::RightParen) {
+							if self.at(&TokenKind::RightParen)? {
 								break;
 							}
 						}
@@ -4520,11 +4528,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::IntLiteral(n) => {
-				self.next();
+				self.next()?;
 
-				if self.at(&TokenKind::DotDot) || self.at(&TokenKind::DotDotEquals) {
-					let inclusive = self.at(&TokenKind::DotDotEquals);
-					self.next(); // .. | ..=
+				if self.at(&TokenKind::DotDot)? || self.at(&TokenKind::DotDotEquals)? {
+					let inclusive = self.at(&TokenKind::DotDotEquals)?;
+					self.next()?; // .. | ..=
 
 					let end = if self.is_range_end() {
 						None
@@ -4550,7 +4558,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::True => {
-				self.next();
+				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Bool(true),
 					span: span.merge(&self.last_span),
@@ -4558,7 +4566,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::False => {
-				self.next();
+				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Bool(false),
 					span: span.merge(&self.last_span),
@@ -4566,7 +4574,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::StringLiteral(s) => {
-				self.next();
+				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::String(s.clone()),
 					span: span.merge(&self.last_span),
@@ -4574,7 +4582,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::CharLiteral(c) => {
-				self.next();
+				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Char(*c),
 					span: span.merge(&self.last_span),
@@ -4604,13 +4612,13 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_block_content(&mut self) -> Result<Block, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let mut stmts: Vec<Stmt> = Vec::new();
 		let mut tail_expr: Option<Box<Expr>> = None;
 
-		while !self.at(&TokenKind::RightBrace) {
-			let saved_label: Option<String> = if matches!(self.peek_kind(), TokenKind::Label(_)) {
-				let tok = self.next();
+		while !self.at(&TokenKind::RightBrace)? {
+			let saved_label: Option<String> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+				let tok = self.next()?;
 				if let TokenKind::Label(l) = tok.kind {
 					self.expect(&TokenKind::Colon)?;
 					Some(l)
@@ -4621,11 +4629,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			let kind: TokenKind = self.peek_kind().clone();
+			let kind: TokenKind = self.peek_kind()?.clone();
 
 			match kind {
 				TokenKind::Semicolon => {
-					self.next(); // ;
+					self.next()?; // ;
 				}
 				TokenKind::Var | TokenKind::Const => {
 					let var_decl: VariableDecl = self.parse_var_decl()?;
@@ -4634,8 +4642,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Return => {
-					self.next();
-					let ret_expr: Option<Expr> = if self.at(&TokenKind::Semicolon) {
+					self.next()?;
+					let ret_expr: Option<Expr> = if self.at(&TokenKind::Semicolon)? {
 						None
 					} else {
 						Some(self.parse_expr()?)
@@ -4648,10 +4656,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Break => {
-					self.next(); // break
+					self.next()?; // break
 
-					let label: Option<String> = if matches!(self.peek_kind(), TokenKind::Label(_)) {
-						let tok: Token = self.next();
+					let label: Option<String> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+						let tok: Token = self.next()?;
 						if let TokenKind::Label(l) = tok.kind {
 							Some(l)
 						} else {
@@ -4661,7 +4669,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						None
 					};
 
-					let value = if self.at(&TokenKind::Semicolon) {
+					let value = if self.at(&TokenKind::Semicolon)? {
 						None
 					} else {
 						Some(self.parse_expr()?)
@@ -4676,10 +4684,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Continue => {
-					self.next(); // continue
+					self.next()?; // continue
 
-					let label: Option<String> = if matches!(self.peek_kind(), TokenKind::Label(_)) {
-						let tok: Token = self.next();
+					let label: Option<String> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+						let tok: Token = self.next()?;
 						if let TokenKind::Label(l) = tok.kind {
 							Some(l)
 						} else {
@@ -4718,11 +4726,11 @@ impl<'s, 'c> Parser<'s, 'c>
 						loop_stmt.set_label(lbl);
 					}
 
-					if self.at(&TokenKind::RightBrace) {
+					if self.at(&TokenKind::RightBrace)? {
 						tail_expr = Some(Box::new(self.stmt_loop_to_expr(loop_stmt)));
 						break;
 					} else {
-						self.consume(&TokenKind::Semicolon);
+						self.consume(&TokenKind::Semicolon)?;
 						stmts.push(loop_stmt);
 					}
 				}
@@ -4732,16 +4740,16 @@ impl<'s, 'c> Parser<'s, 'c>
 					let checkpoint_span: Span = self.last_span;
 					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
 
-					self.next(); // if
+					self.next()?; // if
 
-					if self.consume(&TokenKind::Var) {
+					if self.consume(&TokenKind::Var)? {
 						let pattern: Pattern = self.parse_pattern()?;
 						self.expect(&TokenKind::Equals)?;
 						let expr: Expr = self.parse_expr_no_struct()?;
 						let then_block: Block = self.parse_block()?;
 
-						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
-							if self.at(&TokenKind::If) {
+						let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else)? {
+							if self.at(&TokenKind::If)? {
 								Some(Box::new(self.parse_if()?))
 							} else {
 								let block: Block = self.parse_block()?;
@@ -4759,9 +4767,9 @@ impl<'s, 'c> Parser<'s, 'c>
 							span,
 						};
 
-						if self.consume(&TokenKind::Semicolon) {
+						if self.consume(&TokenKind::Semicolon)? {
 							stmts.push(if_var_stmt);
-						} else if self.at(&TokenKind::RightBrace) {
+						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(self.stmt_if_to_expr_wrapper(if_var_stmt)?));
 							break;
 						} else {
@@ -4774,9 +4782,9 @@ impl<'s, 'c> Parser<'s, 'c>
 
 						let if_stmt: Stmt = self.parse_if()?;
 
-						if self.consume(&TokenKind::Semicolon) {
+						if self.consume(&TokenKind::Semicolon)? {
 							stmts.push(if_stmt);
-						} else if self.at(&TokenKind::RightBrace) {
+						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(self.stmt_if_to_expr_wrapper(if_stmt)?));
 							break;
 						} else {
@@ -4795,12 +4803,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::Unsafe => {
-					self.next();
+					self.next()?;
 					let block: Block = self.parse_block()?;
 
-					if self.consume(&TokenKind::Semicolon) {
+					if self.consume(&TokenKind::Semicolon)? {
 						stmts.push(Stmt::Unsafe(block));
-					} else if self.at(&TokenKind::RightBrace) {
+					} else if self.at(&TokenKind::RightBrace)? {
 						tail_expr = Some(Box::new(Expr::Block(Box::new(block))));
 						break;
 					} else {
@@ -4832,9 +4840,9 @@ impl<'s, 'c> Parser<'s, 'c>
 							span: span.merge(&self.last_span),
 						});
 					} else if let Expr::Block(block) = expr {
-						if self.consume(&TokenKind::Semicolon) {
+						if self.consume(&TokenKind::Semicolon)? {
 							stmts.push(Stmt::Block(*block));
-						} else if self.at(&TokenKind::RightBrace) {
+						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(Expr::Block(block)));
 							break;
 						} else {
@@ -4844,13 +4852,13 @@ impl<'s, 'c> Parser<'s, 'c>
 						let needs_semi: bool = self.expr_needs_semicolon(&expr);
 
 						if needs_semi {
-							if self.consume(&TokenKind::Semicolon) {
+							if self.consume(&TokenKind::Semicolon)? {
 								stmts.push(Stmt::Expr(expr));
-							} else if self.at(&TokenKind::RightBrace) {
+							} else if self.at(&TokenKind::RightBrace)? {
 								tail_expr = Some(Box::new(expr));
 								break;
 							} else {
-								let tok: Token = self.next();
+								let tok: Token = self.next()?;
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
 									tok.span,
 									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
@@ -4858,7 +4866,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									self.source_index,
 								)));
 							}
-						} else if self.at(&TokenKind::RightBrace) {
+						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(expr));
 							break;
 						} else {
@@ -4887,7 +4895,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		return matches!(
 			self.peek_kind(),
-			TokenKind::Equals
+			Ok(TokenKind::Equals
 				| TokenKind::PlusEquals
 				| TokenKind::MinusEquals
 				| TokenKind::StarEquals
@@ -4898,13 +4906,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				| TokenKind::CaretEquals
 				| TokenKind::TildeEquals
 				| TokenKind::LShiftEquals
-				| TokenKind::RShiftEquals
+				| TokenKind::RShiftEquals)
 		);
 	}
 
 	fn parse_assign_op(&mut self) -> Result<AssignOp, CompileError>
 	{
-		let op: AssignOp = match self.peek_kind() {
+		let op: AssignOp = match self.peek_kind()? {
 			TokenKind::Equals => AssignOp::Assign,
 			TokenKind::PlusEquals => AssignOp::AddAssign,
 			TokenKind::MinusEquals => AssignOp::SubAssign,
@@ -4917,7 +4925,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::LShiftEquals => AssignOp::ShlAssign,
 			TokenKind::RShiftEquals => AssignOp::ShrAssign,
 			_ => {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Description("assignment operator".to_string()),
@@ -4926,23 +4934,23 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			}
 		};
-		self.next();
+		self.next()?;
 		return Ok(op);
 	}
 
 	fn parse_if(&mut self) -> Result<Stmt, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::If)?;
 
-		return if self.consume(&TokenKind::Var) {
+		return if self.consume(&TokenKind::Var)? {
 			let pattern: Pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
 			let expr: Expr = self.parse_expr_no_struct()?;
 			let then_block: Block = self.parse_block()?;
 
-			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
-				if self.at(&TokenKind::If) {
+			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else)? {
+				if self.at(&TokenKind::If)? {
 					Some(Box::new(self.parse_if()?))
 				} else {
 					let block: Block = self.parse_block()?;
@@ -4963,8 +4971,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			let cond: Expr = self.parse_expr_no_struct()?;
 			let then_block: Block = self.parse_block()?;
 
-			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else) {
-				if self.at(&TokenKind::If) {
+			let else_branch: Option<Box<Stmt>> = if self.consume(&TokenKind::Else)? {
+				if self.at(&TokenKind::If)? {
 					Some(Box::new(self.parse_if()?))
 				} else {
 					let block: Block = self.parse_block()?;
@@ -4985,10 +4993,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_while(&mut self) -> Result<Stmt, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::While)?;
 
-		if self.consume(&TokenKind::Var) {
+		if self.consume(&TokenKind::Var)? {
 			let pattern: Pattern = self.parse_pattern()?;
 			self.expect(&TokenKind::Equals)?;
 			let expr: Expr = self.parse_expr_no_struct()?;
@@ -5016,7 +5024,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_for(&mut self) -> Result<Stmt, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::For)?;
 		let name: Path = self.get_path()?;
 		self.expect(&TokenKind::In)?;
@@ -5034,7 +5042,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_loop(&mut self) -> Result<Stmt, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::Loop)?;
 		return Ok(Stmt::Loop {
 			label: None,
@@ -5045,9 +5053,9 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_function_decl(&mut self) -> Result<FunctionDecl, CompileError>
 	{
-		let mut span: Span = self.peek().span();
+		let mut span: Span = self.peek()?.span();
 		let signature: FunctionSignature = self.parse_function_signature()?;
-		let body: Option<Block> = if self.consume(&TokenKind::Semicolon) {
+		let body: Option<Block> = if self.consume(&TokenKind::Semicolon)? {
 			None
 		} else {
 			Some(self.parse_block()?)
@@ -5062,32 +5070,32 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_function_signature(&mut self) -> Result<FunctionSignature, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 
 		self.expect(&TokenKind::FuncDef)?;
 
-		let call_type = if self.consume(&TokenKind::Bang) {
+		let call_type = if self.consume(&TokenKind::Bang)? {
 			CallType::UserHeap
-		} else if self.consume(&TokenKind::QuestionMark) {
+		} else if self.consume(&TokenKind::QuestionMark)? {
 			CallType::UserMaybeHeap
 		} else {
 			CallType::Regular
 		};
 
-		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan) {
+		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan)? {
 			self.get_generics()?
 		} else {
 			Vec::new()
 		};
 
-		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 			self.get_path()?
-		} else if self.at(&TokenKind::Delete) {
-			let tok = self.next();
+		} else if self.at(&TokenKind::Delete)? {
+			let tok = self.next()?;
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span,
 				Expected::Identifier,
@@ -5096,27 +5104,27 @@ impl<'s, 'c> Parser<'s, 'c>
 			)));
 		};
 
-		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
 			self.get_generics()?
 		} else {
 			Vec::new()
 		};
 		let params: Vec<Param> = self.parse_function_arguments()?;
 
-		let return_type: Option<Type> = if self.at(&TokenKind::Arrow) {
-			self.next(); // ->
+		let return_type: Option<Type> = if self.at(&TokenKind::Arrow)? {
+			self.next()?; // ->
 			Some(self.parse_type()?)
 		} else {
 			None
 		};
 
-		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where) {
-			self.next(); // where
-			if !matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?; // where
+			if !matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
-					self.peek().span(),
+					self.peek()?.span(),
 					Expected::Identifier,
-					self.next().kind,
+					self.next()?.kind,
 					self.source_index,
 				)));
 			}
@@ -5144,18 +5152,18 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut params: Vec<Param> = Vec::new();
 
-		if self.at(&TokenKind::RightParen) {
-			self.next();
+		if self.at(&TokenKind::RightParen)? {
+			self.next()?;
 			return Ok(params);
 		}
 
 		loop {
-			let loop_span: Span = self.peek().span();
-			match self.peek_kind() {
+			let loop_span: Span = self.peek()?.span();
+			match self.peek_kind()? {
 				TokenKind::Ampersand => {
-					self.next(); // &
+					self.next()?; // &
 
-					let mutable: bool = self.consume(&TokenKind::Mut);
+					let mutable: bool = self.consume(&TokenKind::Mut)?;
 
 					let self_span: Span = self.expect(&TokenKind::SelfKw)?.span();
 
@@ -5179,7 +5187,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 				TokenKind::SelfKw => {
-					let self_span: Span = self.next().span(); // self
+					let self_span: Span = self.next()?.span(); // self
 
 					let self_type = Type {
 						modifiers: Vec::new(),
@@ -5198,7 +5206,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 				TokenKind::Mut => {
-					let self_span: Span = self.next().span(); // mut
+					let self_span: Span = self.next()?.span(); // mut
 					self.expect(&TokenKind::SelfKw)?;
 
 					let self_type = Type {
@@ -5234,11 +5242,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 
-			if !self.consume(&TokenKind::Comma) {
+			if !self.consume(&TokenKind::Comma)? {
 				break;
 			}
 
-			if self.at(&TokenKind::RightParen) {
+			if self.at(&TokenKind::RightParen)? {
 				break;
 			}
 		}
@@ -5252,30 +5260,30 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut ret: Vec<Modifier> = Vec::new();
 
 		loop {
-			let tok: &Token = self.peek();
+			let tok: &Token = self.peek()?;
 			match &tok.kind {
 				TokenKind::Directive(_) => {
 					ret.push(Modifier::Directive(self.parse_directive()?));
 				}
 				TokenKind::Pub => {
 					ret.push(Modifier::Pub);
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Unsafe => {
 					ret.push(Modifier::Unsafe);
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Inline => {
 					ret.push(Modifier::Inline);
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Volatile => {
 					ret.push(Modifier::Volatile);
-					self.next();
+					self.next()?;
 				}
 				TokenKind::Const => {
 					ret.push(Modifier::Const);
-					self.next();
+					self.next()?;
 				}
 				_ => return Ok(ret),
 			}
@@ -5284,14 +5292,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_struct(&mut self) -> Result<StructDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Struct)?;
 
-		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span,
 				Expected::Identifier,
@@ -5304,14 +5312,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut fields: Vec<(Type, Ident, Option<Expr>)> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
-			if *self.peek_kind() == TokenKind::RightBrace {
+		while !self.at(&TokenKind::RightBrace)? {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
@@ -5324,7 +5332,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let field_type: Type = self.parse_type()?;
 
-			let default_value: Option<Expr> = if self.consume(&TokenKind::Equals) {
+			let default_value: Option<Expr> = if self.consume(&TokenKind::Equals)? {
 				Some(self.parse_expr()?)
 			} else {
 				None
@@ -5332,7 +5340,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			fields.push((field_type, field_name, default_value));
 
-			if *self.peek_kind() == TokenKind::RightBrace {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
 			self.expect(&TokenKind::Comma)?;
@@ -5350,14 +5358,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_union(&mut self) -> Result<UnionDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Union)?;
 
-		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span,
 				Expected::Identifier,
@@ -5370,14 +5378,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut fields: Vec<(Type, Ident)> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
-			if *self.peek_kind() == TokenKind::RightBrace {
+		while !self.at(&TokenKind::RightBrace)? {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
@@ -5392,7 +5400,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			fields.push((field_type, field_name));
 
-			if *self.peek_kind() == TokenKind::RightBrace {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
 			self.expect(&TokenKind::Comma)?;
@@ -5410,7 +5418,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_namespace(&mut self) -> Result<NamespaceDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Namespace)?;
 		let name: Path = self.get_path()?;
@@ -5427,14 +5435,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_enum(&mut self) -> Result<EnumDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Enum)?;
 
-		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span,
 				Expected::Identifier,
@@ -5447,14 +5455,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut fields: Vec<(Ident, Option<Expr>)> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
-			if *self.peek_kind() == TokenKind::RightBrace {
+		while !self.at(&TokenKind::RightBrace)? {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
@@ -5463,8 +5471,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let field_type: Option<Expr> = if self.at(&TokenKind::Equals) {
-				self.next();
+			let field_type: Option<Expr> = if self.at(&TokenKind::Equals)? {
+				self.next()?;
 				Some(self.parse_expr()?)
 			} else {
 				None
@@ -5472,7 +5480,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			fields.push((field_name, field_type));
 
-			if *self.peek_kind() == TokenKind::RightBrace {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
 			self.expect(&TokenKind::Comma)?;
@@ -5490,14 +5498,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_variant(&mut self) -> Result<VariantDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Variant)?;
 
-		let name: Path = if matches!(self.peek_kind(), TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
 			self.get_path()?
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span,
 				Expected::Identifier,
@@ -5510,14 +5518,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut fields: Vec<(Option<Type>, Ident, Option<Expr>)> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
-			if *self.peek_kind() == TokenKind::RightBrace {
+		while !self.at(&TokenKind::RightBrace)? {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next().kind {
+			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
@@ -5526,8 +5534,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let field_type: Option<Type> = if self.at(&TokenKind::LeftParen) {
-				self.next();
+			let field_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
+				self.next()?;
 				let ty: Option<Type> = Some(self.parse_type()?);
 				self.expect(&TokenKind::RightParen)?;
 				ty
@@ -5535,8 +5543,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			let field_value: Option<Expr> = if self.at(&TokenKind::Equals) {
-				self.next();
+			let field_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
+				self.next()?;
 				Some(self.parse_expr()?)
 			} else {
 				None
@@ -5544,7 +5552,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			fields.push((field_type, field_name, field_value));
 
-			if *self.peek_kind() == TokenKind::RightBrace {
+			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
 			self.expect(&TokenKind::Comma)?;
@@ -5562,11 +5570,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_impl(&mut self) -> Result<ImplDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Impl)?;
 
-		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
 			self.get_generics()?
 		} else {
 			Vec::new()
@@ -5574,15 +5582,15 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let first_target: ImplTarget = self.parse_impl_target()?;
 
-		let (trait_path, target): (Option<ImplTarget>, ImplTarget) = if self.consume(&TokenKind::For) {
+		let (trait_path, target): (Option<ImplTarget>, ImplTarget) = if self.consume(&TokenKind::For)? {
 			let target: ImplTarget = self.parse_impl_target()?;
 			(Some(first_target), target)
 		} else {
 			(None, first_target)
 		};
 
-		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where) {
-			self.next();
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?;
 			self.parse_where_clause()?
 		} else {
 			Vec::new()
@@ -5592,7 +5600,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut body: Vec<ImplItem> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
+		while !self.at(&TokenKind::RightBrace)? {
 			let item = self.parse_impl_item()?;
 			body.push(item);
 		}
@@ -5612,10 +5620,10 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_impl_target(&mut self) -> Result<ImplTarget, CompileError>
 	{
-		let span: Span = self.peek().span();
+		let span: Span = self.peek()?.span();
 		let path: Path = self.get_path()?;
 
-		let generics: Vec<Type> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<Type> = if self.at(&TokenKind::LessThan)? {
 			self.parse_type_generics()?
 		} else {
 			Vec::new()
@@ -5630,25 +5638,25 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type_generics(&mut self) -> Result<Vec<Type>, CompileError>
 	{
-		if !self.consume(&TokenKind::LessThan) {
+		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
 		}
 
 		let mut generics: Vec<Type> = Vec::new();
 
-		if self.consume_greater_than() {
+		if self.consume_greater_than()? {
 			return Ok(generics);
 		}
 
 		loop {
 			generics.push(self.parse_type()?);
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 
-			if !self.consume(&TokenKind::Comma) {
-				let tok = self.peek().clone();
+			if !self.consume(&TokenKind::Comma)? {
+				let tok = self.peek()?.clone();
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
@@ -5657,7 +5665,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			}
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 		}
@@ -5667,21 +5675,21 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, CompileError>
 	{
-		if !self.consume(&TokenKind::LessThan) {
+		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
 		}
 
 		let mut named_generics: Vec<(Ident, Type)> = Vec::new();
 
-		if self.consume_greater_than() {
+		if self.consume_greater_than()? {
 			return Ok(named_generics);
 		}
 
 		loop {
-			let name = if let TokenKind::Identifier(name) = self.next().kind {
+			let name = if let TokenKind::Identifier(name) = self.next()?.kind {
 				name
 			} else {
-				let tok: Token = self.peek().clone();
+				let tok: Token = self.peek()?.clone();
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
@@ -5696,12 +5704,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			named_generics.push((name, ty));
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 
-			if !self.consume(&TokenKind::Comma) {
-				let tok = self.peek().clone();
+			if !self.consume(&TokenKind::Comma)? {
+				let tok = self.peek()?.clone();
 				return Err(CompileError::ParseError(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
@@ -5710,7 +5718,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			}
 
-			if self.consume_greater_than() {
+			if self.consume_greater_than()? {
 				break;
 			}
 		}
@@ -5738,7 +5746,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				ImplItem::Const(var_decl)
 			}
 			_ => {
-				let tok = self.peek().clone();
+				let tok = self.peek()?.clone();
 				return Err(CompileError::ParseError(ParseError::unexpected_item(
 					tok.span,
 					"impl block",
@@ -5756,11 +5764,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		let mut constraints: Vec<WhereConstraint> = Vec::new();
 
 		loop {
-			let loop_span: Span = self.peek().span();
+			let loop_span: Span = self.peek()?.span();
 
 			let ty: Path = self.get_path()?;
 
-			let type_args: Vec<Type> = if self.at(&TokenKind::LessThan) {
+			let type_args: Vec<Type> = if self.at(&TokenKind::LessThan)? {
 				self.parse_type_generics()?
 			} else {
 				Vec::new()
@@ -5773,7 +5781,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			loop {
 				bounds.push(self.parse_where_bound()?);
 
-				if !self.consume(&TokenKind::Plus) {
+				if !self.consume(&TokenKind::Plus)? {
 					break;
 				}
 			}
@@ -5785,11 +5793,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				span: loop_span.merge(&self.last_span),
 			});
 
-			if !self.consume(&TokenKind::Comma) {
+			if !self.consume(&TokenKind::Comma)? {
 				break;
 			}
 
-			if self.at(&TokenKind::LeftBrace) {
+			if self.at(&TokenKind::LeftBrace)? {
 				break;
 			}
 		}
@@ -5799,7 +5807,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
@@ -5818,19 +5826,19 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_trait(&mut self) -> Result<TraitDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Trait)?;
 
 		let name: Path = self.get_path()?;
 
-		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan) {
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
 			self.get_generics()?
 		} else {
 			Vec::new()
 		};
 
-		let super_traits: Vec<WhereBound> = if self.consume(&TokenKind::Colon) {
+		let super_traits: Vec<WhereBound> = if self.consume(&TokenKind::Colon)? {
 			self.parse_trait_bounds()?
 		} else {
 			Vec::new()
@@ -5840,7 +5848,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let mut items: Vec<TraitItem> = Vec::new();
 
-		while !self.at(&TokenKind::RightBrace) {
+		while !self.at(&TokenKind::RightBrace)? {
 			let item = self.parse_trait_item()?;
 			items.push(item);
 		}
@@ -5865,7 +5873,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			let bound: WhereBound = self.parse_where_bound()?;
 			bounds.push(bound);
 
-			if !self.consume(&TokenKind::Plus) {
+			if !self.consume(&TokenKind::Plus)? {
 				break;
 			}
 		}
@@ -5875,27 +5883,27 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_where_bound(&mut self) -> Result<WhereBound, CompileError>
 	{
-		let bound: WhereBound = if matches!(self.peek_kind(), TokenKind::Identifier(s) if *s == "Fn") {
-			self.next(); // Fn
+		let bound: WhereBound = if matches!(self.peek_kind()?, TokenKind::Identifier(s) if *s == "Fn") {
+			self.next()?; // Fn
 			let mut params: Vec<Type> = Vec::new();
 
 			self.expect(&TokenKind::LeftParen)?;
 			loop {
-				if self.at(&TokenKind::RightParen) {
+				if self.at(&TokenKind::RightParen)? {
 					break;
 				}
 				params.push(self.parse_type()?);
-				if !self.consume(&TokenKind::Comma) {
+				if !self.consume(&TokenKind::Comma)? {
 					break;
 				}
-				if self.at(&TokenKind::RightParen) {
+				if self.at(&TokenKind::RightParen)? {
 					break;
 				}
 			}
 			self.expect(&TokenKind::RightParen)?;
 
-			let return_type: Option<Type> = if self.at(&TokenKind::Arrow) {
-				self.next(); // ->
+			let return_type: Option<Type> = if self.at(&TokenKind::Arrow)? {
+				self.next()?; // ->
 				Some(self.parse_type()?)
 			} else {
 				None
@@ -5907,7 +5915,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		} else {
 			let mut bound_path: Path = self.get_path()?;
 
-			if self.at(&TokenKind::LessThan) {
+			if self.at(&TokenKind::LessThan)? {
 				bound_path.generics.extend(self.parse_type_generics()?);
 			}
 			WhereBound::Path(bound_path)
@@ -5918,7 +5926,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_trait_item(&mut self) -> Result<TraitItem, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -5926,7 +5934,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			DeclKind::Function => {
 				let signature: FunctionSignature = self.parse_function_signature()?;
 
-				let body: Option<Block> = if self.at(&TokenKind::LeftBrace) {
+				let body: Option<Block> = if self.at(&TokenKind::LeftBrace)? {
 					Some(self.parse_block()?)
 				} else {
 					self.expect(&TokenKind::Semicolon)?;
@@ -5950,7 +5958,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				TraitItem::Const(var_decl)
 			}
 			_ => {
-				let tok: Token = self.next();
+				let tok: Token = self.next()?;
 				return Err(CompileError::ParseError(ParseError::unexpected_item(
 					tok.span,
 					"trait block",
@@ -5965,16 +5973,16 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_trait_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError>
 	{
-		let span: Span = self.peek().span;
+		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
 		let name: Path = self.get_path()?;
 
-		let ty: Type = if self.consume(&TokenKind::Equals) {
+		let ty: Type = if self.consume(&TokenKind::Equals)? {
 			self.parse_type()?
 		} else {
-			let tok: Token = self.next();
+			let tok: Token = self.next()?;
 			return Err(CompileError::ParseError(ParseError::unexpected_token(
 				tok.span(),
 				Expected::Token(TokenKind::Equals),
