@@ -997,6 +997,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 				self.advance();
 				if let Some(escaped) = self.lex_escape_sequence() {
 					string.push(escaped);
+				} else {
+					// Invalid escape sequence
+					return TokenKind::Invalid;
 				}
 			} else {
 				string.push(ch);
@@ -1092,9 +1095,84 @@ impl<'source, 'config> Lexer<'source, 'config>
 			'\\' => '\\',
 			'\'' => '\'',
 			'"' => '"',
+			'x' => {
+				// Hexadecimal escape sequence: \xHH
+				self.advance();
+				let mut hex_str = String::new();
+
+				// Read up to 2 hex digits
+				for _ in 0..2 {
+					if let Some(ch) = self.current_char {
+						if ch.is_ascii_hexdigit() {
+							hex_str.push(ch);
+							self.advance();
+						} else {
+							break;
+						}
+					} else {
+						break;
+					}
+				}
+
+				if hex_str.is_empty() {
+					return None;
+				}
+
+				// Parse hex string to u8, then convert to char
+				if let Ok(value) = u8::from_str_radix(&hex_str, 16) {
+					// Don't advance here - we already advanced while reading hex digits
+					return Some(value as char);
+				} else {
+					return None;
+				}
+			}
+			'u' => {
+				// Unicode escape sequence: \u{HHHHHH}
+				self.advance();
+
+				if self.current_char != Some('{') {
+					return None;
+				}
+				self.advance();
+
+				let mut hex_str = String::new();
+
+				// Read hex digits until we hit '}'
+				while let Some(ch) = self.current_char {
+					if ch == '}' {
+						break;
+					} else if ch.is_ascii_hexdigit() {
+						hex_str.push(ch);
+						self.advance();
+					} else {
+						return None;
+					}
+				}
+
+				if self.current_char != Some('}') {
+					return None;
+				}
+				self.advance();
+
+				if hex_str.is_empty() || hex_str.len() > 6 {
+					return None;
+				}
+
+				// Parse hex string to u32, then convert to char
+				if let Ok(value) = u32::from_str_radix(&hex_str, 16) {
+					return char::from_u32(value);
+				} else {
+					return None;
+				}
+			}
 			_ => return None,
 		};
-		self.advance();
+
+		// For simple escape sequences, advance past the escape character
+		if escaped != '\0' || self.current_char == Some('0') {
+			self.advance();
+		}
+
 		return Some(escaped);
 	}
 
