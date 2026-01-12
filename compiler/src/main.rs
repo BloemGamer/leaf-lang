@@ -174,7 +174,7 @@ impl CompileError
 
 fn main()
 {
-	const FILE_NAME: &str = "slang-test/main.sl";
+	const FILE_NAME: &str = "leaf-test/main.leaf";
 	let config: Config = Config::default();
 	let mut source_map: SourceMap = SourceMap::default();
 

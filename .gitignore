@@ -8,7 +8,7 @@
 /__pycache__
 /build*
 /cmake-build*
-/slang-test
+/leaf-test
 /.cache
 /test_output
 /Testing

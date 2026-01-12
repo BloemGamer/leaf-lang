@@ -4,7 +4,7 @@
 [![Project_license][license-shield]][license-url]
 
 
-# S-lang
+# Leaf-lang
 A language that is designed to be used with C, with modern features and a platform to learn compiler design.
 
 > [!WARNING]
@@ -76,15 +76,15 @@ fn main()
 	- **CMake** >= 3.10
 	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
 
-S-lang is currently under development, but you can build it from source.
+leaf-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
 
 ![Linux][Linux-shield] ![Linux Mint][Linux-Mint-shield] ![Windows][Windows-shield]
 
 ### Cloning the Repository
 ```sh
-git clone https://github.com/BloemGamer/S-lang.git
-cd S-lang
+git clone https://github.com/BloemGamer/leaf-lang.git
+cd leaf-lang
 ````
 
 ### Building the Project
@@ -101,21 +101,21 @@ cargo run --release
 
 
 ## License
-S-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
+leaf-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contact
-Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/S-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/S-lang/issues).
+Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/leaf-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/leaf-lang/issues).
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[forks-shield]: https://img.shields.io/github/forks/BloemGamer/S-lang.svg?style=flat
-[forks-url]: https://github.com/BloemGamer/S-lang/network/members
-[stars-shield]: https://img.shields.io/github/stars/BloemGamer/S-lang.svg?style=flat
-[stars-url]: https://github.com/BloemGamer/S-lang/stargazers
-[issues-shield]: https://img.shields.io/github/issues/BloemGamer/S-lang.svg?style=flat
-[issues-url]: https://github.com/BloemGamer/S-lang/issues
-[license-shield]: https://img.shields.io/github/license/BloemGamer/S-lang.svg?style=flat
-[license-url]: https://github.com/BloemGamer/S-lang/blob/main/LICENSE
+[forks-shield]: https://img.shields.io/github/forks/BloemGamer/leaf-lang.svg?style=flat
+[forks-url]: https://github.com/BloemGamer/leaf-lang/network/members
+[stars-shield]: https://img.shields.io/github/stars/BloemGamer/leaf-lang.svg?style=flat
+[stars-url]: https://github.com/BloemGamer/leaf-lang/stargazers
+[issues-shield]: https://img.shields.io/github/issues/BloemGamer/leaf-lang.svg?style=flat
+[issues-url]: https://github.com/BloemGamer/leaf-lang/issues
+[license-shield]: https://img.shields.io/github/license/BloemGamer/leaf-lang.svg?style=flat
+[license-url]: https://github.com/BloemGamer/leaf-lang/blob/main/LICENSE
 
 [Linux-Mint-shield]: https://img.shields.io/badge/Linux%20Mint-87CF3E?logo=linuxmint&logoColor=fff
 [Linux-shield]: https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black
