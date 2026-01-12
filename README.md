@@ -76,7 +76,7 @@ fn main()
 	- **CMake** >= 3.10
 	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
 
-leaf-lang is currently under development, but you can build it from source.
+Leaf-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
 
 ![Linux][Linux-shield] ![Linux Mint][Linux-Mint-shield] ![Windows][Windows-shield]
@@ -101,7 +101,7 @@ cargo run --release
 
 
 ## License
-leaf-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
+Leaf-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contact
 Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/leaf-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/leaf-lang/issues).
