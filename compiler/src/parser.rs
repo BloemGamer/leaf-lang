@@ -6644,8 +6644,8 @@ impl fmt::Display for Literal
 			Literal::Int(n) => return write!(f, "{}", n),
 			Literal::Float(fl) => return write!(f, "{}", fl),
 			Literal::Bool(b) => return write!(f, "{}", b),
-			Literal::String(s) => return write!(f, "\"{}\"", s),
-			Literal::Char(c) => return write!(f, "'{}'", c),
+			Literal::String(s) => return write!(f, "{:?}", s),
+			Literal::Char(c) => return write!(f, "{:?}", c),
 		}
 	}
 }
