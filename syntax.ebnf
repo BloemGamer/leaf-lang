@@ -143,7 +143,15 @@ postfix_expr = primary_expr , { postfix_op } ;
 
 postfix_op = "." , identifier                      // field access
            | "[" , expression , "]"                // array indexing
+           | heap_call_op                          // heap call: !<IO: x>() or ?<IO: x>()
            | "(" , [ argument_list ] , ")" ;       // function call
+
+// Heap call operator: !<Name: Type, ...>(...) or ?<Name: Type, ...>(...)
+heap_call_op = ( "!" | "?" ) , [ named_generic_args ] , "(" , [ argument_list ] , ")" ;
+
+// Named generic arguments: <Name: Type, Name2: Type2>
+named_generic_args = "<" , named_generic_arg , { "," , named_generic_arg } , [ "," ] , ">" ;
+named_generic_arg = identifier , ":" , type ;
 
 argument_list = expression , { "," , expression } , [ "," ] ;
 
@@ -162,9 +170,12 @@ primary_expr = path
              | switch_expr
              | if_expr
              | loop_expr
-             | "default" , [ "!" ] , "(" , ")"
+             | default_expr
              | "self"
              | "(" , expression , ")" ;
+
+// Default expression: default() or default!() or default?()
+default_expr = "default" , [ ( "!" | "?" ) ] , "(" , ")" ;
 
 // ============================================================================
 // BLOCK AND CONTROL FLOW EXPRESSIONS
@@ -220,7 +231,11 @@ literal_pattern = integer_literal
                 | char_literal
                 | boolean_literal ;
 
-typed_identifier_pattern = identifier , ":" , type ;
+// Typed identifier with optional heap constructor: x: i32 or x: i32() or x: i32!() or x: i32?()
+typed_identifier_pattern = identifier , ":" , type , [ heap_constructor ] ;
+
+// Heap constructor: () or !() or ?()
+heap_constructor = [ ( "!" | "?" ) ] , "(" , ")" ;
 
 variant_pattern = path , [ "(" , [ pattern_list ] , ")" ] ;
 
@@ -368,17 +383,25 @@ modifier_list = { modifier } ;
 
 function_decl = function_signature , ( block_expr | ";" ) ;
 
+// Function signature with heap call support:
+// fn name<T>(...) -> RetType           (regular)
+// fn!<IO: Allocator> name<T>(...) -> RetType  (heap with allocator)
+// fn?<IO: Allocator> name<T>(...) -> RetType  (maybe-heap with allocator)
 function_signature = modifier_list ,
                      "fn" ,
-                     [ "!" ] ,  // heap-allocated function
+                     [ ( "!" | "?" ) ] ,        (* heap function marker *)
+                     [ generic_params ] ,       (* heap generics: fn!<IO: Allocator> *)
                      path ,
-                     [ generic_params ] ,
+                     [ generic_params ] ,       (* regular generics: name<T> *)
                      "(" , [ parameter_list ] , ")" ,
                      [ "->" , type ] ,
                      [ where_clause ] ;
 
 // Generic parameters: <T, U>
-generic_params = "<" , identifier , { "," , identifier } , [ "," ] , ">" ;
+generic_params = "<" , generic_param , { "," , generic_param } , [ "," ] , ">" ;
+
+// Generic parameter with optional bounds: T or T: Clone or T: Clone + Debug
+generic_param = identifier , [ ":" , trait_bound_list ] ;
 
 // Function parameters
 parameter_list = parameter , { "," , parameter } , [ "," ] ;
@@ -393,9 +416,15 @@ regular_parameter = path , ":" , type ;
 // Where clause: where T: Trait1 + Trait2, U: Trait3
 where_clause = "where" , constraint , { "," , constraint } , [ "," ] ;
 
-constraint = path , ":" , trait_bound_list ;
+constraint = path , [ generic_args ] , ":" , trait_bound_list ;
 
-trait_bound_list = path , { "+" , path } ;
+trait_bound_list = trait_bound , { "+" , trait_bound } ;
+
+// Trait bound: either a path (MyTrait) or function trait (Fn(i32) -> i32)
+trait_bound = func_bound | path ;
+
+// Function trait bounds: Fn(T, U) -> R
+func_bound = "Fn" , "(" , [ type , { "," , type } , [ "," ] ] , ")" , [ "->" , type ] ;
 
 // ============================================================================
 // TYPE DECLARATIONS
@@ -468,7 +497,7 @@ trait_function = function_signature , ( block_expr | ";" ) ;
 
 trait_type_alias = modifier_list , "type" , path , "=" , type , ";" ;
 
-trait_const = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
+trait_const = "const" , pattern , [ "=" , expression ] , ";" ;
 
 // ============================================================================
 // IMPL BLOCKS
@@ -492,7 +521,7 @@ impl_function = function_decl ;
 
 impl_type_alias = type_alias_decl ;
 
-impl_const = ( "var" | "const" ) , pattern , [ "=" , expression ] , ";" ;
+impl_const = "const" , pattern , [ "=" , expression ] , ";" ;
 
 // ============================================================================
 // NAMESPACE DECLARATIONS
@@ -543,7 +572,7 @@ program = { top_level_decl } ;
 //  11.  * / %        (multiplicative)
 //  12.  (type)       (cast)
 //  13.  ! - * &      (unary)
-//  14.  . [] ()      (postfix)
+//  14.  . [] () ! ?  (postfix - includes heap calls)
 //  15.  literals, identifiers, blocks (primary)
 //
 // Type structure examples:
@@ -598,8 +627,26 @@ program = { top_level_decl } ;
 //     y: i32 = 0,
 //   }
 //
+// Heap-allocated functions and calls:
+//   // Function declaration with heap allocator
+//   fn!<IO: Allocator> allocate<T>(size: usize) -> T* { ... }
+//   fn?<IO: Allocator> maybe_allocate<T>(size: usize) -> T* { ... }
+//
+//   // Function calls with heap allocator
+//   var ptr = allocate!<IO: MyAllocator>(100);
+//   var ptr = maybe_allocate?<IO: MyAllocator>(100);
+//
+//   // Default with heap allocation
+//   var val = default!();
+//   var val = default?();
+//
+//   // Pattern matching with heap constructors
+//   if var Some(x: Vec<i32>!()) = opt {
+//     // x is bound with heap-allocated Vec
+//   }
+//
 // Special keywords:
-//   - default: represents default value for a value a struct
+//   - default: represents default value for a struct
 //   - self: current instance
 //
 // ============================================================================
