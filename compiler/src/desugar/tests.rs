@@ -3,7 +3,9 @@
 mod tests
 {
 	use crate::desugar::*;
-	use crate::parser::{AssignOp, BinaryOp, FunctionSignature, ImplTarget, Literal, Path, UnaryOp};
+	use crate::parser::{
+		AssignOp, BinaryOp, FunctionSignature, GenericParam, ImplTarget, Literal, Param, Path, UnaryOp,
+	};
 
 	// Helper to create a simple identifier expression
 	fn ident(name: &str) -> Expr
@@ -2792,5 +2794,643 @@ mod tests
 			},
 			_ => panic!("Expected index expression"),
 		}
+	}
+
+	// Add this module to your existing tests file
+
+	// Helper to create a simple generic parameter
+	fn generic_param(name: &str, bounds: Vec<WhereBound>) -> GenericParam
+	{
+		return GenericParam {
+			name: name.to_string(),
+			bounds,
+			span: Span::default(),
+		};
+	}
+
+	// Helper to create a simple where bound (trait bound)
+	fn trait_bound(trait_name: &str) -> WhereBound
+	{
+		return WhereBound::Path(Path::simple(vec![trait_name.to_string()], Span::default()));
+	}
+
+	// Helper to create a where constraint
+	fn where_constraint(type_name: &str, bounds: Vec<WhereBound>, type_args: Vec<Type>) -> WhereConstraint
+	{
+		return WhereConstraint {
+			ty: Path::simple(vec![type_name.to_string()], Span::default()),
+			bounds,
+			type_args,
+			span: Span::default(),
+		};
+	}
+
+	#[test]
+	fn test_desugar_simple_generic_bound()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>()
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok(), "Failed to desugar: {:?}", result.err());
+		let output = result.unwrap();
+
+		// After desugaring:
+		// 1. Generic parameter should have no bounds
+		assert!(
+			output.generics[0].bounds.is_empty(),
+			"Generic should have no bounds after desugaring"
+		);
+
+		// 2. Where clause should contain T: Clone
+		assert_eq!(output.where_clause.len(), 1, "Should have one where constraint");
+		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.where_clause[0].bounds.len(), 1);
+		assert!(output.where_clause[0].type_args.is_empty());
+	}
+
+	#[test]
+	fn test_desugar_multiple_bounds()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone + Send + Debug>()
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param(
+				"T",
+				vec![trait_bound("Clone"), trait_bound("Send"), trait_bound("Debug")],
+			)],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Generic should have no bounds
+		assert!(output.generics[0].bounds.is_empty());
+
+		// Where clause should have T: Clone + Send + Debug
+		assert_eq!(output.where_clause.len(), 1);
+		assert_eq!(output.where_clause[0].bounds.len(), 3);
+	}
+
+	#[test]
+	fn test_desugar_multiple_generics()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone, U: Send, V>()
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![
+				generic_param("T", vec![trait_bound("Clone")]),
+				generic_param("U", vec![trait_bound("Send")]),
+				generic_param("V", vec![]), // No bounds
+			],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// All generics should have no bounds
+		assert!(output.generics[0].bounds.is_empty());
+		assert!(output.generics[1].bounds.is_empty());
+		assert!(output.generics[2].bounds.is_empty());
+
+		// Where clause should have T: Clone and U: Send (but not V)
+		assert_eq!(output.where_clause.len(), 2);
+
+		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.where_clause[0].bounds.len(), 1);
+
+		assert_eq!(output.where_clause[1].ty.segments, vec!["U"]);
+		assert_eq!(output.where_clause[1].bounds.len(), 1);
+	}
+
+	#[test]
+	fn test_error_on_duplicate_simple_constraint()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where T: Send
+		// ERROR: T appears in both places
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], vec![])],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error on duplicate constraint");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				// Verify error message mentions the duplicate
+				let error_str = format!("{}", e);
+				assert!(error_str.contains("T"), "Error should mention type parameter T");
+				assert!(error_str.contains("bounds"), "Error should mention bounds");
+			}
+			_ => panic!("Expected DesugarError"),
+		}
+	}
+
+	#[test]
+	fn test_error_on_complex_type_using_bounded_param()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where Vec<T>: Send
+		// ERROR: T appears in where clause
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint(
+				"Vec",
+				vec![trait_bound("Send")],
+				vec![simple_type("T")],
+			)],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error when T appears in Vec<T>");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				let error_str = format!("{}", e);
+				assert!(error_str.contains("T"), "Error should mention T");
+			}
+			_ => panic!("Expected DesugarError"),
+		}
+	}
+
+	#[test]
+	fn test_ok_different_params_in_where()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone, U>() where Vec<U>: Send
+		// OK: T has bounds, but where clause only mentions U
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![
+				generic_param("T", vec![trait_bound("Clone")]),
+				generic_param("U", vec![]),
+			],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint(
+				"Vec",
+				vec![trait_bound("Send")],
+				vec![simple_type("U")],
+			)],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok(), "Should be OK when different params used");
+
+		let output = result.unwrap();
+
+		// T's bounds should be moved to where clause
+		assert!(output.generics[0].bounds.is_empty());
+		assert!(output.generics[1].bounds.is_empty());
+
+		// Should have two where constraints: T: Clone and Vec<U>: Send
+		assert_eq!(output.where_clause.len(), 2);
+	}
+
+	#[test]
+	fn test_no_bounds_no_where()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T, U>()
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![]), generic_param("U", vec![])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// No bounds should be moved
+		assert!(output.where_clause.is_empty());
+		assert!(output.generics[0].bounds.is_empty());
+		assert!(output.generics[1].bounds.is_empty());
+	}
+
+	#[test]
+	fn test_only_where_clause_no_generic_bounds()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T>() where Vec<T>: Clone
+		// OK: T has no bounds in generic list
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint(
+				"Vec",
+				vec![trait_bound("Clone")],
+				vec![simple_type("T")],
+			)],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok(), "Should be OK when T has no generic bounds");
+
+		let output = result.unwrap();
+
+		// Where clause should be unchanged
+		assert_eq!(output.where_clause.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments, vec!["Vec"]);
+	}
+
+	#[test]
+	fn test_heap_generics_bounds()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn!<A: Allocator> foo<T: Clone>()
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![],
+			call_type: CallType::UserHeap,
+			heap_generics: vec![generic_param("A", vec![trait_bound("Allocator")])],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Both regular and heap generics should have no bounds
+		assert!(output.generics[0].bounds.is_empty());
+		assert!(output.heap_generics[0].bounds.is_empty());
+
+		// Where clause should have both T: Clone and A: Allocator
+		assert_eq!(output.where_clause.len(), 2);
+
+		// Check that both constraints are present (order doesn't matter)
+		let has_t_clone = output
+			.where_clause
+			.iter()
+			.any(|w| return w.ty.segments == vec!["T"] && w.bounds.len() == 1);
+		let has_a_alloc = output
+			.where_clause
+			.iter()
+			.any(|w| return w.ty.segments == vec!["A"] && w.bounds.len() == 1);
+
+		assert!(has_t_clone, "Should have T: Clone in where clause");
+		assert!(has_a_alloc, "Should have A: Allocator in where clause");
+	}
+
+	#[test]
+	fn test_error_heap_generic_in_where_clause()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn!<A: Allocator> foo<T>() where Vec<A>: Clone
+		// ERROR: A has bounds in heap generics and appears in where clause
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint(
+				"Vec",
+				vec![trait_bound("Clone")],
+				vec![simple_type("A")],
+			)],
+			call_type: CallType::UserHeap,
+			heap_generics: vec![generic_param("A", vec![trait_bound("Allocator")])],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(
+			result.is_err(),
+			"Should error when heap generic appears in where clause"
+		);
+	}
+
+	#[test]
+	fn test_nested_type_args()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
+		// ERROR: T appears nested in where clause
+		let vec_t = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::Base {
+				path: Path::simple(vec!["Vec".to_string()], Span::default()),
+				generics: vec![simple_type("T")],
+			}),
+			span: Span::default(),
+		};
+
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![where_constraint(
+				"HashMap",
+				vec![trait_bound("Debug")],
+				vec![simple_type("K"), vec_t],
+			)],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error when T appears nested in Vec<T>");
+	}
+
+	#[test]
+	fn test_tuple_type_with_bounded_param()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where (T, U): Debug
+		// ERROR: T appears in tuple
+		let tuple_type = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::Tuple(vec![simple_type("T"), simple_type("U")])),
+			span: Span::default(),
+		};
+
+		// Note: This test assumes your where_constraint helper can handle non-simple types
+		// You might need to construct the WhereConstraint manually
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![WhereConstraint {
+				ty: Path::simple(vec!["tuple".to_string()], Span::default()), // placeholder
+				bounds: vec![trait_bound("Debug")],
+				type_args: vec![tuple_type],
+				span: Span::default(),
+			}],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error when T appears in tuple type");
+	}
+
+	#[test]
+	fn test_desugar_impl_generics()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// impl<T: Clone> MyTrait for MyType<T> { }
+		let impl_decl = ImplDecl {
+			modifiers: vec![],
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			target: ImplTarget {
+				path: Path::simple(vec!["MyType".into()], Span::default()),
+				generics: vec![],
+				span: Span::default(),
+			},
+			trait_path: Some(ImplTarget {
+				path: Path::simple(vec!["MyTrait".into()], Span::default()),
+				generics: vec![],
+				span: Span::default(),
+			}),
+			where_clause: vec![],
+			body: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_impl(impl_decl);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Generic should have no bounds
+		println!("{:#?}", output);
+		assert!(output.generics[0].bounds.is_empty());
+
+		// Where clause should have T: Clone
+		assert_eq!(output.where_clause.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+	}
+
+	#[test]
+	fn test_error_impl_generic_in_where()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// impl<T: Clone> MyType<T> where T: Send { }
+		// ERROR: T has bounds in generic list and appears in where clause
+		let impl_decl = ImplDecl {
+			modifiers: vec![],
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			target: ImplTarget {
+				path: Path::simple(vec!["MyType".into()], Span::default()),
+				generics: vec![],
+				span: Span::default(),
+			},
+			trait_path: None,
+			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], vec![])],
+			body: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_impl(impl_decl);
+		assert!(result.is_err(), "Should error on duplicate constraint in impl");
+	}
+
+	#[test]
+	fn test_reference_type_with_bounded_param()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where &T: Debug
+		// ERROR: T appears in reference type
+		let ref_type = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::Reference {
+				mutable: false,
+				inner: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["T".to_string()], Span::default()),
+					generics: vec![],
+				}),
+			}),
+			span: Span::default(),
+		};
+
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![WhereConstraint {
+				ty: Path::simple(vec!["ref".to_string()], Span::default()),
+				bounds: vec![trait_bound("Debug")],
+				type_args: vec![ref_type],
+				span: Span::default(),
+			}],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error when T appears in &T");
+	}
+
+	#[test]
+	fn test_complete_function_desugaring()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// fn foo<T: Clone + Send>(x: T) -> T { x }
+		let func = FunctionDecl {
+			signature: FunctionSignature {
+				modifiers: vec![],
+				name: Path::simple(vec!["foo".into()], Span::default()),
+				generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
+				params: vec![Param {
+					ty: simple_type("T"),
+					name: Path::simple(vec!["x".into()], Span::default()),
+					mutable: false,
+					span: Span::default(),
+				}],
+				return_type: Some(simple_type("T")),
+				where_clause: vec![],
+				call_type: CallType::Regular,
+				heap_generics: vec![],
+				span: Span::default(),
+			},
+			body: Some(Block {
+				stmts: vec![],
+				tail_expr: Some(Box::new(ident("x"))),
+				span: Span::default(),
+			}),
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function(func);
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Generic should have no bounds
+		assert!(output.signature.generics[0].bounds.is_empty());
+
+		// Where clause should have T: Clone + Send
+		assert_eq!(output.signature.where_clause.len(), 1);
+		assert_eq!(output.signature.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.signature.where_clause[0].bounds.len(), 2);
+	}
+
+	#[test]
+	fn test_array_type_with_bounded_param()
+	{
+		let desugarer = Desugarer::new();
+
+		// fn foo<T: Clone>() where [T; 10]: Debug
+		// ERROR: T appears in array type
+		let array_type = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::Array {
+				inner: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["T".to_string()], Span::default()),
+					generics: vec![],
+				}),
+				size: Some(Box::new(int_lit(10))),
+			}),
+			span: Span::default(),
+		};
+
+		let sig = FunctionSignature {
+			modifiers: vec![],
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+			params: vec![],
+			return_type: None,
+			where_clause: vec![WhereConstraint {
+				ty: Path::simple(vec!["array".to_string()], Span::default()),
+				bounds: vec![trait_bound("Debug")],
+				type_args: vec![array_type],
+				span: Span::default(),
+			}],
+			call_type: CallType::Regular,
+			heap_generics: vec![],
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_function_signature(sig);
+		assert!(result.is_err(), "Should error when T appears in [T; 10]");
 	}
 }

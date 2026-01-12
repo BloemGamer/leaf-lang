@@ -4,9 +4,9 @@ use crate::{
 	CompileError,
 	lexer::{Span, Spanned},
 	parser::{
-		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FunctionDecl, Ident, ImplDecl, ImplItem,
-		NamespaceDecl, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl,
-		TraitItem, Type, TypeCore, VariableDecl,
+		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl, FunctionSignature,
+		Ident, ImplDecl, ImplItem, NamespaceDecl, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody,
+		TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint,
 	},
 	source_map::SourceIndex,
 };
@@ -209,7 +209,108 @@ impl Desugarer
 		if let Some(body) = func.body {
 			func.body = Some(self.desugar_block(body)?);
 		}
+		func.signature = self.desugar_function_signature(func.signature)?;
+
 		return Ok(func);
+	}
+
+	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, CompileError>
+	{
+		let generics_with_bounds: Vec<&String> = func_sig
+			.generics
+			.iter()
+			.filter(|g| return g.has_bounds())
+			.map(|g| return &g.name)
+			.collect();
+
+		let heap_generics_with_bounds: Vec<&String> = func_sig
+			.heap_generics
+			.iter()
+			.filter(|g| return g.has_bounds())
+			.map(|g| return &g.name)
+			.collect();
+
+		for where_constraint in &func_sig.where_clause {
+			let mentioned_types: Vec<Ident> = get_mentioned_type_params(&where_constraint.ty);
+
+			let mentioned_in_args: Vec<Ident> = where_constraint
+				.type_args
+				.iter()
+				.flat_map(|ty| return get_mentioned_type_params_in_type(ty))
+				.collect();
+
+			let all_mentioned: Vec<Ident> = mentioned_types.into_iter().chain(mentioned_in_args).collect();
+
+			for type_param in all_mentioned {
+				if generics_with_bounds.contains(&&type_param) {
+					return Err(CompileError::DesugarError(DesugarError::generic(
+						where_constraint.span,
+						format!(
+							"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+								 Move all bounds for `{}` to the where clause instead.",
+							type_param, type_param
+						),
+						self.source_index,
+					)));
+				}
+
+				if heap_generics_with_bounds.contains(&&type_param) {
+					return Err(CompileError::DesugarError(DesugarError::generic(
+						where_constraint.span,
+						format!(
+							"heap generic type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+								 Move all bounds for `{}` to the where clause instead.",
+							type_param, type_param
+						),
+						self.source_index,
+					)));
+				}
+			}
+		}
+
+		for generic in &func_sig.generics {
+			if generic.bounds.is_empty() {
+				continue;
+			}
+
+			func_sig.where_clause.push(WhereConstraint {
+				ty: Path {
+					segments: vec![generic.name.clone()],
+					generics: Vec::new(),
+					span: generic.span,
+				},
+				bounds: generic.bounds.clone(),
+				type_args: Vec::new(),
+				span: generic.span,
+			});
+		}
+
+		for generic in &mut func_sig.generics {
+			generic.bounds.clear();
+		}
+
+		for generic in &func_sig.heap_generics {
+			if generic.bounds.is_empty() {
+				continue;
+			}
+
+			func_sig.where_clause.push(WhereConstraint {
+				ty: Path {
+					segments: vec![generic.name.clone()],
+					generics: Vec::new(),
+					span: generic.span,
+				},
+				bounds: generic.bounds.clone(),
+				type_args: Vec::new(),
+				span: generic.span,
+			});
+		}
+
+		for generic in &mut func_sig.heap_generics {
+			generic.bounds.clear();
+		}
+
+		return Ok(func_sig);
 	}
 
 	#[allow(clippy::result_large_err)]
@@ -222,6 +323,8 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> Result<ImplDecl, CompileError>
 	{
+		impl_decl = self.desugar_impl_generics(impl_decl)?;
+
 		impl_decl.body = impl_decl
 			.body
 			.into_iter()
@@ -233,6 +336,65 @@ impl Desugarer
 				});
 			})
 			.collect::<Result<Vec<_>, _>>()?;
+		return Ok(impl_decl);
+	}
+
+	fn desugar_impl_generics(&self, mut impl_decl: ImplDecl) -> Result<ImplDecl, CompileError>
+	{
+		let generics_with_bounds: Vec<&String> = impl_decl
+			.generics
+			.iter()
+			.filter(|g| return g.has_bounds())
+			.map(|g| return &g.name)
+			.collect();
+
+		for where_constraint in &impl_decl.where_clause {
+			let mentioned_types = get_mentioned_type_params(&where_constraint.ty);
+
+			let mentioned_in_args: Vec<String> = where_constraint
+				.type_args
+				.iter()
+				.flat_map(|ty| return get_mentioned_type_params_in_type(ty))
+				.collect();
+
+			let all_mentioned: Vec<String> = mentioned_types.into_iter().chain(mentioned_in_args).collect();
+
+			for type_param in all_mentioned {
+				if generics_with_bounds.contains(&&type_param) {
+					return Err(CompileError::DesugarError(DesugarError::generic(
+						where_constraint.span,
+						format!(
+							"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+								 Move all bounds for `{}` to the where clause instead.",
+							type_param, type_param
+						),
+						self.source_index,
+					)));
+				}
+			}
+		}
+
+		for generic in &impl_decl.generics {
+			if generic.bounds.is_empty() {
+				continue;
+			}
+
+			impl_decl.where_clause.push(WhereConstraint {
+				ty: Path {
+					segments: vec![generic.name.clone()],
+					generics: Vec::new(),
+					span: generic.span,
+				},
+				bounds: generic.bounds.clone(),
+				type_args: Vec::new(),
+				span: generic.span,
+			});
+		}
+
+		for generic in &mut impl_decl.generics {
+			generic.bounds.clear();
+		}
+
 		return Ok(impl_decl);
 	}
 
@@ -1161,5 +1323,117 @@ impl Desugarer
 			// ..
 			(None, None, _) => call(&["RangeFull", "new"], vec![], span),
 		});
+	}
+}
+
+// Helper function to extract type parameter names from a Path
+fn get_mentioned_type_params(path: &Path) -> Vec<String>
+{
+	let mut result = Vec::new();
+
+	// If the path is a single segment and has no generics, it might be a type param
+	if path.segments.len() == 1 && path.generics.is_empty() {
+		result.push(path.segments[0].clone());
+	}
+
+	// Check generics in the path
+	for generic_type in &path.generics {
+		result.extend(get_mentioned_type_params_in_type(generic_type));
+	}
+
+	return result;
+}
+
+// Helper function to extract type parameter names from a Type
+fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
+{
+	match ty.core.as_ref() {
+		TypeCore::Base { path, generics } => {
+			let mut result = Vec::new();
+
+			// If it's a simple single-segment path, it might be a type parameter
+			if path.segments.len() == 1 && generics.is_empty() && path.generics.is_empty() {
+				result.push(path.segments[0].clone());
+			}
+
+			// Recursively check generics
+			for generic_type in generics {
+				result.extend(get_mentioned_type_params_in_type(generic_type));
+			}
+
+			// Also check path generics
+			for generic_type in &path.generics {
+				result.extend(get_mentioned_type_params_in_type(generic_type));
+			}
+
+			return result;
+		}
+		TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
+			return get_mentioned_type_params_in_type_core(inner);
+		}
+		TypeCore::Array { inner, size } => {
+			let result = get_mentioned_type_params_in_type_core(inner);
+
+			// Also check the size expression if present
+			if let Some(size_expr) = size {
+				// You might want to check for type params in the size expression too
+				// but typically array sizes are constants, not type parameters
+				_ = size_expr; // Suppress unused warning
+			}
+
+			return result;
+		}
+		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
+		TypeCore::ImplTrait { bounds } => {
+			// Impl trait bounds might reference type parameters
+			return bounds
+				.iter()
+				.flat_map(|bound| match bound {
+					WhereBound::Path(path) => return get_mentioned_type_params(path),
+					WhereBound::Func(func_bound) => match func_bound {
+						FuncBound::Fn { args, ret } => {
+							let mut result: Vec<String> =
+								args.iter().flat_map(get_mentioned_type_params_in_type).collect();
+
+							if let Some(ret_ty) = ret {
+								result.extend(get_mentioned_type_params_in_type(ret_ty));
+							}
+
+							return result;
+						}
+					},
+				})
+				.collect();
+		}
+	}
+}
+
+// Helper for TypeCore
+fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
+{
+	match core {
+		TypeCore::Base { path, generics } => {
+			let mut result = Vec::new();
+
+			if path.segments.len() == 1 && generics.is_empty() && path.generics.is_empty() {
+				result.push(path.segments[0].clone());
+			}
+
+			for generic_type in generics {
+				result.extend(get_mentioned_type_params_in_type(generic_type));
+			}
+
+			for generic_type in &path.generics {
+				result.extend(get_mentioned_type_params_in_type(generic_type));
+			}
+
+			return result;
+		}
+		TypeCore::Reference { inner, .. }
+		| TypeCore::Mutable { inner }
+		| TypeCore::Pointer { inner }
+		| TypeCore::Array { inner, .. } => return get_mentioned_type_params_in_type_core(inner),
+		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
+		TypeCore::ImplTrait { .. } => return Vec::new(), // Already handled above
 	}
 }
