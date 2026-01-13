@@ -640,8 +640,8 @@ impl Desugarer
 
 		let some_false_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
-				path: Path::simple(vec!["Some".to_string()], Span::default()),
-				args: vec![Pattern::Wildcard { span: Span::default() }],
+				path: Path::simple(vec!["Some".to_string()], pattern_span),
+				args: vec![Pattern::Wildcard { span: pattern_span }],
 				span: pattern_span,
 			},
 			body: SwitchBody::Block(Block {
@@ -659,7 +659,7 @@ impl Desugarer
 			pattern: Pattern::Variant {
 				path: Path::simple(vec!["None".to_string()], pattern_span),
 				args: vec![],
-				span: Span::default(),
+				span: pattern_span,
 			},
 			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break {
@@ -710,23 +710,24 @@ impl Desugarer
 	{
 		let temp_var: Ident = self.gen_temp("ifvar");
 		let expr_span: Span = expr.span();
+		let pattern_span: Span = pattern.span();
 
 		let desugared_expr: Expr = self.desugar_expr(expr)?;
 		let desugared_then: Block = self.desugar_block(then_block)?;
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec![temp_var.clone()], Span::default()),
+				path: Path::simple(vec![temp_var.clone()], expr_span),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], Span::default()),
+						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
 					}),
-					span: Span::default(),
+					span: expr_span,
 				},
 				call_constructor: None,
-				span: Span::default(),
+				span: expr_span,
 			},
 			init: Some(desugared_expr),
 			comp_const: false,
@@ -736,37 +737,38 @@ impl Desugarer
 		let match_arm: SwitchArm = SwitchArm {
 			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let else_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: Span::default() },
+			pattern: Pattern::Wildcard { span: pattern_span },
 			body: else_branch.map_or_else(
 				|| {
 					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
-						span: Span::default(),
+						span: pattern_span,
 					}));
 				},
 				|else_stmt| {
+					let stmt_span = else_stmt.span();
 					return Ok(SwitchBody::Block(Block {
 						stmts: vec![self.desugar_stmt(*else_stmt)?],
 						tail_expr: None,
-						span: Span::default(),
+						span: stmt_span,
 					}));
 				},
 			)?,
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: Path::simple(vec![temp_var], Span::default()),
-				span: Span::default(),
+				path: Path::simple(vec![temp_var], expr_span),
+				span: expr_span,
 			}),
 			arms: vec![match_arm, else_arm],
-			span: Span::default(),
+			span,
 		};
 
 		return Ok(Stmt::Block(Block {
@@ -788,6 +790,7 @@ impl Desugarer
 	{
 		let temp_var: Ident = self.gen_temp("whilevar");
 		let expr_span: Span = expr.span();
+		let pattern_span: Span = pattern.span();
 
 		let desugared_expr: Expr = self.desugar_expr(expr)?;
 
@@ -796,17 +799,17 @@ impl Desugarer
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec![temp_var.clone()], Span::default()),
+				path: Path::simple(vec![temp_var.clone()], expr_span),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], Span::default()),
+						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
 					}),
-					span: Span::default(),
+					span: expr_span,
 				},
 				call_constructor: None,
-				span: Span::default(),
+				span: expr_span,
 			},
 			init: Some(desugared_expr),
 			comp_const: false,
@@ -816,30 +819,30 @@ impl Desugarer
 		let match_arm: SwitchArm = SwitchArm {
 			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_body),
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let break_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: Span::default() },
+			pattern: Pattern::Wildcard { span: pattern_span },
 			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break {
 					label: Some(actual_label.clone()),
 					value: None,
-					span: Span::default(),
+					span: pattern_span,
 				}],
 				tail_expr: None,
-				span: Span::default(),
+				span: pattern_span,
 			}),
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: Path::simple(vec![temp_var], Span::default()),
-				span: Span::default(),
+				path: Path::simple(vec![temp_var], expr_span),
+				span: expr_span,
 			}),
 			arms: vec![match_arm, break_arm],
-			span: Span::default(),
+			span,
 		};
 
 		let result = Stmt::Loop {
@@ -847,7 +850,7 @@ impl Desugarer
 			body: Block {
 				stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 				tail_expr: None,
-				span: Span::default(),
+				span,
 			},
 			span,
 		};
@@ -884,10 +887,10 @@ impl Desugarer
 				stmts: vec![Stmt::Break {
 					label: Some(actual_label.clone()),
 					value: None,
-					span: Span::default(),
+					span: cond_span,
 				}],
 				tail_expr: None,
-				span: Span::default(),
+				span: cond_span,
 			},
 			else_branch: None,
 			span: cond_span,
@@ -901,7 +904,7 @@ impl Desugarer
 			body: Block {
 				stmts: loop_body_stmts,
 				tail_expr: desugared_body.tail_expr,
-				span: Span::default(),
+				span,
 			},
 			span,
 		};
@@ -1092,23 +1095,24 @@ impl Desugarer
 	{
 		let temp_var: Ident = self.gen_temp("ifvar_expr");
 		let expr_span: Span = expr.span();
+		let pattern_span: Span = pattern.span();
 
 		let desugared_expr: Expr = self.desugar_expr(expr)?;
 		let desugared_then: Block = self.desugar_block(then_block)?;
 
 		let temp_decl = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec![temp_var.clone()], Span::default()),
+				path: Path::simple(vec![temp_var.clone()], expr_span),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], Span::default()),
+						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
 					}),
-					span: Span::default(),
+					span: expr_span,
 				},
 				call_constructor: None,
-				span: Span::default(),
+				span: expr_span,
 			},
 			init: Some(desugared_expr),
 			comp_const: false,
@@ -1118,17 +1122,17 @@ impl Desugarer
 		let match_arm: SwitchArm = SwitchArm {
 			pattern: self.desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let else_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: Span::default() },
+			pattern: Pattern::Wildcard { span: pattern_span },
 			body: else_branch.map_or_else(
 				|| {
 					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
-						span: Span::default(),
+						span: pattern_span,
 					}));
 				},
 				|else_expr| {
@@ -1136,24 +1140,27 @@ impl Desugarer
 
 					return Ok(match desugared_else {
 						Expr::Block(block) => SwitchBody::Block(*block),
-						other_expr => SwitchBody::Block(Block {
-							stmts: vec![],
-							tail_expr: Some(Box::new(other_expr)),
-							span: Span::default(),
-						}),
+						other_expr => {
+							let other_span = other_expr.span();
+							SwitchBody::Block(Block {
+								stmts: vec![],
+								tail_expr: Some(Box::new(other_expr)),
+								span: other_span,
+							})
+						}
 					});
 				},
 			)?,
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(Expr::Identifier {
-				path: Path::simple(vec![temp_var], Span::default()),
-				span: Span::default(),
+				path: Path::simple(vec![temp_var], expr_span),
+				span: expr_span,
 			}),
 			arms: vec![match_arm, else_arm],
-			span: Span::default(),
+			span,
 		};
 
 		return Ok(Expr::Block(Box::new(Block {
