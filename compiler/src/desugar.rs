@@ -1344,17 +1344,14 @@ impl Desugarer
 	}
 }
 
-// Helper function to extract type parameter names from a Path
 fn get_mentioned_type_params(path: &Path) -> Vec<String>
 {
 	let mut result = Vec::new();
 
-	// If the path is a single segment and has no generics, it might be a type param
 	if path.segments.len() == 1 && path.generics.is_empty() {
 		result.push(path.segments[0].clone());
 	}
 
-	// Check generics in the path
 	for generic_type in &path.generics {
 		result.extend(get_mentioned_type_params_in_type(generic_type));
 	}
@@ -1362,24 +1359,20 @@ fn get_mentioned_type_params(path: &Path) -> Vec<String>
 	return result;
 }
 
-// Helper function to extract type parameter names from a Type
 fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 {
 	match ty.core.as_ref() {
 		TypeCore::Base { path, generics } => {
 			let mut result = Vec::new();
 
-			// If it's a simple single-segment path, it might be a type parameter
 			if path.segments.len() == 1 && generics.is_empty() && path.generics.is_empty() {
 				result.push(path.segments[0].clone());
 			}
 
-			// Recursively check generics
 			for generic_type in generics {
 				result.extend(get_mentioned_type_params_in_type(generic_type));
 			}
 
-			// Also check path generics
 			for generic_type in &path.generics {
 				result.extend(get_mentioned_type_params_in_type(generic_type));
 			}
@@ -1389,21 +1382,13 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 		TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
 			return get_mentioned_type_params_in_type_core(inner);
 		}
-		TypeCore::Array { inner, size } => {
+		TypeCore::Array { inner, size: _ } => {
 			let result = get_mentioned_type_params_in_type_core(inner);
-
-			// Also check the size expression if present
-			if let Some(size_expr) = size {
-				// You might want to check for type params in the size expression too
-				// but typically array sizes are constants, not type parameters
-				_ = size_expr; // Suppress unused warning
-			}
 
 			return result;
 		}
 		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
 		TypeCore::ImplTrait { bounds } => {
-			// Impl trait bounds might reference type parameters
 			return bounds
 				.iter()
 				.flat_map(|bound| match bound {
@@ -1426,7 +1411,6 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 	}
 }
 
-// Helper for TypeCore
 fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 {
 	match core {
