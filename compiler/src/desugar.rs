@@ -585,6 +585,7 @@ impl Desugarer
 	{
 		let iter_temp: Ident = self.gen_temp("loop");
 		let iter_span: Span = iter.span();
+		let pattern_span: Span = pattern.span();
 
 		let desugared_iter: Expr = self.desugar_expr(iter)?;
 
@@ -595,17 +596,17 @@ impl Desugarer
 
 		let iter_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec![iter_temp.clone()], Span::default()),
+				path: Path::simple(vec![iter_temp.clone()], iter_span),
 				ty: Type {
 					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], Span::default()),
+						path: Path::simple(vec!["_".to_string()], iter_span),
 						generics: vec![],
 					}),
-					span: Span::default(),
+					span: iter_span,
 				},
 				call_constructor: None,
-				span: Span::default(),
+				span: iter_span,
 			},
 			init: Some(desugared_iter),
 			comp_const: false,
@@ -615,31 +616,48 @@ impl Desugarer
 		let next_call: Expr = Expr::Call {
 			callee: Box::new(Expr::Field {
 				base: Box::new(Expr::Identifier {
-					path: Path::simple(vec![iter_temp], Span::default()),
-					span: Span::default(),
+					path: Path::simple(vec![iter_temp], iter_span),
+					span: iter_span,
 				}),
 				name: "next".to_string(),
-				span: Span::default(),
+				span: iter_span,
 			}),
 			call_type: CallType::CompilerHeap,
 			named_generics: Vec::new(),
 			args: vec![],
-			span: Span::default(),
+			span: iter_span,
 		};
 
 		let some_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
-				path: Path::simple(vec!["Some".to_string()], Span::default()),
+				path: Path::simple(vec!["Some".to_string()], pattern_span),
 				args: vec![desugared_pattern],
-				span: Span::default(),
+				span: pattern_span,
 			},
 			body: SwitchBody::Block(desugared_body),
-			span: Span::default(),
+			span,
+		};
+
+		let some_false_arm: SwitchArm = SwitchArm {
+			pattern: Pattern::Variant {
+				path: Path::simple(vec!["Some".to_string()], Span::default()),
+				args: vec![Pattern::Wildcard { span: Span::default() }],
+				span: pattern_span,
+			},
+			body: SwitchBody::Block(Block {
+				stmts: vec![Stmt::Continue {
+					label: Some(actual_label.clone()),
+					span: pattern_span,
+				}],
+				tail_expr: None,
+				span: pattern_span,
+			}),
+			span: pattern_span,
 		};
 
 		let none_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
-				path: Path::simple(vec!["None".to_string()], Span::default()),
+				path: Path::simple(vec!["None".to_string()], pattern_span),
 				args: vec![],
 				span: Span::default(),
 			},
@@ -647,18 +665,18 @@ impl Desugarer
 				stmts: vec![Stmt::Break {
 					label: Some(actual_label.clone()),
 					value: None,
-					span: Span::default(),
+					span: pattern_span,
 				}],
 				tail_expr: None,
-				span: Span::default(),
+				span: pattern_span,
 			}),
-			span: Span::default(),
+			span: pattern_span,
 		};
 
 		let switch_expr: Expr = Expr::Switch {
 			expr: Box::new(next_call),
-			arms: vec![some_arm, none_arm],
-			span: Span::default(),
+			arms: vec![some_arm, some_false_arm, none_arm],
+			span,
 		};
 
 		let loop_stmt: Stmt = Stmt::Loop {
@@ -666,9 +684,9 @@ impl Desugarer
 			body: Block {
 				stmts: vec![Stmt::Expr(switch_expr)],
 				tail_expr: None,
-				span: Span::default(),
+				span,
 			},
-			span: Span::default(),
+			span,
 		};
 
 		self.pop_loop();
