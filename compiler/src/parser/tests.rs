@@ -2958,19 +2958,27 @@ mod tests
 	// ========== Function Parameter Tests ==========
 
 	#[test]
-	fn test_parse_function_with_qualified_param_name()
+	fn test_parse_function_with_path_param_name()
 	{
 		let input = "fn foo(ns::name: i32) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err(), "a function parameter should not be path");
+	}
+
+	#[test]
+	fn test_parse_function_with_simple_param_name()
+	{
+		let input = "fn foo(name: i32) {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Function(func) => {
-				assert_eq!(
-					func.signature.params[0].name,
-					Path::simple(vec!["ns".to_string(), "name".to_string()], Default::default())
-				);
-			}
+			TopLevelDecl::Function(func) => match &func.signature.params[0].pattern {
+				Pattern::TypedIdentifier { path, .. } => {
+					assert_eq!(path, &Path::simple(vec!["name".to_string()], Default::default()));
+				}
+				_ => panic!("Expected TypedIdentifier pattern"),
+			},
 			_ => panic!("Expected function"),
 		}
 	}

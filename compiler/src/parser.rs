@@ -659,14 +659,14 @@ impl Spanned for GenericParam
 ///
 /// # Fields
 /// * `ty` - Parameter type
-/// * `name` - Parameter name (can be qualified path)
+/// * `pattern` - Pattern for destructuring (can be identifier, tuple, etc.)
 /// * `mutable` - Whether the parameter is mutable
 /// * `span` - Source location of the parameter
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param
 {
 	pub ty: Type,
-	pub name: Path,
+	pub pattern: Pattern,
 	pub mutable: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -4166,7 +4166,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 					TokenKind::Continue => {
 						self.next()?; // continue
-						let label = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
+						let label: Option<Ident> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
 							let tok = self.next()?;
 							if let TokenKind::Label(l) = tok.kind {
 								Some(l)
@@ -4233,6 +4233,35 @@ impl<'s, 'c> Parser<'s, 'c>
 				patterns,
 				span: span.merge(&self.last_span),
 			});
+		}
+	}
+
+	fn extract_type_from_pattern(&self, pattern: &Pattern) -> Option<Type>
+	{
+		match pattern {
+			Pattern::TypedIdentifier { ty, .. } => {
+				return Some(ty.clone());
+			}
+			Pattern::Tuple { patterns, span } => {
+				let mut types: Vec<Type> = Vec::new();
+				for p in patterns {
+					if let Some(ty) = self.extract_type_from_pattern(p) {
+						types.push(ty);
+					} else {
+						return None;
+					}
+				}
+				return Some(Type {
+					modifiers: Vec::new(),
+					core: Box::new(TypeCore::Tuple(types)),
+					span: *span,
+				});
+			}
+			Pattern::Struct { .. } => {
+				// Structs already have explicit types
+				return None;
+			}
+			_ => return None,
 		}
 	}
 
@@ -5091,10 +5120,17 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: loop_span.merge(&self.last_span),
 					};
 
+					let self_pattern = Pattern::TypedIdentifier {
+						path: Path::simple(vec!["self".to_string()], self_span),
+						ty: self_type.clone(),
+						call_constructor: None,
+						span: self_span,
+					};
+
 					params.push(Param {
 						ty: self_type,
 						mutable,
-						name: Path::simple(vec!["self".to_string()], self_span),
+						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
 				}
@@ -5110,10 +5146,17 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: loop_span.merge(&self.last_span),
 					};
 
+					let self_pattern = Pattern::TypedIdentifier {
+						path: Path::simple(vec!["self".to_string()], self_span),
+						ty: self_type.clone(),
+						call_constructor: None,
+						span: self_span,
+					};
+
 					params.push(Param {
 						ty: self_type,
 						mutable: false,
-						name: Path::simple(vec!["self".to_string()], self_span),
+						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
 				}
@@ -5130,25 +5173,56 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: loop_span.merge(&self.last_span),
 					};
 
+					let self_pattern = Pattern::TypedIdentifier {
+						path: Path::simple(vec!["self".to_string()], self_span),
+						ty: self_type.clone(),
+						call_constructor: None,
+						span: self_span,
+					};
+
 					params.push(Param {
 						ty: self_type,
-						mutable: false,
-						name: Path::simple(vec!["self".to_string()], self_span),
+						mutable: true,
+						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
 				}
 
 				_ => {
-					let name: Path = self.get_path()?;
+					let pattern: Pattern = self.parse_pattern()?;
 
-					self.expect(&TokenKind::Colon)?;
-
-					let ty: Type = self.parse_type()?;
+					let ty = if let Some(extracted_ty) = self.extract_type_from_pattern(&pattern) {
+						extracted_ty
+					} else {
+						match &pattern {
+							Pattern::Variant { args, .. } if args.is_empty() => {
+								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									pattern.span(),
+									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+									self.source_index,
+								)));
+							}
+							Pattern::Tuple { .. } => {
+								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									pattern.span(),
+									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+									self.source_index,
+								)));
+							}
+							_ => {
+								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									pattern.span(),
+									"parameter patterns must either be simple identifiers or tuples with type annotations",
+									self.source_index,
+								)));
+							}
+						}
+					};
 
 					params.push(Param {
 						mutable: false,
 						ty,
-						name,
+						pattern,
 						span: loop_span.merge(&self.last_span),
 					});
 				}
@@ -6183,7 +6257,7 @@ impl fmt::Display for Param
 		if self.mutable {
 			write!(f, "mut ")?;
 		}
-		return write!(f, "{}: {}", self.name, self.ty);
+		return write!(f, "{}: {}", self.pattern, self.ty);
 	}
 }
 

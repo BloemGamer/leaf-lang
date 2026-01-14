@@ -3363,7 +3363,12 @@ mod tests
 				generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
 				params: vec![Param {
 					ty: simple_type("T"),
-					name: Path::simple(vec!["x".into()], Span::default()),
+					pattern: Pattern::Variant {
+						// Changed here
+						path: Path::simple(vec!["x".into()], Span::default()),
+						args: vec![],
+						span: Span::default(),
+					},
 					mutable: false,
 					span: Span::default(),
 				}],
@@ -3385,10 +3390,7 @@ mod tests
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
-		// Generic should have no bounds
 		assert!(output.signature.generics[0].bounds.is_empty());
-
-		// Where clause should have T: Clone + Send
 		assert_eq!(output.signature.where_clause.len(), 1);
 		assert_eq!(output.signature.where_clause[0].ty.segments, vec!["T"]);
 		assert_eq!(output.signature.where_clause[0].bounds.len(), 2);
