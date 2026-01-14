@@ -6257,7 +6257,7 @@ impl fmt::Display for Param
 		if self.mutable {
 			write!(f, "mut ")?;
 		}
-		return write!(f, "{}: {}", self.pattern, self.ty);
+		return write!(f, "{}", self.pattern); // not displaying type because the pattern will already show the type, and the type is just for internal use
 	}
 }
 
