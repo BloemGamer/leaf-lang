@@ -6124,4 +6124,477 @@ mod tests
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
+
+	#[test]
+	fn test_simple_tuple_unpacking()
+	{
+		let input = "fn foo((a: i32, b: i32)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 1);
+
+				// Pattern should be a tuple
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+
+						// First element should be 'a'
+						match &patterns[0] {
+							Pattern::TypedIdentifier { path, ty, .. } => {
+								assert_eq!(path.segments, vec!["a".to_string()]);
+								match ty.core.as_ref() {
+									TypeCore::Base { path, .. } => {
+										assert_eq!(path.segments, vec!["i32".to_string()]);
+									}
+									_ => panic!("Expected base type"),
+								}
+							}
+							_ => panic!("Expected TypedIdentifier pattern"),
+						}
+
+						// Second element should be 'b'
+						match &patterns[1] {
+							Pattern::TypedIdentifier { path, ty, .. } => {
+								assert_eq!(path.segments, vec!["b".to_string()]);
+								match ty.core.as_ref() {
+									TypeCore::Base { path, .. } => {
+										assert_eq!(path.segments, vec!["i32".to_string()]);
+									}
+									_ => panic!("Expected base type"),
+								}
+							}
+							_ => panic!("Expected TypedIdentifier pattern"),
+						}
+					}
+					_ => panic!("Expected Tuple pattern, got {:?}", func.signature.params[0].pattern),
+				}
+
+				// Type should be extracted as a tuple type
+				match func.signature.params[0].ty.core.as_ref() {
+					TypeCore::Tuple(types) => {
+						assert_eq!(types.len(), 2);
+						match types[0].core.as_ref() {
+							TypeCore::Base { path, .. } => {
+								assert_eq!(path.segments, vec!["i32".to_string()]);
+							}
+							_ => panic!("Expected base type"),
+						}
+						match types[1].core.as_ref() {
+							TypeCore::Base { path, .. } => {
+								assert_eq!(path.segments, vec!["i32".to_string()]);
+							}
+							_ => panic!("Expected base type"),
+						}
+					}
+					_ => panic!("Expected Tuple type"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_nested_tuple_unpacking()
+	{
+		let input = "fn foo((a: i32, (b: i32, c: i32))) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 1);
+
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+
+						// First element is 'a: i32'
+						match &patterns[0] {
+							Pattern::TypedIdentifier { path, .. } => {
+								assert_eq!(path.segments, vec!["a".to_string()]);
+							}
+							_ => panic!("Expected TypedIdentifier"),
+						}
+
+						// Second element is nested tuple (b, c)
+						match &patterns[1] {
+							Pattern::Tuple {
+								patterns: inner_patterns,
+								..
+							} => {
+								assert_eq!(inner_patterns.len(), 2);
+
+								match &inner_patterns[0] {
+									Pattern::TypedIdentifier { path, .. } => {
+										assert_eq!(path.segments, vec!["b".to_string()]);
+									}
+									_ => panic!("Expected TypedIdentifier"),
+								}
+
+								match &inner_patterns[1] {
+									Pattern::TypedIdentifier { path, .. } => {
+										assert_eq!(path.segments, vec!["c".to_string()]);
+									}
+									_ => panic!("Expected TypedIdentifier"),
+								}
+							}
+							_ => panic!("Expected nested Tuple pattern"),
+						}
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+
+				// Type should be (i32, (i32, i32))
+				match func.signature.params[0].ty.core.as_ref() {
+					TypeCore::Tuple(types) => {
+						assert_eq!(types.len(), 2);
+
+						// Second type should be a nested tuple
+						match types[1].core.as_ref() {
+							TypeCore::Tuple(inner_types) => {
+								assert_eq!(inner_types.len(), 2);
+							}
+							_ => panic!("Expected nested tuple type"),
+						}
+					}
+					_ => panic!("Expected Tuple type"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_mixed_simple_and_tuple_params()
+	{
+		let input = "fn foo(x: i32, (a: i32, b: i32), y: i32) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 3);
+
+				// First param is simple
+				match &func.signature.params[0].pattern {
+					Pattern::TypedIdentifier { path, .. } => {
+						assert_eq!(path.segments, vec!["x".to_string()]);
+					}
+					_ => panic!("Expected TypedIdentifier for first param"),
+				}
+
+				// Second param is tuple
+				match &func.signature.params[1].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+					}
+					_ => panic!("Expected Tuple for second param"),
+				}
+
+				// Third param is simple
+				match &func.signature.params[2].pattern {
+					Pattern::TypedIdentifier { path, .. } => {
+						assert_eq!(path.segments, vec!["y".to_string()]);
+					}
+					_ => panic!("Expected TypedIdentifier for third param"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_triple_tuple_unpacking()
+	{
+		let input = "fn foo((a: i32, b: i32, c: i32)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 3);
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+
+				match func.signature.params[0].ty.core.as_ref() {
+					TypeCore::Tuple(types) => {
+						assert_eq!(types.len(), 3);
+					}
+					_ => panic!("Expected 3-element tuple type"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_tuple_with_different_types()
+	{
+		let input = "fn foo((x: i32, y: f64, z: bool)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => match func.signature.params[0].ty.core.as_ref() {
+				TypeCore::Tuple(types) => {
+					assert_eq!(types.len(), 3);
+
+					match types[0].core.as_ref() {
+						TypeCore::Base { path, .. } => {
+							assert_eq!(path.segments, vec!["i32".to_string()]);
+						}
+						_ => panic!("Expected i32"),
+					}
+
+					match types[1].core.as_ref() {
+						TypeCore::Base { path, .. } => {
+							assert_eq!(path.segments, vec!["f64".to_string()]);
+						}
+						_ => panic!("Expected f64"),
+					}
+
+					match types[2].core.as_ref() {
+						TypeCore::Base { path, .. } => {
+							assert_eq!(path.segments, vec!["bool".to_string()]);
+						}
+						_ => panic!("Expected bool"),
+					}
+				}
+				_ => panic!("Expected Tuple type"),
+			},
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_tuple_with_generic_types()
+	{
+		let input = "fn foo((a: Vec<i32>, b: Option<String>)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+
+						// First element should be Vec<i32>
+						match &patterns[0] {
+							Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
+								TypeCore::Base { path, generics } => {
+									assert_eq!(path.segments, vec!["Vec".to_string()]);
+									assert_eq!(generics.len(), 1);
+								}
+								_ => panic!("Expected base type with generics"),
+							},
+							_ => panic!("Expected TypedIdentifier"),
+						}
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_deeply_nested_tuples()
+	{
+		let input = "fn foo((a: i32, (b: i32, (c: i32, d: i32)))) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+
+						// Second element is a nested tuple
+						match &patterns[1] {
+							Pattern::Tuple { patterns: level2, .. } => {
+								assert_eq!(level2.len(), 2);
+
+								// Second element of that is another nested tuple
+								match &level2[1] {
+									Pattern::Tuple { patterns: level3, .. } => {
+										assert_eq!(level3.len(), 2);
+									}
+									_ => panic!("Expected deeply nested tuple"),
+								}
+							}
+							_ => panic!("Expected nested tuple"),
+						}
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_tuple_with_reference_types()
+	{
+		let input = "fn foo((a: &i32, b: &mut String)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						// First element is &i32
+						match &patterns[0] {
+							Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
+								TypeCore::Reference { mutable, .. } => {
+									assert!(!mutable);
+								}
+								_ => panic!("Expected reference type"),
+							},
+							_ => panic!("Expected TypedIdentifier"),
+						}
+
+						// Second element is &mut String
+						match &patterns[1] {
+							Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
+								TypeCore::Reference { mutable, .. } => {
+									assert!(mutable);
+								}
+								_ => panic!("Expected mutable reference type"),
+							},
+							_ => panic!("Expected TypedIdentifier"),
+						}
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_empty_tuple_param()
+	{
+		let input = "fn foo(()) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 0);
+					}
+					_ => panic!("Expected empty Tuple pattern"),
+				}
+
+				match func.signature.params[0].ty.core.as_ref() {
+					TypeCore::Tuple(types) => {
+						assert_eq!(types.len(), 0);
+					}
+					_ => panic!("Expected unit type"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_single_element_tuple()
+	{
+		let input = "fn foo((a: i32,)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => match &func.signature.params[0].pattern {
+				Pattern::Tuple { patterns, .. } => {
+					assert_eq!(patterns.len(), 1);
+				}
+				_ => panic!("Expected Tuple pattern"),
+			},
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_tuple_in_generic_function()
+	{
+		let input = "fn foo<T>((a: T, b: T)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 1);
+				assert_eq!(func.signature.generics[0].name, "T");
+
+				match &func.signature.params[0].pattern {
+					Pattern::Tuple { patterns, .. } => {
+						assert_eq!(patterns.len(), 2);
+
+						// Both elements should be type T
+						for pattern in patterns {
+							match pattern {
+								Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
+									TypeCore::Base { path, .. } => {
+										assert_eq!(path.segments, vec!["T".to_string()]);
+									}
+									_ => panic!("Expected T type"),
+								},
+								_ => panic!("Expected TypedIdentifier"),
+							}
+						}
+					}
+					_ => panic!("Expected Tuple pattern"),
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_multiple_tuple_params()
+	{
+		let input = "fn foo((a: i32, b: i32), (c: i32, d: i32)) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.params.len(), 2);
+
+				// Both params should be tuples
+				for param in &func.signature.params {
+					match &param.pattern {
+						Pattern::Tuple { patterns, .. } => {
+							assert_eq!(patterns.len(), 2);
+						}
+						_ => panic!("Expected Tuple pattern"),
+					}
+				}
+			}
+			_ => panic!("Expected function"),
+		}
+	}
 }
