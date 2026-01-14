@@ -5,8 +5,8 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl, FunctionSignature,
-		Ident, ImplDecl, ImplItem, NamespaceDecl, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody,
-		TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint,
+		Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm,
+		SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint,
 	},
 	source_map::SourceIndex,
 };
@@ -206,10 +206,53 @@ impl Desugarer
 	{
 		debug_assert!(self.loop_stack.is_empty(), "loop_stack should be empty");
 
-		if let Some(body) = func.body {
-			func.body = Some(self.desugar_block(body)?);
+		let mut new_params: Vec<Param> = Vec::new();
+		let mut body_stmts: Vec<Stmt> = Vec::new();
+
+		for param in func.signature.params {
+			let param_span: Span = param.span();
+			match param.pattern {
+				Pattern::TypedIdentifier { .. } => {
+					new_params.push(param);
+				}
+
+				other_pattern => {
+					let temp: Ident = self.gen_temp("param");
+
+					new_params.push(Param {
+						pattern: Pattern::TypedIdentifier {
+							path: Path::simple(vec![temp.clone()], param_span),
+							ty: param.ty.clone(),
+							call_constructor: None,
+							span: param_span,
+						},
+						mutable: param.mutable,
+						ty: param.ty,
+						span: param_span,
+					});
+
+					body_stmts.push(Stmt::VariableDecl(VariableDecl {
+						pattern: other_pattern,
+						init: Some(Expr::Identifier {
+							path: Path::simple(vec![temp], param_span),
+							span: param_span,
+						}),
+						comp_const: false,
+						span: param_span,
+					}));
+				}
+			}
 		}
+
+		func.signature.params = new_params;
 		func.signature = self.desugar_function_signature(func.signature)?;
+
+		if let Some(body) = func.body {
+			let mut new_body: Block = body;
+			body_stmts.extend(new_body.stmts);
+			new_body.stmts = body_stmts;
+			func.body = Some(self.desugar_block(new_body)?);
+		}
 
 		return Ok(func);
 	}
