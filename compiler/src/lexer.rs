@@ -358,12 +358,6 @@ pub enum TokenKind
 	/// Mutable binding: `mut`
 	#[keyword("mut")]
 	Mut,
-	#[allow(unused)]
-	/// Mutable reference: `mut` or `&mut`
-	MutRef,
-	#[allow(unused)]
-	/// Immutable reference: `ref`
-	Ref,
 	/// Unsafe block/function: `unsafe`
 	#[keyword("unsafe")]
 	Unsafe,
@@ -542,10 +536,9 @@ pub enum TokenKind
 	/// Switch arm: `=>`
 	#[operator("=>")]
 	FatArrow,
-	/// Optional/error propagation: `?`
 	#[simple_token("?")]
 	QuestionMark,
-	/// Attribute marker: `#`
+	#[reserved]
 	#[simple_token("#")]
 	Hash,
 	/// Escape character: `\`
