@@ -113,10 +113,10 @@
 
 use proc_macro::TokenStream;
 
-mod reserved;
+mod gen_lex;
 
 #[proc_macro_attribute]
-pub fn reserved_tokens(attr: TokenStream, item: TokenStream) -> TokenStream
+pub fn generate_lexer(attr: TokenStream, item: TokenStream) -> TokenStream
 {
-	return reserved::reserved_tokens(attr, item);
+	return gen_lex::generate_lexer(attr, item);
 }

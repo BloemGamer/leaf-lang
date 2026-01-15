@@ -1,6 +1,6 @@
 mod tests;
 
-use leaf_proc::reserved_tokens;
+use leaf_proc::generate_lexer;
 
 use crate::Config;
 use crate::source_map::{SourceIndex, SourceMap};
@@ -244,7 +244,7 @@ impl Span
 /// - **Special**: Macros, directives, comments
 /// - **End/Error**: EOF and invalid tokens
 #[derive(Debug, Clone, PartialEq)]
-#[reserved_tokens]
+#[generate_lexer]
 pub enum TokenKind
 {
 	// ===== Literals =====
@@ -257,76 +257,106 @@ pub enum TokenKind
 	/// String literal: `"hello"`, `"world\n"`
 	StringLiteral(String),
 	/// Boolean literal: `true`
+	#[keyword("true")]
 	True,
 	/// Boolean literal: `false`
+	#[keyword("false")]
 	False,
 
 	// ===== Identifiers =====
 	/// Variable/function names: `foo`, `bar`, `my_var`
 	Identifier(String),
 	/// Wildcard pattern: `_`
+	#[keyword("_")]
 	Underscore,
 	/// Self keyword: `self`
+	#[keyword("self")]
 	SelfKw,
 	/// Default keyword: `default`
+	#[keyword("default")]
 	Default,
 	/// Label: `'label`
 	Label(String),
 
 	// ===== Keywords - Control Flow =====
 	/// Conditional: `if`
+	#[keyword("if")]
 	If,
 	/// Conditional alternative: `else`
+	#[keyword("else")]
 	Else,
 	/// Loop: `while`
+	#[keyword("while")]
 	While,
 	/// Iterator loop: `for`
+	#[keyword("for")]
 	For,
 	/// Loop: `loop`
+	#[keyword("loop")]
 	Loop,
 	/// Pattern matching: `switch`
+	#[keyword("switch")]
 	Switch,
 	/// Return from function: `return`
+	#[keyword("return")]
 	Return,
 	/// Exit loop: `break`
+	#[keyword("break")]
 	Break,
 	/// Skip to next iteration: `continue`
+	#[keyword("continue")]
 	Continue,
 	/// Call the destructor for a type: `delete`
+	#[keyword("delete")]
 	Delete,
 
 	// ===== Keywords - Declarations =====
 	/// Function definition: `fn`
+	#[keyword("fn")]
 	FuncDef,
 	/// Constant declaration: `const`
+	#[keyword("const")]
 	Const,
 	/// Variable declaration: `var`
+	#[keyword("var")]
 	Var,
 	/// Static variable: `static`
+	#[keyword("static")]
 	Static,
 	/// Structure definition: `struct`
+	#[keyword("struct")]
 	Struct,
 	/// Untagged union: `union`
+	#[keyword("union")]
 	Union,
 	/// Tagged union: `variant`
+	#[keyword("variant")]
 	Variant,
 	/// Enumeration definition: `enum`
+	#[keyword("enum")]
 	Enum,
 	/// Implementation block: `impl`
+	#[keyword("impl")]
 	Impl,
 	/// Trait definition: `trait`
+	#[keyword("trait")]
 	Trait,
 	/// Macro definition: `macro`
+	#[keyword("macro")]
 	MacroDef,
 	/// Namespace declaration: `namespace`
+	#[keyword("namespace")]
 	Namespace,
 	/// Type alias: `type`
+	#[keyword("type")]
 	Type,
 
 	// ===== Keywords - Modifiers =====
 	/// Public visibility: `pub`
+	#[keyword("pub")]
 	Pub,
 	/// Mutable binding: `mut`
+	#[keyword("mut")]
 	Mut,
 	#[allow(unused)]
 	/// Mutable reference: `mut` or `&mut`
@@ -335,134 +365,191 @@ pub enum TokenKind
 	/// Immutable reference: `ref`
 	Ref,
 	/// Unsafe block/function: `unsafe`
+	#[keyword("unsafe")]
 	Unsafe,
 	/// Volatile memory access: `volatile`
+	#[keyword("volatile")]
 	Volatile,
 	/// Inline function: `inline`
+	#[keyword("inline")]
 	Inline,
 
 	// ===== Keywords - Other =====
 	/// Iterator source: `in` (for x in iter)
+	#[keyword("in")]
 	In,
 	/// Type casting: `as`
+	#[keyword("as")]
 	As,
 	/// Generic constraints: `where`
+	#[keyword("where")]
 	Where,
 
 	// ===== Arithmetic Operators =====
 	/// Addition: `+`
+	#[operator("+")]
 	Plus,
 	/// Subtraction or negation: `-`
+	#[operator("-")]
 	Minus,
 	/// Multiplication or dereference: `*`
+	#[operator("*")]
 	Star,
 	/// Division: `/`
+	#[operator("/")]
 	Slash,
 	/// Modulo/remainder: `%`
+	#[operator("%")]
 	Mod,
 
 	// ===== Bitwise Operators =====
 	/// Bitwise OR: `|`
+	#[operator("|")]
 	Pipe,
 	/// Bitwise AND or reference: `&`
+	#[operator("&")]
 	Ampersand,
 	/// Bitwise XOR: `^`
+	#[operator("^")]
 	Caret,
 	/// Bitwise NOT: `~`
+	#[operator("~")]
 	Tilde,
 	/// Left shift: `<<`
+	#[operator("<<")]
 	LShift,
 	/// Right shift: `>>`
+	#[operator(">>")]
 	RShift,
 
 	// ===== Logical Operators =====
 	/// Logical NOT: `!`
+	#[operator("!")]
 	Bang,
 	/// Logical AND: `&&`
+	#[operator("&&")]
 	And,
 	/// Logical OR: `||`
+	#[operator("||")]
 	Or,
 
 	// ===== Comparison Operators =====
 	/// Less than: `<`
+	#[operator("<")]
 	LessThan,
 	/// Greater than: `>`
+	#[operator(">")]
 	GreaterThan,
 	/// Less than or equal: `<=`
+	#[operator("<=")]
 	LessEquals,
 	/// Greater than or equal: `>=`
+	#[operator(">=")]
 	GreaterEquals,
 	/// Equality: `==`
+	#[operator("==")]
 	EqualsEquals,
 	/// Inequality: `!=`
+	#[operator("!=")]
 	BangEquals,
 
 	// ===== Assignment Operators =====
 	/// Assignment: `=`
+	#[operator("=")]
 	Equals,
 	/// Add and assign: `+=`
+	#[operator("+=")]
 	PlusEquals,
 	/// Subtract and assign: `-=`
+	#[operator("-=")]
 	MinusEquals,
 	/// Multiply and assign: `*=`
+	#[operator("*=")]
 	StarEquals,
 	/// Divide and assign: `/=`
+	#[operator("/=")]
 	SlashEquals,
 	/// Modulo and assign: `%=`
+	#[operator("%=")]
 	ModEquals,
 	/// Bitwise OR and assign: `|=`
+	#[operator("|=")]
 	PipeEquals,
 	/// Bitwise AND and assign: `&=`
+	#[operator("&=")]
 	AmpersandEquals,
 	/// Bitwise XOR and assign: `^=`
+	#[operator("^=")]
 	CaretEquals,
 	/// Bitwise NOT and assign: `~=`
+	#[operator("~=")]
 	TildeEquals,
 	/// Left shift and assign: `<<=`
+	#[operator("<<=")]
 	LShiftEquals,
 	/// Right shift and assign: `>>=`
+	#[operator(">>=")]
 	RShiftEquals,
 
 	// ===== Delimiters =====
 	/// Opening parenthesis: `(`
+	#[simple_token("(")]
 	LeftParen,
 	/// Closing parenthesis: `)`
+	#[simple_token(")")]
 	RightParen,
 	/// Opening brace: `{`
+	#[simple_token("{")]
 	LeftBrace,
 	/// Closing brace: `}`
+	#[simple_token("}")]
 	RightBrace,
 	/// Opening bracket: `[`
+	#[simple_token("[")]
 	LeftBracket,
 	/// Closing bracket: `]`
+	#[simple_token("]")]
 	RightBracket,
 
 	// ===== Punctuation =====
 	/// Statement terminator: `;`
+	#[simple_token(";")]
 	Semicolon,
 	/// Type annotation: `:`
+	#[operator(":")]
 	Colon,
 	/// Path separator/namespaces: `::`
+	#[operator("::")]
 	DoubleColon,
 	/// List separator: `,`
+	#[simple_token(",")]
 	Comma,
 	/// Member access: `.`
+	#[operator(".")]
 	Dot,
 	/// Range: `..`
+	#[operator("..")]
 	DotDot,
 	/// Inclusive range: `..=`
+	#[operator("..=")]
 	DotDotEquals,
 	/// Variadic: `...`
+	#[operator("...")]
 	Ellipsis,
 	/// Function return type: `->`
+	#[operator("->")]
 	Arrow,
 	/// Switch arm: `=>`
+	#[operator("=>")]
 	FatArrow,
 	/// Optional/error propagation: `?`
+	#[simple_token("?")]
 	QuestionMark,
 	/// Attribute marker: `#`
+	#[simple_token("#")]
 	Hash,
 	/// Escape character: `\`
+	#[simple_token("\\")]
 	Backslash,
 
 	// ===== Special Tokens =====
@@ -488,12 +575,15 @@ pub enum TokenKind
 	// ===== Reserved =====
 	/// Reserved `async`
 	#[reserved]
+	#[keyword("async")]
 	Async,
 	/// Reserved for iterator kind function `gen`
 	#[reserved]
+	#[keyword("gen")]
 	Gen,
 	/// Reserved `try`
 	#[reserved]
+	#[keyword("try")]
 	Try,
 }
 
@@ -655,9 +745,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 	{
 		self.skip_whitespace();
 
-		let start = self.position;
-		let start_line = self.line;
-		let start_col = self.column;
+		let start: usize = self.position;
+		let start_line: usize = self.line;
+		let start_col: usize = self.column;
 
 		let Some(ch) = self.current_char else {
 			return Token {
@@ -673,23 +763,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 			};
 		};
 
-		let kind = match ch {
-			// Operators that might be multi-character
-			'+' => self.lex_plus_family(),
-			'-' => self.lex_minus_family(),
-			'*' => self.lex_star_family(),
-			'/' => self.lex_slash_family(),
-			'%' => self.lex_mod_family(),
-			'<' => self.lex_less_family(),
-			'>' => self.lex_greater_family(),
-			'=' => self.lex_equals_family(),
-			'&' => self.lex_ampersand_family(),
-			'|' => self.lex_pipe_family(),
-			'^' => self.lex_caret_family(),
-			'~' => self.lex_tilde_family(),
-			'!' => self.lex_bang_family(),
-			'.' => self.lex_dot_family(),
-			':' => self.lex_colon_family(),
+		let kind: TokenKind = match ch {
+			// Special case: / needs comment handling
+			'/' => self.lex_slash_or_comment(),
 
 			// Literals
 			'"' => self.lex_string_literal(),
@@ -705,56 +781,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 			// Macros
 			'$' => self.lex_macro(),
 
-			// Simple single-character tokens
-			'(' => {
-				self.advance();
-				TokenKind::LeftParen
-			}
-			')' => {
-				self.advance();
-				TokenKind::RightParen
-			}
-			'{' => {
-				self.advance();
-				TokenKind::LeftBrace
-			}
-			'}' => {
-				self.advance();
-				TokenKind::RightBrace
-			}
-			'[' => {
-				self.advance();
-				TokenKind::LeftBracket
-			}
-			']' => {
-				self.advance();
-				TokenKind::RightBracket
-			}
-			';' => {
-				self.advance();
-				TokenKind::Semicolon
-			}
-			',' => {
-				self.advance();
-				TokenKind::Comma
-			}
-			'?' => {
-				self.advance();
-				TokenKind::QuestionMark
-			}
-			'#' => {
-				self.advance();
-				TokenKind::Hash
-			}
-			'\\' => {
-				self.advance();
-				TokenKind::Backslash
-			}
-
-			_ => {
-				self.advance();
-				TokenKind::Invalid
-			}
+			// All operators and simple tokens - handled by generated lex_char
+			_ => self.lex_char(ch),
 		};
 
 		let end = self.position;
@@ -774,45 +802,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 	}
 
-	fn lex_plus_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '+'
-		if self.current_char == Some('=') {
-			self.advance();
-			return TokenKind::PlusEquals;
-		} else {
-			return TokenKind::Plus;
-		}
-	}
-
-	fn lex_minus_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '-'
-		return match self.current_char {
-			Some('=') => {
-				self.advance();
-				TokenKind::MinusEquals
-			}
-			Some('>') => {
-				self.advance();
-				TokenKind::Arrow
-			}
-			_ => TokenKind::Minus,
-		};
-	}
-
-	fn lex_star_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '*'
-		return if self.current_char == Some('=') {
-			self.advance();
-			TokenKind::StarEquals
-		} else {
-			TokenKind::Star
-		};
-	}
-
-	fn lex_slash_family(&mut self) -> TokenKind
+	fn lex_slash_or_comment(&mut self) -> TokenKind
 	{
 		self.advance(); // consume '/'
 		return match self.current_char {
@@ -834,170 +824,53 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 	}
 
-	fn lex_mod_family(&mut self) -> TokenKind
+	fn lex_line_comment(&mut self) -> TokenKind
 	{
-		self.advance(); // %
-		return if self.current_char == Some('=') {
+		let mut comment = String::new();
+
+		let is_doc = self.current_char == Some('/');
+		if is_doc {
 			self.advance();
-			TokenKind::ModEquals
-		} else {
-			TokenKind::Mod
-		};
-	}
-
-	fn lex_less_family(&mut self) -> TokenKind
-	{
-		self.advance(); // <
-		return match self.current_char {
-			Some('<') => {
-				self.advance();
-				if self.current_char == Some('=') {
-					self.advance();
-					TokenKind::LShiftEquals
-				} else {
-					TokenKind::LShift
-				}
-			}
-			Some('=') => {
-				self.advance();
-				TokenKind::LessEquals
-			}
-			_ => TokenKind::LessThan,
-		};
-	}
-
-	fn lex_greater_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '>'
-		match self.current_char {
-			Some('>') => {
-				self.advance();
-				if self.current_char == Some('=') {
-					self.advance();
-					return TokenKind::RShiftEquals;
-				} else {
-					return TokenKind::RShift;
-				}
-			}
-			Some('=') => {
-				self.advance();
-				return TokenKind::GreaterEquals;
-			}
-			_ => return TokenKind::GreaterThan,
 		}
-	}
 
-	fn lex_equals_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '='
-		match self.current_char {
-			Some('=') => {
-				self.advance();
-				return TokenKind::EqualsEquals;
+		while let Some(ch) = self.current_char {
+			if ch == '\n' {
+				break;
 			}
-			Some('>') => {
-				self.advance();
-				return TokenKind::FatArrow;
-			}
-			_ => return TokenKind::Equals,
-		}
-	}
-
-	fn lex_ampersand_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '&'
-		match self.current_char {
-			Some('&') => {
-				self.advance();
-				return TokenKind::And;
-			}
-			Some('=') => {
-				self.advance();
-				return TokenKind::AmpersandEquals;
-			}
-			_ => return TokenKind::Ampersand,
-		}
-	}
-
-	fn lex_pipe_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '|'
-		match self.current_char {
-			Some('|') => {
-				self.advance();
-				return TokenKind::Or;
-			}
-			Some('=') => {
-				self.advance();
-				return TokenKind::PipeEquals;
-			}
-			_ => return TokenKind::Pipe,
-		}
-	}
-
-	fn lex_caret_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '^'
-		if self.current_char == Some('=') {
+			comment.push(ch);
 			self.advance();
-			return TokenKind::CaretEquals;
+		}
+
+		if is_doc {
+			return TokenKind::DocsComment(comment);
 		} else {
-			return TokenKind::Caret;
+			return TokenKind::LineComment(comment);
 		}
 	}
 
-	fn lex_tilde_family(&mut self) -> TokenKind
+	fn lex_block_comment(&mut self) -> TokenKind
 	{
-		self.advance(); // consume '~'
-		if self.current_char == Some('=') {
+		let mut comment = String::new();
+
+		let is_doc = self.current_char == Some('*') && self.peek() != Some('/');
+		if is_doc {
 			self.advance();
-			return TokenKind::TildeEquals;
-		} else {
-			return TokenKind::Tilde;
 		}
-	}
 
-	fn lex_bang_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '!'
-		if self.current_char == Some('=') {
-			self.advance();
-			return TokenKind::BangEquals;
-		} else {
-			return TokenKind::Bang;
-		}
-	}
-
-	fn lex_dot_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume '.'
-		match self.current_char {
-			Some('.') => {
-				self.advance();
-				match self.current_char {
-					Some('.') => {
-						self.advance();
-						return TokenKind::Ellipsis;
-					}
-					Some('=') => {
-						self.advance();
-						return TokenKind::DotDotEquals;
-					}
-					_ => return TokenKind::DotDot,
-				}
+		while let Some(ch) = self.current_char {
+			if ch == '*' && self.peek() == Some('/') {
+				self.advance(); // consume '*'
+				self.advance(); // consume '/'
+				break;
 			}
-			_ => return TokenKind::Dot,
-		}
-	}
-
-	fn lex_colon_family(&mut self) -> TokenKind
-	{
-		self.advance(); // consume ':'
-		if self.current_char == Some(':') {
+			comment.push(ch);
 			self.advance();
-			return TokenKind::DoubleColon;
+		}
+
+		if is_doc {
+			return TokenKind::DocsComment(comment);
 		} else {
-			return TokenKind::Colon;
+			return TokenKind::BlockComment(comment);
 		}
 	}
 
@@ -1079,7 +952,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 	fn lex_char_literal(&mut self) -> TokenKind
 	{
-		self.advance(); // consume opening '\''
+		self.advance(); // opening '\''
 
 		let ch = if self.current_char == Some('\\') {
 			self.advance();
@@ -1091,7 +964,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 
 		if self.current_char == Some('\'') {
-			self.advance(); // consume closing '\''
+			self.advance(); // closing '\''
 			if let Some(c) = ch {
 				return TokenKind::CharLiteral(c);
 			} else {
@@ -1147,7 +1020,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 				}
 				self.advance();
 
-				let mut hex_str = String::new();
+				let mut hex_str: String = String::new();
 
 				while let Some(ch) = self.current_char {
 					if ch == '}' {
@@ -1187,7 +1060,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 	fn read_radix_number(&mut self, radix: u32, is_valid_digit: impl Fn(char) -> bool) -> TokenKind
 	{
-		let mut num_str = String::new();
+		let mut num_str: String = String::new();
 
 		while let Some(ch) = self.current_char {
 			if is_valid_digit(ch) || ch == '_' {
@@ -1212,18 +1085,18 @@ impl<'source, 'config> Lexer<'source, 'config>
 		if self.current_char == Some('0') {
 			match self.peek() {
 				Some('x') => {
-					self.advance(); // '0'
-					self.advance(); // 'x'
+					self.advance(); // 0
+					self.advance(); // x
 					return self.read_radix_number(16, |c| return c.is_ascii_hexdigit());
 				}
 				Some('b') => {
-					self.advance(); // '0'
-					self.advance(); // 'b'
+					self.advance(); // 0
+					self.advance(); // b
 					return self.read_radix_number(2, |c| return c == '0' || c == '1');
 				}
 				Some('o') => {
-					self.advance(); // '0'
-					self.advance(); // 'o'
+					self.advance(); // 0
+					self.advance(); // o
 					return self.read_radix_number(8, |c| return ('0'..='7').contains(&c));
 				}
 				_ => {}
@@ -1243,7 +1116,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		if self.current_char == Some('.') && self.peek().is_some_and(|c| return c.is_ascii_digit()) {
 			num_str.push('.');
-			self.advance(); // consume '.'
+			self.advance(); // .
 
 			while let Some(ch) = self.current_char {
 				if ch.is_ascii_digit() || ch == '_' {
@@ -1282,54 +1155,17 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		match ident.as_str() {
-			"_" => return TokenKind::Underscore,
-			"self" => return TokenKind::SelfKw,
-			"default" => return TokenKind::Default,
-			"if" => return TokenKind::If,
-			"else" => return TokenKind::Else,
-			"while" => return TokenKind::While,
-			"for" => return TokenKind::For,
-			"loop" => return TokenKind::Loop,
-			"switch" => return TokenKind::Switch,
-			"return" => return TokenKind::Return,
-			"break" => return TokenKind::Break,
-			"continue" => return TokenKind::Continue,
-			"namespace" => return TokenKind::Namespace,
-			"fn" => return TokenKind::FuncDef,
-			"const" => return TokenKind::Const,
-			"var" => return TokenKind::Var,
-			"static" => return TokenKind::Static,
-			"struct" => return TokenKind::Struct,
-			"union" => return TokenKind::Union,
-			"variant" => return TokenKind::Variant,
-			"enum" => return TokenKind::Enum,
-			"type" => return TokenKind::Type,
-			"impl" => return TokenKind::Impl,
-			"trait" => return TokenKind::Trait,
-			"macro" => return TokenKind::MacroDef,
-			"pub" => return TokenKind::Pub,
-			"inline" => return TokenKind::Inline,
-			"mut" => return TokenKind::Mut,
-			"unsafe" => return TokenKind::Unsafe,
-			"volatile" => return TokenKind::Volatile,
-			"in" => return TokenKind::In,
-			"as" => return TokenKind::As,
-			"where" => return TokenKind::Where,
-			"true" => return TokenKind::True,
-			"false" => return TokenKind::False,
-			"delete" => return TokenKind::Delete,
-			"gen" => return TokenKind::Gen,
-			"async" => return TokenKind::Async,
-			"try" => return TokenKind::Try,
-			_ => return TokenKind::Identifier(ident),
+		if let Some(keyword) = Self::match_keyword(&ident) {
+			return keyword;
 		}
+
+		return TokenKind::Identifier(ident);
 	}
 
 	fn lex_directive(&mut self) -> TokenKind
 	{
-		self.advance(); // consume '@'
-		let mut directive = String::new();
+		self.advance(); // @
+		let mut directive: String = String::new();
 
 		while let Some(ch) = self.current_char {
 			if ch.is_alphanumeric() || ch == '_' {
@@ -1340,7 +1176,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		let dir = match directive.as_str() {
+		let dir: Directive = match directive.as_str() {
 			"use" => Directive::Use,
 			"import" => Directive::Import,
 			_ => Directive::Custom(directive),
@@ -1352,7 +1188,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	fn lex_macro(&mut self) -> TokenKind
 	{
 		self.advance(); // consume '$'
-		let mut macro_name = String::new();
+		let mut macro_name: String = String::new();
 
 		while let Some(ch) = self.current_char {
 			if ch.is_alphanumeric() || ch == '_' {
@@ -1364,56 +1200,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 		}
 
 		return TokenKind::Macro(macro_name);
-	}
-
-	fn lex_line_comment(&mut self) -> TokenKind
-	{
-		let mut comment = String::new();
-
-		let is_doc = self.current_char == Some('/');
-		if is_doc {
-			self.advance();
-		}
-
-		while let Some(ch) = self.current_char {
-			if ch == '\n' {
-				break;
-			}
-			comment.push(ch);
-			self.advance();
-		}
-
-		if is_doc {
-			return TokenKind::DocsComment(comment);
-		} else {
-			return TokenKind::LineComment(comment);
-		}
-	}
-
-	fn lex_block_comment(&mut self) -> TokenKind
-	{
-		let mut comment = String::new();
-
-		let is_doc = self.current_char == Some('*') && self.peek() != Some('/');
-		if is_doc {
-			self.advance();
-		}
-
-		while let Some(ch) = self.current_char {
-			if ch == '*' && self.peek() == Some('/') {
-				self.advance(); // consume '*'
-				self.advance(); // consume '/'
-				break;
-			}
-			comment.push(ch);
-			self.advance();
-		}
-
-		if is_doc {
-			return TokenKind::DocsComment(comment);
-		} else {
-			return TokenKind::BlockComment(comment);
-		}
 	}
 
 	fn skip_whitespace(&mut self)
