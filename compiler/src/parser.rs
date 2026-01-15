@@ -6,7 +6,7 @@ use ignorable::PartialEq;
 
 use crate::{
 	CompileError, Config,
-	lexer::{self, Lexer, Span, Spanned, Token, TokenKind},
+	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
 
@@ -1976,6 +1976,7 @@ pub enum ParseErrorKind
 	{
 		message: String,
 	},
+	ReservedToken(ReservedError),
 }
 
 /// Expected token or construct description.
@@ -2214,6 +2215,9 @@ impl std::fmt::Display for ParseError
 			ParseErrorKind::UnexpectedItem { context, found } => {
 				write!(f, "unexpected item in {}: found {:?}", context, found)?;
 			}
+			ParseErrorKind::ReservedToken(e) => {
+				write!(f, "reserved token: {:?}", e.token)?;
+			}
 			ParseErrorKind::Generic { message } => {
 				write!(f, "{}", message)?;
 			}
@@ -2333,9 +2337,24 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(token);
 		}
 
-		return self.lexer.peek().ok_or_else(|| {
+		let token = self.lexer.peek().ok_or_else(|| {
 			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
 		});
+
+		let Ok(tok) = token else {
+			return token;
+		};
+		match tok.check_reserved() {
+			Ok(_) => return Ok(tok),
+			Err(e) => {
+				return Err(CompileError::ParseError(ParseError {
+					span: tok.span(),
+					kind: ParseErrorKind::ReservedToken(e),
+					context: Vec::new(),
+					source_index: self.source_index,
+				}));
+			}
+		}
 	}
 
 	fn next(&mut self) -> Result<Token, CompileError>
@@ -2345,12 +2364,22 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(tok);
 		}
 
-		let tok = self.lexer.next().ok_or_else(|| {
+		let tok: Token = self.lexer.next().ok_or_else(|| {
 			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
 		})?;
 
 		self.last_span = tok.span;
-		return Ok(tok);
+		match tok.check_reserved() {
+			Ok(_) => return Ok(tok),
+			Err(e) => {
+				return Err(CompileError::ParseError(ParseError {
+					span: tok.span(),
+					kind: ParseErrorKind::ReservedToken(e),
+					context: Vec::new(),
+					source_index: self.source_index,
+				}));
+			}
+		}
 	}
 
 	fn peek_kind(&mut self) -> Result<&TokenKind, CompileError>

@@ -102,6 +102,36 @@ pub struct Token
 	pub span: Span,
 }
 
+impl Token
+{
+	pub fn check_reserved(&self) -> Result<(), ReservedError>
+	{
+		if self.kind.check_reserved().is_err() {
+			return Err(ReservedError {
+				token: self.kind.clone(),
+			});
+		}
+		return Ok(());
+	}
+}
+
+impl TokenKind
+{
+	pub fn check_reserved(&self) -> Result<TokenKind, ReservedError>
+	{
+		if matches!(self, TokenKind::Async | TokenKind::Gen | TokenKind::Try) {
+			return Err(ReservedError { token: self.clone() });
+		}
+		return Ok(self.clone());
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct ReservedError
+{
+	pub token: TokenKind,
+}
+
 #[allow(unused)]
 pub trait Spanned
 {
@@ -462,6 +492,14 @@ pub enum TokenKind
 	Eof,
 	/// Invalid/unrecognized token
 	Invalid,
+
+	// ===== Reserved =====
+	/// Reserved `async`
+	Async,
+	/// Reserved for iterator kind function `gen`
+	Gen,
+	/// Reserved `try`
+	Try,
 }
 
 /// Compiler directive types.
@@ -1286,6 +1324,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 			"true" => return TokenKind::True,
 			"false" => return TokenKind::False,
 			"delete" => return TokenKind::Delete,
+			"gen" => return TokenKind::Gen,
+			"async" => return TokenKind::Async,
+			"try" => return TokenKind::Try,
 			_ => return TokenKind::Identifier(ident),
 		}
 	}
