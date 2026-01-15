@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 ignorable = "0.1.2"
+leaf_proc = { path = "../leaf_proc" }

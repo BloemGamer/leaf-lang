@@ -1,5 +1,7 @@
 mod tests;
 
+use leaf_proc::reserved_tokens;
+
 use crate::Config;
 use crate::source_map::{SourceIndex, SourceMap};
 
@@ -112,17 +114,6 @@ impl Token
 			});
 		}
 		return Ok(());
-	}
-}
-
-impl TokenKind
-{
-	pub fn check_reserved(&self) -> Result<TokenKind, ReservedError>
-	{
-		if matches!(self, TokenKind::Async | TokenKind::Gen | TokenKind::Try) {
-			return Err(ReservedError { token: self.clone() });
-		}
-		return Ok(self.clone());
 	}
 }
 
@@ -253,6 +244,7 @@ impl Span
 /// - **Special**: Macros, directives, comments
 /// - **End/Error**: EOF and invalid tokens
 #[derive(Debug, Clone, PartialEq)]
+#[reserved_tokens]
 pub enum TokenKind
 {
 	// ===== Literals =====
@@ -495,10 +487,13 @@ pub enum TokenKind
 
 	// ===== Reserved =====
 	/// Reserved `async`
+	#[reserved]
 	Async,
 	/// Reserved for iterator kind function `gen`
+	#[reserved]
 	Gen,
 	/// Reserved `try`
+	#[reserved]
 	Try,
 }
 
