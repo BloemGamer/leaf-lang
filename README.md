@@ -101,7 +101,7 @@ cargo run --release
 
 
 ## License
-Leaf-lang is released under the MIT License. See [LICENSE](LICENSE) for details.
+Leaf-lang is released under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
 
 ## Contact
 Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/leaf-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/leaf-lang/issues).
