@@ -6597,4 +6597,449 @@ mod tests
 			_ => panic!("Expected function"),
 		}
 	}
+
+	// ========== Nested Pattern in Struct Destructuring Tests ==========
+
+	#[test]
+	fn test_parse_struct_pattern_with_tuple_positional()
+	{
+		let input = "{ var S {a: i64, (b: i64, c: i32)} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { path, fields, .. } => {
+						assert_eq!(path.segments, vec!["S".to_string()]);
+						assert_eq!(fields.len(), 2);
+
+						// First field is named: a: i64
+						assert_eq!(fields[0].0, "a");
+						match &fields[0].1 {
+							Pattern::TypedIdentifier { path, .. } => {
+								assert_eq!(path.segments, vec!["a".to_string()]);
+							}
+							_ => panic!("Expected TypedIdentifier for first field"),
+						}
+
+						// Second field is positional tuple pattern
+						assert!(fields[1].0.starts_with("__pos_"));
+						match &fields[1].1 {
+							Pattern::Tuple { patterns, .. } => {
+								assert_eq!(patterns.len(), 2);
+
+								match &patterns[0] {
+									Pattern::TypedIdentifier { path, .. } => {
+										assert_eq!(path.segments, vec!["b".to_string()]);
+									}
+									_ => panic!("Expected TypedIdentifier for b"),
+								}
+
+								match &patterns[1] {
+									Pattern::TypedIdentifier { path, .. } => {
+										assert_eq!(path.segments, vec!["c".to_string()]);
+									}
+									_ => panic!("Expected TypedIdentifier for c"),
+								}
+							}
+							_ => panic!("Expected Tuple pattern for second field"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_with_nested_struct_positional()
+	{
+		let input = "{ var S {a: i64, S {b: i64, c: i32}} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { path, fields, .. } => {
+						assert_eq!(path.segments, vec!["S".to_string()]);
+						assert_eq!(fields.len(), 2);
+
+						// First field is named
+						assert_eq!(fields[0].0, "a");
+
+						// Second field is positional nested struct
+						assert!(fields[1].0.starts_with("__pos_"));
+						match &fields[1].1 {
+							Pattern::Struct {
+								path: inner_path,
+								fields: inner_fields,
+								..
+							} => {
+								assert_eq!(inner_path.segments, vec!["S".to_string()]);
+								assert_eq!(inner_fields.len(), 2);
+								assert_eq!(inner_fields[0].0, "b");
+								assert_eq!(inner_fields[1].0, "c");
+							}
+							_ => panic!("Expected nested Struct pattern"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_all_positional()
+	{
+		let input = "{ var S {(a: i64, b: i64), (c: i32, d: i32)} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 2);
+
+						// Both fields should be positional
+						assert!(fields[0].0.starts_with("__pos_"));
+						assert!(fields[1].0.starts_with("__pos_"));
+
+						// Both should be tuple patterns
+						assert!(matches!(&fields[0].1, Pattern::Tuple { .. }));
+						assert!(matches!(&fields[1].1, Pattern::Tuple { .. }));
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_mixed_named_and_positional()
+	{
+		let input = "{ var Point {x: i64, (a: i64, b: i32), y: String, Inner {z: bool}} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 4);
+
+						// x - named field
+						assert_eq!(fields[0].0, "x");
+						assert!(matches!(&fields[0].1, Pattern::TypedIdentifier { .. }));
+
+						// (a, b) - positional tuple
+						assert!(fields[1].0.starts_with("__pos_"));
+						assert!(matches!(&fields[1].1, Pattern::Tuple { .. }));
+
+						// y - named field
+						assert_eq!(fields[2].0, "y");
+						assert!(matches!(&fields[2].1, Pattern::TypedIdentifier { .. }));
+
+						// Inner {...} - positional struct
+						assert!(fields[3].0.starts_with("__pos_"));
+						assert!(matches!(&fields[3].1, Pattern::Struct { .. }));
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_deeply_nested()
+	{
+		let input = "{ var Outer {a: i64, Inner {(x: i64, y: i64), z: bool}} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 2);
+
+						// Second field is positional nested struct
+						match &fields[1].1 {
+							Pattern::Struct {
+								fields: inner_fields, ..
+							} => {
+								assert_eq!(inner_fields.len(), 2);
+
+								// First inner field is positional tuple
+								assert!(inner_fields[0].0.starts_with("__pos_"));
+								assert!(matches!(&inner_fields[0].1, Pattern::Tuple { .. }));
+
+								// Second inner field is named
+								assert_eq!(inner_fields[1].0, "z");
+							}
+							_ => panic!("Expected nested Struct pattern"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_with_qualified_path()
+	{
+		let input = "{ var S {a: i64, std::Option {b: i64}} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						// Second field should be positional struct with qualified path
+						match &fields[1].1 {
+							Pattern::Struct { path, .. } => {
+								assert_eq!(path.segments.len(), 2);
+								assert_eq!(path.segments[0], "std");
+								assert_eq!(path.segments[1], "Option");
+							}
+							_ => panic!("Expected nested Struct pattern"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_in_switch()
+	{
+		let input = r#"{
+		switch val {
+			S {a: i64, (b: i64, c: i64)} => a,
+			_ => 0,
+		}
+	}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::Switch { arms, .. } => match &arms[0].pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 2);
+						assert_eq!(fields[0].0, "a");
+						assert!(fields[1].0.starts_with("__pos_"));
+						assert!(matches!(&fields[1].1, Pattern::Tuple { .. }));
+					}
+					_ => panic!("Expected Struct pattern"),
+				},
+				_ => panic!("Expected Switch expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_in_if_var()
+	{
+		let input = "{ if var S {a: i64, (b: i64, c: i64)} = opt { a } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.tail_expr {
+			Some(expr) => match expr.as_ref() {
+				Expr::IfVar { pattern, .. } => match pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 2);
+						assert!(fields[1].0.starts_with("__pos_"));
+					}
+					_ => panic!("Expected Struct pattern"),
+				},
+				_ => panic!("Expected IfVar expression"),
+			},
+			None => panic!("Expected tail expression"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_with_variant()
+	{
+		let input = "{ var S {a: i64, Some(x: i64)} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 2);
+
+						// Second field is positional variant pattern
+						assert!(fields[1].0.starts_with("__pos_"));
+						match &fields[1].1 {
+							Pattern::Variant { path, args, .. } => {
+								assert_eq!(path.segments, vec!["Some".to_string()]);
+								assert_eq!(args.len(), 1);
+							}
+							_ => panic!("Expected Variant pattern"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_empty_tuple()
+	{
+		let input = "{ var S {a: i64, ()} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => match &var.pattern {
+				Pattern::Struct { fields, .. } => {
+					assert_eq!(fields.len(), 2);
+
+					match &fields[1].1 {
+						Pattern::Tuple { patterns, .. } => {
+							assert_eq!(patterns.len(), 0);
+						}
+						_ => panic!("Expected empty Tuple pattern"),
+					}
+				}
+				_ => panic!("Expected Struct pattern"),
+			},
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_triple_nested()
+	{
+		let input = "{ var A {B {C {x: i64}}} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						// First level positional
+						match &fields[0].1 {
+							Pattern::Struct { fields: level2, .. } => {
+								// Second level positional
+								match &level2[0].1 {
+									Pattern::Struct { fields: level3, .. } => {
+										// Third level has named field
+										assert_eq!(level3[0].0, "x");
+									}
+									_ => panic!("Expected third level Struct"),
+								}
+							}
+							_ => panic!("Expected second level Struct"),
+						}
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_with_wildcards()
+	{
+		let input = "{ var S {a: i64, (_, b: i64)} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => match &var.pattern {
+				Pattern::Struct { fields, .. } => match &fields[1].1 {
+					Pattern::Tuple { patterns, .. } => {
+						assert!(matches!(&patterns[0], Pattern::Wildcard { .. }));
+						assert!(matches!(&patterns[1], Pattern::TypedIdentifier { .. }));
+					}
+					_ => panic!("Expected Tuple pattern"),
+				},
+				_ => panic!("Expected Struct pattern"),
+			},
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_pattern_real_world_example()
+	{
+		let input = r#"{
+		var Response {
+			status: i32,
+			(method: String, path: String),
+			Body {content: String, encoding: String}
+		} = parse_response();
+	}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
+
+		let block = result.unwrap();
+		match &block.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				match &var.pattern {
+					Pattern::Struct { fields, .. } => {
+						assert_eq!(fields.len(), 3);
+
+						// status - named
+						assert_eq!(fields[0].0, "status");
+
+						// (method, path) - positional tuple
+						assert!(fields[1].0.starts_with("__pos_"));
+						assert!(matches!(&fields[1].1, Pattern::Tuple { .. }));
+
+						// Body {...} - positional struct
+						assert!(fields[2].0.starts_with("__pos_"));
+						assert!(matches!(&fields[2].1, Pattern::Struct { .. }));
+					}
+					_ => panic!("Expected Struct pattern"),
+				}
+			}
+			_ => panic!("Expected VariableDecl"),
+		}
+	}
+
+	// ========== Error Cases ==========
+
+	#[test]
+	fn test_parse_struct_pattern_unclosed_tuple()
+	{
+		let input = "{ var S {a: i64, (b: i64, c: i64} = get(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_err());
+	}
 }
