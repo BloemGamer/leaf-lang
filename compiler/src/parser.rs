@@ -4326,53 +4326,80 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					if !self.at(&TokenKind::RightBrace)? {
 						loop {
-							let field_name = if let TokenKind::Identifier(name) = self.next()?.kind {
-								name
-							} else {
-								return Err(CompileError::ParseError(ParseError::unexpected_token(
-									self.last_span,
-									Expected::Identifier,
-									self.peek()?.kind.clone(),
-									self.source_index,
-								)));
-							};
+							if self.at(&TokenKind::LeftParen)? {
+								let pattern = self.parse_pattern()?;
+								fields.push((format!("__pos_{}", fields.len()), pattern));
+							} else if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+								let checkpoint = self.lexer.clone();
+								let checkpoint_buffered = self.buffered_token.clone();
 
-							let pattern: Pattern = if self.consume(&TokenKind::Equals)? {
-								self.parse_pattern()?
-							} else if self.consume(&TokenKind::Colon)? {
-								let ty: Type = self.parse_type()?;
+								self.next()?; // identifier
+								let next_is_colon_or_equals =
+									self.at(&TokenKind::Colon)? || self.at(&TokenKind::Equals)?;
 
-								let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
-									self.expect(&TokenKind::LeftParen)?;
-									self.expect(&TokenKind::RightParen)?;
-									Some(CallType::UserHeap)
-								} else if self.consume(&TokenKind::QuestionMark)? {
-									self.expect(&TokenKind::LeftParen)?;
-									self.expect(&TokenKind::RightParen)?;
-									Some(CallType::UserMaybeHeap)
-								} else if self.consume(&TokenKind::LeftParen)? {
-									self.expect(&TokenKind::RightParen)?;
-									Some(CallType::Regular)
+								self.lexer = checkpoint;
+								self.buffered_token = checkpoint_buffered;
+
+								if next_is_colon_or_equals {
+									let field_name = if let TokenKind::Identifier(name) = self.next()?.kind {
+										name
+									} else {
+										return Err(CompileError::ParseError(ParseError::unexpected_token(
+											self.last_span,
+											Expected::Identifier,
+											self.peek()?.kind.clone(),
+											self.source_index,
+										)));
+									};
+
+									let pattern: Pattern = if self.consume(&TokenKind::Equals)? {
+										self.parse_pattern()?
+									} else if self.consume(&TokenKind::Colon)? {
+										let ty: Type = self.parse_type()?;
+
+										let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
+											self.expect(&TokenKind::LeftParen)?;
+											self.expect(&TokenKind::RightParen)?;
+											Some(CallType::UserHeap)
+										} else if self.consume(&TokenKind::QuestionMark)? {
+											self.expect(&TokenKind::LeftParen)?;
+											self.expect(&TokenKind::RightParen)?;
+											Some(CallType::UserMaybeHeap)
+										} else if self.consume(&TokenKind::LeftParen)? {
+											self.expect(&TokenKind::RightParen)?;
+											Some(CallType::Regular)
+										} else {
+											None
+										};
+
+										Pattern::TypedIdentifier {
+											path: Path::simple(vec![field_name.clone()], self.last_span),
+											ty,
+											call_constructor,
+											span: self.last_span,
+										}
+									} else {
+										return Err(CompileError::ParseError(ParseError::unexpected_token(
+											self.last_span,
+											Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
+											self.peek()?.kind.clone(),
+											self.source_index,
+										)));
+									};
+
+									fields.push((field_name, pattern));
 								} else {
-									None
-								};
-
-								Pattern::TypedIdentifier {
-									path: Path::simple(vec![field_name.clone()], self.last_span),
-									ty,
-									call_constructor,
-									span: self.last_span,
+									let pattern = self.parse_pattern()?;
+									fields.push((format!("__pos_{}", fields.len()), pattern));
 								}
 							} else {
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
-									self.last_span,
-									Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
+									self.peek()?.span(),
+									Expected::Description("pattern (identifier or '(')".to_string()),
 									self.peek()?.kind.clone(),
 									self.source_index,
 								)));
-							};
-
-							fields.push((field_name, pattern));
+							}
 
 							if !self.consume(&TokenKind::Comma)? {
 								break;
