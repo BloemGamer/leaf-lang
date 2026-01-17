@@ -4265,35 +4265,6 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn extract_type_from_pattern(&self, pattern: &Pattern) -> Option<Type>
-	{
-		match pattern {
-			Pattern::TypedIdentifier { ty, .. } => {
-				return Some(ty.clone());
-			}
-			Pattern::Tuple { patterns, span } => {
-				let mut types: Vec<Type> = Vec::new();
-				for p in patterns {
-					if let Some(ty) = self.extract_type_from_pattern(p) {
-						types.push(ty);
-					} else {
-						return None;
-					}
-				}
-				return Some(Type {
-					modifiers: Vec::new(),
-					core: Box::new(TypeCore::Tuple(types)),
-					span: *span,
-				});
-			}
-			Pattern::Struct { .. } => {
-				// Structs already have explicit types
-				return None;
-			}
-			_ => return None,
-		}
-	}
-
 	fn parse_pattern_no_or(&mut self) -> Result<Pattern, CompileError>
 	{
 		let span: Span = self.peek()?.span();
@@ -5220,7 +5191,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				_ => {
 					let pattern: Pattern = self.parse_pattern()?;
 
-					let ty = if let Some(extracted_ty) = self.extract_type_from_pattern(&pattern) {
+					let ty = if let Some(extracted_ty) = extract_type_from_pattern(&pattern) {
 						extracted_ty
 					} else {
 						match &pattern {
@@ -6019,6 +5990,41 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.expect(&TokenKind::Delete)?;
 
 		return self.parse_expr();
+	}
+}
+
+pub fn extract_type_from_pattern(pattern: &Pattern) -> Option<Type>
+{
+	match pattern {
+		Pattern::TypedIdentifier { ty, .. } => {
+			return Some(ty.clone());
+		}
+		Pattern::Tuple { patterns, span } => {
+			let mut types: Vec<Type> = Vec::new();
+			for p in patterns {
+				if let Some(ty) = extract_type_from_pattern(p) {
+					types.push(ty);
+				} else {
+					return None;
+				}
+			}
+			return Some(Type {
+				modifiers: Vec::new(),
+				core: Box::new(TypeCore::Tuple(types)),
+				span: *span,
+			});
+		}
+		Pattern::Struct { path, span, .. } | Pattern::Variant { path, span, .. } => {
+			return Some(Type {
+				modifiers: Vec::new(),
+				core: Box::new(TypeCore::Base {
+					path: path.clone(),
+					generics: vec![],
+				}),
+				span: *span,
+			});
+		}
+		_ => return None,
 	}
 }
 

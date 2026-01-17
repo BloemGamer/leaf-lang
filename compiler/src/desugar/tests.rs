@@ -3363,10 +3363,10 @@ mod tests
 				generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
 				params: vec![Param {
 					ty: simple_type("T"),
-					pattern: Pattern::Variant {
-						// Changed here
+					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["x".into()], Span::default()),
-						args: vec![],
+						ty: simple_type("T"),
+						call_constructor: None,
 						span: Span::default(),
 					},
 					mutable: false,
@@ -3386,7 +3386,7 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_function(func);
+		let result = desugarer.desugar_function(func).inspect_err(|e| println!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 

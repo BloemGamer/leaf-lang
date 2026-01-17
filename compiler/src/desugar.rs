@@ -7,6 +7,7 @@ use crate::{
 		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl, FunctionSignature,
 		Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm,
 		SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint,
+		extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -479,11 +480,43 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_block(&mut self, block: Block) -> Result<Block, CompileError>
 	{
-		let stmts: Vec<Stmt> = block
-			.stmts
-			.into_iter()
-			.map(|stmt| return self.desugar_stmt(stmt))
-			.collect::<Result<Vec<_>, _>>()?;
+		let mut stmts: Vec<Stmt> = Vec::new();
+
+		for stmt in block.stmts {
+			match stmt {
+				Stmt::VariableDecl(var) => {
+					let needs_complex_desugar = match &var.pattern {
+						Pattern::Struct { .. } | Pattern::Variant { .. } => true,
+						Pattern::Tuple { patterns, .. } => patterns.len() > 1 || Self::has_nested_patterns(patterns),
+						_ => false,
+					};
+
+					if needs_complex_desugar {
+						let span = var.span;
+						let comp_const = var.comp_const;
+						let init = var.init.ok_or_else(|| {
+							return CompileError::DesugarError(DesugarError::generic(
+								span,
+								"complex pattern requires initializer",
+								self.source_index,
+							));
+						})?;
+
+						let var_decls = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+
+						for var_decl in var_decls {
+							stmts.push(Stmt::VariableDecl(var_decl));
+						}
+					} else {
+						stmts.push(Stmt::VariableDecl(self.desugar_variable_decl(var)?));
+					}
+				}
+
+				other_stmt => {
+					stmts.push(self.desugar_stmt(other_stmt)?);
+				}
+			}
+		}
 
 		let tail_expr = block
 			.tail_expr
@@ -566,7 +599,38 @@ impl Desugarer
 				span,
 			} => self.desugar_while_var_loop(label, pattern, expr, body, span)?,
 
-			Stmt::VariableDecl(var) => Stmt::VariableDecl(self.desugar_variable_decl(var)?),
+			Stmt::VariableDecl(var) => {
+				let needs_complex_desugar = match &var.pattern {
+					Pattern::Struct { .. } | Pattern::Variant { .. } => true,
+					Pattern::Tuple { patterns, .. } => patterns.len() > 1 && Self::has_nested_patterns(patterns),
+					_ => false,
+				};
+
+				if needs_complex_desugar {
+					let span: Span = var.span;
+					let comp_const: bool = var.comp_const;
+					let init: Expr = var.init.ok_or_else(|| {
+						return CompileError::DesugarError(DesugarError::generic(
+							span,
+							"complex pattern requires initializer",
+							self.source_index,
+						));
+					})?;
+
+					let var_decls: Vec<VariableDecl> =
+						self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+
+					let stmts: Vec<Stmt> = var_decls.into_iter().map(Stmt::VariableDecl).collect();
+
+					Stmt::Block(Block {
+						stmts,
+						tail_expr: None,
+						span,
+					})
+				} else {
+					Stmt::VariableDecl(self.desugar_variable_decl(var)?)
+				}
+			}
 
 			Stmt::Assignment {
 				target,
@@ -986,6 +1050,16 @@ impl Desugarer
 			}
 		}
 
+		let needs_complex_desugar = match &var.pattern {
+			Pattern::Struct { .. } | Pattern::Variant { .. } => true,
+			Pattern::Tuple { patterns, .. } => patterns.len() > 1 && Self::has_nested_patterns(patterns),
+			_ => false,
+		};
+
+		if needs_complex_desugar {
+			return self.desugar_complex_pattern_binding(var);
+		}
+
 		var.init = var.init.map(|init| return self.desugar_expr(init)).transpose()?;
 		var.pattern = self.desugar_pattern(var.pattern)?;
 		return Ok(var);
@@ -1391,6 +1465,158 @@ impl Desugarer
 			// ..
 			(None, None, _) => call(&["RangeFull", "new"], vec![], span),
 		});
+	}
+
+	fn has_nested_patterns(patterns: &[Pattern]) -> bool
+	{
+		return patterns
+			.iter()
+			.any(|p| return !matches!(p, Pattern::TypedIdentifier { .. } | Pattern::Wildcard { .. }));
+	}
+
+	fn desugar_complex_pattern_binding(&mut self, var: VariableDecl) -> Result<VariableDecl, CompileError>
+	{
+		let span: Span = var.span;
+		let comp_const: bool = var.comp_const;
+		let init: Expr = var.init.ok_or_else(|| {
+			return CompileError::DesugarError(DesugarError::generic(
+				span,
+				"complex pattern requires initializer",
+				self.source_index,
+			));
+		})?;
+
+		let stmts: Vec<VariableDecl> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+
+		return Ok(stmts.into_iter().next().expect("this should never be None"));
+	}
+
+	fn desugar_pattern_to_statements(
+		&mut self,
+		pattern: Pattern,
+		init: Expr,
+		span: Span,
+		comp_const: bool,
+	) -> Result<Vec<VariableDecl>, CompileError>
+	{
+		let mut statements = Vec::new();
+
+		let is_simple_binding = matches!(pattern, Pattern::TypedIdentifier { .. });
+
+		if is_simple_binding {
+			if let Pattern::TypedIdentifier {
+				path,
+				ty,
+				call_constructor,
+				span: id_span,
+			} = pattern
+			{
+				statements.push(VariableDecl {
+					pattern: Pattern::TypedIdentifier {
+						path,
+						ty,
+						call_constructor,
+						span: id_span,
+					},
+					init: Some(self.desugar_expr(init)?),
+					comp_const,
+					span: id_span,
+				});
+			}
+			return Ok(statements);
+		}
+
+		let temp_type: Type = extract_type_from_pattern(&pattern).ok_or_else(|| {
+			return CompileError::DesugarError(DesugarError::generic(
+				pattern.span(),
+				"cannot extract type from pattern",
+				self.source_index,
+			));
+		})?;
+
+		let temp = self.gen_temp("pattern");
+		let temp_span = init.span();
+
+		let temp_decl = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec![temp.clone()], temp_span),
+				ty: temp_type,
+				call_constructor: None,
+				span: temp_span,
+			},
+			init: Some(self.desugar_expr(init)?),
+			comp_const,
+			span,
+		};
+
+		statements.push(temp_decl);
+
+		match pattern {
+			Pattern::Struct {
+				path: _,
+				fields,
+				span: pattern_span,
+			} => {
+				for (field_name, field_pattern) in fields {
+					let field_expr: Expr = Expr::Field {
+						base: Box::new(Expr::Identifier {
+							path: Path::simple(vec![temp.clone()], temp_span),
+							span: temp_span,
+						}),
+						name: field_name.clone(),
+						span: pattern_span,
+					};
+
+					let nested_stmts: Vec<VariableDecl> =
+						self.desugar_pattern_to_statements(field_pattern, field_expr, pattern_span, comp_const)?;
+
+					statements.extend(nested_stmts);
+				}
+			}
+
+			Pattern::Tuple {
+				patterns,
+				span: pattern_span,
+			} => {
+				for (i, elem_pattern) in patterns.into_iter().enumerate() {
+					let index_expr = Expr::Field {
+						base: Box::new(Expr::Identifier {
+							path: Path::simple(vec![temp.clone()], temp_span),
+							span: temp_span,
+						}),
+						name: i.to_string(),
+						span: pattern_span,
+					};
+
+					let nested_stmts =
+						self.desugar_pattern_to_statements(elem_pattern, index_expr, pattern_span, comp_const)?;
+
+					statements.extend(nested_stmts);
+				}
+			}
+
+			Pattern::TypedIdentifier { .. } => {
+				unreachable!("TypedIdentifier should be handled in the early return");
+			}
+
+			Pattern::Variant { .. } => {
+				return Err(CompileError::DesugarError(DesugarError::generic(
+					span,
+					"variant patterns in let bindings not yet supported - use switch instead",
+					self.source_index,
+				)));
+			}
+
+			_ => {
+				return Err(CompileError::DesugarError(DesugarError::generic(
+					span,
+					"unsupported pattern type in let binding",
+					self.source_index,
+				)));
+			}
+		}
+
+		return Ok(statements);
 	}
 }
 
