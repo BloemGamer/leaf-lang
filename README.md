@@ -2,68 +2,123 @@
 [![Stargazers][stars-shield]][stars-url]
 [![Issues][issues-shield]][issues-url]
 [![Project_license][license-shield]][license-url]
+[![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/BloemGamer/leaf-lang)
 
 
 # Leaf-lang
 A language that is designed to be used with C, with modern features and a platform to learn compiler design.
 
-> [!WARNING]
-> It is still under construction and cannot be used yet.
-
 ## Code preview
-```rs
+```leaf
+// Note: Leaf-lang compiler is under development. This example is illustrative only.
 fn main()
 {
 	var a: i64 = 0;
 	var v: Vec<i64> = Vec::with_len!(5);
-	print("{}", a);
+	print!("{}", a);
 }
 ```
 
 # Features
-- **Simple language**: No hidden control flow. Simple but powerfull preprocessor.
+- **Simple language**: No hidden control flow. Simple but powerful preprocessor.
 - **Explicit memory**: No hidden memory allocations, deallocations are predictable.
-- **Fast by design**: No garbage collector. Strong comptime excecution and lazy evaluation.
+- **Fast by design**: No garbage collector. Strong compile-time execution and lazy evaluation.
 
-## Roadmap
-### Now busy with
+<details>
+<summary><strong>Roadmap</strong></summary>
+
+<br/>
+
+### Current focus
+- [ ] Writing the desugarer
+
+### Still actively being developed
 - [x] Writing the lexer
 - [x] Writing the parser
-- [ ] Writing the desugarer
 - [ ] Refining the syntax
 
 ### Short-term
 - [ ] Finish first compiler version
 
 ### Long-term
-- [ ] Adding tagged unions (variants)
+- [ ] Adding variants
 - [ ] Adding templates
 - [ ] Adding lambda functions
 - [ ] Preprocessor
 - [ ] Code optimisations
 - [ ] C parser integration
 - [ ] Design a build system
-- [ ] Write compile time execution
+- [ ] Write compile-time execution
 - [ ] Adding a LLVM backend (very low priority)
 
-## Progress of the stages of the compiler
-### Frontend
-- [x] Lexing
-- [ ] Preprocessor (lower priority)
-- [x] Parsing -> AST
-- [ ] AST macro -> AST to AST
-- [ ] Semantic Analysis
-	- [ ] Desugaring / Lowering
-	- [ ] Symbol Collection
-	- [ ] Name Resolution + Type Analysis
-	- [ ] AST -> HIR
-	- [ ] Lifetime Analysis & Destructor Insertion
-	- [ ] HIR -> MIR
-- [ ] Optimizations (low priority)
+</details>
 
-### Backend
-- [ ] Code Generator (to C)
-- [ ] Invoke C Compiler
+
+<details>
+<summary><strong>Compiler Pipeline Progress</strong></summary>
+
+<br/>
+
+Leaf-lang uses a multi-stage compiler pipeline with explicit lowering steps.
+Each stage transforms the program into a simpler or more constrained form.
+
+### Frontend (Source -> AST)
+
+- [x] **Lexing**
+	- Source text -> tokens
+- [ ] **Preprocessing** (low priority)
+	- Macro expansion
+- [x] **Parsing**
+	- Tokens -> Concrete Syntax Tree (CST)
+- [ ] **AST-macros** (low priority)
+	- Another macro expansion round (CST -> CST)
+- [ ] **AST Normalization**
+	- CST -> simplified AST
+	- Syntax sugar removal (Desugaring)
+	- Normalizes multiple ways to write the same thing
+
+---
+
+### Semantic Analysis (AST -> HIR)
+
+- [ ] **Symbol Collection**
+	- Scope creation
+	- Symbol tables
+- [ ] **Name Resolution**
+	- Identifier binding
+	- Shadowing rules
+- [ ] **Type Analysis**
+	- Type checking
+- [ ] **Basic ownership validation**
+	- Checking ownerships
+- [ ] **Lowering to HIR**
+	- AST -> High-Level IR (HIR)
+
+---
+
+### Lifetime Analysis + Optimization (HIR)
+
+- [ ] **Lifetime Analysis**
+	- Ownership rules
+	- Destructor insertion
+- [ ] **HIR Optimizations** (low priority)
+
+---
+
+### Lowering (HIR -> MIR)
+
+- [ ] **Lowering to MIR**
+	- Control-flow normalization
+
+
+### Backend (MIR -> C)
+- [ ] **Code Generation**
+	- MIR -> C source code
+- [ ] **C Compilation**
+	- Invoke system C compiler (C23)
+
+</details>
+
 
 
 
@@ -85,7 +140,7 @@ The build is tested on **Linux** and **Windows**. macOS is **not currently suppo
 ```sh
 git clone https://github.com/BloemGamer/leaf-lang.git
 cd leaf-lang
-````
+```
 
 ### Building the Project
 
@@ -99,12 +154,18 @@ cargo build --release
 cargo run --release
 ```
 
+## Syntax
+The full language grammar is in [syntax.ebnf](syntax.ebnf).
+
+> [!NOTE]
+> The syntax will most likely change in the future, and the `syntax.ebnf` is not always very up to date
+
 
 ## License
 Leaf-lang is released under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
 
 ## Contact
-Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/leaf-lang/discussions) or [GitHub Isues](https://github.com/BloemGamer/leaf-lang/issues).
+Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/leaf-lang/discussions) or [GitHub Issues](https://github.com/BloemGamer/leaf-lang/issues).
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
