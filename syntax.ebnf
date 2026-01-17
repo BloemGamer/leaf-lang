@@ -392,7 +392,7 @@ function_signature = modifier_list ,
                      [ ( "!" | "?" ) ] ,        (* heap function marker *)
                      [ generic_params ] ,       (* heap generics: fn!<IO: Allocator> *)
                      path ,
-                     [ generic_params ] ,       (* regular generics: name<T> *)
+                     [ patterns ] ,       (* regular generics: name<T> *)
                      "(" , [ parameter_list ] , ")" ,
                      [ "->" , type ] ,
                      [ where_clause ] ;
