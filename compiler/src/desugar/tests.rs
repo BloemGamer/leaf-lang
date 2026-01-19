@@ -2811,7 +2811,10 @@ mod tests
 	// Helper to create a simple where bound (trait bound)
 	fn trait_bound(trait_name: &str) -> WhereBound
 	{
-		return WhereBound::Path(Path::simple(vec![trait_name.to_string()], Span::default()));
+		return WhereBound::Path {
+			path: Path::simple(vec![trait_name.to_string()], Span::default()),
+			args: Vec::new(),
+		};
 	}
 
 	// Helper to create a where constraint

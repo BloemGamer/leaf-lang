@@ -4300,7 +4300,10 @@ mod tests
 				assert_eq!(bounds.len(), 1);
 				assert_eq!(
 					bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected impl trait type"),
@@ -5085,7 +5088,10 @@ mod tests
 				assert_eq!(func.signature.generics[0].bounds.len(), 1);
 				assert_eq!(
 					func.signature.generics[0].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected function declaration"),
@@ -5106,15 +5112,24 @@ mod tests
 				assert_eq!(func.signature.generics[0].bounds.len(), 3);
 				assert_eq!(
 					func.signature.generics[0].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 				assert_eq!(
 					func.signature.generics[0].bounds[1],
-					WhereBound::Path(Path::simple(vec!["Debug".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 				assert_eq!(
 					func.signature.generics[0].bounds[2],
-					WhereBound::Path(Path::simple(vec!["Display".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Display".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected function declaration"),
@@ -5141,7 +5156,10 @@ mod tests
 				assert_eq!(func.signature.generics[1].bounds.len(), 1);
 				assert_eq!(
 					func.signature.generics[1].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 
 				// V: Debug + Send
@@ -5149,11 +5167,17 @@ mod tests
 				assert_eq!(func.signature.generics[2].bounds.len(), 2);
 				assert_eq!(
 					func.signature.generics[2].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Debug".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 				assert_eq!(
 					func.signature.generics[2].bounds[1],
-					WhereBound::Path(Path::simple(vec!["Send".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Send".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected function declaration"),
@@ -5177,14 +5201,20 @@ mod tests
 				assert_eq!(t.generics[0].bounds.len(), 1);
 				assert_eq!(
 					t.generics[0].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 
 				assert_eq!(t.generics[1].name, "U");
 				assert_eq!(t.generics[1].bounds.len(), 1);
 				assert_eq!(
 					t.generics[1].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Debug".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected trait declaration"),
@@ -5224,11 +5254,17 @@ mod tests
 				assert_eq!(i.generics[0].bounds.len(), 2);
 				assert_eq!(
 					i.generics[0].bounds[0],
-					WhereBound::Path(Path::simple(vec!["Clone".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 				assert_eq!(
 					i.generics[0].bounds[1],
-					WhereBound::Path(Path::simple(vec!["Send".to_string()], Default::default()))
+					WhereBound::Path {
+						path: Path::simple(vec!["Send".to_string()], Default::default()),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected impl declaration"),
@@ -5268,17 +5304,23 @@ mod tests
 				assert_eq!(func.signature.generics[0].bounds.len(), 2);
 				assert_eq!(
 					func.signature.generics[0].bounds[0],
-					WhereBound::Path(Path::simple(
-						vec!["std".to_string(), "clone".to_string(), "Clone".to_string()],
-						Default::default()
-					))
+					WhereBound::Path {
+						path: Path::simple(
+							vec!["std".to_string(), "clone".to_string(), "Clone".to_string()],
+							Default::default()
+						),
+						args: Vec::new()
+					}
 				);
 				assert_eq!(
 					func.signature.generics[0].bounds[1],
-					WhereBound::Path(Path::simple(
-						vec!["std".to_string(), "fmt".to_string(), "Debug".to_string()],
-						Default::default()
-					))
+					WhereBound::Path {
+						path: Path::simple(
+							vec!["std".to_string(), "fmt".to_string(), "Debug".to_string()],
+							Default::default()
+						),
+						args: Vec::new()
+					}
 				);
 			}
 			_ => panic!("Expected function declaration"),

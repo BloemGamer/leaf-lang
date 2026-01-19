@@ -4,10 +4,10 @@ use crate::{
 	CompileError,
 	lexer::{Span, Spanned},
 	parser::{
-		ArrayLiteral, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl, FunctionSignature,
-		Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, Pattern, Program, RangeExpr, Stmt, SwitchArm,
-		SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint,
-		extract_type_from_pattern,
+		ArrayLiteral, AssignOp, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl,
+		FunctionSignature, GenericArg, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, Pattern, Program,
+		RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
+		WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -637,12 +637,66 @@ impl Desugarer
 				op,
 				value,
 				span,
-			} => Stmt::Assignment {
-				target: self.desugar_expr(target)?,
-				op,
-				value: self.desugar_expr(value)?,
-				span,
-			},
+			} => {
+				let needs_complex_desugar: bool = match &target {
+					Expr::Tuple { elements, .. } => {
+						elements.len() > 1 || !elements.iter().all(|e| matches!(e, Expr::Identifier { .. }))
+					}
+					Expr::StructInit { .. } => true,
+					_ => false,
+				};
+
+				if needs_complex_desugar && matches!(op, AssignOp::Assign) {
+					let desugared_value: Expr = self.desugar_expr(value)?;
+
+					let temp: Ident = self.gen_temp("assign");
+					let value_span: Span = desugared_value.span();
+
+					let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
+						pattern: Pattern::TypedIdentifier {
+							path: Path::simple(vec![temp.clone()], value_span),
+							ty: Type {
+								modifiers: vec![],
+								core: Box::new(TypeCore::Base {
+									path: Path::simple(vec!["_".to_string()], value_span),
+									generics: vec![],
+								}),
+								span: value_span,
+							},
+							call_constructor: None,
+							span: value_span,
+						},
+						init: Some(desugared_value),
+						comp_const: false,
+						span: value_span,
+					});
+
+					let assignments: Vec<Stmt> = self.desugar_assignment_target(
+						target,
+						Expr::Identifier {
+							path: Path::simple(vec![temp], value_span),
+							span: value_span,
+						},
+						span,
+					)?;
+
+					let mut stmts: Vec<Stmt> = vec![temp_decl];
+					stmts.extend(assignments);
+
+					Stmt::Block(Block {
+						stmts,
+						tail_expr: None,
+						span,
+					})
+				} else {
+					Stmt::Assignment {
+						target: self.desugar_expr(target)?,
+						op,
+						value: self.desugar_expr(value)?,
+						span,
+					}
+				}
+			}
 
 			Stmt::Return { value, span } => Stmt::Return {
 				value: value.map(|e| return self.desugar_expr(e)).transpose()?,
@@ -1618,6 +1672,57 @@ impl Desugarer
 
 		return Ok(statements);
 	}
+
+	fn desugar_assignment_target(&mut self, target: Expr, source: Expr, span: Span) -> Result<Vec<Stmt>, CompileError>
+	{
+		let mut statements = Vec::new();
+
+		match target {
+			Expr::Tuple {
+				elements,
+				span: tuple_span,
+			} => {
+				for (i, elem) in elements.into_iter().enumerate() {
+					let index_expr = Expr::Field {
+						base: Box::new(source.clone()),
+						name: i.to_string(),
+						span: tuple_span,
+					};
+
+					let nested_stmts = self.desugar_assignment_target(elem, index_expr, span)?;
+					statements.extend(nested_stmts);
+				}
+			}
+
+			Expr::StructInit {
+				path: _,
+				fields,
+				span: struct_span,
+			} => {
+				for (field_name, field_expr) in fields {
+					let field_access = Expr::Field {
+						base: Box::new(source.clone()),
+						name: field_name,
+						span: struct_span,
+					};
+
+					let nested_stmts = self.desugar_assignment_target(field_expr, field_access, span)?;
+					statements.extend(nested_stmts);
+				}
+			}
+
+			other_expr => {
+				statements.push(Stmt::Assignment {
+					target: self.desugar_expr(other_expr)?,
+					op: AssignOp::Assign,
+					value: self.desugar_expr(source)?,
+					span,
+				});
+			}
+		}
+
+		return Ok(statements);
+	}
 }
 
 fn get_mentioned_type_params(path: &Path) -> Vec<String>
@@ -1668,7 +1773,20 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 			return bounds
 				.iter()
 				.flat_map(|bound| match bound {
-					WhereBound::Path(path) => return get_mentioned_type_params(path),
+					WhereBound::Path { path, args } => {
+						let mut result = get_mentioned_type_params(path);
+
+						for arg in args {
+							match arg {
+								GenericArg::Type(ty) | GenericArg::Binding { ty, .. } => {
+									result.extend(get_mentioned_type_params_in_type(ty));
+								}
+							}
+						}
+
+						return result;
+					}
+
 					WhereBound::Func(func_bound) => match func_bound {
 						FuncBound::Fn { args, ret } => {
 							let mut result: Vec<String> =

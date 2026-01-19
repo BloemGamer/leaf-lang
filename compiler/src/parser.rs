@@ -1902,8 +1902,27 @@ impl Spanned for WhereConstraint
 #[derive(Debug, Clone, PartialEq)]
 pub enum WhereBound
 {
-	Path(Path),
+	Path
+	{
+		path: Path,
+		args: Vec<GenericArg>,
+	},
 	Func(FuncBound),
+}
+
+/// Generic argument in angle brackets - can be a type or an associated type binding
+#[derive(Debug, Clone, PartialEq)]
+pub enum GenericArg
+{
+	Type(Type),
+	Binding
+	{
+		name: Ident,
+		ty: Type,
+		#[ignored(PartialEq)]
+		#[allow(dead_code)]
+		span: Span,
+	},
 }
 
 /// Function trait bounds (`Fn`).
@@ -2380,6 +2399,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				}));
 			}
 		}
+	}
+
+	fn make_checkpoint(&self) -> (Peekable<Lexer<'s, 'c>>, Span, Option<Token>)
+	{
+		return (self.lexer.clone(), self.last_span, self.buffered_token.clone());
+	}
+
+	fn load_checkpoint(&mut self, checkpoint: (Peekable<Lexer<'s, 'c>>, Span, Option<Token>))
+	{
+		let (lexer, last_span, buffered_token) = checkpoint;
+		self.lexer = lexer;
+		self.last_span = last_span;
+		self.buffered_token = buffered_token;
 	}
 
 	fn peek_kind(&mut self) -> Result<&TokenKind, CompileError>
@@ -5739,6 +5771,60 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(named_generics);
 	}
 
+	fn parse_generic_args(&mut self) -> Result<Vec<GenericArg>, CompileError>
+	{
+		if !self.consume(&TokenKind::LessThan)? {
+			return Ok(Vec::new());
+		}
+
+		let mut args: Vec<GenericArg> = Vec::new();
+
+		if self.consume_greater_than()? {
+			return Ok(args);
+		}
+
+		loop {
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+
+			if let Ok(TokenKind::Identifier(name)) = self.peek_kind().cloned() {
+				self.next()?; // identifier
+
+				if self.consume(&TokenKind::Equals)? {
+					let ty: Type = self.parse_type()?;
+					let span: Span = self.last_span;
+					args.push(GenericArg::Binding { name, ty, span });
+				} else {
+					self.load_checkpoint(checkpoint);
+					let ty: Type = self.parse_type()?;
+					args.push(GenericArg::Type(ty));
+				}
+			} else {
+				let ty: Type = self.parse_type()?;
+				args.push(GenericArg::Type(ty));
+			}
+
+			if self.consume_greater_than()? {
+				break;
+			}
+
+			if !self.consume(&TokenKind::Comma)? {
+				let tok: Token = self.peek()?.clone();
+				return Err(CompileError::ParseError(ParseError::unexpected_token(
+					tok.span,
+					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+					tok.kind,
+					self.source_index,
+				)));
+			}
+
+			if self.consume_greater_than()? {
+				break;
+			}
+		}
+
+		return Ok(args);
+	}
+
 	fn parse_impl_item(&mut self) -> Result<ImplItem, CompileError>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
@@ -5926,12 +6012,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				ret: return_type,
 			})
 		} else {
-			let mut bound_path: Path = self.get_path()?;
-
-			if self.at(&TokenKind::LessThan)? {
-				bound_path.generics.extend(self.parse_type_generics()?);
-			}
-			WhereBound::Path(bound_path)
+			let bound_path: Path = self.get_path()?;
+			let args: Vec<GenericArg> = if self.at(&TokenKind::LessThan)? {
+				self.parse_generic_args()?
+			} else {
+				Vec::new()
+			};
+			WhereBound::Path { path: bound_path, args }
 		};
 
 		return Ok(bound);
@@ -7338,8 +7425,19 @@ impl fmt::Display for WhereBound
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		return match self {
-			WhereBound::Path(path) => {
-				write!(f, "{}", path)
+			WhereBound::Path { path, args } => {
+				write!(f, "{}", path)?;
+				if !args.is_empty() {
+					write!(f, "<")?;
+					for (i, arg) in args.iter().enumerate() {
+						if i > 0 {
+							write!(f, ", ")?;
+						}
+						write!(f, "{}", arg)?;
+					}
+					write!(f, ">")?;
+				}
+				Ok(())
 			}
 			WhereBound::Func(func_bound) => {
 				write!(f, "{}", func_bound)
@@ -7367,6 +7465,17 @@ impl fmt::Display for FuncBound
 				}
 				Ok(())
 			}
+		};
+	}
+}
+
+impl fmt::Display for GenericArg
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match self {
+			GenericArg::Type(ty) => write!(f, "{}", ty),
+			GenericArg::Binding { name, ty, .. } => write!(f, "{} = {}", name, ty),
 		};
 	}
 }
