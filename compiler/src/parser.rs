@@ -6054,7 +6054,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 			DeclKind::TypeAlias => {
-				let type_alias: TypeAliasDecl = self.parse_trait_type_alias()?;
+				let type_alias: TypeAliasDecl = self.parse_type_alias()?;
 				self.expect(&TokenKind::Semicolon)?;
 				TraitItem::TypeAlias(type_alias)
 			}
@@ -6075,41 +6075,6 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 
 		return Ok(node);
-	}
-
-	fn parse_trait_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError> // TODO: Check why this one exsist, because there is also one without the trait
-	{
-		let span: Span = self.peek()?.span;
-		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
-		self.expect(&TokenKind::Type)?;
-
-		let name: Path = self.get_path()?;
-
-		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
-			self.get_generics()?
-		} else {
-			Vec::new()
-		};
-
-		let ty: Type = if self.consume(&TokenKind::Equals)? {
-			self.parse_type()?
-		} else {
-			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span(),
-				Expected::Token(TokenKind::Equals),
-				tok.kind,
-				self.source_index,
-			)));
-		};
-
-		return Ok(TypeAliasDecl {
-			modifiers,
-			name,
-			generics,
-			ty,
-			span: span.merge(&self.last_span),
-		});
 	}
 
 	fn parse_delete(&mut self) -> Result<Expr, CompileError>
