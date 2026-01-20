@@ -11,14 +11,3 @@ max_width = 120
 # Brace style
 brace_style = "AlwaysNextLine"
 control_brace_style = "AlwaysSameLine"
-
-# Indentation
-indent_match_arms = true
-
-# Short statements
-merge_single_line_if = false
-merge_single_line_loop = false
-merge_single_line_fn = false
-
-# Trailing comments
-trailing_comments_spacing = 1
