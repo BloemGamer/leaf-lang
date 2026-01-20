@@ -810,7 +810,7 @@ pub enum Expr
 	Field
 	{
 		base: Box<Expr>,
-		name: Ident,
+		name: Path,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -3600,17 +3600,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			match self.peek_kind()? {
 				TokenKind::Dot => {
 					self.next()?;
-					let field_tok: Token = self.next()?;
-					let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
-						name
-					} else {
-						return Err(CompileError::ParseError(ParseError::unexpected_token(
-							field_tok.span,
-							Expected::Identifier,
-							field_tok.kind,
-							self.source_index,
-						)));
-					};
+					let field_name: Path = self.get_path()?;
 					expr = Expr::Field {
 						base: Box::new(expr),
 						name: field_name,

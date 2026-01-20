@@ -1014,7 +1014,7 @@ mod tests
 					}
 					_ => panic!("Expected obj identifier"),
 				}
-				assert_eq!(name, "field");
+				assert_eq!(name.segments[0].name, "field");
 			}
 			_ => panic!("Expected field access"),
 		}
@@ -1027,12 +1027,12 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Field { base, name, .. } => {
-				assert_eq!(name, "field2");
+				assert_eq!(name.segments[0].name, "field2");
 				match *base {
 					Expr::Field {
 						name: ref inner_name, ..
 					} => {
-						assert_eq!(inner_name, "field1");
+						assert_eq!(inner_name.segments[0].name, "field1");
 					}
 					_ => panic!("Expected nested field access"),
 				}

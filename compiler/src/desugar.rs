@@ -789,7 +789,7 @@ impl Desugarer
 					path: Path::simple(vec![iter_temp], iter_span),
 					span: iter_span,
 				}),
-				name: "next".to_string(),
+				name: Path::simple(vec!["next".to_string()], Span::default()),
 				span: iter_span,
 			}),
 			call_type: CallType::CompilerHeap,
@@ -1638,7 +1638,7 @@ impl Desugarer
 							path: Path::simple(vec![temp.clone()], temp_span),
 							span: temp_span,
 						}),
-						name: field_name.clone(),
+						name: Path::simple(vec![field_name.clone()], Span::default()),
 						span: pattern_span,
 					};
 
@@ -1659,7 +1659,7 @@ impl Desugarer
 							path: Path::simple(vec![temp.clone()], temp_span),
 							span: temp_span,
 						}),
-						name: i.to_string(),
+						name: Path::simple(vec![i.to_string()], Span::default()),
 						span: pattern_span,
 					};
 
@@ -1706,7 +1706,7 @@ impl Desugarer
 				for (i, elem) in elements.into_iter().enumerate() {
 					let index_expr = Expr::Field {
 						base: Box::new(source.clone()),
-						name: i.to_string(),
+						name: Path::simple(vec![i.to_string()], Span::default()),
 						span: tuple_span,
 					};
 
@@ -1723,7 +1723,7 @@ impl Desugarer
 				for (field_name, field_expr) in fields {
 					let field_access = Expr::Field {
 						base: Box::new(source.clone()),
-						name: field_name,
+						name: Path::simple(vec![field_name], Span::default()),
 						span: struct_span,
 					};
 

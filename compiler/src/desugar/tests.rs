@@ -753,7 +753,7 @@ mod tests
 			target: Expr::Index {
 				base: Box::new(Expr::Field {
 					base: Box::new(ident("obj")),
-					name: "arr".into(),
+					name: Path::simple(vec!["arr".into()], Span::default()),
 					span: Span::default(),
 				}),
 				index: Box::new(int_lit(0)),
@@ -1111,10 +1111,10 @@ mod tests
 		let expr = Expr::Field {
 			base: Box::new(Expr::Field {
 				base: Box::new(ident("obj")),
-				name: "inner".into(),
+				name: Path::simple(vec!["inner".into()], Span::default()),
 				span: Span::default(),
 			}),
-			name: "field".into(),
+			name: Path::simple(vec!["field".into()], Span::default()),
 			span: Span::default(),
 		};
 
