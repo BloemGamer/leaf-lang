@@ -578,6 +578,9 @@ pub enum TokenKind
 	#[reserved]
 	#[keyword("try")]
 	Try,
+	#[reserved]
+	#[keyword("defer")]
+	Defer,
 }
 
 /// Compiler directive types.
