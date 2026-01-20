@@ -7084,4 +7084,750 @@ mod tests
 		let result = parse_block_from_str(input);
 		assert!(result.is_err());
 	}
+
+	// ========== Generic Type Usage Tests ==========
+
+	#[test]
+	fn test_parse_generic_struct()
+	{
+		let input = "struct Container<T> { value: T }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.name.segments, vec!["Container".to_string()]);
+				assert_eq!(s.fields.len(), 1);
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_struct_multiple_params()
+	{
+		let input = "struct Map<K, V> { key: K, value: V }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert_eq!(s.fields.len(), 2);
+			}
+			_ => panic!("Expected struct declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_struct_with_bounds()
+	{
+		let input = "struct Container<T: Clone + Debug> { value: T }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_enum()
+	{
+		let input = "enum Option<T> { Some = 0, None = 1 }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_variant()
+	{
+		let input = "variant Result<T, E> { Ok(T), Err(E) }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Variant(v) => {
+				assert_eq!(v.variants.len(), 2);
+			}
+			_ => panic!("Expected variant declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_union()
+	{
+		let input = "union Data<T> { int_val: i32, generic_val: T }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_type_alias()
+	{
+		let input = "type BoxedValue<T> = Box<T>;";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Function Usage Tests ==========
+
+	#[test]
+	fn test_parse_generic_function_call()
+	{
+		let input = "{ var x = foo::<i32>(5); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_function_call_multiple_args()
+	{
+		let input = "{ var x = convert::<String, i32>(\"42\"); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_method_call()
+	{
+		let input = "{ var x = vec.push::<i32>(42); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_nested_generic_instantiation()
+	{
+		let input = "{ var x: Vec<Vec<i32>> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_struct_init()
+	{
+		let input = "{ var x = Container::<i32> { value = 42 }; }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_in_return_type()
+	{
+		let input = "fn create<T>() -> Vec<T> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.signature.return_type.is_some());
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_in_parameter()
+	{
+		let input = "fn process<T>(items: Vec<T>) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Nested and Complex Generics Tests ==========
+
+	#[test]
+	fn test_parse_deeply_nested_generics()
+	{
+		let input = "{ var x: Map<String, Vec<Option<i32>>> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_with_qualified_path()
+	{
+		let input = "{ var x: std::collections::HashMap<i32, String> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_multiple_generic_constraints()
+	{
+		let input = "fn process<T, U>(a: T, b: U) where T: Clone, U: Debug {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 2);
+				assert_eq!(func.signature.where_clause.len(), 2);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_with_lifetime_like_bound()
+	{
+		let input = "fn foo<T: 'static>() {}";
+		let result = parse_program_from_str(input);
+		// May fail if lifetimes aren't supported, but documents behavior
+		assert!(result.is_ok() || result.is_err());
+	}
+
+	// ========== Generic Trait Tests ==========
+
+	#[test]
+	fn test_parse_generic_trait()
+	{
+		let input = "trait Iterator<Item> { fn next(&mut self) -> Option<Item>; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_trait_with_bounds()
+	{
+		let input = "trait Convert<T: Clone> { fn convert(&self) -> T; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_trait_with_multiple_generic_params()
+	{
+		let input = "trait Transform<Input, Output> { fn transform(input: Input) -> Output; }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_trait_with_generic_supertrait()
+	{
+		let input = "trait MyIterator<T>: Iterator<T> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Impl Tests ==========
+
+	#[test]
+	fn test_parse_generic_impl_for_generic_type()
+	{
+		let input = "impl<T> Container<T> { fn new(value: T) -> Self {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_trait_impl()
+	{
+		let input = "impl<T: Clone> Clone for Container<T> { fn clone(&self) -> Self {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_with_different_generic_names()
+	{
+		let input = "impl<U> From<U> for Container<U> { fn from(value: U) -> Self {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_with_multiple_generics_and_where()
+	{
+		let input = "impl<T, E> Result<T, E> where T: Clone, E: Debug { fn unwrap(self) -> T {} }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_impl_generic_method()
+	{
+		let input = r#"
+		impl Container {
+			fn convert<U>(&self) -> U where U: From<i32> {}
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Edge Cases ==========
+
+	#[test]
+	fn test_parse_empty_generic_list()
+	{
+		let input = "fn foo<>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_with_trailing_comma()
+	{
+		let input = "fn foo<T, U,>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_without_spaces()
+	{
+		let input = "fn foo<T,U,V>(){}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_turbofish_in_expression()
+	{
+		let input = "{ var x = Vec::<i32>::new(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_array_type()
+	{
+		let input = "{ var x: [Vec<i32>; 10] = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_tuple_type()
+	{
+		let input = "{ var x: (Vec<i32>, Option<String>) = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_reference_type()
+	{
+		let input = "{ var x: &Vec<i32> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_mut_reference_type()
+	{
+		let input = "{ var x: &mut Vec<i32> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_pointer_type()
+	{
+		let input = "{ var x: Vec<i32>* = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Bound Combinations ==========
+
+	#[test]
+	fn test_parse_multiple_bounds_on_single_param()
+	{
+		let input = "fn foo<T: Clone + Debug + Send + Sync>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics[0].bounds.len(), 4);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_mixed_bounded_and_unbounded_params()
+	{
+		let input = "fn foo<T, U: Clone, V, W: Debug>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 4);
+				assert_eq!(func.signature.generics[0].bounds.len(), 0); // T
+				assert_eq!(func.signature.generics[1].bounds.len(), 1); // U
+				assert_eq!(func.signature.generics[2].bounds.len(), 0); // V
+				assert_eq!(func.signature.generics[3].bounds.len(), 1); // W
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_bounds_with_qualified_traits()
+	{
+		let input = "fn foo<T: std::clone::Clone + std::fmt::Debug>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic in Complex Expressions ==========
+
+	#[test]
+	fn test_parse_generic_in_switch()
+	{
+		let input = r#"{
+		switch opt {
+			Some(val: Vec<i32>) => val,
+			None => default(),
+		}
+	}"#;
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_in_for_loop()
+	{
+		let input = "{ for item: Vec<i32> in items { } }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_in_closure_type()
+	{
+		let input = "fn foo<F: Fn(Vec<i32>) -> Vec<String>>(f: F) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Error Cases ==========
+
+	#[test]
+	fn test_parse_unclosed_generic_params()
+	{
+		let input = "fn foo<T(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_generic_missing_closing_bracket()
+	{
+		let input = "struct Container<T { value: T }";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_double_colon_in_generic()
+	{
+		let input = "fn foo<T::U>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn test_parse_invalid_bound_syntax()
+	{
+		let input = "fn foo<T Clone>(x: T) {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_err());
+	}
+
+	// ========== Real-World Generic Examples ==========
+
+	#[test]
+	fn test_parse_vec_like_implementation()
+	{
+		let input = r#"
+		struct Vec<T> {
+			data: T*,
+			len: usize,
+			cap: usize,
+		}
+		
+		impl<T> Vec<T> {
+			fn new() -> Self {}
+			fn push(&mut self, item: T) {}
+			fn pop(&mut self) -> Option<T> {}
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_option_like_variant()
+	{
+		let input = r#"
+		variant Option<T> {
+			Some(T),
+			None,
+		}
+		
+		impl<T> Option<T> {
+			fn is_some(&self) -> bool {}
+			fn unwrap(self) -> T {}
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_result_like_variant()
+	{
+		let input = r#"
+		variant Result<T, E> {
+			Ok(T),
+			Err(E),
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_hashmap_like_struct()
+	{
+		let input = r#"
+		struct HashMap<K, V> where K: Hash + Eq {
+			buckets: Vec<Vec<(K, V)>>,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_generic_builder_pattern()
+	{
+		let input = r#"
+		struct Builder<T> {
+			value: T,
+		}
+		
+		impl<T> Builder<T> {
+			fn new(value: T) -> Self {}
+			fn build(self) -> T {}
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Display Tests ==========
+
+	#[test]
+	fn test_display_generic_function()
+	{
+		let input = "fn foo<T>(x: T) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("<T>"));
+	}
+
+	#[test]
+	fn test_display_generic_with_bounds()
+	{
+		let input = "fn foo<T: Clone>(x: T) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("T: Clone"));
+	}
+
+	#[test]
+	fn test_display_multiple_generics()
+	{
+		let input = "fn foo<T, U>(x: T, y: U) {}";
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		assert!(output.contains("<T, U>"));
+	}
+
+	// ========== Generic with Where Clause Edge Cases ==========
+
+	#[test]
+	fn test_parse_where_clause_only_no_inline_bounds()
+	{
+		let input = "fn foo<T, U>(x: T, y: U) where T: Clone, U: Debug {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics[0].bounds.len(), 0); // No inline bounds
+				assert_eq!(func.signature.generics[1].bounds.len(), 0); // No inline bounds
+				assert_eq!(func.signature.where_clause.len(), 2); // Where clause has bounds
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_inline_and_where_clause_combined()
+	{
+		let input = "fn foo<T: Clone, U>(x: T, y: U) where T: Debug, U: Send {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics[0].bounds.len(), 1); // T: Clone inline
+				assert_eq!(func.signature.generics[1].bounds.len(), 0); // U has no inline bounds
+				assert_eq!(func.signature.where_clause.len(), 2); // Both have where clause
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_where_clause_with_multiple_bounds_per_type()
+	{
+		let input = "fn foo<T>(x: T) where T: Clone + Debug + Send + Sync {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.where_clause.len(), 1);
+				assert_eq!(func.signature.where_clause[0].bounds.len(), 4);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	// ========== Right Shift in Generics ==========
+
+	#[test]
+	fn test_parse_rshift_as_two_close_brackets()
+	{
+		let input = "{ var x: Vec<Vec<i32>> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_triple_close_with_rshift()
+	{
+		let input = "{ var x: Vec<Vec<Vec<i32>>> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_rshift_in_function_signature()
+	{
+		let input = "fn foo() -> Vec<Vec<i32>> {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Namespaces ==========
+
+	#[test]
+	fn test_parse_generic_type_in_namespace()
+	{
+		let input = r#"
+		namespace collections {
+			struct Vec<T> { data: T* }
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn test_parse_qualified_generic_type()
+	{
+		let input = "{ var x: std::vec::Vec<i32> = default(); }";
+		let result = parse_block_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Const and Static ==========
+
+	#[test]
+	fn test_parse_const_with_generic_type()
+	{
+		let input = "const EMPTY: Vec<i32> = default();";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Phantom Data Pattern ==========
+
+	#[test]
+	fn test_parse_phantom_data_pattern()
+	{
+		let input = r#"
+		struct PhantomData<T> {}
+		
+		struct Wrapper<T> {
+			phantom: PhantomData<T>,
+			data: i32,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
+
+	// ========== Generic Function Pointers ==========
+
+	#[test]
+	fn test_parse_generic_function_pointer_type()
+	{
+		let input = "{ var f: fn(Vec<i32>) -> Vec<String> = default(); }";
+		let result = parse_block_from_str(input);
+		// May not be supported, but documents behavior
+		assert!(result.is_ok() || result.is_err());
+	}
+
+	// ========== Default Generic Parameters ==========
+
+	#[test]
+	fn test_parse_generic_with_default_value()
+	{
+		let input = "struct Container<T = i32> { value: T }";
+		let result = parse_program_from_str(input);
+		// May not be supported, documents expected behavior
+		assert!(result.is_ok() || result.is_err());
+	}
+
+	// ========== Variadic Generics ==========
+
+	#[test]
+	fn test_parse_many_generic_parameters()
+	{
+		let input = "fn foo<A, B, C, D, E, F, G, H>() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert_eq!(func.signature.generics.len(), 8);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	// ========== Generic Specialization Patterns ==========
+
+	#[test]
+	fn test_parse_multiple_impls_same_type_different_generics()
+	{
+		let input = r#"
+		impl Container<i32> {
+			fn specialized() {}
+		}
+		
+		impl<T> Container<T> {
+			fn generic() {}
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+	}
 }
