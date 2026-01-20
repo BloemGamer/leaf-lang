@@ -1677,7 +1677,7 @@ impl Desugarer
 			Pattern::Variant { .. } => {
 				return Err(CompileError::DesugarError(DesugarError::generic(
 					span,
-					"variant patterns in let bindings not yet supported - use switch instead",
+					"variant patterns in var bindings not yet supported - use switch instead",
 					self.source_index,
 				)));
 			}
@@ -1685,7 +1685,7 @@ impl Desugarer
 			_ => {
 				return Err(CompileError::DesugarError(DesugarError::generic(
 					span,
-					"unsupported pattern type in let binding",
+					"unsupported pattern type in var binding",
 					self.source_index,
 				)));
 			}
