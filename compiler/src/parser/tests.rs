@@ -2089,7 +2089,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(
 			&config,
-			"{ if var Point { x = a: i32, y = b: i32 } = pt { a } }",
+			"{ if var Point { a: i32 = x, b: i32 = y } = pt { a } }",
 			"test_file_28",
 			&mut source_map,
 		);
@@ -2120,7 +2120,7 @@ mod tests
 		let config = Config::default();
 		let lexer = Lexer::new(
 			&config,
-			"{ if var Some(Point { x = a: i32, y = b: i32 }) = opt { a } }",
+			"{ if var Some(Point { a: i32 = x, b: i32 = y }) = opt { a } }",
 			0,
 		);
 		let mut parser = Parser::from(lexer);
@@ -4199,7 +4199,7 @@ mod tests
 	#[test]
 	fn test_parse_pattern_deeply_nested_struct()
 	{
-		let input = "{ switch x { Outer { inner = Inner { value = val: i32 } } => val, } }";
+		let input = "{ switch x { Outer { inner = Inner { val: i32 = value } } => val, } }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}

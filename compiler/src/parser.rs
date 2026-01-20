@@ -4254,10 +4254,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
-				let inclusive = self.at(&TokenKind::DotDotEquals)?;
+				let inclusive: bool = self.at(&TokenKind::DotDotEquals)?;
 				self.next()?; // .. | ..=
 
-				let end = if self.is_range_end() {
+				let end: Option<Box<Expr>> = if self.is_range_end() {
 					None
 				} else {
 					Some(Box::new(self.parse_expr()?))
@@ -4301,21 +4301,19 @@ impl<'s, 'c> Parser<'s, 'c>
 					if !self.at(&TokenKind::RightBrace)? {
 						loop {
 							if self.at(&TokenKind::LeftParen)? {
-								let pattern = self.parse_pattern()?;
+								let pattern: Pattern = self.parse_pattern()?;
 								fields.push((format!("__pos_{}", fields.len()), pattern));
 							} else if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
-								let checkpoint = self.lexer.clone();
-								let checkpoint_buffered = self.buffered_token.clone();
+								let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
 
 								self.next()?; // identifier
-								let next_is_colon_or_equals =
+								let next_is_colon_or_equals: bool =
 									self.at(&TokenKind::Colon)? || self.at(&TokenKind::Equals)?;
 
-								self.lexer = checkpoint;
-								self.buffered_token = checkpoint_buffered;
+								self.load_checkpoint(checkpoint);
 
 								if next_is_colon_or_equals {
-									let field_name = if let TokenKind::Identifier(name) = self.next()?.kind {
+									let var_name: Ident = if let TokenKind::Identifier(name) = self.next()?.kind {
 										name
 									} else {
 										return Err(CompileError::ParseError(ParseError::unexpected_token(
@@ -4327,30 +4325,90 @@ impl<'s, 'c> Parser<'s, 'c>
 									};
 
 									let pattern: Pattern = if self.consume(&TokenKind::Equals)? {
-										self.parse_pattern()?
+										let pat = self.parse_pattern()?;
+
+										if matches!(pat, Pattern::TypedIdentifier { .. }) {
+											return Err(CompileError::ParseError(ParseError::invalid_pattern(
+												pat.span(),
+												"type annotations are not allowed after '=' in struct patterns. Use 'var: Type = field' syntax instead",
+												self.source_index,
+											)));
+										}
+
+										pat
 									} else if self.consume(&TokenKind::Colon)? {
 										let ty: Type = self.parse_type()?;
 
-										let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
-											self.expect(&TokenKind::LeftParen)?;
-											self.expect(&TokenKind::RightParen)?;
-											Some(CallType::UserHeap)
-										} else if self.consume(&TokenKind::QuestionMark)? {
-											self.expect(&TokenKind::LeftParen)?;
-											self.expect(&TokenKind::RightParen)?;
-											Some(CallType::UserMaybeHeap)
-										} else if self.consume(&TokenKind::LeftParen)? {
-											self.expect(&TokenKind::RightParen)?;
-											Some(CallType::Regular)
-										} else {
-											None
-										};
+										if self.consume(&TokenKind::Equals)? {
+											let struct_member: Ident = if let TokenKind::Identifier(name) =
+												self.next()?.kind
+											{
+												name
+											} else {
+												return Err(CompileError::ParseError(ParseError::unexpected_token(
+													self.last_span,
+													Expected::Identifier,
+													self.peek()?.kind.clone(),
+													self.source_index,
+												)));
+											};
 
-										Pattern::TypedIdentifier {
-											path: Path::simple(vec![field_name.clone()], self.last_span),
-											ty,
-											call_constructor,
-											span: self.last_span,
+											let call_constructor: Option<CallType> =
+												if self.consume(&TokenKind::Bang)? {
+													self.expect(&TokenKind::LeftParen)?;
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::UserHeap)
+												} else if self.consume(&TokenKind::QuestionMark)? {
+													self.expect(&TokenKind::LeftParen)?;
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::UserMaybeHeap)
+												} else if self.consume(&TokenKind::LeftParen)? {
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::Regular)
+												} else {
+													None
+												};
+
+											fields.push((
+												struct_member,
+												Pattern::TypedIdentifier {
+													path: Path::simple(vec![var_name], self.last_span),
+													ty,
+													call_constructor,
+													span: self.last_span,
+												},
+											));
+
+											if !self.consume(&TokenKind::Comma)? {
+												break;
+											}
+											if self.at(&TokenKind::RightBrace)? {
+												break;
+											}
+											continue;
+										} else {
+											let call_constructor: Option<CallType> =
+												if self.consume(&TokenKind::Bang)? {
+													self.expect(&TokenKind::LeftParen)?;
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::UserHeap)
+												} else if self.consume(&TokenKind::QuestionMark)? {
+													self.expect(&TokenKind::LeftParen)?;
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::UserMaybeHeap)
+												} else if self.consume(&TokenKind::LeftParen)? {
+													self.expect(&TokenKind::RightParen)?;
+													Some(CallType::Regular)
+												} else {
+													None
+												};
+
+											Pattern::TypedIdentifier {
+												path: Path::simple(vec![var_name.clone()], self.last_span),
+												ty,
+												call_constructor,
+												span: self.last_span,
+											}
 										}
 									} else {
 										return Err(CompileError::ParseError(ParseError::unexpected_token(
@@ -4361,9 +4419,9 @@ impl<'s, 'c> Parser<'s, 'c>
 										)));
 									};
 
-									fields.push((field_name, pattern));
+									fields.push((var_name, pattern));
 								} else {
-									let pattern = self.parse_pattern()?;
+									let pattern: Pattern = self.parse_pattern()?;
 									fields.push((format!("__pos_{}", fields.len()), pattern));
 								}
 							} else {
