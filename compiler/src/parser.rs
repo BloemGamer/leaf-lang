@@ -1551,6 +1551,8 @@ pub struct StructDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
+	pub generics: Vec<GenericParam>,
+	pub where_clause: Vec<WhereConstraint>,
 	pub fields: Vec<(Type, Ident, Option<Expr>)>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1578,6 +1580,8 @@ pub struct UnionDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
+	pub generics: Vec<GenericParam>,
+	pub where_clause: Vec<WhereConstraint>,
 	pub fields: Vec<(Type, Ident)>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1605,6 +1609,8 @@ pub struct EnumDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
+	pub generics: Vec<GenericParam>,
+	pub where_clause: Vec<WhereConstraint>,
 	pub variants: Vec<(Ident, Option<Expr>)>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1632,6 +1638,8 @@ pub struct VariantDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
+	pub generics: Vec<GenericParam>,
+	pub where_clause: Vec<WhereConstraint>,
 	pub variants: Vec<(Option<Type>, Ident, Option<Expr>)>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -2230,6 +2238,7 @@ pub struct TypeAliasDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
+	pub generics: Vec<GenericParam>,
 	pub ty: Type,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -5293,6 +5302,19 @@ impl<'s, 'c> Parser<'s, 'c>
 			)));
 		};
 
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?;
+			self.parse_where_clause()?
+		} else {
+			Vec::new()
+		};
+
 		self.expect(&TokenKind::LeftBrace)?;
 
 		let mut fields: Vec<(Type, Ident, Option<Expr>)> = Vec::new();
@@ -5336,6 +5358,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(StructDecl {
 			modifiers,
 			name,
+			generics,
+			where_clause,
 			fields,
 			span: span.merge(&self.last_span),
 		});
@@ -5357,6 +5381,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.kind,
 				self.source_index,
 			)));
+		};
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?;
+			self.parse_where_clause()?
+		} else {
+			Vec::new()
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -5396,6 +5433,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(UnionDecl {
 			modifiers,
 			name,
+			generics,
+			where_clause,
 			fields,
 			span: span.merge(&self.last_span),
 		});
@@ -5434,6 +5473,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.kind,
 				self.source_index,
 			)));
+		};
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?;
+			self.parse_where_clause()?
+		} else {
+			Vec::new()
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -5476,6 +5528,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(EnumDecl {
 			modifiers,
 			name,
+			generics,
+			where_clause,
 			variants: fields,
 			span: span.merge(&self.last_span),
 		});
@@ -5497,6 +5551,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				tok.kind,
 				self.source_index,
 			)));
+		};
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
+			self.next()?;
+			self.parse_where_clause()?
+		} else {
+			Vec::new()
 		};
 
 		self.expect(&TokenKind::LeftBrace)?;
@@ -5548,6 +5615,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(VariantDecl {
 			modifiers,
 			name,
+			generics,
+			where_clause,
 			variants: fields,
 			span: span.merge(&self.last_span),
 		});
@@ -5850,14 +5919,21 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
-		let name = self.get_path()?;
+		let name: Path = self.get_path()?;
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
 
 		self.expect(&TokenKind::Equals)?;
-		let ty = self.parse_type()?;
+		let ty: Type = self.parse_type()?;
 
 		return Ok(TypeAliasDecl {
 			modifiers,
 			name,
+			generics,
 			ty,
 			span: span.merge(&self.last_span),
 		});
@@ -6011,13 +6087,19 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(node);
 	}
 
-	fn parse_trait_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError>
+	fn parse_trait_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError> // TODO: Check why this one exsist, because there is also one without the trait
 	{
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
 
 		let name: Path = self.get_path()?;
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
 
 		let ty: Type = if self.consume(&TokenKind::Equals)? {
 			self.parse_type()?
@@ -6034,6 +6116,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(TypeAliasDecl {
 			modifiers,
 			name,
+			generics,
 			ty,
 			span: span.merge(&self.last_span),
 		});
@@ -7061,7 +7144,29 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "struct {} {{", s.name)?;
+	writeln!(f, "struct {}", s.name)?;
+	if !s.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in s.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	if !s.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in s.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	write!(f, " {{")?;
 	w.indent();
 
 	for (ty, name, default_value) in &s.fields {
@@ -7084,7 +7189,29 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "union {} {{", u.name)?;
+	writeln!(f, "union {}", u.name)?;
+	if !u.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in u.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	if !u.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in u.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	write!(f, " {{")?;
 	w.indent();
 
 	for (ty, name) in &u.fields {
@@ -7103,7 +7230,29 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "enum {} {{", e.name)?;
+	writeln!(f, "enum {}", e.name)?;
+	if !e.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in e.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	if !e.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in e.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	write!(f, " {{")?;
 	w.indent();
 
 	for (name, value) in &e.variants {
@@ -7127,7 +7276,29 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "variant {} {{", v.name)?;
+	writeln!(f, "variant {}", v.name)?;
+	if !v.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in v.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	if !v.where_clause.is_empty() {
+		write!(f, " where ")?;
+		for (i, constraint) in v.where_clause.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", constraint)?;
+		}
+	}
+
+	write!(f, " {{")?;
 	w.indent();
 
 	for (ty, name, value) in &v.variants {
@@ -7154,7 +7325,20 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &
 		write!(f, "{} ", modifier)?;
 	}
 
-	return write!(f, "type {} = {}", t.name, t.ty);
+	write!(f, "type {}", t.name)?;
+
+	if !t.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in t.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	return write!(f, " = {}", t.ty);
 }
 
 fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result

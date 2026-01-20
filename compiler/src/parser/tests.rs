@@ -7259,7 +7259,7 @@ mod tests
 	#[test]
 	fn test_parse_generic_method_call()
 	{
-		let input = "{ var x = vec.push::<i32>(42); }";
+		let input = "{ var x: Vec<i32> = vec.push::<i32>(42); }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7275,7 +7275,7 @@ mod tests
 	#[test]
 	fn test_parse_generic_struct_init()
 	{
-		let input = "{ var x = Container::<i32> { value = 42 }; }";
+		let input = "{ var x: Container = Container::<i32> { value = 42 }; }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
