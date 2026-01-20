@@ -811,7 +811,10 @@ impl Desugarer
 		let some_false_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Variant {
 				path: Path::simple(vec!["Some".to_string()], pattern_span),
-				args: vec![Pattern::Wildcard { span: pattern_span }],
+				args: vec![Pattern::Wildcard {
+					span: pattern_span,
+					ty: None,
+				}],
 				span: pattern_span,
 			},
 			body: SwitchBody::Block(Block {
@@ -911,7 +914,10 @@ impl Desugarer
 		};
 
 		let else_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: pattern_span },
+			pattern: Pattern::Wildcard {
+				span: pattern_span,
+				ty: None,
+			},
 			body: else_branch.map_or_else(
 				|| {
 					return Ok(SwitchBody::Block(Block {
@@ -993,7 +999,10 @@ impl Desugarer
 		};
 
 		let break_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: pattern_span },
+			pattern: Pattern::Wildcard {
+				span: pattern_span,
+				ty: None,
+			},
 			body: SwitchBody::Block(Block {
 				stmts: vec![Stmt::Break {
 					label: Some(actual_label.clone()),
@@ -1306,7 +1315,10 @@ impl Desugarer
 		};
 
 		let else_arm: SwitchArm = SwitchArm {
-			pattern: Pattern::Wildcard { span: pattern_span },
+			pattern: Pattern::Wildcard {
+				span: pattern_span,
+				ty: None,
+			},
 			body: else_branch.map_or_else(
 				|| {
 					return Ok(SwitchBody::Block(Block {
@@ -1415,7 +1427,7 @@ impl Desugarer
 	fn desugar_pattern(&mut self, pattern: Pattern) -> Result<Pattern, CompileError>
 	{
 		return Ok(match pattern {
-			Pattern::Wildcard { span } => Pattern::Wildcard { span },
+			Pattern::Wildcard { span, ty } => Pattern::Wildcard { span, ty },
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
 			Pattern::TypedIdentifier {
 				path,

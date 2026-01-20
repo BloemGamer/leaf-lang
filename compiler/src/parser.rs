@@ -1475,6 +1475,7 @@ pub enum Pattern
 	{
 		#[ignored(PartialEq)]
 		span: Span,
+		ty: Option<Type>,
 	},
 	Literal
 	{
@@ -1525,7 +1526,7 @@ impl Spanned for Pattern
 	{
 		#[allow(clippy::match_same_arms)]
 		return match self {
-			Pattern::Wildcard { span } => *span,
+			Pattern::Wildcard { span, .. } => *span,
 			Pattern::Literal { span, .. } => *span,
 			Pattern::TypedIdentifier { span, .. } => *span,
 			Pattern::Variant { span, .. } => *span,
@@ -4244,10 +4245,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		match &tok.kind {
 			TokenKind::Underscore => {
 				self.next()?;
-				if self.consume(&TokenKind::Colon)? {
-					let _ignored_type = self.parse_type()?;
-				}
-				return Ok(Pattern::Wildcard { span });
+				let ty: Option<Type> = if self.consume(&TokenKind::Colon)? {
+					Some(self.parse_type()?)
+				} else {
+					None
+				};
+				return Ok(Pattern::Wildcard { span, ty });
 			}
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
@@ -6501,7 +6504,13 @@ impl fmt::Display for Pattern
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Pattern::Wildcard { .. } => return write!(f, "_"),
+			Pattern::Wildcard { ty, .. } => {
+				write!(f, "_")?;
+				if let Some(t) = ty {
+					write!(f, ": {}", t)?;
+				}
+				return Ok(());
+			}
 			Pattern::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Pattern::TypedIdentifier {
 				path,

@@ -247,7 +247,10 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let stmt = Stmt::IfVar {
-			pattern: Pattern::Wildcard { span: Span::default() },
+			pattern: Pattern::Wildcard {
+				span: Span::default(),
+				ty: None,
+			},
 			expr: ident("x"),
 			then_block: Block {
 				stmts: vec![],
@@ -275,7 +278,10 @@ mod tests
 				patterns: vec![
 					Pattern::Variant {
 						path: Path::simple(vec!["Some".into()], Span::default()),
-						args: vec![Pattern::Wildcard { span: Span::default() }],
+						args: vec![Pattern::Wildcard {
+							span: Span::default(),
+							ty: None,
+						}],
 						span: Span::default(),
 					},
 					Pattern::Variant {
@@ -345,7 +351,10 @@ mod tests
 			expr: ident("value"),
 			then_block: Block {
 				stmts: vec![Stmt::IfVar {
-					pattern: Pattern::Wildcard { span: Span::default() },
+					pattern: Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
 					expr: ident("y"),
 					then_block: Block {
 						stmts: vec![],
@@ -502,12 +511,18 @@ mod tests
 				patterns: vec![
 					Pattern::Variant {
 						path: Path::simple(vec!["Some".into()], Span::default()),
-						args: vec![Pattern::Wildcard { span: Span::default() }],
+						args: vec![Pattern::Wildcard {
+							span: Span::default(),
+							ty: None,
+						}],
 						span: Span::default(),
 					},
 					Pattern::Or {
 						patterns: vec![
-							Pattern::Wildcard { span: Span::default() },
+							Pattern::Wildcard {
+								span: Span::default(),
+								ty: None,
+							},
 							Pattern::Literal {
 								value: Literal::Int(5),
 								span: Span::default(),
@@ -644,7 +659,10 @@ mod tests
 				body: Some(Block {
 					stmts: vec![Stmt::WhileVarLoop {
 						label: None,
-						pattern: Pattern::Wildcard { span: Span::default() },
+						pattern: Pattern::Wildcard {
+							span: Span::default(),
+							ty: None,
+						},
 						expr: ident("x"),
 						body: Block {
 							stmts: vec![],
@@ -867,7 +885,10 @@ mod tests
 			label: None,
 			body: Block {
 				stmts: vec![Stmt::IfVar {
-					pattern: Pattern::Wildcard { span: Span::default() },
+					pattern: Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
 					expr: ident("x"),
 					then_block: Block {
 						stmts: vec![Stmt::Break {
@@ -1006,7 +1027,10 @@ mod tests
 		let expr = Expr::Switch {
 			expr: Box::new(ident("x")),
 			arms: vec![SwitchArm {
-				pattern: Pattern::Wildcard { span: Span::default() },
+				pattern: Pattern::Wildcard {
+					span: Span::default(),
+					ty: None,
+				},
 				body: SwitchBody::Block(Block {
 					stmts: vec![Stmt::For {
 						label: None,
@@ -1254,7 +1278,10 @@ mod tests
 			path: Path::simple(vec!["Some".into()], Span::default()),
 			args: vec![Pattern::Tuple {
 				patterns: vec![
-					Pattern::Wildcard { span: Span::default() },
+					Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
 					typed_ident_pattern("x", "i32"),
 				],
 				span: Span::default(),
@@ -1284,7 +1311,10 @@ mod tests
 			patterns: vec![
 				Pattern::Variant {
 					path: Path::simple(vec!["Some".into()], Span::default()),
-					args: vec![Pattern::Wildcard { span: Span::default() }],
+					args: vec![Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					}],
 					span: Span::default(),
 				},
 				Pattern::Variant {
@@ -1360,7 +1390,10 @@ mod tests
 			pattern: Pattern::Tuple {
 				patterns: vec![
 					typed_ident_pattern("x", "i32"),
-					Pattern::Wildcard { span: Span::default() },
+					Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
 				],
 				span: Span::default(),
 			},
@@ -1441,7 +1474,10 @@ mod tests
 				path: Path::simple(vec!["Ok".into()], Span::default()),
 				args: vec![Pattern::Tuple {
 					patterns: vec![
-						Pattern::Wildcard { span: Span::default() },
+						Pattern::Wildcard {
+							span: Span::default(),
+							ty: None,
+						},
 						typed_ident_pattern("val", "i32"),
 					],
 					span: Span::default(),
@@ -1879,7 +1915,10 @@ mod tests
 
 		let stmt = Stmt::WhileVarLoop {
 			label: None,
-			pattern: Pattern::Wildcard { span: Span::default() },
+			pattern: Pattern::Wildcard {
+				span: Span::default(),
+				ty: None,
+			},
 			expr: ident("x"),
 			body: Block {
 				stmts: vec![Stmt::Continue {
