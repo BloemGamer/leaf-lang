@@ -5,9 +5,9 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		ArrayLiteral, AssignOp, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl,
-		FunctionSignature, GenericArg, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, Pattern, Program,
-		RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore, VariableDecl,
-		WhereBound, WhereConstraint, extract_type_from_pattern,
+		FunctionSignature, GenericArg, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, PathSegment, Pattern,
+		Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
+		VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -319,8 +319,11 @@ impl Desugarer
 
 			func_sig.where_clause.push(WhereConstraint {
 				ty: Path {
-					segments: vec![generic.name.clone()],
-					generics: Vec::new(),
+					segments: vec![PathSegment {
+						name: generic.name.clone(),
+						generics: Vec::new(),
+						span: generic.span,
+					}],
 					span: generic.span,
 				},
 				bounds: generic.bounds.clone(),
@@ -340,8 +343,11 @@ impl Desugarer
 
 			func_sig.where_clause.push(WhereConstraint {
 				ty: Path {
-					segments: vec![generic.name.clone()],
-					generics: Vec::new(),
+					segments: vec![PathSegment {
+						name: generic.name.clone(),
+						generics: Vec::new(),
+						span: generic.span,
+					}],
 					span: generic.span,
 				},
 				bounds: generic.bounds.clone(),
@@ -425,8 +431,11 @@ impl Desugarer
 
 			impl_decl.where_clause.push(WhereConstraint {
 				ty: Path {
-					segments: vec![generic.name.clone()],
-					generics: Vec::new(),
+					segments: vec![PathSegment {
+						name: generic.name.clone(),
+						generics: Vec::new(),
+						span: generic.span,
+					}],
 					span: generic.span,
 				},
 				bounds: generic.bounds.clone(),
@@ -1355,7 +1364,11 @@ impl Desugarer
 			}
 		};
 
-		path.segments.push("create".to_string());
+		path.segments.push(PathSegment {
+			name: "create".to_string(),
+			generics: Vec::new(),
+			span: ty.span,
+		});
 
 		return Ok(Expr::Call {
 			callee: Box::new(Expr::Identifier { path, span: ty.span }),
@@ -1483,8 +1496,16 @@ impl Desugarer
 			return Expr::Call {
 				callee: Box::new(Expr::Identifier {
 					path: Path {
-						segments: path.iter().map(|s| return s.to_string()).collect(),
-						generics: Vec::new(),
+						segments: path
+							.iter()
+							.map(|s| {
+								return PathSegment {
+									name: s.to_string(),
+									generics: Vec::new(),
+									span,
+								};
+							})
+							.collect(),
 						span,
 					},
 					span,
@@ -1729,12 +1750,16 @@ fn get_mentioned_type_params(path: &Path) -> Vec<String>
 {
 	let mut result = Vec::new();
 
-	if path.segments.len() == 1 && path.generics.is_empty() {
-		result.push(path.segments[0].clone());
+	// Check if this is a single-segment path with no generics anywhere
+	if path.segments.len() == 1 && path.segments[0].generics.is_empty() {
+		result.push(path.segments[0].name.clone());
 	}
 
-	for generic_type in &path.generics {
-		result.extend(get_mentioned_type_params_in_type(generic_type));
+	// Collect from segment generics (turbofish)
+	for segment in &path.segments {
+		for generic_type in &segment.generics {
+			result.extend(get_mentioned_type_params_in_type(generic_type));
+		}
 	}
 
 	return result;
@@ -1746,27 +1771,31 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 		TypeCore::Base { path, generics } => {
 			let mut result = Vec::new();
 
-			if path.segments.len() == 1 && generics.is_empty() && path.generics.is_empty() {
-				result.push(path.segments[0].clone());
+			// Single segment with no generics = type parameter
+			if path.segments.len() == 1 && generics.is_empty() && path.segments[0].generics.is_empty() {
+				result.push(path.segments[0].name.clone());
 			}
 
+			// Collect from type-level generics
 			for generic_type in generics {
 				result.extend(get_mentioned_type_params_in_type(generic_type));
 			}
 
-			for generic_type in &path.generics {
-				result.extend(get_mentioned_type_params_in_type(generic_type));
+			// Collect from path segment generics (turbofish)
+			for segment in &path.segments {
+				for generic_type in &segment.generics {
+					result.extend(get_mentioned_type_params_in_type(generic_type));
+				}
 			}
 
 			return result;
 		}
-		TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
+		// ... rest stays the same
+		TypeCore::Reference { inner, .. }
+		| TypeCore::Mutable { inner }
+		| TypeCore::Pointer { inner }
+		| TypeCore::Array { inner, size: _ } => {
 			return get_mentioned_type_params_in_type_core(inner);
-		}
-		TypeCore::Array { inner, size: _ } => {
-			let result = get_mentioned_type_params_in_type_core(inner);
-
-			return result;
 		}
 		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
 		TypeCore::ImplTrait { bounds } => {
@@ -1811,16 +1840,18 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 		TypeCore::Base { path, generics } => {
 			let mut result = Vec::new();
 
-			if path.segments.len() == 1 && generics.is_empty() && path.generics.is_empty() {
-				result.push(path.segments[0].clone());
+			if path.segments.len() == 1 && generics.is_empty() && path.segments[0].generics.is_empty() {
+				result.push(path.segments[0].name.clone());
 			}
 
 			for generic_type in generics {
 				result.extend(get_mentioned_type_params_in_type(generic_type));
 			}
 
-			for generic_type in &path.generics {
-				result.extend(get_mentioned_type_params_in_type(generic_type));
+			for segment in &path.segments {
+				for generic_type in &segment.generics {
+					result.extend(get_mentioned_type_params_in_type(generic_type));
+				}
 			}
 
 			return result;
@@ -1830,6 +1861,6 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 		| TypeCore::Pointer { inner }
 		| TypeCore::Array { inner, .. } => return get_mentioned_type_params_in_type_core(inner),
 		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
-		TypeCore::ImplTrait { .. } => return Vec::new(), // Already handled above
+		TypeCore::ImplTrait { .. } => return Vec::new(),
 	}
 }

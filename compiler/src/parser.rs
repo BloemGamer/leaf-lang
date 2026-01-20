@@ -375,27 +375,42 @@ impl Spanned for DirectiveNode
 /// Qualified path representing a sequence of identifiers separated by `::`.
 ///
 /// A path is used to reference items across module boundaries and can include
-/// generic type arguments. Paths are fundamental to the type system and are used
-/// for type names, function names, trait references, and more.
+/// generic type arguments at any segment. Paths are fundamental to the type system.
 ///
 /// # Structure
 ///
-/// A path consists of two parts:
-/// - **Segments**: A sequence of identifiers separated by `::` (e.g., `std::collections::Vec`)
-/// - **Generics**: Optional generic type arguments applied to the path (e.g., `::<i32, String>`)
+/// A path consists of segments, where each segment can optionally have generic arguments:
+/// - `Vec::<i32>::new` - generics on first segment
+/// - `std::vec::Vec::<i32>` - generics on last segment
+/// - `Foo::<T>::bar::<U>::baz` - generics on multiple segments
 ///
 /// # Fields
 ///
-/// * `segments` - The identifier segments making up the path. Each segment is a `String`.
-/// * `generics` - Generic type arguments applied to the path. Empty if no generics are used.
+/// * `segments` - The path segments, each potentially with generic arguments
 /// * `span` - Source location information for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Path
 {
-	pub segments: Vec<Ident>,
-	pub generics: Vec<Type>,
+	pub segments: Vec<PathSegment>,
 	#[allow(dead_code)]
 	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+/// A single segment in a path, optionally with generic arguments
+///
+/// # Fields
+///
+/// * `name` - Name of the segment
+/// * `generics` - The generics that are with the name -> `Vec::<i64>`
+/// * `span` - Source location information for error reporting and debugging
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathSegment
+{
+	pub name: Ident,
+	pub generics: Vec<Type>,
+	#[ignored(PartialEq)]
+	#[allow(dead_code)]
 	pub span: Span,
 }
 
@@ -406,126 +421,52 @@ impl Path
 	/// # Arguments
 	/// * `segments` - The identifier segments
 	/// * `span` - Source location
-	///
-	/// # Example
-	/// ```ignore
-	/// # use crate::parser::{Path, Span};
-	/// let path = Path::simple(vec!["std".to_string(), "io".to_string()], Span::default());
-	/// ```
 	#[allow(dead_code)]
-	pub const fn simple(segments: Vec<Ident>, span: Span) -> Self
+	pub fn simple(segments: Vec<Ident>, span: Span) -> Self
 	{
 		return Self {
-			segments,
-			generics: Vec::new(),
+			segments: segments
+				.into_iter()
+				.map(|name| {
+					return PathSegment {
+						span,
+						name,
+						generics: Vec::new(),
+					};
+				})
+				.collect(),
 			span,
 		};
 	}
 
-	/// Checks if this path has generic type arguments.
+	/// Checks if this path has any generic type arguments.
 	///
 	/// # Returns
-	/// `true` if the path has generic arguments, `false` otherwise
+	/// `true` if any segment has generic arguments, `false` otherwise
 	#[allow(dead_code)]
-	pub const fn has_generics(&self) -> bool
+	pub fn has_generics(&self) -> bool
 	{
-		return !self.generics.is_empty();
+		return self.segments.iter().any(|seg| return !seg.generics.is_empty());
 	}
 
-	/// Checks if this path is empty (no segments or generics).
+	/// Checks if this path is empty (no segments).
 	///
 	/// # Returns
 	/// `true` if the path is empty, `false` otherwise
 	#[allow(dead_code)]
 	pub const fn is_empty(&self) -> bool
 	{
-		return !(self.segments.is_empty() && self.generics.is_empty());
+		return self.segments.is_empty();
 	}
 
-	/// Returns the total length (segments + generics).
+	/// Returns the number of segments.
 	///
 	/// # Returns
-	/// The sum of segment count and generic count
+	/// The number of path segments
 	#[allow(dead_code)]
 	pub const fn len(&self) -> usize
 	{
-		return self.segments.len() + self.generics.len();
-	}
-}
-
-/// Component of a path - either a segment or a generic type argument.
-///
-/// This enum is used as the item type when iterating over a `Path` with `PathIter`.
-/// It allows distinguishing between the identifier segments of a path (like `std::vec::Vec`)
-/// and the generic type arguments (like the `i32` in `Vec::<i32>`).
-///
-/// # Variants
-///
-/// * `Segment(&'a Ident)` - A reference to an identifier segment.
-/// * `Generic(&'a Type)` - A reference to a generic type argument.
-///
-/// # Lifetime
-///
-/// The `'a` lifetime ensures that the references to segments and generics remain
-/// valid only as long as the source `Path` exists. This prevents use-after-free
-/// errors when iterating over path components.
-#[allow(dead_code)]
-pub enum PathComponent<'a>
-{
-	Segment(&'a Ident),
-	Generic(&'a Type),
-}
-
-/// Iterator over path components (segments and generics).
-///
-/// When iterating over a `Path`, you get a sequence of `PathComponent` items
-/// that can be either identifier segments or generic type arguments. The iterator
-/// yields segments first, then generics.
-///
-/// # Fields
-///
-/// * `segments` - Iterator over the path's identifier segments.
-/// * `generics` - Iterator over the path's generic type arguments.
-///
-/// # Lifetime
-///
-/// The `'a` lifetime ties the component references back to the original `Path`
-/// that owns the data. Components are borrowed, not owned, so they're only
-/// valid as long as the source `Path` exists.
-pub struct PathIter<'a>
-{
-	segments: std::slice::Iter<'a, Ident>,
-	generics: std::slice::Iter<'a, Type>,
-}
-
-impl<'a> Iterator for PathIter<'a>
-{
-	type Item = PathComponent<'a>;
-
-	fn next(&mut self) -> Option<Self::Item>
-	{
-		if let Some(segment) = self.segments.next() {
-			return Some(PathComponent::Segment(segment));
-		} else {
-			return self
-				.generics
-				.next()
-				.map(|generic| -> PathComponent<'_> { return PathComponent::Generic(generic) });
-		}
-	}
-
-	fn size_hint(&self) -> (usize, Option<usize>)
-	{
-		let len = self.segments.len() + self.generics.len();
-		return (len, Some(len));
-	}
-}
-
-impl<'a> ExactSizeIterator for PathIter<'a>
-{
-	fn len(&self) -> usize
-	{
-		return self.segments.len() + self.generics.len();
+		return self.segments.len();
 	}
 }
 
@@ -537,14 +478,12 @@ impl Path
 	/// An iterator that yields `PathComponent` items representing
 	/// segments and generic type arguments in order.
 	#[allow(dead_code)]
-	pub fn iter(&'_ self) -> PathIter<'_>
+	pub fn iter(&self) -> std::slice::Iter<'_, PathSegment>
 	{
-		return PathIter {
-			segments: self.segments.iter(),
-			generics: self.generics.iter(),
-		};
+		return self.segments.iter();
 	}
 }
+
 /// Function declaration.
 ///
 /// Represents a complete function including its signature and optional body.
@@ -2356,7 +2295,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(token);
 		}
 
-		let token = self.lexer.peek().ok_or_else(|| {
+		let token: Result<&Token, CompileError> = self.lexer.peek().ok_or_else(|| {
 			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
 		});
 
@@ -2500,7 +2439,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			if self.consume(&TokenKind::Semicolon)? {
 				continue;
 			}
-			let decl = self.parse_top_level_decl()?;
+			let decl: TopLevelDecl = self.parse_top_level_decl()?;
 			items.push(decl);
 		}
 
@@ -2797,14 +2736,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		let tok: Token = self.next()?;
-		// let start: Span = tok.span;
 
 		let node: Directive = match tok.kind {
 			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
 			_ => unreachable!("Bug: Token should be a directive"),
 		};
-
-		// let end: Span = self.last_span;
 
 		return Ok(node);
 	}
@@ -2854,12 +2790,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				break;
 			}
 
-			let is_negative = self.consume(&TokenKind::Minus)?;
+			let is_negative: bool = self.consume(&TokenKind::Minus)?;
 
-			let tok_span = self.peek()?.span();
-			let tok_kind = self.peek_kind()?.clone();
+			let tok_span: Span = self.peek()?.span();
+			let tok_kind: TokenKind = self.peek_kind()?.clone();
 
-			let tok = self.next()?;
+			let tok: Token = self.next()?;
 
 			let arg: DirectiveParam = match tok.kind {
 				TokenKind::StringLiteral(s) => {
@@ -3118,7 +3054,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 			}
 			TokenKind::LeftBracket => {
-				self.next()?; // consume the [
+				self.next()?; // [
 
 				let base_type: TypeCore = self.parse_type_core()?;
 
@@ -3160,12 +3096,13 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn get_path(&mut self) -> Result<Path, CompileError>
 	{
 		let start_span: Span = self.peek()?.span();
-		let mut segments: Vec<Ident> = Vec::new();
+		let mut segments: Vec<PathSegment> = Vec::new();
 
 		loop {
 			let tok: Token = self.next()?;
-			match &tok.kind {
-				TokenKind::Identifier(s) => segments.push(s.clone()),
+			let segment_start = tok.span;
+			let name: Ident = match tok.kind {
+				TokenKind::Identifier(s) => s,
 				_ => {
 					return Err(CompileError::ParseError(ParseError::unexpected_token(
 						tok.span,
@@ -3174,39 +3111,43 @@ impl<'s, 'c> Parser<'s, 'c>
 						self.source_index,
 					)));
 				}
-			}
+			};
+
+			let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
+				let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+				self.next()?; // ::
+
+				if self.peek()?.kind == TokenKind::LessThan {
+					self.parse_type_generics()?
+				} else {
+					self.load_checkpoint(checkpoint);
+					Vec::new()
+				}
+			} else {
+				Vec::new()
+			};
+
+			segments.push(PathSegment {
+				name,
+				generics,
+				span: segment_start.merge(&self.last_span),
+			});
 
 			if self.peek()?.kind != TokenKind::DoubleColon {
 				break;
 			}
 
-			let double_colon = self.next()?; // ::
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			self.next()?; // ::
+
 			if !matches!(self.peek()?.kind, TokenKind::Identifier(_)) {
-				self.buffered_token = Some(double_colon);
+				self.load_checkpoint(checkpoint);
 				break;
 			}
 		}
 
-		let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
-			self.next()?; // ::
-
-			if self.peek()?.kind == TokenKind::LessThan {
-				self.parse_type_generics()?
-			} else {
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
-					self.peek()?.span(),
-					Expected::Token(TokenKind::LessThan),
-					self.peek()?.kind.clone(),
-					self.source_index,
-				)));
-			}
-		} else {
-			Vec::new()
-		};
-
 		return Ok(Path {
 			segments,
-			generics,
 			span: start_span.merge(&self.last_span),
 		});
 	}
@@ -3580,7 +3521,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
-			let checkpoint_buffered = self.buffered_token.clone();
+			let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
 			self.next()?; // (
 
 			if let Ok(ty) = self.parse_type()
@@ -3678,8 +3619,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					};
 				}
 				TokenKind::Bang | TokenKind::QuestionMark => {
-					// Handle heap call operators in postfix position
-					let call_type = if self.consume(&TokenKind::Bang)? {
+					let call_type: CallType = if self.consume(&TokenKind::Bang)? {
 						CallType::UserHeap
 					} else if self.consume(&TokenKind::QuestionMark)? {
 						CallType::UserMaybeHeap
@@ -6241,8 +6181,7 @@ impl std::fmt::Display for DirectiveNode
 			write!(f, " ")?;
 			match body {
 				BlockContent::Block(_block) => {
-					// Format block inline or with braces
-					write!(f, "{{ ... }}")?;
+					todo!()
 				}
 				BlockContent::TopLevelBlock(top_level) => {
 					write!(f, "{{ {} items }}", top_level.items.len())?;
@@ -6262,18 +6201,17 @@ impl std::fmt::Display for Path
 			if i > 0 {
 				write!(f, "::")?;
 			}
-			write!(f, "{}", segment)?;
-		}
-
-		if !self.generics.is_empty() {
-			write!(f, "::<")?;
-			for (i, generic) in self.generics.iter().enumerate() {
-				if i > 0 {
-					write!(f, ", ")?;
+			write!(f, "{}", segment.name)?;
+			if !segment.generics.is_empty() {
+				write!(f, "::<")?;
+				for (i, generic) in segment.generics.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", generic)?;
 				}
-				write!(f, "{}", generic)?;
+				write!(f, ">")?;
 			}
-			write!(f, ">")?;
 		}
 
 		return Ok(());
