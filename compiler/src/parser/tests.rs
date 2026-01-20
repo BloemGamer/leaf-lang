@@ -417,8 +417,7 @@ mod tests
 		match result.unwrap() {
 			Expr::Cast { ty, expr, .. } => {
 				match *ty.core {
-					TypeCore::Base { ref path, .. }
-						if path == &Path::simple(vec!["i32".to_string()], Default::default()) => {}
+					TypeCore::Base { ref path, .. } if path.segments.len() == 1 && path.segments[0].name == "i32" => {}
 					_ => panic!("Expected i32 type"),
 				}
 				match *expr {
@@ -973,8 +972,8 @@ mod tests
 		match result.unwrap() {
 			Expr::Call { callee, args, .. } => {
 				match *callee {
-					Expr::Identifier { ref path, .. }
-						if path == &Path::simple(vec!["foo".to_string()], Default::default()) => {}
+					Expr::Identifier { ref path, .. } if path.segments.len() == 1 && path.segments[0].name == "foo" => {
+					}
 					_ => panic!("Expected foo identifier"),
 				}
 				assert_eq!(args.len(), 0);
@@ -991,8 +990,8 @@ mod tests
 		match result.unwrap() {
 			Expr::Call { callee, args, .. } => {
 				match *callee {
-					Expr::Identifier { ref path, .. }
-						if path == &Path::simple(vec!["foo".to_string()], Default::default()) => {}
+					Expr::Identifier { ref path, .. } if path.segments.len() == 1 && path.segments[0].name == "foo" => {
+					}
 					_ => panic!("Expected foo identifier"),
 				}
 				assert_eq!(args.len(), 3);
@@ -1011,8 +1010,8 @@ mod tests
 		match result.unwrap() {
 			Expr::Field { base, name, .. } => {
 				match *base {
-					Expr::Identifier { ref path, .. }
-						if path == &Path::simple(vec!["obj".to_string()], Default::default()) => {}
+					Expr::Identifier { ref path, .. } if path.segments.len() == 1 && path.segments[0].name == "obj" => {
+					}
 					_ => panic!("Expected obj identifier"),
 				}
 				assert_eq!(name, "field");
@@ -1052,8 +1051,8 @@ mod tests
 		match result.unwrap() {
 			Expr::Index { base, index, .. } => {
 				match *base {
-					Expr::Identifier { ref path, .. }
-						if path == &Path::simple(vec!["arr".to_string()], Default::default()) => {}
+					Expr::Identifier { ref path, .. } if path.segments.len() == 1 && path.segments[0].name == "arr" => {
+					}
 					_ => panic!("Expected arr identifier"),
 				}
 				match *index {
@@ -1174,7 +1173,9 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { path, fields, .. } => {
-				assert_eq!(path, Path::simple(vec!["Point".to_string()], Default::default()));
+				assert_eq!(path.segments.len(), 1);
+
+				assert_eq!(path.segments[0].name, "Point");
 				assert_eq!(fields.len(), 0);
 			}
 			_ => panic!("Expected struct init"),
@@ -1188,7 +1189,9 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { path, fields, .. } => {
-				assert_eq!(path, Path::simple(vec!["Point".to_string()], Default::default()));
+				assert_eq!(path.segments.len(), 1);
+
+				assert_eq!(path.segments[0].name, "Point");
 				assert_eq!(fields.len(), 2);
 				assert_eq!(fields[0].0, "x");
 				assert_eq!(fields[1].0, "y");
@@ -1268,7 +1271,7 @@ mod tests
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
-			TypeCore::Base { path, .. } if path == &Path::simple(vec!["i32".to_string()], Default::default()) => (),
+			TypeCore::Base { path, .. } if path.segments.len() == 1 && path.segments[0].name == "i32" => (),
 			_ => panic!("Expected i32 type"),
 		}
 	}
@@ -1284,7 +1287,9 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, generics } => {
-				assert_eq!(path, &Path::simple(vec!["Vec".to_string()], Default::default()));
+				assert_eq!(path.segments.len(), 1);
+
+				assert_eq!(path.segments[0].name, "Vec");
 				assert_eq!(generics.len(), 1);
 			}
 			_ => panic!("Expected generic type"),
@@ -1504,7 +1509,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
-				assert_eq!(s.name, Path::simple(vec!["Empty".to_string()], Default::default()));
+				assert_eq!(s.name.segments.len(), 1);
+
+				assert_eq!(s.name.segments[0].name, "Empty");
 				assert_eq!(s.fields.len(), 0);
 			}
 			_ => panic!("Expected struct declaration"),
@@ -1554,7 +1561,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Union(u) => {
-				assert_eq!(u.name, Path::simple(vec!["Data".to_string()], Default::default()));
+				assert_eq!(u.name.segments.len(), 1);
+
+				assert_eq!(u.name.segments[0].name, "Data");
 				assert_eq!(u.fields.len(), 2);
 			}
 			_ => panic!("Expected union declaration"),
@@ -1572,7 +1581,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Enum(e) => {
-				assert_eq!(e.name, Path::simple(vec!["Color".to_string()], Default::default()));
+				assert_eq!(e.name.segments.len(), 1);
+
+				assert_eq!(e.name.segments[0].name, "Color");
 				assert_eq!(e.variants.len(), 3);
 			}
 			_ => panic!("Expected enum declaration"),
@@ -1606,7 +1617,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Variant(v) => {
-				assert_eq!(v.name, Path::simple(vec!["Option".to_string()], Default::default()));
+				assert_eq!(v.name.segments.len(), 1);
+
+				assert_eq!(v.name.segments[0].name, "Option");
 				assert_eq!(v.variants.len(), 2);
 			}
 			_ => panic!("Expected variant declaration"),
@@ -1624,7 +1637,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::TypeAlias(t) => {
-				assert_eq!(t.name, Path::simple(vec!["Int".to_string()], Default::default()));
+				assert_eq!(t.name.segments.len(), 1);
+
+				assert_eq!(t.name.segments[0].name, "Int");
 			}
 			_ => panic!("Expected type alias declaration"),
 		}
@@ -1641,7 +1656,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Namespace(n) => {
-				assert_eq!(n.name, Path::simple(vec!["std".to_string()], Default::default()));
+				assert_eq!(n.name.segments.len(), 1);
+
+				assert_eq!(n.name.segments[0].name, "std");
 				assert_eq!(n.body.items.len(), 1);
 			}
 			_ => panic!("Expected namespace declaration"),
@@ -1659,7 +1676,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Trait(t) => {
-				assert_eq!(t.name, Path::simple(vec!["Display".to_string()], Default::default()));
+				assert_eq!(t.name.segments.len(), 1);
+
+				assert_eq!(t.name.segments[0].name, "Display");
 				assert_eq!(t.items.len(), 1);
 			}
 			_ => panic!("Expected trait declaration"),
@@ -2192,7 +2211,9 @@ mod tests
 		match &block.stmts[0] {
 			Stmt::Delete { expr, .. } => match expr {
 				Expr::Identifier { path, .. } => {
-					assert_eq!(path, &Path::simple(vec!["ptr".to_string()], Default::default()));
+					assert_eq!(path.segments.len(), 1);
+
+					assert_eq!(path.segments[0].name, "ptr");
 				}
 				_ => panic!("Expected identifier expression"),
 			},
@@ -2428,7 +2449,9 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
 			TypeCore::Base { path, generics } => {
-				assert_eq!(path, &Path::simple(vec!["Vec".to_string()], Default::default()));
+				assert_eq!(path.segments.len(), 1);
+
+				assert_eq!(path.segments[0].name, "Vec");
 				assert_eq!(generics.len(), 1);
 			}
 			_ => panic!("Expected generic type"),
@@ -2975,7 +2998,9 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => match &func.signature.params[0].pattern {
 				Pattern::TypedIdentifier { path, .. } => {
-					assert_eq!(path, &Path::simple(vec!["name".to_string()], Default::default()));
+					assert_eq!(path.segments.len(), 1);
+
+					assert_eq!(path.segments[0].name, "name");
 				}
 				_ => panic!("Expected TypedIdentifier pattern"),
 			},
@@ -4578,9 +4603,9 @@ mod tests
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
 						assert_eq!(path.segments.len(), 3);
-						assert_eq!(path.segments[0], "std");
-						assert_eq!(path.segments[1], "alloc");
-						assert_eq!(path.segments[2], "allocate");
+						assert_eq!(path.segments[0].name, "std");
+						assert_eq!(path.segments[1].name, "alloc");
+						assert_eq!(path.segments[2].name, "allocate");
 					}
 					_ => panic!("Expected identifier"),
 				}
@@ -6187,10 +6212,14 @@ mod tests
 						// First element should be 'a'
 						match &patterns[0] {
 							Pattern::TypedIdentifier { path, ty, .. } => {
-								assert_eq!(path.segments, vec!["a".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "a");
 								match ty.core.as_ref() {
 									TypeCore::Base { path, .. } => {
-										assert_eq!(path.segments, vec!["i32".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "i32");
 									}
 									_ => panic!("Expected base type"),
 								}
@@ -6201,10 +6230,14 @@ mod tests
 						// Second element should be 'b'
 						match &patterns[1] {
 							Pattern::TypedIdentifier { path, ty, .. } => {
-								assert_eq!(path.segments, vec!["b".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "b");
 								match ty.core.as_ref() {
 									TypeCore::Base { path, .. } => {
-										assert_eq!(path.segments, vec!["i32".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "i32");
 									}
 									_ => panic!("Expected base type"),
 								}
@@ -6221,13 +6254,17 @@ mod tests
 						assert_eq!(types.len(), 2);
 						match types[0].core.as_ref() {
 							TypeCore::Base { path, .. } => {
-								assert_eq!(path.segments, vec!["i32".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "i32");
 							}
 							_ => panic!("Expected base type"),
 						}
 						match types[1].core.as_ref() {
 							TypeCore::Base { path, .. } => {
-								assert_eq!(path.segments, vec!["i32".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "i32");
 							}
 							_ => panic!("Expected base type"),
 						}
@@ -6258,7 +6295,9 @@ mod tests
 						// First element is 'a: i32'
 						match &patterns[0] {
 							Pattern::TypedIdentifier { path, .. } => {
-								assert_eq!(path.segments, vec!["a".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "a");
 							}
 							_ => panic!("Expected TypedIdentifier"),
 						}
@@ -6273,14 +6312,18 @@ mod tests
 
 								match &inner_patterns[0] {
 									Pattern::TypedIdentifier { path, .. } => {
-										assert_eq!(path.segments, vec!["b".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "b");
 									}
 									_ => panic!("Expected TypedIdentifier"),
 								}
 
 								match &inner_patterns[1] {
 									Pattern::TypedIdentifier { path, .. } => {
-										assert_eq!(path.segments, vec!["c".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "c");
 									}
 									_ => panic!("Expected TypedIdentifier"),
 								}
@@ -6326,7 +6369,9 @@ mod tests
 				// First param is simple
 				match &func.signature.params[0].pattern {
 					Pattern::TypedIdentifier { path, .. } => {
-						assert_eq!(path.segments, vec!["x".to_string()]);
+						assert_eq!(path.segments.len(), 1);
+
+						assert_eq!(path.segments[0].name, "x");
 					}
 					_ => panic!("Expected TypedIdentifier for first param"),
 				}
@@ -6342,7 +6387,9 @@ mod tests
 				// Third param is simple
 				match &func.signature.params[2].pattern {
 					Pattern::TypedIdentifier { path, .. } => {
-						assert_eq!(path.segments, vec!["y".to_string()]);
+						assert_eq!(path.segments.len(), 1);
+
+						assert_eq!(path.segments[0].name, "y");
 					}
 					_ => panic!("Expected TypedIdentifier for third param"),
 				}
@@ -6394,21 +6441,27 @@ mod tests
 
 					match types[0].core.as_ref() {
 						TypeCore::Base { path, .. } => {
-							assert_eq!(path.segments, vec!["i32".to_string()]);
+							assert_eq!(path.segments.len(), 1);
+
+							assert_eq!(path.segments[0].name, "i32");
 						}
 						_ => panic!("Expected i32"),
 					}
 
 					match types[1].core.as_ref() {
 						TypeCore::Base { path, .. } => {
-							assert_eq!(path.segments, vec!["f64".to_string()]);
+							assert_eq!(path.segments.len(), 1);
+
+							assert_eq!(path.segments[0].name, "f64");
 						}
 						_ => panic!("Expected f64"),
 					}
 
 					match types[2].core.as_ref() {
 						TypeCore::Base { path, .. } => {
-							assert_eq!(path.segments, vec!["bool".to_string()]);
+							assert_eq!(path.segments.len(), 1);
+
+							assert_eq!(path.segments[0].name, "bool");
 						}
 						_ => panic!("Expected bool"),
 					}
@@ -6437,7 +6490,9 @@ mod tests
 						match &patterns[0] {
 							Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
 								TypeCore::Base { path, generics } => {
-									assert_eq!(path.segments, vec!["Vec".to_string()]);
+									assert_eq!(path.segments.len(), 1);
+
+									assert_eq!(path.segments[0].name, "Vec");
 									assert_eq!(generics.len(), 1);
 								}
 								_ => panic!("Expected base type with generics"),
@@ -6599,7 +6654,9 @@ mod tests
 							match pattern {
 								Pattern::TypedIdentifier { ty, .. } => match ty.core.as_ref() {
 									TypeCore::Base { path, .. } => {
-										assert_eq!(path.segments, vec!["T".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "T");
 									}
 									_ => panic!("Expected T type"),
 								},
@@ -6654,14 +6711,18 @@ mod tests
 			Stmt::VariableDecl(var) => {
 				match &var.pattern {
 					Pattern::Struct { path, fields, .. } => {
-						assert_eq!(path.segments, vec!["S".to_string()]);
+						assert_eq!(path.segments.len(), 1);
+
+						assert_eq!(path.segments[0].name, "S");
 						assert_eq!(fields.len(), 2);
 
 						// First field is named: a: i64
 						assert_eq!(fields[0].0, "a");
 						match &fields[0].1 {
 							Pattern::TypedIdentifier { path, .. } => {
-								assert_eq!(path.segments, vec!["a".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "a");
 							}
 							_ => panic!("Expected TypedIdentifier for first field"),
 						}
@@ -6674,14 +6735,18 @@ mod tests
 
 								match &patterns[0] {
 									Pattern::TypedIdentifier { path, .. } => {
-										assert_eq!(path.segments, vec!["b".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "b");
 									}
 									_ => panic!("Expected TypedIdentifier for b"),
 								}
 
 								match &patterns[1] {
 									Pattern::TypedIdentifier { path, .. } => {
-										assert_eq!(path.segments, vec!["c".to_string()]);
+										assert_eq!(path.segments.len(), 1);
+
+										assert_eq!(path.segments[0].name, "c");
 									}
 									_ => panic!("Expected TypedIdentifier for c"),
 								}
@@ -6708,7 +6773,9 @@ mod tests
 			Stmt::VariableDecl(var) => {
 				match &var.pattern {
 					Pattern::Struct { path, fields, .. } => {
-						assert_eq!(path.segments, vec!["S".to_string()]);
+						assert_eq!(path.segments.len(), 1);
+
+						assert_eq!(path.segments[0].name, "S");
 						assert_eq!(fields.len(), 2);
 
 						// First field is named
@@ -6722,7 +6789,9 @@ mod tests
 								fields: inner_fields,
 								..
 							} => {
-								assert_eq!(inner_path.segments, vec!["S".to_string()]);
+								assert_eq!(inner_path.segments.len(), 1);
+
+								assert_eq!(inner_path.segments[0].name, "S");
 								assert_eq!(inner_fields.len(), 2);
 								assert_eq!(inner_fields[0].0, "b");
 								assert_eq!(inner_fields[1].0, "c");
@@ -6857,8 +6926,8 @@ mod tests
 						match &fields[1].1 {
 							Pattern::Struct { path, .. } => {
 								assert_eq!(path.segments.len(), 2);
-								assert_eq!(path.segments[0], "std");
-								assert_eq!(path.segments[1], "Option");
+								assert_eq!(path.segments[0].name, "std");
+								assert_eq!(path.segments[1].name, "Option");
 							}
 							_ => panic!("Expected nested Struct pattern"),
 						}
@@ -6941,7 +7010,9 @@ mod tests
 						assert!(fields[1].0.starts_with("__pos_"));
 						match &fields[1].1 {
 							Pattern::Variant { path, args, .. } => {
-								assert_eq!(path.segments, vec!["Some".to_string()]);
+								assert_eq!(path.segments.len(), 1);
+
+								assert_eq!(path.segments[0].name, "Some");
 								assert_eq!(args.len(), 1);
 							}
 							_ => panic!("Expected Variant pattern"),
@@ -7096,7 +7167,9 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
-				assert_eq!(s.name.segments, vec!["Container".to_string()]);
+				assert_eq!(s.name.segments.len(), 1);
+
+				assert_eq!(s.name.segments[0].name, "Container");
 				assert_eq!(s.fields.len(), 1);
 			}
 			_ => panic!("Expected struct declaration"),

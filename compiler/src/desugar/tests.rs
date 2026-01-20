@@ -2057,7 +2057,10 @@ mod tests
 				Expr::Call { callee, args, .. } => {
 					match *callee {
 						Expr::Identifier { path, .. } => {
-							assert_eq!(path.segments, vec!["Point", "create"]);
+							assert_eq!(
+								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+								vec!["Point", "create"]
+							);
 						}
 						_ => panic!("Expected identifier in callee"),
 					}
@@ -2150,7 +2153,10 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Vec", "create"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Vec", "create"]
+						);
 					}
 					_ => panic!("Expected Vec::new identifier"),
 				},
@@ -2184,7 +2190,10 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Config", "create"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Config", "create"]
+						);
 					}
 					_ => panic!("Expected Config::create identifier"),
 				},
@@ -2227,7 +2236,10 @@ mod tests
 			match output.init.unwrap() {
 				Expr::Call { callee, .. } => match *callee {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["std", "config", "Config", "create"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["std", "config", "Config", "create"]
+						);
 					}
 					_ => panic!("Expected qualified path"),
 				},
@@ -2368,7 +2380,10 @@ mod tests
 					match &var.init {
 						Some(Expr::Call { callee, .. }) => match callee.as_ref() {
 							Expr::Identifier { path, .. } => {
-								assert_eq!(path.segments, vec!["LocalType", "create"]);
+								assert_eq!(
+									path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+									vec!["LocalType", "create"]
+								);
 							}
 							_ => panic!("Expected identifier callee"),
 						},
@@ -2422,7 +2437,10 @@ mod tests
 					// Type should be preserved
 					match ty.core.as_ref() {
 						TypeCore::Base { path, generics } => {
-							assert_eq!(path.segments, vec!["MyType"]);
+							assert_eq!(
+								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+								vec!["MyType"]
+							);
 							assert_eq!(generics.len(), 1);
 						}
 						_ => panic!("Expected base type"),
@@ -2455,7 +2473,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Range", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Range", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2487,7 +2508,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["RangeInclusive", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["RangeInclusive", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2519,7 +2543,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["RangeFrom", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["RangeFrom", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2551,7 +2578,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["RangeTo", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["RangeTo", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2583,7 +2613,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["RangeToInclusive", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["RangeToInclusive", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2615,7 +2648,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["RangeFull", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["RangeFull", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2657,7 +2693,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Range", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Range", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2692,7 +2731,10 @@ mod tests
 			Expr::Call { callee, args, .. } => {
 				match callee.as_ref() {
 					Expr::Identifier { path, .. } => {
-						assert_eq!(path.segments, vec!["Range", "new"]);
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Range", "new"]
+						);
 					}
 					_ => panic!("Expected identifier callee"),
 				}
@@ -2741,7 +2783,10 @@ mod tests
 						Some(Expr::Call { callee, args, .. }) => {
 							match callee.as_ref() {
 								Expr::Identifier { path, .. } => {
-									assert_eq!(path.segments, vec!["Range", "new"]);
+									assert_eq!(
+										path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+										vec!["Range", "new"]
+									);
 								}
 								_ => panic!("Expected Range::new identifier"),
 							}
@@ -2784,7 +2829,10 @@ mod tests
 				Expr::Call { callee, args, .. } => {
 					match callee.as_ref() {
 						Expr::Identifier { path, .. } => {
-							assert_eq!(path.segments, vec!["Range", "new"]);
+							assert_eq!(
+								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+								vec!["Range", "new"]
+							);
 						}
 						_ => panic!("Expected Range::new"),
 					}
@@ -2859,7 +2907,8 @@ mod tests
 
 		// 2. Where clause should contain T: Clone
 		assert_eq!(output.where_clause.len(), 1, "Should have one where constraint");
-		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
 		assert_eq!(output.where_clause[0].bounds.len(), 1);
 		assert!(output.where_clause[0].type_args.is_empty());
 	}
@@ -2931,10 +2980,12 @@ mod tests
 		// Where clause should have T: Clone and U: Send (but not V)
 		assert_eq!(output.where_clause.len(), 2);
 
-		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
 		assert_eq!(output.where_clause[0].bounds.len(), 1);
 
-		assert_eq!(output.where_clause[1].ty.segments, vec!["U"]);
+		assert_eq!(output.where_clause[1].ty.segments.len(), 1);
+		assert_eq!(output.where_clause[1].ty.segments[0].name, "U");
 		assert_eq!(output.where_clause[1].bounds.len(), 1);
 	}
 
@@ -3103,7 +3154,8 @@ mod tests
 
 		// Where clause should be unchanged
 		assert_eq!(output.where_clause.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments, vec!["Vec"]);
+		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments[0].name, "Vec");
 	}
 
 	#[test]
@@ -3139,11 +3191,11 @@ mod tests
 		let has_t_clone = output
 			.where_clause
 			.iter()
-			.any(|w| return w.ty.segments == vec!["T"] && w.bounds.len() == 1);
+			.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "T" && w.bounds.len() == 1);
 		let has_a_alloc = output
 			.where_clause
 			.iter()
-			.any(|w| return w.ty.segments == vec!["A"] && w.bounds.len() == 1);
+			.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "A" && w.bounds.len() == 1);
 
 		assert!(has_t_clone, "Should have T: Clone in where clause");
 		assert!(has_a_alloc, "Should have A: Allocator in where clause");
@@ -3285,7 +3337,8 @@ mod tests
 
 		// Where clause should have T: Clone
 		assert_eq!(output.where_clause.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
 	}
 
 	#[test]
@@ -3395,7 +3448,8 @@ mod tests
 
 		assert!(output.signature.generics[0].bounds.is_empty());
 		assert_eq!(output.signature.where_clause.len(), 1);
-		assert_eq!(output.signature.where_clause[0].ty.segments, vec!["T"]);
+		assert_eq!(output.signature.where_clause[0].ty.segments.len(), 1);
+		assert_eq!(output.signature.where_clause[0].ty.segments[0].name, "T");
 		assert_eq!(output.signature.where_clause[0].bounds.len(), 2);
 	}
 
