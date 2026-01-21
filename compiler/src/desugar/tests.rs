@@ -3465,6 +3465,7 @@ mod tests
 						span: Span::default(),
 					},
 					mutable: false,
+					variadic: false,
 					span: Span::default(),
 				}],
 				return_type: Some(simple_type("T")),

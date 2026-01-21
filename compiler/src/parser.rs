@@ -607,6 +607,7 @@ pub struct Param
 	pub ty: Type,
 	pub pattern: Pattern,
 	pub mutable: bool,
+	pub variadic: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -5159,6 +5160,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			let loop_span: Span = self.peek()?.span();
+
 			match self.peek_kind()? {
 				TokenKind::Ampersand => {
 					self.next()?; // &
@@ -5189,6 +5191,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					params.push(Param {
 						ty: self_type,
 						mutable,
+						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
@@ -5215,6 +5218,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					params.push(Param {
 						ty: self_type,
 						mutable: false,
+						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
@@ -5242,15 +5246,48 @@ impl<'s, 'c> Parser<'s, 'c>
 					params.push(Param {
 						ty: self_type,
 						mutable: true,
+						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
 					});
 				}
 
+				TokenKind::Ellipsis => {
+					let span: Span = self.next()?.span(); // ...
+
+					if !self.at(&TokenKind::RightParen)? {
+						return Err(CompileError::ParseError(ParseError::generic(
+							loop_span,
+							"variadic parameter (...) must be the last parameter",
+							self.source_index,
+						)));
+					}
+
+					params.push(Param {
+						ty: Type {
+							modifiers: vec![],
+							core: Box::new(TypeCore::Base {
+								path: Path::simple(vec!["_".to_string()], span),
+								generics: vec![],
+							}),
+							span,
+						},
+						pattern: Pattern::Wildcard {
+							span: loop_span,
+							ty: None,
+						},
+						mutable: false,
+						variadic: true,
+						span: loop_span.merge(&self.last_span),
+					});
+
+					break;
+				}
+
 				_ => {
 					let pattern: Pattern = self.parse_pattern()?;
 
-					let ty = if let Some(extracted_ty) = extract_type_from_pattern(&pattern) {
+					let ty: Type = if let Some(extracted_ty) = extract_type_from_pattern(&pattern) {
 						extracted_ty
 					} else {
 						match &pattern {
@@ -5281,6 +5318,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					params.push(Param {
 						mutable: false,
 						ty,
+						variadic: false,
 						pattern,
 						span: loop_span.merge(&self.last_span),
 					});
@@ -6440,10 +6478,14 @@ impl fmt::Display for Param
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
+		if self.variadic {
+			return write!(f, "...");
+		}
+
 		if self.mutable {
 			write!(f, "mut ")?;
 		}
-		return write!(f, "{}", self.pattern); // not displaying type because the pattern will already show the type, and the type is just for internal use
+		return write!(f, "{}", self.pattern);
 	}
 }
 

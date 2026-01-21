@@ -212,6 +212,12 @@ impl Desugarer
 
 		for param in func.signature.params {
 			let param_span: Span = param.span();
+
+			if param.variadic {
+				new_params.push(param);
+				continue;
+			}
+
 			match param.pattern {
 				Pattern::TypedIdentifier { .. } => {
 					new_params.push(param);
@@ -228,6 +234,7 @@ impl Desugarer
 							span: param_span,
 						},
 						mutable: param.mutable,
+						variadic: param.variadic,
 						ty: param.ty,
 						span: param_span,
 					});
