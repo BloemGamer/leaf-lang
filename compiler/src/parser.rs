@@ -4463,7 +4463,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									fields.push((var_name, pattern));
 								} else {
 									let pattern: Pattern = self.parse_pattern()?;
-									fields.push((format!("__pos_{}", fields.len()), pattern));
+									fields.push((format!("__pos_{}", fields.len()), pattern)); // TODO: Fix this one, because positional arguments are not supported
 								}
 							} else {
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
