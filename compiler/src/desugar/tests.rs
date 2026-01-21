@@ -1004,7 +1004,9 @@ mod tests
 				),
 				("y".into(), int_lit(2)),
 			],
+			base: None,
 			span: Span::default(),
+			has_rest: false,
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
@@ -1439,6 +1441,7 @@ mod tests
 			pattern: Pattern::Struct {
 				path: Path::simple(vec!["Point".into()], Span::default()),
 				fields: vec![("x".into(), typed_ident_pattern("x_val", "i32"))],
+				has_rest: false,
 				span: Span::default(),
 			},
 			expr: ident("point"),

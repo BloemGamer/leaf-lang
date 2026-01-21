@@ -312,6 +312,7 @@ pub enum Modifier
 /// * `Import` - Import a file: `@import "file.rs"`
 /// * `Use` - Use a module path: `@use std::vec`
 /// * `Custom` - Custom directive with name and arguments
+/// * `ValidateStructPattern` Internal for validating if a struct pattern is valid
 #[derive(Debug, Clone, PartialEq)]
 pub enum Directive
 {
@@ -321,6 +322,12 @@ pub enum Directive
 	{
 		name: Ident,
 		params: Vec<DirectiveParam>,
+	},
+	ValidateStructPattern
+	{
+		struct_path: Path,
+		pattern_fields: Vec<String>,
+		has_rest: bool,
 	},
 }
 
@@ -839,6 +846,8 @@ pub enum Expr
 	{
 		path: Path,
 		fields: Vec<(Ident, Expr)>,
+		base: Option<Box<Expr>>,
+		has_rest: bool,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -1509,6 +1518,7 @@ pub enum Pattern
 	{
 		path: Path,
 		fields: Vec<(Ident, Pattern)>,
+		has_rest: bool,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -3792,10 +3802,23 @@ impl<'s, 'c> Parser<'s, 'c>
 					if is_struct {
 						self.next()?; // {
 						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
+
+						let (base, has_rest) = if self.consume(&TokenKind::DotDot)? {
+							if self.at(&TokenKind::RightBrace)? {
+								(None, true)
+							} else {
+								(Some(Box::new(self.parse_expr()?)), false)
+							}
+						} else {
+							(None, false)
+						};
+
 						self.expect(&TokenKind::RightBrace)?;
 						return Ok(Expr::StructInit {
 							path,
 							fields,
+							base,
+							has_rest,
 							span: span.merge(&self.last_span),
 						});
 					} else {
@@ -4083,13 +4106,17 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, CompileError>
 	{
-		if self.at(&TokenKind::RightBrace)? {
+		if self.at(&TokenKind::RightBrace)? || self.at(&TokenKind::DotDot)? {
 			return Ok(Vec::new());
 		}
 
 		let mut fields: Vec<(String, Expr)> = Vec::new();
 
 		loop {
+			if self.at(&TokenKind::DotDot)? {
+				break;
+			}
+
 			let name_tok: Token = self.next()?;
 			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
 				str
@@ -4116,7 +4143,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			if !self.consume(&TokenKind::Comma)? {
 				break;
 			}
-			if self.at(&TokenKind::RightBrace)? {
+			if self.at(&TokenKind::RightBrace)? || self.at(&TokenKind::DotDot)? {
 				break;
 			}
 		}
@@ -4298,9 +4325,22 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else if self.consume(&TokenKind::LeftBrace)? {
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
+					let mut has_rest: bool = false;
 
 					if !self.at(&TokenKind::RightBrace)? {
 						loop {
+							if self.consume(&TokenKind::DotDot)? {
+								has_rest = true;
+								if !self.at(&TokenKind::RightBrace)? {
+									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										self.peek()?.span(),
+										".. must be the last element in a struct pattern",
+										self.source_index,
+									)));
+								}
+								break;
+							}
+
 							if self.at(&TokenKind::LeftParen)? {
 								let pattern: Pattern = self.parse_pattern()?;
 								fields.push((format!("__pos_{}", fields.len()), pattern));
@@ -4447,6 +4487,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(Pattern::Struct {
 						path,
 						fields,
+						has_rest,
 						span: span.merge(&self.last_span),
 					});
 				} else if self.at(&TokenKind::Colon)? {
@@ -6380,6 +6421,26 @@ impl std::fmt::Display for Directive
 				}
 				return Ok(());
 			}
+			Directive::ValidateStructPattern {
+				struct_path,
+				pattern_fields,
+				has_rest,
+			} => {
+				write!(f, "@#validate_struct_pattern({struct_path}{{")?;
+				for (i, p) in pattern_fields.iter().enumerate() {
+					if i > 0 {
+						write!(f, ", ")?;
+					}
+					write!(f, "{}", p)?;
+				}
+				if *has_rest {
+					if !pattern_fields.is_empty() {
+						write!(f, ", ")?;
+					}
+					write!(f, "..")?;
+				}
+				return write!(f, "}})");
+			}
 		}
 	}
 }
@@ -6652,13 +6713,21 @@ impl fmt::Display for Pattern
 				}
 				return write!(f, ")");
 			}
-			Pattern::Struct { path, fields, .. } => {
+			Pattern::Struct {
+				path, fields, has_rest, ..
+			} => {
 				write!(f, "{} {{", path)?;
 				for (i, (name, pat)) in fields.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
 					}
 					write!(f, "{}: {}", name, pat)?;
+				}
+				if *has_rest {
+					if !fields.is_empty() {
+						write!(f, ", ")?;
+					}
+					write!(f, "..")?;
 				}
 				return write!(f, "}}");
 			}
@@ -6756,13 +6825,30 @@ impl fmt::Display for Expr
 				return write!(f, ")");
 			}
 			Expr::Array(arr) => return write!(f, "{}", arr),
-			Expr::StructInit { path, fields, .. } => {
+			Expr::StructInit {
+				path,
+				fields,
+				base,
+				has_rest,
+				..
+			} => {
 				write!(f, "{} {{", path)?;
 				for (i, (name, expr)) in fields.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
 					}
 					write!(f, "{} = {}", name, expr)?;
+				}
+				if let Some(base_expr) = base {
+					if !fields.is_empty() {
+						write!(f, ", ")?;
+					}
+					write!(f, "..{}", base_expr)?;
+				} else if *has_rest {
+					if !fields.is_empty() {
+						write!(f, ", ")?;
+					}
+					write!(f, "..")?;
 				}
 				return write!(f, "}}");
 			}
@@ -7171,7 +7257,6 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 		}
 		Stmt::Block(block) => return write_block(f, w, block),
 		Stmt::Directive(directive_node) => {
-			w.indent();
 			write!(f, "{}", directive_node)?;
 			if directive_node.body.is_none() {
 				write!(f, ";")?;

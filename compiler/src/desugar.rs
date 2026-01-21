@@ -4,7 +4,7 @@ use crate::{
 	CompileError,
 	lexer::{Span, Spanned},
 	parser::{
-		ArrayLiteral, AssignOp, Block, BlockContent, CallType, DirectiveNode, Expr, FuncBound, FunctionDecl,
+		ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound, FunctionDecl,
 		FunctionSignature, GenericArg, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, PathSegment, Pattern,
 		Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
 		VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
@@ -521,7 +521,7 @@ impl Desugarer
 						let var_decls = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
 
 						for var_decl in var_decls {
-							stmts.push(Stmt::VariableDecl(var_decl));
+							stmts.push(var_decl);
 						}
 					} else {
 						stmts.push(Stmt::VariableDecl(self.desugar_variable_decl(var)?));
@@ -633,10 +633,7 @@ impl Desugarer
 						));
 					})?;
 
-					let var_decls: Vec<VariableDecl> =
-						self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
-
-					let stmts: Vec<Stmt> = var_decls.into_iter().map(Stmt::VariableDecl).collect();
+					let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
 
 					Stmt::Block(Block {
 						stmts,
@@ -1206,13 +1203,24 @@ impl Desugarer
 
 			Expr::Array(array_lit) => Expr::Array(self.desugar_array_literal(array_lit)?),
 
-			Expr::StructInit { path, fields, span } => Expr::StructInit {
+			Expr::StructInit {
+				path,
+				fields,
+				span,
+				base,
+				has_rest,
+			} => Expr::StructInit {
 				path,
 				fields: fields
 					.into_iter()
 					.map(|(name, expr)| return Ok((name, self.desugar_expr(expr)?)))
 					.collect::<Result<Vec<_>, _>>()?,
+				base: base
+					.map(|expr| return self.desugar_expr(*expr))
+					.transpose()?
+					.map(Box::new),
 				span,
+				has_rest,
 			},
 
 			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block)?)),
@@ -1473,13 +1481,19 @@ impl Desugarer
 				}
 			}
 
-			Pattern::Struct { path, fields, span } => Pattern::Struct {
+			Pattern::Struct {
+				path,
+				fields,
+				span,
+				has_rest,
+			} => Pattern::Struct {
 				path,
 				fields: fields
 					.into_iter()
 					.map(|(name, pat)| return Ok((name, self.desugar_pattern(pat)?)))
 					.collect::<Result<Vec<_>, _>>()?,
 				span,
+				has_rest,
 			},
 
 			Pattern::Range(range) => Pattern::Range(range),
@@ -1580,9 +1594,13 @@ impl Desugarer
 			));
 		})?;
 
-		let stmts: Vec<VariableDecl> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+		let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
 
-		return Ok(stmts.into_iter().next().expect("this should never be None"));
+		if let Some(Stmt::VariableDecl(var_decl)) = stmts.into_iter().next() {
+			return Ok(var_decl);
+		}
+
+		unreachable!("desugar_pattern_to_statements should always return at least one statement");
 	}
 
 	fn desugar_pattern_to_statements(
@@ -1591,11 +1609,11 @@ impl Desugarer
 		init: Expr,
 		span: Span,
 		comp_const: bool,
-	) -> Result<Vec<VariableDecl>, CompileError>
+	) -> Result<Vec<Stmt>, CompileError>
 	{
-		let mut statements = Vec::new();
+		let mut statements: Vec<Stmt> = Vec::new();
 
-		let is_simple_binding = matches!(pattern, Pattern::TypedIdentifier { .. });
+		let is_simple_binding: bool = matches!(pattern, Pattern::TypedIdentifier { .. });
 
 		if is_simple_binding {
 			if let Pattern::TypedIdentifier {
@@ -1605,7 +1623,7 @@ impl Desugarer
 				span: id_span,
 			} = pattern
 			{
-				statements.push(VariableDecl {
+				statements.push(Stmt::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path,
 						ty,
@@ -1615,7 +1633,7 @@ impl Desugarer
 					init: Some(self.desugar_expr(init)?),
 					comp_const,
 					span: id_span,
-				});
+				}));
 			}
 			return Ok(statements);
 		}
@@ -1628,10 +1646,10 @@ impl Desugarer
 			));
 		})?;
 
-		let temp = self.gen_temp("pattern");
-		let temp_span = init.span();
+		let temp: String = self.gen_temp("pattern");
+		let temp_span: Span = init.span();
 
-		let temp_decl = VariableDecl {
+		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp.clone()], temp_span),
 				ty: temp_type,
@@ -1641,16 +1659,31 @@ impl Desugarer
 			init: Some(self.desugar_expr(init)?),
 			comp_const,
 			span,
-		};
+		});
 
 		statements.push(temp_decl);
 
 		match pattern {
 			Pattern::Struct {
-				path: _,
+				path,
 				fields,
 				span: pattern_span,
+				has_rest,
 			} => {
+				let field_names: Vec<String> = fields.iter().map(|(name, _)| return name.clone()).collect();
+
+				let validation_directive = Stmt::Directive(DirectiveNode {
+					directive: Directive::ValidateStructPattern {
+						struct_path: path,
+						pattern_fields: field_names,
+						has_rest,
+					},
+					body: None,
+					span: pattern_span,
+				});
+
+				statements.push(validation_directive);
+
 				for (field_name, field_pattern) in fields {
 					let field_expr: Expr = Expr::Field {
 						base: Box::new(Expr::Identifier {
@@ -1661,7 +1694,7 @@ impl Desugarer
 						span: pattern_span,
 					};
 
-					let nested_stmts: Vec<VariableDecl> =
+					let nested_stmts: Vec<Stmt> =
 						self.desugar_pattern_to_statements(field_pattern, field_expr, pattern_span, comp_const)?;
 
 					statements.extend(nested_stmts);
@@ -1729,16 +1762,32 @@ impl Desugarer
 						span: tuple_span,
 					};
 
-					let nested_stmts = self.desugar_assignment_target(elem, index_expr, span)?;
+					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(elem, index_expr, span)?;
 					statements.extend(nested_stmts);
 				}
 			}
 
 			Expr::StructInit {
-				path: _,
+				path,
 				fields,
 				span: struct_span,
+				base,
+				has_rest,
 			} => {
+				assert!(base.is_none());
+				let field_names: Vec<String> = fields.iter().map(|(name, _)| return name.clone()).collect();
+
+				let validation_directive = Stmt::Directive(DirectiveNode {
+					directive: Directive::ValidateStructPattern {
+						struct_path: path,
+						pattern_fields: field_names,
+						has_rest,
+					},
+					body: None,
+					span: struct_span,
+				});
+
+				statements.push(validation_directive);
 				for (field_name, field_expr) in fields {
 					let field_access = Expr::Field {
 						base: Box::new(source.clone()),
@@ -1746,7 +1795,7 @@ impl Desugarer
 						span: struct_span,
 					};
 
-					let nested_stmts = self.desugar_assignment_target(field_expr, field_access, span)?;
+					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(field_expr, field_access, span)?;
 					statements.extend(nested_stmts);
 				}
 			}
@@ -1769,12 +1818,10 @@ fn get_mentioned_type_params(path: &Path) -> Vec<String>
 {
 	let mut result = Vec::new();
 
-	// Check if this is a single-segment path with no generics anywhere
 	if path.segments.len() == 1 && path.segments[0].generics.is_empty() {
 		result.push(path.segments[0].name.clone());
 	}
 
-	// Collect from segment generics (turbofish)
 	for segment in &path.segments {
 		for generic_type in &segment.generics {
 			result.extend(get_mentioned_type_params_in_type(generic_type));
@@ -1790,17 +1837,14 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 		TypeCore::Base { path, generics } => {
 			let mut result = Vec::new();
 
-			// Single segment with no generics = type parameter
 			if path.segments.len() == 1 && generics.is_empty() && path.segments[0].generics.is_empty() {
 				result.push(path.segments[0].name.clone());
 			}
 
-			// Collect from type-level generics
 			for generic_type in generics {
 				result.extend(get_mentioned_type_params_in_type(generic_type));
 			}
 
-			// Collect from path segment generics (turbofish)
 			for segment in &path.segments {
 				for generic_type in &segment.generics {
 					result.extend(get_mentioned_type_params_in_type(generic_type));
@@ -1809,7 +1853,6 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 
 			return result;
 		}
-		// ... rest stays the same
 		TypeCore::Reference { inner, .. }
 		| TypeCore::Mutable { inner }
 		| TypeCore::Pointer { inner }
