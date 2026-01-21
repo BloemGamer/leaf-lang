@@ -581,6 +581,9 @@ pub enum TokenKind
 	#[reserved]
 	#[keyword("defer")]
 	Defer,
+	#[reserved]
+	#[keyword("yield")]
+	Yield,
 }
 
 /// Compiler directive types.
