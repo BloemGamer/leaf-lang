@@ -7760,7 +7760,11 @@ mod tests
 		let input = "Point { .. }";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
-		// println!("{}\n{:#?}", result.clone().unwrap(), result.clone().unwrap());
+		println!(
+			"{}\n------------------------\n{:#?}",
+			result.clone().unwrap(),
+			result.clone().unwrap()
+		);
 		match result.unwrap() {
 			Expr::StructInit {
 				fields, base, has_rest, ..

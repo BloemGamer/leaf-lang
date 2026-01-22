@@ -3799,6 +3799,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next()?; // {
 
 					let is_struct: bool = self.at(&TokenKind::RightBrace)?
+						|| self.at(&TokenKind::DotDot)?
 						|| (matches!(self.peek_kind()?, TokenKind::Identifier(_))
 							&& self.lookahead_for_struct_field()?);
 
@@ -3808,6 +3809,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					if is_struct {
 						self.next()?; // {
+
 						let fields: Vec<(String, Expr)> = self.parse_struct_fields()?;
 
 						let (base, has_rest) = if self.consume(&TokenKind::DotDot)? {
@@ -4083,8 +4085,10 @@ impl<'s, 'c> Parser<'s, 'c>
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
 			self.next()?; // identifier
 
-			let is_struct_field: bool =
-				self.at(&TokenKind::Arrow)? || self.at(&TokenKind::Comma)? || self.at(&TokenKind::RightBrace)?;
+			let is_struct_field: bool = self.at(&TokenKind::Arrow)?
+				|| self.at(&TokenKind::Comma)?
+				|| self.at(&TokenKind::RightBrace)?
+				|| self.at(&TokenKind::DotDot)?;
 
 			self.lexer = checkpoint;
 			return Ok(is_struct_field);
