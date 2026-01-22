@@ -293,6 +293,7 @@ enum DeclKind
 /// * `Volatile` - Volatile memory access
 /// * `Directive` - Custom compiler directive
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Modifier
 {
 	Pub,
@@ -314,6 +315,7 @@ pub enum Modifier
 /// * `Custom` - Custom directive with name and arguments
 /// * `ValidateStructPattern` Internal for validating if a struct pattern is valid
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Directive
 {
 	Import(String),
@@ -328,6 +330,11 @@ pub enum Directive
 		struct_path: Path,
 		pattern_fields: Vec<String>,
 		has_rest: bool,
+	},
+	ValidateType
+	{
+		ty: Type,
+		expr: Expr,
 	},
 }
 
@@ -6354,6 +6361,9 @@ impl std::fmt::Display for Directive
 				}
 				return write!(f, "}})");
 			}
+			Directive::ValidateType { ty, expr } => {
+				return write!(f, "@#validate_type({} == #typeof({}))", ty, expr);
+			}
 		}
 	}
 }
@@ -7174,7 +7184,6 @@ fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: 
 			if directive_node.body.is_none() {
 				write!(f, ";")?;
 			}
-			writeln!(f)?;
 			return Ok(());
 		}
 	}

@@ -1706,7 +1706,22 @@ impl Desugarer
 				statements.push(validation_directive);
 
 				for (field_name, field_pattern) in fields {
-					if matches!(field_pattern, Pattern::Wildcard { .. }) {
+					if let Pattern::Wildcard { ty, span } = field_pattern {
+						if let Some(wildcard_ty) = ty {
+							let validation_directive = Stmt::Directive(DirectiveNode {
+								directive: Directive::ValidateType {
+									ty: wildcard_ty,
+									expr: Expr::Identifier {
+										path: Path::simple(vec![temp.clone()], temp_span),
+										span: temp_span,
+									},
+								},
+								body: None,
+								span,
+							});
+
+							statements.push(validation_directive);
+						}
 						continue;
 					}
 
@@ -1744,6 +1759,24 @@ impl Desugarer
 						self.desugar_pattern_to_statements(elem_pattern, index_expr, pattern_span, comp_const)?;
 
 					statements.extend(nested_stmts);
+				}
+			}
+
+			Pattern::Wildcard { ty, span } => {
+				if let Some(wildcard_ty) = ty {
+					let validation_directive = Stmt::Directive(DirectiveNode {
+						directive: Directive::ValidateType {
+							ty: wildcard_ty,
+							expr: Expr::Identifier {
+								path: Path::simple(vec![temp], temp_span),
+								span: temp_span,
+							},
+						},
+						body: None,
+						span,
+					});
+
+					statements.push(validation_directive);
 				}
 			}
 
