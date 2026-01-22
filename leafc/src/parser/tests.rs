@@ -7730,7 +7730,7 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 3);
-				assert!(s.fields.iter().all(|(_, _, default)| default.is_some()));
+				assert!(s.fields.iter().all(|(_, _, default)| return default.is_some()));
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -7820,7 +7820,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Identifier { path, .. } => {
-				assert!(path.segments.iter().any(|seg| !seg.generics.is_empty()));
+				assert!(path.segments.iter().any(|seg| return !seg.generics.is_empty()));
 			}
 			_ => panic!("Expected identifier"),
 		}

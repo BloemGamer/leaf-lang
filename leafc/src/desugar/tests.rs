@@ -3983,7 +3983,7 @@ mod tests
 
 		// Body should have the destructuring
 		if let Some(body) = output.body {
-			assert!(body.stmts.len() > 0);
+			assert!(!body.stmts.is_empty());
 		}
 	}
 
