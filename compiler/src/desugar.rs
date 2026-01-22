@@ -178,6 +178,18 @@ impl Desugarer
 			.map(|item| return self.desugar_top_level_decl(item))
 			.collect::<Result<Vec<_>, _>>()?;
 
+		#[allow(clippy::debug_assert_with_mut_call)]
+		{
+			debug_assert_eq!(
+				// checks if the desugar function is called twice, the output will be the same, so if everything is fully desugared
+				items,
+				items
+					.clone()
+					.into_iter()
+					.map(|item| return self.desugar_top_level_decl(item))
+					.collect::<Result<Vec<_>, _>>()?
+			);
+		}
 		return Ok(Program {
 			items,
 			span: program.span,
