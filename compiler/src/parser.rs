@@ -4074,10 +4074,10 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
-			self.next()?; // identifier(_)
+			self.next()?; // identifier
 
 			let is_struct_field: bool =
-				self.at(&TokenKind::Equals)? || self.at(&TokenKind::Comma)? || self.at(&TokenKind::RightBrace)?;
+				self.at(&TokenKind::Arrow)? || self.at(&TokenKind::Comma)? || self.at(&TokenKind::RightBrace)?;
 
 			self.lexer = checkpoint;
 			return Ok(is_struct_field);
@@ -4129,7 +4129,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let value: Expr = if self.consume(&TokenKind::Equals)? {
+			let value: Expr = if self.consume(&TokenKind::Arrow)? {
 				self.parse_expr()?
 			} else {
 				Expr::Identifier {
@@ -4304,7 +4304,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				if self.consume(&TokenKind::LeftParen)? {
 					let mut args: Vec<Pattern> = Vec::new();
-
 					if !self.at(&TokenKind::RightParen)? {
 						loop {
 							args.push(self.parse_pattern()?);
@@ -4316,7 +4315,6 @@ impl<'s, 'c> Parser<'s, 'c>
 							}
 						}
 					}
-
 					self.expect(&TokenKind::RightParen)?;
 					return Ok(Pattern::Variant {
 						path,
@@ -4341,138 +4339,53 @@ impl<'s, 'c> Parser<'s, 'c>
 								break;
 							}
 
-							if self.at(&TokenKind::LeftParen)? {
-								let pattern: Pattern = self.parse_pattern()?;
-								fields.push((format!("__pos_{}", fields.len()), pattern));
-							} else if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
-								let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
-
-								self.next()?; // identifier
-								let next_is_colon_or_equals: bool =
-									self.at(&TokenKind::Colon)? || self.at(&TokenKind::Equals)?;
-
-								self.load_checkpoint(checkpoint);
-
-								if next_is_colon_or_equals {
-									let var_name: Ident = if let TokenKind::Identifier(name) = self.next()?.kind {
-										name
-									} else {
-										return Err(CompileError::ParseError(ParseError::unexpected_token(
-											self.last_span,
-											Expected::Identifier,
-											self.peek()?.kind.clone(),
-											self.source_index,
-										)));
-									};
-
-									let pattern: Pattern = if self.consume(&TokenKind::Equals)? {
-										let pat = self.parse_pattern()?;
-
-										if matches!(pat, Pattern::TypedIdentifier { .. }) {
-											return Err(CompileError::ParseError(ParseError::invalid_pattern(
-												pat.span(),
-												"type annotations are not allowed after '=' in struct patterns. Use 'var: Type = field' syntax instead",
-												self.source_index,
-											)));
-										}
-
-										pat
-									} else if self.consume(&TokenKind::Colon)? {
-										let ty: Type = self.parse_type()?;
-
-										if self.consume(&TokenKind::Equals)? {
-											let struct_member: Ident = if let TokenKind::Identifier(name) =
-												self.next()?.kind
-											{
-												name
-											} else {
-												return Err(CompileError::ParseError(ParseError::unexpected_token(
-													self.last_span,
-													Expected::Identifier,
-													self.peek()?.kind.clone(),
-													self.source_index,
-												)));
-											};
-
-											let call_constructor: Option<CallType> =
-												if self.consume(&TokenKind::Bang)? {
-													self.expect(&TokenKind::LeftParen)?;
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::UserHeap)
-												} else if self.consume(&TokenKind::QuestionMark)? {
-													self.expect(&TokenKind::LeftParen)?;
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::UserMaybeHeap)
-												} else if self.consume(&TokenKind::LeftParen)? {
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::Regular)
-												} else {
-													None
-												};
-
-											fields.push((
-												struct_member,
-												Pattern::TypedIdentifier {
-													path: Path::simple(vec![var_name], self.last_span),
-													ty,
-													call_constructor,
-													span: self.last_span,
-												},
-											));
-
-											if !self.consume(&TokenKind::Comma)? {
-												break;
-											}
-											if self.at(&TokenKind::RightBrace)? {
-												break;
-											}
-											continue;
-										} else {
-											let call_constructor: Option<CallType> =
-												if self.consume(&TokenKind::Bang)? {
-													self.expect(&TokenKind::LeftParen)?;
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::UserHeap)
-												} else if self.consume(&TokenKind::QuestionMark)? {
-													self.expect(&TokenKind::LeftParen)?;
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::UserMaybeHeap)
-												} else if self.consume(&TokenKind::LeftParen)? {
-													self.expect(&TokenKind::RightParen)?;
-													Some(CallType::Regular)
-												} else {
-													None
-												};
-
-											Pattern::TypedIdentifier {
-												path: Path::simple(vec![var_name.clone()], self.last_span),
-												ty,
-												call_constructor,
-												span: self.last_span,
-											}
-										}
-									} else {
-										return Err(CompileError::ParseError(ParseError::unexpected_token(
-											self.last_span,
-											Expected::OneOf(vec![TokenKind::Equals, TokenKind::Colon]),
-											self.peek()?.kind.clone(),
-											self.source_index,
-										)));
-									};
-
-									fields.push((var_name, pattern));
-								} else {
-									let pattern: Pattern = self.parse_pattern()?;
-									fields.push((format!("__pos_{}", fields.len()), pattern)); // TODO: Fix this one, because positional arguments are not supported
-								}
+							let field_tok: Token = self.next()?;
+							let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
+								name
 							} else {
 								return Err(CompileError::ParseError(ParseError::unexpected_token(
-									self.peek()?.span(),
-									Expected::Description("pattern (identifier or '(')".to_string()),
-									self.peek()?.kind.clone(),
+									field_tok.span,
+									Expected::Identifier,
+									field_tok.kind,
 									self.source_index,
 								)));
-							}
+							};
+
+							let pattern: Pattern = if self.consume(&TokenKind::Arrow)? {
+								self.parse_pattern()?
+							} else if self.consume(&TokenKind::Colon)? {
+								let ty: Type = self.parse_type()?;
+
+								let call_constructor = if self.consume(&TokenKind::Bang)? {
+									self.expect(&TokenKind::LeftParen)?;
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::UserHeap)
+								} else if self.consume(&TokenKind::QuestionMark)? {
+									self.expect(&TokenKind::LeftParen)?;
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::UserMaybeHeap)
+								} else if self.consume(&TokenKind::LeftParen)? {
+									self.expect(&TokenKind::RightParen)?;
+									Some(CallType::Regular)
+								} else {
+									None
+								};
+
+								Pattern::TypedIdentifier {
+									path: Path::simple(vec![field_name.clone()], field_tok.span),
+									ty,
+									call_constructor,
+									span: field_tok.span.merge(&self.last_span),
+								}
+							} else {
+								Pattern::Variant {
+									path: Path::simple(vec![field_name.clone()], field_tok.span),
+									args: Vec::new(),
+									span: field_tok.span,
+								}
+							};
+
+							fields.push((field_name, pattern));
 
 							if !self.consume(&TokenKind::Comma)? {
 								break;
@@ -4490,7 +4403,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						has_rest,
 						span: span.merge(&self.last_span),
 					});
-				} else if self.at(&TokenKind::Colon)? {
+				} else if self.consume(&TokenKind::Colon)? {
 					if path.len() != 1 {
 						return Err(CompileError::ParseError(ParseError::invalid_pattern(
 							tok.span,
@@ -4499,7 +4412,6 @@ impl<'s, 'c> Parser<'s, 'c>
 						)));
 					}
 
-					self.next()?; // :
 					let ty: Type = self.parse_type()?;
 
 					let call_constructor: Option<CallType> = if self.consume(&TokenKind::Bang)? {
@@ -6721,7 +6633,7 @@ impl fmt::Display for Pattern
 					if i > 0 {
 						write!(f, ", ")?;
 					}
-					write!(f, "{}: {}", name, pat)?;
+					write!(f, "{} -> {}", name, pat)?;
 				}
 				if *has_rest {
 					if !fields.is_empty() {
@@ -6837,7 +6749,7 @@ impl fmt::Display for Expr
 					if i > 0 {
 						write!(f, ", ")?;
 					}
-					write!(f, "{} = {}", name, expr)?;
+					write!(f, "{} -> {}", name, expr)?;
 				}
 				if let Some(base_expr) = base {
 					if !fields.is_empty() {
