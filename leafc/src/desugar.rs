@@ -1453,6 +1453,21 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_pattern(&mut self, pattern: Pattern) -> Result<Pattern, CompileError>
 	{
+		let expanded: Vec<Pattern> = self.expand_or_patterns(pattern);
+
+		let pattern: Pattern = if expanded.len() > 1 {
+			let span: Span = expanded[0].span();
+			Pattern::Or {
+				patterns: expanded,
+				span,
+			}
+		} else {
+			expanded
+				.into_iter()
+				.next()
+				.expect("expand_or_patterns always returns at least one pattern")
+		};
+
 		return Ok(match pattern {
 			Pattern::Wildcard { span, ty } => Pattern::Wildcard { span, ty },
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
@@ -1511,16 +1526,10 @@ impl Desugarer
 			Pattern::Range(range) => Pattern::Range(range),
 
 			Pattern::Or { patterns, span } => {
-				let mut flattened: Vec<Pattern> = Vec::new();
-				for pat in patterns {
-					let desugared = self.desugar_pattern(pat)?;
-					match desugared {
-						Pattern::Or { patterns: inner, .. } => {
-							flattened.extend(inner);
-						}
-						other => flattened.push(other),
-					}
-				}
+				let flattened: Vec<Pattern> = patterns
+					.into_iter()
+					.map(|p| return self.desugar_pattern(p))
+					.collect::<Result<Vec<_>, _>>()?;
 
 				if flattened.len() == 1 {
 					flattened.into_iter().next().expect("len == 1, so should not error")
@@ -1756,6 +1765,94 @@ impl Desugarer
 		}
 
 		return Ok(statements);
+	}
+
+	fn expand_or_patterns(&self, pattern: Pattern) -> Vec<Pattern>
+	{
+		match pattern {
+			Pattern::Or { patterns, .. } => return patterns.into_iter().flat_map(|p| return self.expand_or_patterns(p)).collect(),
+
+			Pattern::Variant { path, args, span } => {
+				let expanded_args: Vec<Vec<Pattern>> =
+					args.into_iter().map(|arg| return self.expand_or_patterns(arg)).collect();
+
+				return self.cartesian_product_patterns(expanded_args)
+					.into_iter()
+					.map(|args| return Pattern::Variant {
+						path: path.clone(),
+						args,
+						span,
+					})
+					.collect()
+			}
+
+			Pattern::Tuple { patterns, span } => {
+				let expanded: Vec<Vec<Pattern>> = patterns.into_iter().map(|p| return self.expand_or_patterns(p)).collect();
+
+				return self.cartesian_product_patterns(expanded)
+					.into_iter()
+					.map(|patterns| return Pattern::Tuple { patterns, span })
+					.collect()
+			}
+
+			Pattern::Struct {
+				path,
+				fields,
+				span,
+				has_rest,
+			} => {
+				let field_names: Vec<_> = fields.iter().map(|(name, _)| return name.clone()).collect();
+				let field_patterns: Vec<Vec<Pattern>> = fields
+					.into_iter()
+					.map(|(_, pat)| return self.expand_or_patterns(pat))
+					.collect();
+
+				let expanded_field_sets = self.cartesian_product_patterns(field_patterns);
+
+				return expanded_field_sets
+					.into_iter()
+					.map(|expanded_patterns| {
+						let fields = field_names
+							.iter()
+							.zip(expanded_patterns)
+							.map(|(name, pat)| return (name.clone(), pat))
+							.collect();
+
+						return Pattern::Struct {
+							path: path.clone(),
+							fields,
+							span,
+							has_rest,
+						}
+					})
+					.collect()
+			}
+
+			other => return vec![other],
+		}
+	}
+
+	fn cartesian_product_patterns(&self, lists: Vec<Vec<Pattern>>) -> Vec<Vec<Pattern>>
+	{
+		if lists.is_empty() {
+			return vec![vec![]];
+		}
+
+		let mut result = vec![vec![]];
+
+		for list in lists {
+			let mut new_result = Vec::new();
+			for existing in &result {
+				for item in &list {
+					let mut new_combo = existing.clone();
+					new_combo.push(item.clone());
+					new_result.push(new_combo);
+				}
+			}
+			result = new_result;
+		}
+
+		return result
 	}
 
 	fn desugar_assignment_target(&mut self, target: Expr, source: Expr, span: Span) -> Result<Vec<Stmt>, CompileError>

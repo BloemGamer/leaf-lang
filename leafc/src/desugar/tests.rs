@@ -505,7 +505,6 @@ mod tests
 	fn test_desugar_nested_switch_pattern()
 	{
 		let mut desugarer = Desugarer::new();
-
 		let arm = SwitchArm {
 			pattern: Pattern::Tuple {
 				patterns: vec![
@@ -541,14 +540,72 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_switch_arm(arm).inspect_err(|e| eprintln!("{e}"));
-		assert!(result.is_ok());
-		let out = result.unwrap();
+		let result = desugarer.desugar_switch_arm(arm).unwrap();
 
-		if let Pattern::Tuple { patterns, .. } = out.pattern {
-			assert_eq!(patterns.len(), 2);
-		} else {
-			panic!("Expected Pattern::Tuple");
+		// The pattern should be expanded to:
+		// (Some(_), _) | (Some(_), 5)
+		match result.pattern {
+			Pattern::Or { patterns, .. } => {
+				assert_eq!(patterns.len(), 2);
+
+				// First pattern: (Some(_), _)
+				match &patterns[0] {
+					Pattern::Tuple {
+						patterns: tuple_patterns,
+						..
+					} => {
+						assert_eq!(tuple_patterns.len(), 2);
+
+						// First element: Some(_)
+						assert!(matches!(
+							&tuple_patterns[0],
+							Pattern::Variant { path, args, .. }
+							if path.segments.len() == 1
+							&& path.segments[0].name == "Some"
+							&& args.len() == 1
+							&& matches!(args[0], Pattern::Wildcard { .. })
+						));
+
+						// Second element: _
+						assert!(matches!(&tuple_patterns[1], Pattern::Wildcard { .. }));
+					}
+					_ => panic!("Expected first pattern to be a Tuple"),
+				}
+
+				// Second pattern: (Some(_), 5)
+				match &patterns[1] {
+					Pattern::Tuple {
+						patterns: tuple_patterns,
+						..
+					} => {
+						assert_eq!(tuple_patterns.len(), 2);
+
+						// First element: Some(_)
+						assert!(matches!(
+							&tuple_patterns[0],
+							Pattern::Variant { path, args, .. }
+							if path.segments.len() == 1
+							&& path.segments[0].name == "Some"
+							&& args.len() == 1
+							&& matches!(args[0], Pattern::Wildcard { .. })
+						));
+
+						// Second element: 5
+						assert!(matches!(
+							&tuple_patterns[1],
+							Pattern::Literal {
+								value: Literal::Int(5),
+								..
+							}
+						));
+					}
+					_ => panic!("Expected second pattern to be a Tuple"),
+				}
+			}
+			_ => panic!(
+				"Expected desugared pattern to be an Or pattern, got: {:?}",
+				result.pattern
+			),
 		}
 	}
 
