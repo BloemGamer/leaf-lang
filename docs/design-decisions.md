@@ -63,7 +63,11 @@ This document explains key design decisions behind Leaf-lang, including language
 
 ### 2.3 Backend Design
 - **C Backend:** Easier to implement, and debug, and have the best C support and runs on everything
-	- **C version** C23, because C23 is almost fully supported, and has features like `constexpr` which are very usefull for libraries
+	- **C version** C23,
+		- C23 is almost fully supported
+		- Has `constexpr` which are very usefull for libraries
+		- Has `ckd_add()`, `ckd_sub()` and `ckd_mul()` for checking overflow operations
+		- Better official `UTF-8` support with `u8""` and `char8_t`
 - **LLVM Backend:** More freedom for the language, and I want to learn how LLVM works
 - **Rationale:** It's fun to try to make both work, and I could add specefic features to each one
 - **Tradeoffs:** 2 backends would be more work, so I will try to make the MIR as uniform and easy as possible so I don't have to change that one very often
