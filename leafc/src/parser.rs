@@ -6140,6 +6140,7 @@ impl<'s, 'c> Parser<'s, 'c>
 pub fn extract_type_from_pattern(pattern: &Pattern) -> Option<Type>
 {
 	match pattern {
+		Pattern::Wildcard { ty, .. } => return ty.clone(),
 		Pattern::TypedIdentifier { ty, .. } => {
 			return Some(ty.clone());
 		}

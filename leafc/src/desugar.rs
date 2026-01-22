@@ -1706,6 +1706,10 @@ impl Desugarer
 				statements.push(validation_directive);
 
 				for (field_name, field_pattern) in fields {
+					if matches!(field_pattern, Pattern::Wildcard { .. }) {
+						continue;
+					}
+
 					let field_expr: Expr = Expr::Field {
 						base: Box::new(Expr::Identifier {
 							path: Path::simple(vec![temp.clone()], temp_span),
@@ -1770,29 +1774,43 @@ impl Desugarer
 	fn expand_or_patterns(&self, pattern: Pattern) -> Vec<Pattern>
 	{
 		match pattern {
-			Pattern::Or { patterns, .. } => return patterns.into_iter().flat_map(|p| return self.expand_or_patterns(p)).collect(),
+			Pattern::Or { patterns, .. } => {
+				return patterns
+					.into_iter()
+					.flat_map(|p| return self.expand_or_patterns(p))
+					.collect();
+			}
 
 			Pattern::Variant { path, args, span } => {
-				let expanded_args: Vec<Vec<Pattern>> =
-					args.into_iter().map(|arg| return self.expand_or_patterns(arg)).collect();
-
-				return self.cartesian_product_patterns(expanded_args)
+				let expanded_args: Vec<Vec<Pattern>> = args
 					.into_iter()
-					.map(|args| return Pattern::Variant {
-						path: path.clone(),
-						args,
-						span,
+					.map(|arg| return self.expand_or_patterns(arg))
+					.collect();
+
+				return self
+					.cartesian_product_patterns(expanded_args)
+					.into_iter()
+					.map(|args| {
+						return Pattern::Variant {
+							path: path.clone(),
+							args,
+							span,
+						};
 					})
-					.collect()
+					.collect();
 			}
 
 			Pattern::Tuple { patterns, span } => {
-				let expanded: Vec<Vec<Pattern>> = patterns.into_iter().map(|p| return self.expand_or_patterns(p)).collect();
+				let expanded: Vec<Vec<Pattern>> = patterns
+					.into_iter()
+					.map(|p| return self.expand_or_patterns(p))
+					.collect();
 
-				return self.cartesian_product_patterns(expanded)
+				return self
+					.cartesian_product_patterns(expanded)
 					.into_iter()
 					.map(|patterns| return Pattern::Tuple { patterns, span })
-					.collect()
+					.collect();
 			}
 
 			Pattern::Struct {
@@ -1823,9 +1841,9 @@ impl Desugarer
 							fields,
 							span,
 							has_rest,
-						}
+						};
 					})
-					.collect()
+					.collect();
 			}
 
 			other => return vec![other],
@@ -1852,7 +1870,7 @@ impl Desugarer
 			result = new_result;
 		}
 
-		return result
+		return result;
 	}
 
 	fn desugar_assignment_target(&mut self, target: Expr, source: Expr, span: Span) -> Result<Vec<Stmt>, CompileError>
