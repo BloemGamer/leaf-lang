@@ -8651,4 +8651,733 @@ mod tests
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
+
+	// Additional Documentation Comment Tests for Parser
+	// Add these tests to the existing tests.rs file in the tests module
+
+	// ========== Documentation Comments Tests ==========
+
+	#[test]
+	fn test_parse_single_line_doc_comment()
+	{
+		let input = r#"
+		/// This is a doc comment
+		fn foo() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("This is a doc comment"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_multiple_line_doc_comments()
+	{
+		let input = r#"
+		/// First line of documentation
+		/// Second line of documentation
+		/// Third line of documentation
+		fn bar() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("First line"));
+				assert!(docs.content.contains("Second line"));
+				assert!(docs.content.contains("Third line"));
+				// Should be separated by newlines
+				assert!(docs.content.contains('\n'));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_struct()
+	{
+		let input = r#"
+		/// A point in 2D space
+		struct Point { x: i32, y: i32 }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.docs.is_some());
+				let docs = s.docs.as_ref().unwrap();
+				assert!(docs.content.contains("A point in 2D space"));
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_struct_field()
+	{
+		let input = r#"
+		struct Point {
+			/// The x coordinate
+			x: i32,
+			/// The y coordinate
+			y: i32,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.fields[0].docs.is_some());
+				assert!(s.fields[0].docs.as_ref().unwrap().content.contains("x coordinate"));
+				assert!(s.fields[1].docs.is_some());
+				assert!(s.fields[1].docs.as_ref().unwrap().content.contains("y coordinate"));
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_enum()
+	{
+		let input = r#"
+		/// Color enumeration
+		enum Color { Red = 0, Green = 1, Blue = 2 }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Enum(e) => {
+				assert!(e.docs.is_some());
+				assert!(e.docs.as_ref().unwrap().content.contains("Color enumeration"));
+			}
+			_ => panic!("Expected enum"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_enum_variant()
+	{
+		let input = r#"
+		enum Color {
+			/// Red color
+			Red = 0,
+			/// Green color
+			Green = 1,
+			/// Blue color
+			Blue = 2,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Enum(e) => {
+				assert!(e.variants[0].docs.is_some());
+				assert!(e.variants[0].docs.as_ref().unwrap().content.contains("Red color"));
+				assert!(e.variants[1].docs.is_some());
+				assert!(e.variants[1].docs.as_ref().unwrap().content.contains("Green color"));
+				assert!(e.variants[2].docs.is_some());
+				assert!(e.variants[2].docs.as_ref().unwrap().content.contains("Blue color"));
+			}
+			_ => panic!("Expected enum"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_variant()
+	{
+		let input = r#"
+		/// Optional value type
+		variant Option<T> { Some(T), None }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Variant(v) => {
+				assert!(v.docs.is_some());
+				assert!(v.docs.as_ref().unwrap().content.contains("Optional value type"));
+			}
+			_ => panic!("Expected variant"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_variant_member()
+	{
+		let input = r#"
+		variant Option<T> {
+			/// Contains a value
+			Some(T),
+			/// No value present
+			None,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Variant(v) => {
+				assert!(v.variants[0].docs.is_some());
+				assert!(
+					v.variants[0]
+						.docs
+						.as_ref()
+						.unwrap()
+						.content
+						.contains("Contains a value")
+				);
+				assert!(v.variants[1].docs.is_some());
+				assert!(
+					v.variants[1]
+						.docs
+						.as_ref()
+						.unwrap()
+						.content
+						.contains("No value present")
+				);
+			}
+			_ => panic!("Expected variant"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_trait()
+	{
+		let input = r#"
+		/// Trait for cloneable types
+		trait Clone { fn clone(&self) -> Self; }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Trait(t) => {
+				assert!(t.docs.is_some());
+				assert!(t.docs.as_ref().unwrap().content.contains("cloneable types"));
+			}
+			_ => panic!("Expected trait"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_impl()
+	{
+		let input = r#"
+		/// Implementation of Clone for Point
+		impl Clone for Point { fn clone(&self) -> Self {} }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Impl(i) => {
+				assert!(i.docs.is_some());
+				assert!(i.docs.as_ref().unwrap().content.contains("Implementation of Clone"));
+			}
+			_ => panic!("Expected impl"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_type_alias()
+	{
+		let input = r#"
+		/// Integer type alias
+		type Int = i32;
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::TypeAlias(t) => {
+				assert!(t.docs.is_some());
+				assert!(t.docs.as_ref().unwrap().content.contains("Integer type alias"));
+			}
+			_ => panic!("Expected type alias"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_namespace()
+	{
+		let input = r#"
+		/// Standard library namespace
+		namespace std { fn foo() {} }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Namespace(n) => {
+				assert!(n.docs.is_some());
+				assert!(n.docs.as_ref().unwrap().content.contains("Standard library"));
+			}
+			_ => panic!("Expected namespace"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_union()
+	{
+		let input = r#"
+		/// A union type for data storage
+		union Data { int_val: i32, float_val: f64 }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Union(u) => {
+				assert!(u.docs.is_some());
+				assert!(u.docs.as_ref().unwrap().content.contains("union type"));
+			}
+			_ => panic!("Expected union"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_union_field()
+	{
+		let input = r#"
+		union Data {
+			/// Integer value
+			int_val: i32,
+			/// Float value
+			float_val: f64,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Union(u) => {
+				assert!(u.fields[0].docs.is_some());
+				assert!(u.fields[0].docs.as_ref().unwrap().content.contains("Integer value"));
+				assert!(u.fields[1].docs.is_some());
+				assert!(u.fields[1].docs.as_ref().unwrap().content.contains("Float value"));
+			}
+			_ => panic!("Expected union"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_on_const_variable()
+	{
+		let input = r#"
+		/// Maximum buffer size
+		const MAX_SIZE: i32 = 1024;
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::VariableDecl(v) => {
+				assert!(v.docs.is_some());
+				assert!(v.docs.as_ref().unwrap().content.contains("Maximum buffer size"));
+			}
+			_ => panic!("Expected variable declaration"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_multiline_formatted()
+	{
+		let input = r#"
+		/// This is a complex documentation comment
+		/// that spans multiple lines and contains
+		/// various formatting elements:
+		/// - Bullet points
+		/// - Code examples
+		/// - Parameter descriptions
+		fn complex_function() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("complex documentation"));
+				assert!(docs.content.contains("Bullet points"));
+				assert!(docs.content.contains("Code examples"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_empty()
+	{
+		let input = r#"
+		///
+		fn foo() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				// Empty doc comment should still be present
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_no_doc_comment()
+	{
+		let input = "fn foo() {}";
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_none());
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_with_special_chars()
+	{
+		let input = r#"
+		/// This contains special characters: <>&"'
+		/// And code: `let x = 42;`
+		/// And symbols: @#$%^&*()
+		fn special() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("special characters"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_span()
+	{
+		let input = r#"
+		/// Documentation
+		fn foo() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				// Span should be valid
+				assert!(docs.span.start < docs.span.end);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_multiple_items_with_docs()
+	{
+		let input = r#"
+		/// First function
+		fn first() {}
+		
+		/// Second function
+		fn second() {}
+		
+		/// A struct
+		struct MyStruct { x: i32 }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		assert_eq!(program.items.len(), 3);
+
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				assert!(func.docs.as_ref().unwrap().content.contains("First function"));
+			}
+			_ => panic!("Expected function"),
+		}
+
+		match &program.items[1] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				assert!(func.docs.as_ref().unwrap().content.contains("Second function"));
+			}
+			_ => panic!("Expected function"),
+		}
+
+		match &program.items[2] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.docs.is_some());
+				assert!(s.docs.as_ref().unwrap().content.contains("A struct"));
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_consecutive_newlines()
+	{
+		let input = r#"
+		/// Line 1
+		///
+		/// Line 3 (with blank line above)
+		fn foo() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("Line 1"));
+				assert!(docs.content.contains("Line 3"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_with_markdown()
+	{
+		let input = r#"
+		/// # Header
+		/// 
+		/// This is **bold** and *italic*
+		/// 
+		/// ```
+		/// code block
+		/// ```
+		fn documented() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("# Header"));
+				assert!(docs.content.contains("**bold**"));
+				assert!(docs.content.contains("code block"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_very_long()
+	{
+		let mut input = String::from("/// ");
+		for i in 0..100 {
+			input.push_str(&format!("Line {} ", i));
+		}
+		input.push_str("\nfn foo() {}");
+
+		let result = parse_program_from_str(&input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("Line 0"));
+				assert!(docs.content.contains("Line 99"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_field_doc_without_trailing_comma()
+	{
+		let input = r#"
+		struct Point {
+			/// X coordinate
+			x: i32,
+			/// Y coordinate  
+			y: i32
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.fields[0].docs.is_some());
+				assert!(s.fields[1].docs.is_some());
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_display()
+	{
+		let input = r#"
+		/// This is documentation
+		fn foo() {}
+	"#;
+		let program = parse_program_from_str(input).unwrap();
+		let output = format!("{}", program);
+		// The display implementation should preserve the docs
+		assert!(output.contains("foo"));
+	}
+
+	#[test]
+	fn test_parse_doc_comment_mixed_with_modifiers()
+	{
+		let input = r#"
+		/// Public function
+		pub fn foo() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				assert!(!func.signature.modifiers.is_empty());
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_with_directives()
+	{
+		let input = r#"
+		/// Inline function
+		@inline
+		fn fast() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				assert!(
+					func.signature
+						.modifiers
+						.iter()
+						.any(|m| matches!(m, Modifier::Directive(_)))
+				);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_doc_comment_unicode()
+	{
+		let input = r#"
+		/// 功能说明: 这是一个函数
+		/// Função: Esta é uma função
+		/// Функция: Это функция
+		fn unicode_docs() {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				let docs = func.docs.as_ref().unwrap();
+				assert!(docs.content.contains("功能说明"));
+				assert!(docs.content.contains("Função"));
+				assert!(docs.content.contains("Функция"));
+			}
+			_ => panic!("Expected function"),
+		}
+	}
+
+	#[test]
+	fn test_parse_struct_default_field_with_doc()
+	{
+		let input = r#"
+		struct Config {
+			/// Timeout in seconds
+			timeout: i32 = 30,
+			/// Number of retries
+			retries: i32 = 3,
+		}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.fields[0].docs.is_some());
+				assert!(s.fields[0].default_value.is_some());
+				assert!(s.fields[1].docs.is_some());
+				assert!(s.fields[1].default_value.is_some());
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_generic_with_doc()
+	{
+		let input = r#"
+		/// Generic container
+		struct Container<T> { value: T }
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Struct(s) => {
+				assert!(s.docs.is_some());
+				assert_eq!(s.generics.len(), 1);
+			}
+			_ => panic!("Expected struct"),
+		}
+	}
+
+	#[test]
+	fn test_parse_heap_function_with_doc()
+	{
+		let input = r#"
+		/// Allocates memory
+		fn! allocate(size: usize) -> u8* {}
+	"#;
+		let result = parse_program_from_str(input);
+		assert!(result.is_ok());
+		let program = result.unwrap();
+		match &program.items[0] {
+			TopLevelDecl::Function(func) => {
+				assert!(func.docs.is_some());
+				assert_eq!(func.signature.call_type, CallType::UserHeap);
+			}
+			_ => panic!("Expected function"),
+		}
+	}
 }
