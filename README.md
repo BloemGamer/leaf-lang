@@ -69,11 +69,11 @@ Each stage transforms the program into a simpler or more constrained form.
 - [ ] **Preprocessing** (low priority)
 	- Macro expansion
 - [x] **Parsing**
-	- Tokens -> Concrete Syntax Tree (CST)
+	- Tokens -> Abstract Syntax Tree (AST)
 - [ ] **AST-macros** (low priority)
-	- Another macro expansion round (CST -> CST)
+	- Another macro expansion round (AST -> AST)
 - [ ] **AST Normalization**
-	- CST -> simplified AST
+	- AST -> simplified AST
 	- Syntax sugar removal (Desugaring)
 	- Normalizes multiple ways to write the same thing
 
