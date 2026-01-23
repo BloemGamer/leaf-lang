@@ -444,6 +444,7 @@ mod tests
 					pattern: typed_ident_pattern("x", "i32"),
 					init: Some(ident("y")),
 					comp_const: false,
+					docs: None,
 					span: Span::default(),
 				})],
 				tail_expr: Some(Box::new(ident("x"))),
@@ -620,6 +621,7 @@ mod tests
 				pattern: typed_ident_pattern("x", "i32"),
 				init: Some(int_lit(42)),
 				comp_const: true,
+				docs: None,
 				span: Span::default(),
 			})],
 			span: Span::default(),
@@ -1464,6 +1466,7 @@ mod tests
 			},
 			init: Some(int_lit(42)),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2146,6 +2149,7 @@ mod tests
 			},
 			init: None,
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2198,6 +2202,7 @@ mod tests
 				span: Span::default(),
 			}),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2243,6 +2248,7 @@ mod tests
 			},
 			init: None,
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2280,6 +2286,7 @@ mod tests
 			},
 			init: None,
 			comp_const: true, // const instead of var
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2327,6 +2334,7 @@ mod tests
 			},
 			init: None,
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2364,6 +2372,7 @@ mod tests
 			},
 			init: Some(int_lit(42)),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2397,6 +2406,7 @@ mod tests
 					},
 					init: None,
 					comp_const: false,
+					docs: None,
 					span: Span::default(),
 				}),
 				TopLevelDecl::VariableDecl(VariableDecl {
@@ -2408,6 +2418,7 @@ mod tests
 					},
 					init: None,
 					comp_const: false,
+					docs: None,
 					span: Span::default(),
 				}),
 			],
@@ -2462,6 +2473,7 @@ mod tests
 					},
 					init: None,
 					comp_const: false,
+					docs: None,
 					span: Span::default(),
 				})],
 				tail_expr: None,
@@ -2527,6 +2539,7 @@ mod tests
 			},
 			init: None,
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3833,6 +3846,7 @@ mod tests
 			},
 			init: Some(ident("point")),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3854,6 +3868,7 @@ mod tests
 			},
 			init: Some(ident("point")),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3873,6 +3888,7 @@ mod tests
 			},
 			init: Some(int_lit(42)),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -4213,6 +4229,7 @@ mod tests
 				pattern: typed_ident_pattern("CONST", "i32"),
 				init: Some(int_lit(42)),
 				comp_const: true,
+				docs: None,
 				span: Span::default(),
 			})],
 			docs: None,
@@ -4265,6 +4282,7 @@ mod tests
 				pattern: typed_ident_pattern("CONST", "i32"),
 				init: Some(int_lit(42)),
 				comp_const: true,
+				docs: None,
 				span: Span::default(),
 			})],
 			docs: None,
@@ -4454,6 +4472,7 @@ mod tests
 			},
 			init: Some(ident("point")),
 			comp_const: false,
+			docs: None,
 			span: Span::default(),
 		};
 

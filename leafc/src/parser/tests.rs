@@ -1528,8 +1528,8 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 2);
-				assert_eq!(s.fields[0].1, "x");
-				assert_eq!(s.fields[1].1, "y");
+				assert_eq!(s.fields[0].name, "x");
+				assert_eq!(s.fields[1].name, "y");
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -1600,7 +1600,7 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Enum(e) => {
 				assert_eq!(e.variants.len(), 2);
-				assert!(e.variants[0].1.is_some());
+				assert!(e.variants[0].value.is_some());
 			}
 			_ => panic!("Expected enum declaration"),
 		}
@@ -3954,8 +3954,8 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 2);
-				assert!(s.fields[0].2.is_some()); // x has default value
-				assert!(s.fields[1].2.is_some()); // y has default value
+				assert!(s.fields[0].default_value.is_some()); // x has default value
+				assert!(s.fields[1].default_value.is_some()); // y has default value
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -3971,8 +3971,8 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 2);
-				assert!(s.fields[0].2.is_none()); // name has no default
-				assert!(s.fields[1].2.is_some()); // age has default
+				assert!(s.fields[0].default_value.is_none()); // name has no default
+				assert!(s.fields[1].default_value.is_some()); // age has default
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -3996,9 +3996,9 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Variant(v) => {
 				assert_eq!(v.variants.len(), 3);
-				assert!(v.variants[0].2.is_some()); // Success has value
-				assert!(v.variants[1].2.is_some()); // Error has value
-				assert!(v.variants[2].2.is_some()); // Pending has value
+				assert!(v.variants[0].value.is_some()); // Success has value
+				assert!(v.variants[1].value.is_some()); // Error has value
+				assert!(v.variants[2].value.is_some()); // Pending has value
 			}
 			_ => panic!("Expected variant declaration"),
 		}
@@ -4015,14 +4015,14 @@ mod tests
 			TopLevelDecl::Variant(v) => {
 				assert_eq!(v.variants.len(), 3);
 				// Unit: no type, has value
-				assert!(v.variants[0].0.is_none());
-				assert!(v.variants[0].2.is_some());
+				assert!(v.variants[0].ty.is_none());
+				assert!(v.variants[0].value.is_some());
 				// WithData: has type, has value
-				assert!(v.variants[1].0.is_some());
-				assert!(v.variants[1].2.is_some());
+				assert!(v.variants[1].ty.is_some());
+				assert!(v.variants[1].value.is_some());
 				// Other: no type, no value
-				assert!(v.variants[2].0.is_none());
-				assert!(v.variants[2].2.is_none());
+				assert!(v.variants[2].ty.is_none());
+				assert!(v.variants[2].value.is_none());
 			}
 			_ => panic!("Expected variant declaration"),
 		}
@@ -7730,7 +7730,11 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 3);
-				assert!(s.fields.iter().all(|(_, _, default)| return default.is_some()));
+				assert!(
+					s.fields
+						.iter()
+						.all(|StructField { default_value, .. }| return default_value.is_some())
+				);
 			}
 			_ => panic!("Expected struct declaration"),
 		}

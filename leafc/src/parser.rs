@@ -1202,6 +1202,9 @@ pub struct VariableDecl
 	pub init: Option<Expr>,
 	pub comp_const: bool,
 	#[ignored(PartialEq)]
+	#[allow(unused)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1574,7 +1577,7 @@ pub struct StructDecl
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub fields: Vec<(Type, Ident, Option<Expr>)>,
+	pub fields: Vec<StructField>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -1605,7 +1608,7 @@ pub struct UnionDecl
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub fields: Vec<(Type, Ident)>,
+	pub fields: Vec<UnionField>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -1636,7 +1639,7 @@ pub struct EnumDecl
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub variants: Vec<(Ident, Option<Expr>)>,
+	pub variants: Vec<EnumVariant>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -1667,7 +1670,7 @@ pub struct VariantDecl
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
-	pub variants: Vec<(Option<Type>, Ident, Option<Expr>)>,
+	pub variants: Vec<VariantMember>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -2350,6 +2353,88 @@ impl Spanned for DocsComment
 	}
 }
 
+/// A field in a struct declaration
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructField
+{
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	pub ty: Type,
+	pub name: Ident,
+	pub default_value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Spanned for StructField
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
+/// A field in a union declaration
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnionField
+{
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	pub ty: Type,
+	pub name: Ident,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Spanned for UnionField
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
+/// A variant in an enum declaration
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant
+{
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	pub name: Ident,
+	pub value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Spanned for EnumVariant
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
+/// A member in a variant declaration
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariantMember
+{
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	pub ty: Option<Type>,
+	pub name: Ident,
+	pub value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Spanned for VariantMember
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
 impl<'s, 'c> Parser<'s, 'c>
 {
 	fn peek(&mut self) -> Result<&Token, CompileError>
@@ -2521,13 +2606,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, CompileError>
 	{
-		let docs: Option<DocsComment> = self.parse_docs()?;
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
 		let ret: TopLevelDecl = match decl_kind {
 			DeclKind::Function => {
-				let mut func_decl: FunctionDecl = self.parse_function_decl()?;
-				func_decl.docs = docs;
+				let func_decl: FunctionDecl = self.parse_function_decl()?;
 				TopLevelDecl::Function(func_decl)
 			}
 			DeclKind::Variable => {
@@ -2545,44 +2628,36 @@ impl<'s, 'c> Parser<'s, 'c>
 				TopLevelDecl::Directive(directive_node)
 			}
 			DeclKind::Struct => {
-				let mut struct_decl: StructDecl = self.parse_struct()?;
-				struct_decl.docs = docs;
+				let struct_decl: StructDecl = self.parse_struct()?;
 				TopLevelDecl::Struct(struct_decl)
 			}
 			DeclKind::Union => {
-				let mut union_decl: UnionDecl = self.parse_union()?;
-				union_decl.docs = docs;
+				let union_decl: UnionDecl = self.parse_union()?;
 				TopLevelDecl::Union(union_decl)
 			}
 			DeclKind::TypeAlias => {
-				let mut type_alias: TypeAliasDecl = self.parse_type_alias()?;
-				type_alias.docs = docs;
+				let type_alias: TypeAliasDecl = self.parse_type_alias()?;
 				self.expect(&TokenKind::Semicolon)?;
 				TopLevelDecl::TypeAlias(type_alias)
 			}
 			DeclKind::Namespace => {
-				let mut namespace_decl: NamespaceDecl = self.parse_namespace()?;
-				namespace_decl.docs = docs;
+				let namespace_decl: NamespaceDecl = self.parse_namespace()?;
 				TopLevelDecl::Namespace(namespace_decl)
 			}
 			DeclKind::Impl => {
-				let mut impl_decl: ImplDecl = self.parse_impl()?;
-				impl_decl.docs = docs;
+				let impl_decl: ImplDecl = self.parse_impl()?;
 				TopLevelDecl::Impl(impl_decl)
 			}
 			DeclKind::Trait => {
-				let mut trait_decl: TraitDecl = self.parse_trait()?;
-				trait_decl.docs = docs;
+				let trait_decl: TraitDecl = self.parse_trait()?;
 				TopLevelDecl::Trait(trait_decl)
 			}
 			DeclKind::Enum => {
-				let mut enum_decl: EnumDecl = self.parse_enum()?;
-				enum_decl.docs = docs;
+				let enum_decl: EnumDecl = self.parse_enum()?;
 				TopLevelDecl::Enum(enum_decl)
 			}
 			DeclKind::Variant => {
-				let mut variant_decl: VariantDecl = self.parse_variant()?;
-				variant_decl.docs = docs;
+				let variant_decl: VariantDecl = self.parse_variant()?;
 				TopLevelDecl::Variant(variant_decl)
 			}
 		};
@@ -2597,7 +2672,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		loop {
 			match self.peek_kind()? {
-				TokenKind::Pub | TokenKind::Unsafe | TokenKind::Inline | TokenKind::Volatile => {
+				TokenKind::Pub
+				| TokenKind::Unsafe
+				| TokenKind::Inline
+				| TokenKind::Volatile
+				| TokenKind::DocsComment(..) => {
 					self.next()?;
 				}
 				TokenKind::Const => {
@@ -3014,6 +3093,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_var_decl(&mut self) -> Result<VariableDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let tok: Token = self.next()?;
 		let span: Span = tok.span;
 		if !matches!(tok.kind, TokenKind::Const | TokenKind::Var) {
@@ -3036,6 +3116,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(VariableDecl {
 			pattern,
 			init,
+			docs,
 			comp_const,
 			span: self.last_span.merge(&span),
 		});
@@ -5056,6 +5137,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_function_decl(&mut self) -> Result<FunctionDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let mut span: Span = self.peek()?.span();
 		let signature: FunctionSignature = self.parse_function_signature()?;
 		let body: Option<Block> = if self.consume(&TokenKind::Semicolon)? {
@@ -5067,7 +5149,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(FunctionDecl {
 			signature,
 			body,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5378,6 +5460,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_struct(&mut self) -> Result<StructDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Struct)?;
@@ -5409,12 +5492,15 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Type, Ident, Option<Expr>)> = Vec::new();
+		let mut fields: Vec<StructField> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace)? {
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
+			let field_start = self.peek()?.span();
+			let field_docs: Option<DocsComment> = self.parse_docs()?;
+
 			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
@@ -5437,7 +5523,13 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			fields.push((field_type, field_name, default_value));
+			fields.push(StructField {
+				docs: field_docs,
+				ty: field_type,
+				name: field_name,
+				default_value,
+				span: field_start.merge(&self.last_span),
+			});
 
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
@@ -5453,13 +5545,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			fields,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_union(&mut self) -> Result<UnionDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Union)?;
@@ -5491,12 +5584,15 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Type, Ident)> = Vec::new();
+		let mut fields: Vec<UnionField> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace)? {
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
+			let field_start = self.peek()?.span();
+			let field_docs: Option<DocsComment> = self.parse_docs()?;
+
 			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
@@ -5513,7 +5609,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			let field_type: Type = self.parse_type()?;
 
-			fields.push((field_type, field_name));
+			fields.push(UnionField {
+				docs: field_docs,
+				ty: field_type,
+				name: field_name,
+				span: field_start.merge(&self.last_span),
+			});
 
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
@@ -5529,13 +5630,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			fields,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_namespace(&mut self) -> Result<NamespaceDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Namespace)?;
@@ -5547,13 +5649,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			modifiers,
 			name,
 			body,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_enum(&mut self) -> Result<EnumDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Enum)?;
@@ -5585,13 +5688,16 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Ident, Option<Expr>)> = Vec::new();
+		let mut variants: Vec<EnumVariant> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace)? {
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
+			let variant_start = self.peek()?.span();
+			let variant_docs: Option<DocsComment> = self.parse_docs()?;
+
+			let variant_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
 				let tok: Token = self.next()?;
@@ -5603,14 +5709,19 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let field_type: Option<Expr> = if self.at(&TokenKind::Equals)? {
+			let variant_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
 				self.next()?;
 				Some(self.parse_expr()?)
 			} else {
 				None
 			};
 
-			fields.push((field_name, field_type));
+			variants.push(EnumVariant {
+				docs: variant_docs,
+				name: variant_name,
+				value: variant_value,
+				span: variant_start.merge(&self.last_span),
+			});
 
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
@@ -5625,14 +5736,15 @@ impl<'s, 'c> Parser<'s, 'c>
 			name,
 			generics,
 			where_clause,
-			variants: fields,
-			docs: None,
+			variants,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_variant(&mut self) -> Result<VariantDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Variant)?;
@@ -5664,13 +5776,16 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.expect(&TokenKind::LeftBrace)?;
 
-		let mut fields: Vec<(Option<Type>, Ident, Option<Expr>)> = Vec::new();
+		let mut variants: Vec<VariantMember> = Vec::new();
 
 		while !self.at(&TokenKind::RightBrace)? {
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
 			}
-			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
+			let member_start: Span = self.peek()?.span();
+			let member_docs: Option<DocsComment> = self.parse_docs()?;
+
+			let member_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
 				let tok: Token = self.next()?;
@@ -5682,7 +5797,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				)));
 			};
 
-			let field_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
+			let member_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
 				self.next()?;
 				let ty: Option<Type> = Some(self.parse_type()?);
 				self.expect(&TokenKind::RightParen)?;
@@ -5691,14 +5806,20 @@ impl<'s, 'c> Parser<'s, 'c>
 				None
 			};
 
-			let field_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
+			let member_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
 				self.next()?;
 				Some(self.parse_expr()?)
 			} else {
 				None
 			};
 
-			fields.push((field_type, field_name, field_value));
+			variants.push(VariantMember {
+				docs: member_docs,
+				ty: member_type,
+				name: member_name,
+				value: member_value,
+				span: member_start.merge(&self.last_span),
+			});
 
 			if *self.peek_kind()? == TokenKind::RightBrace {
 				break;
@@ -5713,14 +5834,15 @@ impl<'s, 'c> Parser<'s, 'c>
 			name,
 			generics,
 			where_clause,
-			variants: fields,
-			docs: None,
+			variants,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_impl(&mut self) -> Result<ImplDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Impl)?;
@@ -5765,7 +5887,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			trait_path,
 			where_clause,
 			body,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -6013,6 +6135,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Type)?;
@@ -6033,13 +6156,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			name,
 			generics,
 			ty,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
 
 	fn parse_trait(&mut self) -> Result<TraitDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Trait)?;
@@ -6075,7 +6199,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			super_traits,
 			items,
-			docs: None,
+			docs,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -7324,10 +7448,11 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 	write!(f, " {{")?;
 	w.indent();
 
-	for (ty, name, default_value) in &s.fields {
+	for field in &s.fields {
+		write_docs(f, w, &field.docs)?;
 		w.write_indent(f)?;
-		write!(f, "{}: {}", name, ty)?;
-		if let Some(default) = default_value {
+		write!(f, "{}: {}", field.name, field.ty)?;
+		if let Some(default) = &field.default_value {
 			write!(f, " = {}", default)?;
 		}
 		writeln!(f, ",")?;
@@ -7370,9 +7495,10 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 	write!(f, " {{")?;
 	w.indent();
 
-	for (ty, name) in &u.fields {
+	for field in &u.fields {
+		write_docs(f, w, &field.docs)?;
 		w.write_indent(f)?;
-		writeln!(f, "{}: {},", name, ty)?;
+		writeln!(f, "{}: {},", field.name, field.ty)?;
 	}
 
 	w.dedent();
@@ -7412,13 +7538,14 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 	write!(f, " {{")?;
 	w.indent();
 
-	for (name, value) in &e.variants {
+	for variant in &e.variants {
+		write_docs(f, w, &variant.docs)?;
 		w.write_indent(f)?;
-		if let Some(val) = value {
-			writeln!(f, "{} = ,", name)?;
+		if let Some(val) = &variant.value {
+			write!(f, "{} = ", variant.name)?;
 			write_expr(f, w, val)?;
 		} else {
-			writeln!(f, "{},", name)?;
+			writeln!(f, "{},", variant.name)?;
 		}
 	}
 
@@ -7459,13 +7586,14 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 	write!(f, " {{")?;
 	w.indent();
 
-	for (ty, name, value) in &v.variants {
+	for member in &v.variants {
+		write_docs(f, w, &member.docs)?;
 		w.write_indent(f)?;
-		write!(f, "{}", name)?;
-		if let Some(t) = ty {
+		write!(f, "{}", member.name)?;
+		if let Some(t) = &member.ty {
 			write!(f, "({})", t)?;
 		}
-		if let Some(val) = value {
+		if let Some(val) = &member.value {
 			write!(f, " = ")?;
 			write_expr(f, w, val)?;
 		}

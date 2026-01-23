@@ -258,6 +258,7 @@ impl Desugarer
 							span: param_span,
 						}),
 						comp_const: false,
+						docs: None,
 						span: param_span,
 					}));
 				}
@@ -791,6 +792,7 @@ impl Desugarer
 							call_constructor: None,
 							span: value_span,
 						},
+						docs: None,
 						init: Some(desugared_value),
 						comp_const: false,
 						span: value_span,
@@ -894,6 +896,7 @@ impl Desugarer
 				call_constructor: None,
 				span: iter_span,
 			},
+			docs: None,
 			init: Some(desugared_iter),
 			comp_const: false,
 			span: iter_span,
@@ -1018,6 +1021,7 @@ impl Desugarer
 				call_constructor: None,
 				span: expr_span,
 			},
+			docs: None,
 			init: Some(desugared_expr),
 			comp_const: false,
 			span: expr_span,
@@ -1089,7 +1093,7 @@ impl Desugarer
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body)?;
 
-		let temp_decl = Stmt::VariableDecl(VariableDecl {
+		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp_var.clone()], expr_span),
 				ty: Type {
@@ -1103,6 +1107,7 @@ impl Desugarer
 				call_constructor: None,
 				span: expr_span,
 			},
+			docs: None,
 			init: Some(desugared_expr),
 			comp_const: false,
 			span: expr_span,
@@ -1416,7 +1421,7 @@ impl Desugarer
 		let desugared_expr: Expr = self.desugar_expr(expr)?;
 		let desugared_then: Block = self.desugar_block(then_block)?;
 
-		let temp_decl = Stmt::VariableDecl(VariableDecl {
+		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp_var.clone()], expr_span),
 				ty: Type {
@@ -1430,6 +1435,7 @@ impl Desugarer
 				call_constructor: None,
 				span: expr_span,
 			},
+			docs: None,
 			init: Some(desugared_expr),
 			comp_const: false,
 			span: expr_span,
@@ -1753,6 +1759,7 @@ impl Desugarer
 					},
 					init: Some(self.desugar_expr(init)?),
 					comp_const,
+					docs: None,
 					span: id_span,
 				}));
 			}
@@ -1779,6 +1786,7 @@ impl Desugarer
 			},
 			init: Some(self.desugar_expr(init)?),
 			comp_const,
+			docs: None,
 			span,
 		});
 
