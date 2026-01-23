@@ -5,9 +5,9 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound, FunctionDecl,
-		FunctionSignature, GenericArg, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path, PathSegment, Pattern,
-		Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
-		VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
+		FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path,
+		PathSegment, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem,
+		Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -277,8 +277,26 @@ impl Desugarer
 		return Ok(func);
 	}
 
-	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, CompileError> // TODO: convert impl to generics
+	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, CompileError>
 	{
+		let mut impl_trait_counter: usize = 0;
+		let mut new_generics: Vec<GenericParam> = Vec::new();
+
+		for param in &mut func_sig.params {
+			if let Some(new_generic) = self.desugar_impl_trait_in_param(param, &mut impl_trait_counter)? {
+				new_generics.push(new_generic);
+			}
+		}
+
+		new_generics.extend(func_sig.generics);
+		func_sig.generics = new_generics;
+
+		if let Some(ret_ty) = &mut func_sig.return_type
+			&& let Some(new_generic) = self.desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)?
+		{
+			func_sig.generics.push(new_generic);
+		}
+
 		let generics_with_bounds: Vec<&String> = func_sig
 			.generics
 			.iter()
@@ -299,7 +317,7 @@ impl Desugarer
 			let mentioned_in_args: Vec<Ident> = where_constraint
 				.type_args
 				.iter()
-				.flat_map(|ty| return get_mentioned_type_params_in_type(ty))
+				.flat_map(get_mentioned_type_params_in_type)
 				.collect();
 
 			let all_mentioned: Vec<Ident> = mentioned_types.into_iter().chain(mentioned_in_args).collect();
@@ -310,7 +328,7 @@ impl Desugarer
 						where_constraint.span,
 						format!(
 							"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
-								 Move all bounds for `{}` to the where clause instead.",
+								Move all bounds for `{}` to the where clause instead.",
 							type_param, type_param
 						),
 						self.source_index,
@@ -322,7 +340,7 @@ impl Desugarer
 						where_constraint.span,
 						format!(
 							"heap generic type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
-								 Move all bounds for `{}` to the where clause instead.",
+								Move all bounds for `{}` to the where clause instead.",
 							type_param, type_param
 						),
 						self.source_index,
@@ -380,6 +398,88 @@ impl Desugarer
 		}
 
 		return Ok(func_sig);
+	}
+
+	fn desugar_impl_trait_in_param(
+		&self,
+		param: &mut Param,
+		counter: &mut usize,
+	) -> Result<Option<GenericParam>, CompileError>
+	{
+		let generic_param = self.desugar_impl_trait_in_type(&mut param.ty, counter)?;
+
+		// Update the type in the pattern to match param.ty
+		if let Pattern::TypedIdentifier { ty, .. } = &mut param.pattern {
+			*ty = param.ty.clone();
+		}
+
+		return Ok(generic_param);
+	}
+
+	fn desugar_impl_trait_in_type(
+		&self,
+		ty: &mut Type,
+		counter: &mut usize,
+	) -> Result<Option<GenericParam>, CompileError>
+	{
+		match ty.core.as_mut() {
+			TypeCore::ImplTrait { bounds } => {
+				let generic_name: String = format!("#__ImplTrait{}", counter);
+				*counter += 1;
+
+				let generic_param = GenericParam {
+					name: generic_name.clone(),
+					bounds: bounds.clone(),
+					span: ty.span,
+				};
+
+				*ty.core = TypeCore::Base {
+					path: Path {
+						segments: vec![PathSegment {
+							name: generic_name,
+							generics: Vec::new(),
+							span: ty.span,
+						}],
+						span: ty.span,
+					},
+					generics: Vec::new(),
+				};
+
+				return Ok(Some(generic_param));
+			}
+			TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
+				let mut inner_ty: Type = Type {
+					modifiers: Vec::new(),
+					core: inner.clone(),
+					span: ty.span,
+				};
+				let result: Option<GenericParam> = self.desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				*inner = inner_ty.core;
+				return Ok(result);
+			}
+			TypeCore::Array { inner, .. } => {
+				let mut inner_ty = Type {
+					modifiers: Vec::new(),
+					core: inner.clone(),
+					span: ty.span,
+				};
+				let result: Option<GenericParam> = self.desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				*inner = inner_ty.core;
+				return Ok(result);
+			}
+			TypeCore::Tuple(types) => {
+				for tuple_ty in types.iter_mut() {
+					self.desugar_impl_trait_in_type(tuple_ty, counter)?;
+				}
+				return Ok(None);
+			}
+			TypeCore::Base { generics, .. } => {
+				for gen_ty in generics.iter_mut() {
+					self.desugar_impl_trait_in_type(gen_ty, counter)?;
+				}
+				return Ok(None);
+			}
+		}
 	}
 
 	#[allow(clippy::result_large_err)]
