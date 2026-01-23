@@ -277,7 +277,7 @@ impl Desugarer
 		return Ok(func);
 	}
 
-	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, CompileError>
+	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, CompileError> // TODO: convert impl to generics
 	{
 		let generics_with_bounds: Vec<&String> = func_sig
 			.generics

@@ -513,6 +513,8 @@ pub struct FunctionDecl
 	pub signature: FunctionSignature,
 	pub body: Option<Block>,
 	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1574,6 +1576,8 @@ pub struct StructDecl
 	pub where_clause: Vec<WhereConstraint>,
 	pub fields: Vec<(Type, Ident, Option<Expr>)>,
 	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1602,6 +1606,8 @@ pub struct UnionDecl
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub fields: Vec<(Type, Ident)>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -1632,6 +1638,8 @@ pub struct EnumDecl
 	pub where_clause: Vec<WhereConstraint>,
 	pub variants: Vec<(Ident, Option<Expr>)>,
 	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -1660,6 +1668,8 @@ pub struct VariantDecl
 	pub generics: Vec<GenericParam>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub variants: Vec<(Option<Type>, Ident, Option<Expr>)>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -1691,6 +1701,8 @@ pub struct TraitDecl
 	pub generics: Vec<GenericParam>,
 	pub super_traits: Vec<WhereBound>,
 	pub items: Vec<TraitItem>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -1761,6 +1773,8 @@ pub struct ImplDecl
 	pub trait_path: Option<ImplTarget>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub body: Vec<ImplItem>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -2260,6 +2274,8 @@ pub struct TypeAliasDecl
 	pub generics: Vec<GenericParam>,
 	pub ty: Type,
 	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -2287,6 +2303,8 @@ pub struct NamespaceDecl
 	pub name: Path,
 	pub body: TopLevelBlock,
 	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
@@ -2313,6 +2331,23 @@ impl Restrictions
 	const NO_STRUCT_LITERAL: Self = Self {
 		no_struct_literal: true,
 	};
+}
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocsComment
+{
+	pub content: String,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+impl Spanned for DocsComment
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
 }
 
 impl<'s, 'c> Parser<'s, 'c>
@@ -2486,11 +2521,13 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, CompileError>
 	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
 		let ret: TopLevelDecl = match decl_kind {
 			DeclKind::Function => {
-				let func_decl: FunctionDecl = self.parse_function_decl()?;
+				let mut func_decl: FunctionDecl = self.parse_function_decl()?;
+				func_decl.docs = docs;
 				TopLevelDecl::Function(func_decl)
 			}
 			DeclKind::Variable => {
@@ -2508,45 +2545,46 @@ impl<'s, 'c> Parser<'s, 'c>
 				TopLevelDecl::Directive(directive_node)
 			}
 			DeclKind::Struct => {
-				let struct_decl: StructDecl = self.parse_struct()?;
-
+				let mut struct_decl: StructDecl = self.parse_struct()?;
+				struct_decl.docs = docs;
 				TopLevelDecl::Struct(struct_decl)
 			}
 			DeclKind::Union => {
-				let union_decl: UnionDecl = self.parse_union()?;
-
+				let mut union_decl: UnionDecl = self.parse_union()?;
+				union_decl.docs = docs;
 				TopLevelDecl::Union(union_decl)
 			}
 			DeclKind::TypeAlias => {
-				let type_alias: TypeAliasDecl = self.parse_type_alias()?;
+				let mut type_alias: TypeAliasDecl = self.parse_type_alias()?;
+				type_alias.docs = docs;
 				self.expect(&TokenKind::Semicolon)?;
 				TopLevelDecl::TypeAlias(type_alias)
 			}
 			DeclKind::Namespace => {
-				let namespace_decl: NamespaceDecl = self.parse_namespace()?;
-
+				let mut namespace_decl: NamespaceDecl = self.parse_namespace()?;
+				namespace_decl.docs = docs;
 				TopLevelDecl::Namespace(namespace_decl)
 			}
 			DeclKind::Impl => {
-				let impl_decl: ImplDecl = self.parse_impl()?;
-
+				let mut impl_decl: ImplDecl = self.parse_impl()?;
+				impl_decl.docs = docs;
 				TopLevelDecl::Impl(impl_decl)
 			}
 			DeclKind::Trait => {
-				let trait_decl: TraitDecl = self.parse_trait()?;
-
+				let mut trait_decl: TraitDecl = self.parse_trait()?;
+				trait_decl.docs = docs;
 				TopLevelDecl::Trait(trait_decl)
 			}
 			DeclKind::Enum => {
-				let enum_decl: EnumDecl = self.parse_enum()?;
-
+				let mut enum_decl: EnumDecl = self.parse_enum()?;
+				enum_decl.docs = docs;
 				TopLevelDecl::Enum(enum_decl)
 			}
 			DeclKind::Variant => {
-				let tagged_union_decl: VariantDecl = self.parse_variant()?;
-
-				TopLevelDecl::Variant(tagged_union_decl)
-			} // other => todo!("not yet implemented: {:?}", other),
+				let mut variant_decl: VariantDecl = self.parse_variant()?;
+				variant_decl.docs = docs;
+				TopLevelDecl::Variant(variant_decl)
+			}
 		};
 
 		return Ok(ret);
@@ -5029,6 +5067,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(FunctionDecl {
 			signature,
 			body,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5414,6 +5453,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			fields,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5489,6 +5529,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			fields,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5506,6 +5547,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			modifiers,
 			name,
 			body,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5584,6 +5626,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			variants: fields,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5671,6 +5714,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			where_clause,
 			variants: fields,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5721,6 +5765,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			trait_path,
 			where_clause,
 			body,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -5988,6 +6033,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			name,
 			generics,
 			ty,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -6029,6 +6075,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			generics,
 			super_traits,
 			items,
+			docs: None,
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -6145,6 +6192,37 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.expect(&TokenKind::Delete)?;
 
 		return self.parse_expr();
+	}
+
+	fn parse_docs(&mut self) -> Result<Option<DocsComment>, CompileError>
+	{
+		let mut combined_content = String::new();
+		let mut start_span: Option<Span> = None;
+		let mut end_span: Span = Span::default();
+
+		while let Ok(TokenKind::DocsComment(content)) = self.peek_kind().cloned() {
+			let span: Span = self.peek()?.span();
+			self.next()?; // DocsComment
+
+			if start_span.is_none() {
+				start_span = Some(span);
+			}
+
+			if !combined_content.is_empty() {
+				combined_content.push('\n');
+			}
+			combined_content.push_str(&content);
+			end_span = span;
+		}
+
+		if let Some(start) = start_span {
+			return Ok(Some(DocsComment {
+				content: combined_content,
+				span: start.merge(&end_span),
+			}));
+		} else {
+			return Ok(None);
+		}
 	}
 }
 
@@ -6386,6 +6464,7 @@ impl fmt::Display for DirectiveParam
 
 fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &FunctionDecl) -> fmt::Result
 {
+	write_docs(f, w, &func.docs)?;
 	write_function_signature(f, w, &func.signature)?;
 
 	if let Some(body) = &func.body {
@@ -7215,6 +7294,7 @@ impl fmt::Display for AssignOp
 
 fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &StructDecl) -> fmt::Result
 {
+	write_docs(f, w, &s.docs)?;
 	for modifier in &s.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7260,6 +7340,7 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 
 fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionDecl) -> fmt::Result
 {
+	write_docs(f, w, &u.docs)?;
 	for modifier in &u.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7301,6 +7382,7 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 
 fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDecl) -> fmt::Result
 {
+	write_docs(f, w, &e.docs)?;
 	for modifier in &e.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7347,6 +7429,7 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 
 fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &VariantDecl) -> fmt::Result
 {
+	write_docs(f, w, &v.docs)?;
 	for modifier in &v.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7394,8 +7477,9 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 	return write!(f, "}}");
 }
 
-fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &TypeAliasDecl) -> fmt::Result
+fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &TypeAliasDecl) -> fmt::Result
 {
+	write_docs(f, w, &t.docs)?;
 	for modifier in &t.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7418,6 +7502,7 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, t: &
 
 fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result
 {
+	write_docs(f, w, &n.docs)?;
 	for modifier in &n.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7439,6 +7524,7 @@ fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Na
 
 fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result
 {
+	write_docs(f, w, &t.docs)?;
 	for modifier in &t.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7505,6 +7591,7 @@ fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &Tra
 
 fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDecl) -> fmt::Result
 {
+	write_docs(f, w, &i.docs)?;
 	for modifier in &i.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
@@ -7674,5 +7761,24 @@ impl fmt::Display for GenericArg
 			GenericArg::Type(ty) => write!(f, "{}", ty),
 			GenericArg::Binding { name, ty, .. } => write!(f, "{} = {}", name, ty),
 		};
+	}
+}
+
+fn write_docs(f: &mut fmt::Formatter<'_>, w: &IndentWriter, docs: &Option<DocsComment>) -> fmt::Result
+{
+	if let Some(doc) = docs {
+		for line in doc.content.lines() {
+			w.write_indent(f)?;
+			writeln!(f, "///{}", line)?;
+		}
+	}
+	return Ok(());
+}
+
+impl fmt::Display for DocsComment
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return write!(f, "///{}", self.content);
 	}
 }

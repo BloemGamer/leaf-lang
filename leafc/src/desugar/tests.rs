@@ -4,7 +4,8 @@ mod tests
 {
 	use crate::desugar::*;
 	use crate::parser::{
-		AssignOp, BinaryOp, FunctionSignature, GenericParam, ImplTarget, Literal, Param, Path, UnaryOp,
+		AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericParam, ImplTarget, Literal, Param, Path, StructDecl,
+		TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
 	};
 
 	// Helper to create a simple identifier expression
@@ -667,9 +668,11 @@ mod tests
 						span: Span::default(),
 					}),
 					span: Span::default(),
+					docs: None,
 				})],
 				span: Span::default(),
 			},
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -731,8 +734,10 @@ mod tests
 					tail_expr: None,
 					span: Span::default(),
 				}),
+				docs: None,
 				span: Span::default(),
 			})],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -781,6 +786,7 @@ mod tests
 				}),
 				span: Span::default(),
 			}],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2077,6 +2083,7 @@ mod tests
 				tail_expr: None,
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2105,6 +2112,7 @@ mod tests
 				tail_expr: None,
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -2117,436 +2125,431 @@ mod tests
 		// Just verify it doesn't panic - loop stack should be properly managed
 	}
 
-	#[cfg(test)]
-	mod constructor_tests
+	#[test]
+	fn test_desugar_var_with_constructor_call()
 	{
-		use super::*;
+		let mut desugarer = Desugarer::new();
 
-		#[test]
-		fn test_desugar_var_with_constructor_call()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["x".to_string()], Span::default()),
-					ty: Type {
-						modifiers: vec![],
-						core: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
-						}),
-						span: Span::default(),
-					},
-					call_constructor: Some(CallType::Regular),
-					span: Span::default(),
-				},
-				init: None,
-				comp_const: false,
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should have generated Point::new() as the initializer
-			assert!(output.init.is_some());
-			match output.init.unwrap() {
-				Expr::Call { callee, args, .. } => {
-					match *callee {
-						Expr::Identifier { path, .. } => {
-							assert_eq!(
-								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-								vec!["Point", "create"]
-							);
-						}
-						_ => panic!("Expected identifier in callee"),
-					}
-					assert_eq!(args.len(), 0); // create() takes no arguments
-				}
-				_ => panic!("Expected call expression"),
-			}
-
-			// call_constructor should be set to false after processing
-			match output.pattern {
-				Pattern::TypedIdentifier { call_constructor, .. } => {
-					assert!(call_constructor.is_none());
-				}
-				_ => panic!("Expected TypedIdentifier pattern"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_var_with_constructor_and_existing_init()
-		{
-			let mut desugarer = Desugarer::new();
-
-			// If there's already an initializer, call_constructor should be ignored
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["x".to_string()], Span::default()),
-					ty: simple_type("Point"),
-					call_constructor: Some(CallType::Regular),
-					span: Span::default(),
-				},
-				init: Some(Expr::Literal {
-					value: Literal::Int(42),
-					span: Span::default(),
-				}),
-				comp_const: false,
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should keep the existing initializer
-			match output.init.unwrap() {
-				Expr::Literal {
-					value: Literal::Int(42),
-					..
-				} => (),
-				_ => panic!("Expected original initializer to be preserved"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_var_with_generic_type_constructor()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["vec".to_string()], Span::default()),
-					ty: Type {
-						modifiers: vec![],
-						core: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Vec".to_string()], Span::default()),
-							generics: vec![Type {
-								modifiers: vec![],
-								core: Box::new(TypeCore::Base {
-									path: Path::simple(vec!["i32".to_string()], Span::default()),
-									generics: vec![],
-								}),
-								span: Span::default(),
-							}],
-						}),
-						span: Span::default(),
-					},
-					call_constructor: Some(CallType::Regular),
-					span: Span::default(),
-				},
-				init: None,
-				comp_const: false,
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should generate Vec::create()
-			assert!(output.init.is_some());
-			match output.init.unwrap() {
-				Expr::Call { callee, .. } => match *callee {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["Vec", "create"]
-						);
-					}
-					_ => panic!("Expected Vec::new identifier"),
-				},
-				_ => panic!("Expected call expression"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_const_with_constructor()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
-					ty: simple_type("Config"),
-					call_constructor: Some(CallType::Regular),
-					span: Span::default(),
-				},
-				init: None,
-				comp_const: true, // const instead of var
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should still generate Config::new()
-			assert!(output.init.is_some());
-			match output.init.unwrap() {
-				Expr::Call { callee, .. } => match *callee {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["Config", "create"]
-						);
-					}
-					_ => panic!("Expected Config::create identifier"),
-				},
-				_ => panic!("Expected call expression"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_qualified_type_constructor()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["cfg".to_string()], Span::default()),
-					ty: Type {
-						modifiers: vec![],
-						core: Box::new(TypeCore::Base {
-							path: Path::simple(
-								vec!["std".to_string(), "config".to_string(), "Config".to_string()],
-								Span::default(),
-							),
-							generics: vec![],
-						}),
-						span: Span::default(),
-					},
-					call_constructor: Some(CallType::Regular),
-					span: Span::default(),
-				},
-				init: None,
-				comp_const: false,
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should generate std::config::Config::new()
-			match output.init.unwrap() {
-				Expr::Call { callee, .. } => match *callee {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "config", "Config", "create"]
-						);
-					}
-					_ => panic!("Expected qualified path"),
-				},
-				_ => panic!("Expected call expression"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_var_without_constructor_unchanged()
-		{
-			let mut desugarer = Desugarer::new();
-
-			// Normal variable without constructor syntax
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["x".to_string()], Span::default()),
-					ty: simple_type("i32"),
-					call_constructor: None,
-					span: Span::default(),
-				},
-				init: Some(int_lit(42)),
-				comp_const: false,
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Should keep original initializer
-			match output.init.unwrap() {
-				Expr::Literal {
-					value: Literal::Int(42),
-					..
-				} => (),
-				_ => panic!("Expected original initializer"),
-			}
-		}
-
-		#[test]
-		fn test_desugar_multiple_vars_with_constructors()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let program = Program {
-				items: vec![
-					TopLevelDecl::VariableDecl(VariableDecl {
-						pattern: Pattern::TypedIdentifier {
-							path: Path::simple(vec!["a".to_string()], Span::default()),
-							ty: simple_type("Point"),
-							call_constructor: Some(CallType::Regular),
-							span: Span::default(),
-						},
-						init: None,
-						comp_const: false,
-						span: Span::default(),
-					}),
-					TopLevelDecl::VariableDecl(VariableDecl {
-						pattern: Pattern::TypedIdentifier {
-							path: Path::simple(vec!["b".to_string()], Span::default()),
-							ty: simple_type("Config"),
-							call_constructor: Some(CallType::Regular),
-							span: Span::default(),
-						},
-						init: None,
-						comp_const: false,
-						span: Span::default(),
-					}),
-				],
-				span: Span::default(),
-			};
-
-			let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
-
-			// Both should have generated constructor calls
-			assert_eq!(output.items.len(), 2);
-
-			for item in &output.items {
-				match item {
-					TopLevelDecl::VariableDecl(var) => {
-						assert!(var.init.is_some());
-						match &var.init {
-							Some(Expr::Call { .. }) => (),
-							_ => panic!("Expected constructor call"),
-						}
-					}
-					_ => panic!("Expected variable declaration"),
-				}
-			}
-		}
-
-		#[test]
-		fn test_desugar_constructor_in_function()
-		{
-			let mut desugarer = Desugarer::new();
-
-			let func = FunctionDecl {
-				signature: FunctionSignature {
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
 					modifiers: vec![],
-					name: Path::simple(vec!["test".into()], Span::default()),
-					generics: vec![],
-					params: vec![],
-					return_type: None,
-					where_clause: vec![],
-					call_type: CallType::Regular,
-					heap_generics: Vec::new(),
+					core: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: vec![],
+					}),
 					span: Span::default(),
 				},
-				body: Some(Block {
-					stmts: vec![Stmt::VariableDecl(VariableDecl {
-						pattern: Pattern::TypedIdentifier {
-							path: Path::simple(vec!["local".to_string()], Span::default()),
-							ty: simple_type("LocalType"),
-							call_constructor: Some(CallType::Regular),
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should have generated Point::new() as the initializer
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { callee, args, .. } => {
+				match *callee {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["Point", "create"]
+						);
+					}
+					_ => panic!("Expected identifier in callee"),
+				}
+				assert_eq!(args.len(), 0); // create() takes no arguments
+			}
+			_ => panic!("Expected call expression"),
+		}
+
+		// call_constructor should be set to false after processing
+		match output.pattern {
+			Pattern::TypedIdentifier { call_constructor, .. } => {
+				assert!(call_constructor.is_none());
+			}
+			_ => panic!("Expected TypedIdentifier pattern"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_var_with_constructor_and_existing_init()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// If there's already an initializer, call_constructor should be ignored
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: simple_type("Point"),
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: Some(Expr::Literal {
+				value: Literal::Int(42),
+				span: Span::default(),
+			}),
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should keep the existing initializer
+		match output.init.unwrap() {
+			Expr::Literal {
+				value: Literal::Int(42),
+				..
+			} => (),
+			_ => panic!("Expected original initializer to be preserved"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_var_with_generic_type_constructor()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["vec".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Vec".to_string()], Span::default()),
+						generics: vec![Type {
+							modifiers: vec![],
+							core: Box::new(TypeCore::Base {
+								path: Path::simple(vec!["i32".to_string()], Span::default()),
+								generics: vec![],
+							}),
 							span: Span::default(),
-						},
-						init: None,
-						comp_const: false,
+						}],
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate Vec::create()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { callee, .. } => match *callee {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["Vec", "create"]
+					);
+				}
+				_ => panic!("Expected Vec::new identifier"),
+			},
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_const_with_constructor()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
+				ty: simple_type("Config"),
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: true, // const instead of var
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should still generate Config::new()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { callee, .. } => match *callee {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["Config", "create"]
+					);
+				}
+				_ => panic!("Expected Config::create identifier"),
+			},
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_qualified_type_constructor()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["cfg".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: Path::simple(
+							vec!["std".to_string(), "config".to_string(), "Config".to_string()],
+							Span::default(),
+						),
+						generics: vec![],
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate std::config::Config::new()
+		match output.init.unwrap() {
+			Expr::Call { callee, .. } => match *callee {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "config", "Config", "create"]
+					);
+				}
+				_ => panic!("Expected qualified path"),
+			},
+			_ => panic!("Expected call expression"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_var_without_constructor_unchanged()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// Normal variable without constructor syntax
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: simple_type("i32"),
+				call_constructor: None,
+				span: Span::default(),
+			},
+			init: Some(int_lit(42)),
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should keep original initializer
+		match output.init.unwrap() {
+			Expr::Literal {
+				value: Literal::Int(42),
+				..
+			} => (),
+			_ => panic!("Expected original initializer"),
+		}
+	}
+
+	#[test]
+	fn test_desugar_multiple_vars_with_constructors()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let program = Program {
+			items: vec![
+				TopLevelDecl::VariableDecl(VariableDecl {
+					pattern: Pattern::TypedIdentifier {
+						path: Path::simple(vec!["a".to_string()], Span::default()),
+						ty: simple_type("Point"),
+						call_constructor: Some(CallType::Regular),
 						span: Span::default(),
-					})],
-					tail_expr: None,
+					},
+					init: None,
+					comp_const: false,
 					span: Span::default(),
 				}),
-				span: Span::default(),
-			};
+				TopLevelDecl::VariableDecl(VariableDecl {
+					pattern: Pattern::TypedIdentifier {
+						path: Path::simple(vec!["b".to_string()], Span::default()),
+						ty: simple_type("Config"),
+						call_constructor: Some(CallType::Regular),
+						span: Span::default(),
+					},
+					init: None,
+					comp_const: false,
+					span: Span::default(),
+				}),
+			],
+			span: Span::default(),
+		};
 
-			let result = desugarer.desugar_function(func).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
+		let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
-			// Check the variable inside the function
-			let body = output.body.unwrap();
-			match &body.stmts[0] {
-				Stmt::VariableDecl(var) => {
+		// Both should have generated constructor calls
+		assert_eq!(output.items.len(), 2);
+
+		for item in &output.items {
+			match item {
+				TopLevelDecl::VariableDecl(var) => {
 					assert!(var.init.is_some());
 					match &var.init {
-						Some(Expr::Call { callee, .. }) => match callee.as_ref() {
-							Expr::Identifier { path, .. } => {
-								assert_eq!(
-									path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-									vec!["LocalType", "create"]
-								);
-							}
-							_ => panic!("Expected identifier callee"),
-						},
+						Some(Expr::Call { .. }) => (),
 						_ => panic!("Expected constructor call"),
 					}
 				}
 				_ => panic!("Expected variable declaration"),
 			}
 		}
+	}
 
-		#[test]
-		fn test_constructor_call_preserves_type_info()
-		{
-			let mut desugarer = Desugarer::new();
+	#[test]
+	fn test_desugar_constructor_in_function()
+	{
+		let mut desugarer = Desugarer::new();
 
-			let original_ty = Type {
+		let func = FunctionDecl {
+			signature: FunctionSignature {
 				modifiers: vec![],
-				core: Box::new(TypeCore::Base {
-					path: Path::simple(vec!["MyType".to_string()], Span::default()),
-					generics: vec![Type {
-						modifiers: vec![],
-						core: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["String".to_string()], Span::default()),
-							generics: vec![],
-						}),
+				name: Path::simple(vec!["test".into()], Span::default()),
+				generics: vec![],
+				params: vec![],
+				return_type: None,
+				where_clause: vec![],
+				call_type: CallType::Regular,
+				heap_generics: Vec::new(),
+				span: Span::default(),
+			},
+			body: Some(Block {
+				stmts: vec![Stmt::VariableDecl(VariableDecl {
+					pattern: Pattern::TypedIdentifier {
+						path: Path::simple(vec!["local".to_string()], Span::default()),
+						ty: simple_type("LocalType"),
+						call_constructor: Some(CallType::Regular),
 						span: Span::default(),
-					}],
-				}),
-				span: Span::default(),
-			};
-
-			let var = VariableDecl {
-				pattern: Pattern::TypedIdentifier {
-					path: Path::simple(vec!["x".to_string()], Span::default()),
-					ty: original_ty,
-					call_constructor: Some(CallType::Regular),
+					},
+					init: None,
+					comp_const: false,
 					span: Span::default(),
-				},
-				init: None,
-				comp_const: false,
+				})],
+				tail_expr: None,
 				span: Span::default(),
-			};
+			}),
+			docs: None,
+			span: Span::default(),
+		};
 
-			let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
-			assert!(result.is_ok());
-			let output = result.unwrap();
+		let result = desugarer.desugar_function(func).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
 
-			// Pattern should still have the type information
-			match &output.pattern {
-				Pattern::TypedIdentifier { ty, .. } => {
-					// Type should be preserved
-					match ty.core.as_ref() {
-						TypeCore::Base { path, generics } => {
+		// Check the variable inside the function
+		let body = output.body.unwrap();
+		match &body.stmts[0] {
+			Stmt::VariableDecl(var) => {
+				assert!(var.init.is_some());
+				match &var.init {
+					Some(Expr::Call { callee, .. }) => match callee.as_ref() {
+						Expr::Identifier { path, .. } => {
 							assert_eq!(
 								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-								vec!["MyType"]
+								vec!["LocalType", "create"]
 							);
-							assert_eq!(generics.len(), 1);
 						}
-						_ => panic!("Expected base type"),
-					}
+						_ => panic!("Expected identifier callee"),
+					},
+					_ => panic!("Expected constructor call"),
 				}
-				_ => panic!("Expected TypedIdentifier pattern"),
 			}
+			_ => panic!("Expected variable declaration"),
+		}
+	}
+
+	#[test]
+	fn test_constructor_call_preserves_type_info()
+	{
+		let mut desugarer = Desugarer::new();
+
+		let original_ty = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::Base {
+				path: Path::simple(vec!["MyType".to_string()], Span::default()),
+				generics: vec![Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["String".to_string()], Span::default()),
+						generics: vec![],
+					}),
+					span: Span::default(),
+				}],
+			}),
+			span: Span::default(),
+		};
+
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: original_ty,
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Pattern should still have the type information
+		match &output.pattern {
+			Pattern::TypedIdentifier { ty, .. } => {
+				// Type should be preserved
+				match ty.core.as_ref() {
+					TypeCore::Base { path, generics } => {
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["MyType"]
+						);
+						assert_eq!(generics.len(), 1);
+					}
+					_ => panic!("Expected base type"),
+				}
+			}
+			_ => panic!("Expected TypedIdentifier pattern"),
 		}
 	}
 
@@ -3423,6 +3426,7 @@ mod tests
 			}),
 			where_clause: vec![],
 			body: vec![],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3458,6 +3462,7 @@ mod tests
 			trait_path: None,
 			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], vec![])],
 			body: vec![],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3539,6 +3544,7 @@ mod tests
 				tail_expr: Some(Box::new(ident("x"))),
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3920,6 +3926,7 @@ mod tests
 				tail_expr: None,
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -3967,6 +3974,7 @@ mod tests
 				tail_expr: None,
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -4039,12 +4047,13 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let struct_decl = TopLevelDecl::Struct(crate::parser::StructDecl {
+		let struct_decl = TopLevelDecl::Struct(StructDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["Point".into()], Span::default()),
 			generics: vec![],
 			fields: vec![],
 			where_clause: vec![],
+			docs: None,
 			span: Span::default(),
 		});
 
@@ -4062,12 +4071,13 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let union_decl = TopLevelDecl::Union(crate::parser::UnionDecl {
+		let union_decl = TopLevelDecl::Union(UnionDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["MyUnion".into()], Span::default()),
 			generics: vec![],
 			fields: vec![],
 			where_clause: vec![],
+			docs: None,
 			span: Span::default(),
 		});
 
@@ -4085,12 +4095,13 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let enum_decl = TopLevelDecl::Enum(crate::parser::EnumDecl {
+		let enum_decl = TopLevelDecl::Enum(EnumDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["MyEnum".into()], Span::default()),
 			generics: vec![],
 			variants: vec![],
 			where_clause: vec![],
+			docs: None,
 			span: Span::default(),
 		});
 
@@ -4108,12 +4119,13 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let variant_decl = TopLevelDecl::Variant(crate::parser::VariantDecl {
+		let variant_decl = TopLevelDecl::Variant(VariantDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["MyVariant".into()], Span::default()),
 			generics: vec![],
 			variants: vec![],
 			where_clause: vec![],
+			docs: None,
 			span: Span::default(),
 		});
 
@@ -4131,11 +4143,12 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let alias = TopLevelDecl::TypeAlias(crate::parser::TypeAliasDecl {
+		let alias = TopLevelDecl::TypeAlias(TypeAliasDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["MyType".into()], Span::default()),
 			generics: vec![],
 			ty: simple_type("i32"),
+			docs: None,
 			span: Span::default(),
 		});
 
@@ -4165,13 +4178,15 @@ mod tests
 			},
 			trait_path: None,
 			where_clause: vec![],
-			body: vec![ImplItem::TypeAlias(crate::parser::TypeAliasDecl {
+			body: vec![ImplItem::TypeAlias(TypeAliasDecl {
 				modifiers: vec![],
 				name: Path::simple(vec!["AssocType".into()], Span::default()),
 				generics: vec![],
 				ty: simple_type("i32"),
+				docs: None,
 				span: Span::default(),
 			})],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -4200,6 +4215,7 @@ mod tests
 				comp_const: true,
 				span: Span::default(),
 			})],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -4219,13 +4235,15 @@ mod tests
 			name: Path::simple(vec!["MyTrait".into()], Span::default()),
 			generics: vec![],
 			super_traits: vec![],
-			items: vec![TraitItem::TypeAlias(crate::parser::TypeAliasDecl {
+			items: vec![TraitItem::TypeAlias(TypeAliasDecl {
 				modifiers: vec![],
 				name: Path::simple(vec!["AssocType".into()], Span::default()),
 				generics: vec![],
 				ty: simple_type("i32"),
+				docs: None,
 				span: Span::default(),
 			})],
+			docs: None,
 			span: Span::default(),
 		};
 
@@ -4249,6 +4267,7 @@ mod tests
 				comp_const: true,
 				span: Span::default(),
 			})],
+			docs: None,
 			span: Span::default(),
 		};
 
