@@ -1337,33 +1337,12 @@ impl Desugarer
 					.transpose()?
 					.map(Box::new);
 
-				if has_rest && desugared_base.is_none() {
-					Expr::Block(Box::new(Block {
-						stmts: vec![Stmt::Directive(DirectiveNode {
-							directive: Directive::Custom {
-								name: "validate_struct_rest".to_string(),
-								params: vec![],
-							},
-							body: None,
-							span,
-						})],
-						tail_expr: Some(Box::new(Expr::StructInit {
-							path,
-							fields: desugared_fields,
-							base: desugared_base,
-							span,
-							has_rest,
-						})),
-						span,
-					}))
-				} else {
-					Expr::StructInit {
-						path,
-						fields: desugared_fields,
-						base: desugared_base,
-						span,
-						has_rest,
-					}
+				Expr::StructInit {
+					path,
+					fields: desugared_fields,
+					base: desugared_base,
+					span,
+					has_rest,
 				}
 			}
 			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block)?)),
