@@ -882,17 +882,36 @@ impl Desugarer
 
 		let desugared_pattern: Pattern = self.desugar_pattern(pattern)?;
 
+		let item_type: Type = extract_type_from_pattern(&desugared_pattern).unwrap_or_else(|| {
+			return Type {
+				modifiers: vec![],
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["_".to_string()], pattern_span),
+					generics: vec![],
+				}),
+				span: pattern_span,
+			};
+		});
+
+		let iterator_type = Type {
+			modifiers: vec![],
+			core: Box::new(TypeCore::ImplTrait {
+				bounds: vec![WhereBound::Path {
+					path: Path::simple(vec!["Iterator".to_string()], iter_span),
+					args: vec![GenericArg::Binding {
+						name: "Item".to_string(),
+						ty: item_type,
+						span: pattern_span,
+					}],
+				}],
+			}),
+			span: iter_span,
+		};
+
 		let iter_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![iter_temp.clone()], iter_span),
-				ty: Type {
-					modifiers: vec![],
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["_".to_string()], iter_span),
-						generics: vec![],
-					}),
-					span: iter_span,
-				},
+				ty: iterator_type,
 				call_constructor: None,
 				span: iter_span,
 			},
