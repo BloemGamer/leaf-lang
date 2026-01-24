@@ -1326,20 +1326,46 @@ impl Desugarer
 				span,
 				base,
 				has_rest,
-			} => Expr::StructInit {
-				path,
-				fields: fields
+			} => {
+				let desugared_fields: Vec<(Ident, Expr)> = fields
 					.into_iter()
 					.map(|(name, expr)| return Ok((name, self.desugar_expr(expr)?)))
-					.collect::<Result<Vec<_>, _>>()?,
-				base: base
+					.collect::<Result<Vec<_>, _>>()?;
+
+				let desugared_base = base
 					.map(|expr| return self.desugar_expr(*expr))
 					.transpose()?
-					.map(Box::new),
-				span,
-				has_rest,
-			},
+					.map(Box::new);
 
+				if has_rest && desugared_base.is_none() {
+					Expr::Block(Box::new(Block {
+						stmts: vec![Stmt::Directive(DirectiveNode {
+							directive: Directive::Custom {
+								name: "validate_struct_rest".to_string(),
+								params: vec![],
+							},
+							body: None,
+							span,
+						})],
+						tail_expr: Some(Box::new(Expr::StructInit {
+							path,
+							fields: desugared_fields,
+							base: desugared_base,
+							span,
+							has_rest,
+						})),
+						span,
+					}))
+				} else {
+					Expr::StructInit {
+						path,
+						fields: desugared_fields,
+						base: desugared_base,
+						span,
+						has_rest,
+					}
+				}
+			}
 			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block)?)),
 
 			Expr::UnsafeBlock(block) => Expr::UnsafeBlock(Box::new(self.desugar_block(*block)?)),
