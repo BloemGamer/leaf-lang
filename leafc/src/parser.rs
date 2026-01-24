@@ -314,6 +314,7 @@ pub enum Modifier
 /// * `Use` - Use a module path: `@use std::vec`
 /// * `Custom` - Custom directive with name and arguments
 /// * `ValidateStructPattern` Internal for validating if a struct pattern is valid
+/// * `ValidateType` Internal for validating if a variable is a certain type
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Directive
@@ -506,6 +507,7 @@ impl Path
 /// # Fields
 /// * `signature` - Function signature (name, parameters, return type, etc.)
 /// * `body` - Optional function body (None for prototypes)
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the function
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDecl
@@ -932,6 +934,12 @@ impl Spanned for Expr
 }
 
 /// Type of function call
+///
+/// # Variants
+/// * `Regular` - Regular function call: `func()`
+/// * `UserHeap` - User-written heap call: `func!<IO: x>()`
+/// * `UserMaybeHeap` - User-written for templates call: `func?<IO: x>()`
+/// * `CompilerHeap` - Compiler-generated call: `func?<IO: x>()`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum CallType
@@ -1194,6 +1202,7 @@ pub enum AssignOp
 /// * `pattern` - Pattern for destructuring
 /// * `init` - Optional initializer expression
 /// * `comp_const` - Whether this is a compile-time constant (`const` vs `var`)
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the declaration
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableDecl
@@ -1569,6 +1578,7 @@ impl Spanned for Pattern
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Struct name (can be qualified path)
 /// * `fields` - List of (`type`, `name`, `Option<default_value>`) tuples for fields
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the struct
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDecl
@@ -1600,6 +1610,7 @@ impl Spanned for StructDecl
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Union name (can be qualified path)
 /// * `fields` - List of (type, name) tuples for fields
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the union
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionDecl
@@ -1631,6 +1642,7 @@ impl Spanned for UnionDecl
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Enum name (can be qualified path)
 /// * `variants` - List of (`name`, `Option<value>`) tuples
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the enum
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumDecl
@@ -1662,6 +1674,7 @@ impl Spanned for EnumDecl
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Variant name (can be qualified path)
 /// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) tuples for variants
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the variant
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariantDecl
@@ -1695,6 +1708,7 @@ impl Spanned for VariantDecl
 /// * `generics` - Generic type parameters
 /// * `super_traits` - Traits that this trait extends
 /// * `items` - Associated items (functions, types, constants)
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the trait
 #[derive(Debug, Clone, PartialEq)]
 pub struct TraitDecl
@@ -1766,6 +1780,7 @@ impl Spanned for TraitItem
 /// * `trait_path` - Optional trait being implemented (None for inherent impl)
 /// * `where_clause` - Generic constraints
 /// * `body` - Implementation items
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the impl
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImplDecl
@@ -1894,6 +1909,10 @@ pub enum WhereBound
 }
 
 /// Generic argument in angle brackets - can be a type or an associated type binding
+///
+/// # Variants
+/// * `Type` - A type
+/// * `Binding` - A struct with name and type, like `<Item = i64>`
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenericArg
 {
@@ -1944,6 +1963,7 @@ pub enum FuncBound
 /// * `InvalidDeclaration` - Declaration syntax error
 /// * `UnexpectedItem` - Item in wrong context
 /// * `Generic` - Generic error with custom message
+/// * `ReservedToken` - When a reserved token is given
 #[derive(Debug, Clone)]
 pub enum ParseErrorKind
 {
@@ -2268,6 +2288,7 @@ impl std::error::Error for ParseError {}
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Alias name (can be qualified path)
 /// * `ty` - Type being aliased
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the type alias
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeAliasDecl
@@ -2298,6 +2319,7 @@ impl Spanned for TypeAliasDecl
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Namespace name (can be qualified path)
 /// * `body` - Declarations within the namespace
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the namespace
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamespaceDecl
@@ -2336,6 +2358,11 @@ impl Restrictions
 	};
 }
 
+/// Docs comment
+///
+/// # Fields
+/// * `content` - The docs comment
+/// * `span` - Source location of the docs comment
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DocsComment
@@ -2354,14 +2381,21 @@ impl Spanned for DocsComment
 }
 
 /// A field in a struct declaration
+///
+/// # Fields
+/// * `ty` - The type of the field
+/// * `name` - The name of the field
+/// * `default_value` - Optinal default value `member: i64 = 0`
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
+/// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructField
 {
-	#[ignored(PartialEq)]
-	pub docs: Option<DocsComment>,
 	pub ty: Type,
 	pub name: Ident,
 	pub default_value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -2375,13 +2409,19 @@ impl Spanned for StructField
 }
 
 /// A field in a union declaration
+///
+/// # Fields
+/// * `ty` - The type of the field
+/// * `name` - The name of the field
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
+/// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnionField
 {
-	#[ignored(PartialEq)]
-	pub docs: Option<DocsComment>,
 	pub ty: Type,
 	pub name: Ident,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -2395,13 +2435,19 @@ impl Spanned for UnionField
 }
 
 /// A variant in an enum declaration
+///
+/// # Fields
+/// * `name` - The name of the field
+/// * `value` - Optional falue of the field `Member = 0`
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
+/// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant
 {
-	#[ignored(PartialEq)]
-	pub docs: Option<DocsComment>,
 	pub name: Ident,
 	pub value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -2415,14 +2461,21 @@ impl Spanned for EnumVariant
 }
 
 /// A member in a variant declaration
+///
+/// # Fields
+/// * `ty` - The type of the field
+/// * `name` - The name of the field
+/// * `value` - Optinal value `Member = 0`
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
+/// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariantMember
 {
-	#[ignored(PartialEq)]
-	pub docs: Option<DocsComment>,
 	pub ty: Option<Type>,
 	pub name: Ident,
 	pub value: Option<Expr>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
