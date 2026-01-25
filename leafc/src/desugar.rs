@@ -12,6 +12,19 @@ use crate::{
 	source_map::SourceIndex,
 };
 
+/// Compiler pass that transforms high-level syntax into simpler forms.
+///
+/// The desugarer converts complex language constructs into their equivalent
+/// primitive forms, making later compiler stages simpler. This includes:
+///
+/// - Converting `for` loops into `while` loops with iterators
+/// - Expanding pattern matching in variable declarations
+/// - Converting `if let` and `while let` into pattern matching
+/// - Expanding `impl Trait` in function signatures to generic parameters
+/// - Normalizing generic bounds from parameter lists to where clauses
+/// - Expanding or-patterns into multiple match arms
+/// - Converting range expressions to constructor calls
+/// - And more
 #[derive(Debug, Default)]
 pub struct Desugarer
 {
@@ -20,23 +33,51 @@ pub struct Desugarer
 	loop_stack: Vec<String>,
 }
 
+/// Types of errors that can occur during desugaring.
+///
+/// Categorizes different semantic errors that prevent desugaring from
+/// completing successfully. Unlike parse errors, these occur when the
+/// AST is syntactically valid but semantically problematic.
 #[derive(Debug, Clone)]
 pub enum DesugarErrorKind
 {
+	/// A constructor call was attempted on an invalid type.
+	///
+	/// Constructor calls (using `()` or `!()`) are not valid on references and pointers.
 	InvalidConstructorType
 	{
 		reason: String
 	},
+
+	/// A pattern is malformed or used in an invalid context.
+	///
+	/// This can occur when patterns are too complex for their context,
+	/// or when they contain constructs that aren't supported.
 	InvalidPattern
 	{
 		reason: String
 	},
+
+	/// A generic error with a custom message.
+	///
+	/// Used for errors that don't fit other categories.
 	Generic
 	{
 		message: String
 	},
 }
 
+/// Desugaring error with location and context information.
+///
+/// Contains detailed information about what went wrong during desugaring,
+/// including source location and a stack of contexts showing what was
+/// being processed when the error occurred.
+///
+/// # Fields
+/// * `span` - Source location where the error occurred
+/// * `source_index` - Index into the source map
+/// * `kind` - The specific kind of error
+/// * `context` - Stack of processing contexts (e.g., "while desugaring for loop")
 #[derive(Debug, Clone)]
 pub struct DesugarError
 {
@@ -48,6 +89,15 @@ pub struct DesugarError
 
 impl DesugarError
 {
+	/// Creates a new desugaring error.
+	///
+	/// # Arguments
+	/// * `span` - Source location of the error
+	/// * `kind` - The kind of desugaring error
+	/// * `source_index` - Index into the source map
+	///
+	/// # Returns
+	/// A new `DesugarError` with no context
 	pub const fn new(span: Span, kind: DesugarErrorKind, source_index: SourceIndex) -> Self
 	{
 		return Self {
@@ -58,12 +108,37 @@ impl DesugarError
 		};
 	}
 
+	/// Adds context information to the error.
+	///
+	/// Context helps track what operations were in progress when the error
+	/// occurred, creating a stack trace of desugaring operations.
+	///
+	/// # Arguments
+	/// * `ctx` - Context description to add
+	///
+	/// # Returns
+	/// The error with the added context
+	///
+	/// # Example
+	/// ```ignore
+	/// error.with_context("while desugaring for loop")
+	///      .with_context("in function foo")
+	/// ```
 	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
 	{
 		self.context.push(ctx.into());
 		return self;
 	}
 
+	/// Creates an invalid constructor type error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `reason` - Why the constructor type is invalid
+	/// * `source_index` - Index into the source map
+	///
+	/// # Returns
+	/// A new error indicating an invalid constructor type
 	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -73,6 +148,15 @@ impl DesugarError
 		);
 	}
 
+	/// Creates an invalid pattern error.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `reason` - Why the pattern is invalid
+	/// * `source_index` - Index into the source map
+	///
+	/// # Returns
+	/// A new error indicating an invalid pattern
 	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -82,6 +166,15 @@ impl DesugarError
 		);
 	}
 
+	/// Creates a generic error with a custom message.
+	///
+	/// # Arguments
+	/// * `span` - Source location
+	/// * `message` - The error message
+	/// * `source_index` - Index into the source map
+	///
+	/// # Returns
+	/// A new generic desugaring error
 	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
 	{
 		return Self::new(
@@ -93,6 +186,17 @@ impl DesugarError
 		);
 	}
 
+	/// Writes the error to a formatter with source context.
+	///
+	/// Formats the error message along with the relevant source code snippet,
+	/// pointing to where the error occurred.
+	///
+	/// # Arguments
+	/// * `f` - The formatter to write to
+	/// * `source_map` - Source map for looking up source text
+	///
+	/// # Returns
+	/// Result of the formatting operation
 	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
 	{
 		return write!(
@@ -134,6 +238,18 @@ impl std::error::Error for DesugarError {}
 
 impl Desugarer
 {
+	/// Creates a new desugarer instance.
+	///
+	/// The desugarer starts with all counters at zero and no active loops.
+	///
+	/// # Returns
+	/// A new `Desugarer` ready to process a program
+	///
+	/// # Example
+	/// ```ignore
+	/// let mut desugarer = Desugarer::new();
+	/// let desugared = desugarer.desugar_program(parsed_program)?;
+	/// ```
 	pub fn new() -> Self
 	{
 		return Desugarer::default();
@@ -169,6 +285,24 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
+	/// Desugars a complete program.
+	///
+	/// This is the main entry point for desugaring. It processes all top-level
+	/// declarations and ensures the result is idempotent (running desugaring
+	/// on already-desugared code produces the same result).
+	///
+	/// # Arguments
+	/// * `program` - The program AST to desugar
+	///
+	/// # Returns
+	/// * `Ok(Program)` - The desugared program
+	/// * `Err(CompileError)` - If desugaring encounters an error
+	///
+	/// # Example
+	/// ```ignore
+	/// let mut desugarer = Desugarer::new();
+	/// let desugared = desugarer.desugar_program(parsed_program)?;
+	/// ```
 	#[allow(clippy::result_large_err)]
 	pub fn desugar_program(&mut self, program: Program) -> Result<Program, CompileError>
 	{
