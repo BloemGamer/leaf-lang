@@ -4271,23 +4271,6 @@ mod tests
 		assert!(result.is_ok());
 	}
 
-	// ========== Type Constructor Error Tests ==========
-
-	#[test]
-	fn test_type_to_constructor_call_non_base_type_error()
-	{
-		let desugarer = Desugarer::new();
-
-		let tuple_type = Type {
-			modifiers: vec![],
-			core: Box::new(TypeCore::Tuple(vec![simple_type("i32")])),
-			span: Span::default(),
-		};
-
-		let result = desugarer.type_to_constructor_call(&tuple_type, CallType::Regular);
-		assert!(result.is_err(), "Should error on non-base type constructor");
-	}
-
 	// ========== Where Clause Tests ==========
 
 	#[test]
@@ -4552,5 +4535,633 @@ mod tests
 		println!("{}\n----------------\n{}", result1, result2);
 		// They should be equal (desugaring should be idempotent)
 		assert_eq!(result1, result2, "Desugaring should be idempotent");
+	}
+
+	// Add these tests to your existing test file
+
+	// ========== Constructor Call Tests ==========
+
+	#[test]
+	fn test_constructor_tuple_type()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: (Point, Config)();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate (Point::create(), Config::create())
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Tuple { elements, .. } => {
+				assert_eq!(elements.len(), 2);
+				// Both elements should be constructor calls
+				for elem in elements {
+					assert!(matches!(elem, Expr::Call { .. }));
+				}
+			}
+			other => panic!("Expected tuple expression, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_array_type()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var arr: [Point; 5]();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["arr".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Array {
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+						size: Some(Box::new(int_lit(5))),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate [Point::create(); 5]
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+				// Value should be Point::create()
+				assert!(matches!(*value, Expr::Call { .. }));
+				// Count should be 5
+				assert!(matches!(
+					*count,
+					Expr::Literal {
+						value: Literal::Int(5),
+						..
+					}
+				));
+			}
+			other => panic!("Expected array repeat expression, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_unsized_array()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var arr: [Point]();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["arr".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Array {
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+						size: None,
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate [] (empty array)
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Array(ArrayLiteral::List { elements, .. }) => {
+				assert_eq!(elements.len(), 0);
+			}
+			other => panic!("Expected empty array list, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_mut_type()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: mut Point();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Mutable {
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate Point::create() (mut wrapper is transparent)
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { callee, .. } => match *callee {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["Point", "create"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			},
+			other => panic!("Expected call expression, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_reference_error()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: &Point(); - should error
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Reference {
+						mutable: false,
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var);
+		assert!(result.is_err(), "Should error on reference constructor");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				let error_str = format!("{}", e);
+				assert!(error_str.contains("reference"), "Error should mention references");
+			}
+			_ => panic!("Expected DesugarError for reference constructor"),
+		}
+	}
+
+	#[test]
+	fn test_constructor_mut_reference_error()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: &mut Point(); - should error
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Reference {
+						mutable: true,
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var);
+		assert!(result.is_err(), "Should error on mutable reference constructor");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				let error_str = format!("{}", e);
+				assert!(error_str.contains("reference"), "Error should mention references");
+			}
+			_ => panic!("Expected DesugarError for mut reference constructor"),
+		}
+	}
+
+	#[test]
+	fn test_constructor_pointer_error()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: Point*(); - should error
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Pointer {
+						inner: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["Point".to_string()], Span::default()),
+							generics: vec![],
+						}),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var);
+		assert!(result.is_err(), "Should error on pointer constructor");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				let error_str = format!("{}", e);
+				assert!(error_str.contains("pointer"), "Error should mention pointers");
+			}
+			_ => panic!("Expected DesugarError for pointer constructor"),
+		}
+	}
+
+	#[test]
+	fn test_constructor_impl_trait_error()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: impl Trait(); - should error
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::ImplTrait {
+						bounds: vec![trait_bound("Trait")],
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var);
+		assert!(result.is_err(), "Should error on impl trait constructor");
+
+		match result {
+			Err(CompileError::DesugarError(e)) => {
+				let error_str = format!("{}", e);
+				assert!(
+					error_str.contains("impl Trait") || error_str.contains("abstract"),
+					"Error should mention impl trait or abstract types"
+				);
+			}
+			_ => panic!("Expected DesugarError for impl trait constructor"),
+		}
+	}
+
+	#[test]
+	fn test_constructor_nested_tuple_array()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: [(Point, Config); 3]();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Array {
+						inner: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
+						size: Some(Box::new(int_lit(3))),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate [(Point::create(), Config::create()); 3]
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+				// Value should be a tuple of constructor calls
+				match *value {
+					Expr::Tuple { elements, .. } => {
+						assert_eq!(elements.len(), 2);
+						assert!(matches!(elements[0], Expr::Call { .. }));
+						assert!(matches!(elements[1], Expr::Call { .. }));
+					}
+					_ => panic!("Expected tuple in array repeat"),
+				}
+				// Count should be 3
+				assert!(matches!(
+					*count,
+					Expr::Literal {
+						value: Literal::Int(3),
+						..
+					}
+				));
+			}
+			other => panic!("Expected array repeat, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_empty_tuple()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: ()(); - unit type
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Tuple(vec![])),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate ()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Tuple { elements, .. } => {
+				assert_eq!(elements.len(), 0);
+			}
+			other => panic!("Expected empty tuple, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_heap_call_type()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: Point!();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: simple_type("Point"),
+				call_constructor: Some(CallType::UserHeap),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate Point::create!()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { call_type, .. } => {
+				assert_eq!(call_type, CallType::UserHeap);
+			}
+			other => panic!("Expected heap call, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_maybe_heap_call_type()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: Point?();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: simple_type("Point"),
+				call_constructor: Some(CallType::UserMaybeHeap),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate Point::create?()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { call_type, .. } => {
+				assert_eq!(call_type, CallType::UserMaybeHeap);
+			}
+			other => panic!("Expected maybe heap call, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_with_generics_preserves_generics()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: Vec<String>();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Vec".to_string()], Span::default()),
+						generics: vec![simple_type("String")],
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate Vec::<String>::create()
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Call { callee, .. } => match *callee {
+				Expr::Identifier { path, .. } => {
+					// Should be Vec::create with String generic on Vec segment
+					assert_eq!(path.segments.len(), 2);
+					assert_eq!(path.segments[0].name, "Vec");
+					assert_eq!(path.segments[0].generics.len(), 1, "{path}");
+					assert_eq!(path.segments[1].name, "create");
+				}
+				_ => panic!("Expected identifier callee"),
+			},
+			other => panic!("Expected call expression, got {:?}", other),
+		}
+	}
+
+	#[test]
+	fn test_constructor_nested_arrays()
+	{
+		let mut desugarer = Desugarer::new();
+
+		// var x: [[Point; 2]; 3]();
+		let var = VariableDecl {
+			pattern: Pattern::TypedIdentifier {
+				path: Path::simple(vec!["x".to_string()], Span::default()),
+				ty: Type {
+					modifiers: vec![],
+					core: Box::new(TypeCore::Array {
+						inner: Box::new(TypeCore::Array {
+							inner: Box::new(TypeCore::Base {
+								path: Path::simple(vec!["Point".to_string()], Span::default()),
+								generics: vec![],
+							}),
+							size: Some(Box::new(int_lit(2))),
+						}),
+						size: Some(Box::new(int_lit(3))),
+					}),
+					span: Span::default(),
+				},
+				call_constructor: Some(CallType::Regular),
+				span: Span::default(),
+			},
+			init: None,
+			comp_const: false,
+			docs: None,
+			span: Span::default(),
+		};
+
+		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(result.is_ok());
+		let output = result.unwrap();
+
+		// Should generate [[Point::create(); 2]; 3]
+		assert!(output.init.is_some());
+		match output.init.unwrap() {
+			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+				// Outer count should be 3
+				assert!(matches!(
+					*count,
+					Expr::Literal {
+						value: Literal::Int(3),
+						..
+					}
+				));
+
+				// Value should be inner array [Point::create(); 2]
+				match *value {
+					Expr::Array(ArrayLiteral::Repeat {
+						value: inner_value,
+						count: inner_count,
+						..
+					}) => {
+						assert!(matches!(
+							*inner_count,
+							Expr::Literal {
+								value: Literal::Int(2),
+								..
+							}
+						));
+						assert!(matches!(*inner_value, Expr::Call { .. }));
+					}
+					_ => panic!("Expected nested array repeat"),
+				}
+			}
+			other => panic!("Expected outer array repeat, got {:?}", other),
+		}
 	}
 }

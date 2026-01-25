@@ -1522,30 +1522,107 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn type_to_constructor_call(&self, ty: &Type, call_type: CallType) -> Result<Expr, CompileError>
 	{
-		let mut path = match ty.core.as_ref() {
-			TypeCore::Base { path, .. } => path.clone(),
-			_ => {
+		let span: Span = ty.span();
+
+		match ty.core.as_ref() {
+			TypeCore::Base { path, generics } => {
+				let mut constructor_path = path.clone();
+
+				if !generics.is_empty()
+					&& let Some(last_segment) = constructor_path.segments.last_mut()
+				{
+					last_segment.generics = generics.clone();
+				}
+
+				constructor_path.segments.push(PathSegment {
+					name: "create".to_string(),
+					generics: Vec::new(),
+					span,
+				});
+
+				return Ok(Expr::Call {
+					callee: Box::new(Expr::Identifier {
+						path: constructor_path,
+						span,
+					}),
+					call_type,
+					named_generics: Vec::new(),
+					args: vec![],
+					span,
+				});
+			}
+
+			TypeCore::Reference { .. } => {
 				return Err(CompileError::DesugarError(DesugarError::invalid_constructor_type(
-					ty.span(),
-					"only basic types can have a constructor call",
+					span,
+					"cannot call constructor on reference types - references must point to existing values",
 					self.source_index,
 				)));
 			}
-		};
 
-		path.segments.push(PathSegment {
-			name: "create".to_string(),
-			generics: Vec::new(),
-			span: ty.span,
-		});
+			TypeCore::Pointer { .. } => {
+				return Err(CompileError::DesugarError(DesugarError::invalid_constructor_type(
+					span,
+					"cannot call constructor on pointer types - pointers must point to existing values",
+					self.source_index,
+				)));
+			}
 
-		return Ok(Expr::Call {
-			callee: Box::new(Expr::Identifier { path, span: ty.span }),
-			call_type,
-			named_generics: Vec::new(),
-			args: vec![],
-			span: ty.span,
-		});
+			TypeCore::Mutable { inner } => {
+				let inner_type: Type = Type {
+					modifiers: Vec::new(),
+					core: inner.clone(),
+					span,
+				};
+
+				return self.type_to_constructor_call(&inner_type, call_type);
+			}
+
+			TypeCore::Array { inner, size } => {
+				let inner_type: Type = Type {
+					modifiers: Vec::new(),
+					core: inner.clone(),
+					span,
+				};
+
+				let element_constructor = self.type_to_constructor_call(&inner_type, call_type)?;
+
+				if let Some(size_expr) = size {
+					return Ok(Expr::Array(ArrayLiteral::Repeat {
+						value: Box::new(element_constructor),
+						count: size_expr.clone(),
+						span,
+					}));
+				} else {
+					return Ok(Expr::Array(ArrayLiteral::List {
+						elements: Vec::new(),
+						span,
+					}));
+				}
+			}
+
+			TypeCore::Tuple(types) => {
+				let mut element_constructors = Vec::new();
+
+				for tuple_ty in types {
+					let element_constructor = self.type_to_constructor_call(tuple_ty, call_type)?;
+					element_constructors.push(element_constructor);
+				}
+
+				return Ok(Expr::Tuple {
+					elements: element_constructors,
+					span,
+				});
+			}
+
+			TypeCore::ImplTrait { .. } => {
+				return Err(CompileError::DesugarError(DesugarError::invalid_constructor_type(
+					span,
+					"cannot call constructor on 'impl Trait' types - they must be concrete types",
+					self.source_index,
+				)));
+			}
+		}
 	}
 
 	#[allow(clippy::result_large_err)]
