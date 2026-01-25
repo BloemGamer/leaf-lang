@@ -30,11 +30,11 @@ fn main()
 <br/>
 
 ### Current focus
-- [ ] Writing the desugarer
 
 ### Still actively being developed
 - [x] Writing the lexer
 - [x] Writing the parser
+- [x] Writing the desugarer
 - [ ] Refining the syntax
 
 ### Short-term
@@ -72,7 +72,7 @@ Each stage transforms the program into a simpler or more constrained form.
 	- Tokens -> Abstract Syntax Tree (AST)
 - [ ] **AST-macros** (low priority)
 	- Another macro expansion round (AST -> AST)
-- [ ] **AST Normalization**
+- [x] **AST Normalization**
 	- AST -> simplified AST
 	- Syntax sugar removal (Desugaring)
 	- Normalizes multiple ways to write the same thing
