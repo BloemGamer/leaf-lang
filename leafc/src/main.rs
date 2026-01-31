@@ -124,6 +124,7 @@ mod desugar;
 mod lexer;
 mod parser;
 mod source_map;
+mod symbol_collection;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Config {}
