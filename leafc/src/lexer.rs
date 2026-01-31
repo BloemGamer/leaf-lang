@@ -344,9 +344,9 @@ pub enum TokenKind
 	/// Macro definition: `macro`
 	#[keyword("macro")]
 	MacroDef,
-	/// Namespace declaration: `namespace`
-	#[keyword("namespace")]
-	Namespace,
+	/// Namespace declaration: `module`
+	#[keyword("module")]
+	Module,
 	/// Type alias: `type`
 	#[keyword("type")]
 	Type,
@@ -512,7 +512,7 @@ pub enum TokenKind
 	/// Type annotation: `:`
 	#[operator(":")]
 	Colon,
-	/// Path separator/namespaces: `::`
+	/// Path separator/module: `::`
 	#[operator("::")]
 	DoubleColon,
 	/// List separator: `,`

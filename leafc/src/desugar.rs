@@ -5,9 +5,9 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound, FunctionDecl,
-		FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, NamespaceDecl, Param, Path,
-		PathSegment, Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem,
-		Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
+		FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, Param, Path, PathSegment,
+		Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
+		VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -335,7 +335,7 @@ impl Desugarer
 	{
 		return Ok(match decl {
 			TopLevelDecl::Function(func) => TopLevelDecl::Function(self.desugar_function(func)?),
-			TopLevelDecl::Namespace(ns) => TopLevelDecl::Namespace(self.desugar_namespace(ns)?),
+			TopLevelDecl::Module(ns) => TopLevelDecl::Module(self.desugar_module(ns)?),
 			TopLevelDecl::Impl(impl_decl) => TopLevelDecl::Impl(self.desugar_impl(impl_decl)?),
 			TopLevelDecl::Trait(trait_decl) => TopLevelDecl::Trait(self.desugar_trait(trait_decl)?),
 			TopLevelDecl::Directive(d) => TopLevelDecl::Directive(self.desugar_directive_node(d)?),
@@ -618,7 +618,7 @@ impl Desugarer
 	}
 
 	#[allow(clippy::result_large_err)]
-	fn desugar_namespace(&mut self, mut ns: NamespaceDecl) -> Result<NamespaceDecl, CompileError>
+	fn desugar_module(&mut self, mut ns: ModuleDecl) -> Result<ModuleDecl, CompileError>
 	{
 		ns.body = self.desugar_program(ns.body)?;
 		return Ok(ns);

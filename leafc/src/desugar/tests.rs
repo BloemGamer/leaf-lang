@@ -634,11 +634,11 @@ mod tests
 	}
 
 	#[test]
-	fn test_desugar_namespace_recursively()
+	fn test_desugar_module_recursively()
 	{
 		let mut desugarer = Desugarer::new();
 
-		let ns = NamespaceDecl {
+		let ns = ModuleDecl {
 			modifiers: vec![],
 			name: Path::simple(vec!["test".into()], Span::default()),
 			body: Program {
@@ -678,7 +678,7 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_namespace(ns).inspect_err(|e| eprintln!("{e}"));
+		let result = desugarer.desugar_module(ns).inspect_err(|e| eprintln!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 

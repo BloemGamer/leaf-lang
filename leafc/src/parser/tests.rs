@@ -1645,23 +1645,23 @@ mod tests
 		}
 	}
 
-	// ========== Namespace Tests ==========
+	// ========== Module Tests ==========
 
 	#[test]
-	fn test_parse_namespace()
+	fn test_parse_module()
 	{
-		let input = "namespace std { fn foo() {} }";
+		let input = "module std { fn foo() {} }";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Namespace(n) => {
+			TopLevelDecl::Module(n) => {
 				assert_eq!(n.name.segments.len(), 1);
 
 				assert_eq!(n.name.segments[0].name, "std");
 				assert_eq!(n.body.items.len(), 1);
 			}
-			_ => panic!("Expected namespace declaration"),
+			_ => panic!("Expected module declaration"),
 		}
 	}
 
@@ -2891,42 +2891,42 @@ mod tests
 		}
 	}
 
-	// ========== Namespace Tests ==========
+	// ========== Module Tests ==========
 
 	#[test]
-	fn test_parse_nested_namespace()
+	fn test_parse_nested_module()
 	{
-		let input = "namespace outer { namespace inner { fn foo() {} } }";
+		let input = "module outer { module inner { fn foo() {} } }";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Namespace(n) => {
+			TopLevelDecl::Module(n) => {
 				assert_eq!(n.body.items.len(), 1);
 				match &n.body.items[0] {
-					TopLevelDecl::Namespace(_) => (),
-					_ => panic!("Expected nested namespace"),
+					TopLevelDecl::Module(_) => (),
+					_ => panic!("Expected nested module"),
 				}
 			}
-			_ => panic!("Expected namespace"),
+			_ => panic!("Expected module"),
 		}
 	}
 
 	#[test]
-	fn test_parse_qualified_namespace_name()
+	fn test_parse_qualified_module_name()
 	{
-		let input = "namespace std::vec { }";
+		let input = "module std::vec { }";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Namespace(n) => {
+			TopLevelDecl::Module(n) => {
 				assert_eq!(
 					n.name,
 					Path::simple(vec!["std".to_string(), "vec".to_string()], Default::default())
 				);
 			}
-			_ => panic!("Expected namespace"),
+			_ => panic!("Expected module"),
 		}
 	}
 
@@ -7612,13 +7612,13 @@ mod tests
 		assert!(result.is_ok());
 	}
 
-	// ========== Generic Namespaces ==========
+	// ========== Generic Modules ==========
 
 	#[test]
-	fn test_parse_generic_type_in_namespace()
+	fn test_parse_generic_type_in_module()
 	{
 		let input = r#"
-		namespace collections {
+		module collections {
 			struct Vec<T> { data: T* }
 		}
 	"#;
@@ -8047,20 +8047,20 @@ mod tests
 		assert!(result.is_ok());
 	}
 
-	// ========== Namespace with Modifiers ==========
+	// ========== Module with Modifiers ==========
 
 	#[test]
-	fn test_parse_pub_namespace()
+	fn test_parse_pub_module()
 	{
-		let input = "pub namespace my_module { fn foo() {} }";
+		let input = "pub module my_module { fn foo() {} }";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Namespace(n) => {
+			TopLevelDecl::Module(n) => {
 				assert!(!n.modifiers.is_empty());
 			}
-			_ => panic!("Expected namespace"),
+			_ => panic!("Expected module"),
 		}
 	}
 
@@ -8912,21 +8912,21 @@ mod tests
 	}
 
 	#[test]
-	fn test_parse_doc_comment_on_namespace()
+	fn test_parse_doc_comment_on_module()
 	{
 		let input = r#"
-		/// Standard library namespace
-		namespace std { fn foo() {} }
+		/// Standard library module
+		module std { fn foo() {} }
 	"#;
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Namespace(n) => {
+			TopLevelDecl::Module(n) => {
 				assert!(n.docs.is_some());
 				assert!(n.docs.as_ref().unwrap().content.contains("Standard library"));
 			}
-			_ => panic!("Expected namespace"),
+			_ => panic!("Expected module"),
 		}
 	}
 

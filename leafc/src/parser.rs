@@ -203,14 +203,14 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 
 /// Type alias for top-level blocks (same structure as Program).
 ///
-/// Used in contexts like namespaces where a block of top-level declarations
+/// Used in contexts like module where a block of top-level declarations
 /// is needed.
 pub type TopLevelBlock = Program;
 
 /// Top-level declaration types.
 ///
 /// Represents all possible declarations that can appear at the top level
-/// of a source file or within a namespace.
+/// of a source file or within a module.
 ///
 /// # Variants
 /// * `Function` - Function definition
@@ -221,7 +221,7 @@ pub type TopLevelBlock = Program;
 /// * `Variant` - Tagged union (Rust-style enum)
 /// * `TypeAlias` - Type alias declaration
 /// * `Trait` - Trait definition
-/// * `Namespace` - Namespace/module declaration
+/// * `Module` - Module declaration
 /// * `Impl` - Implementation block
 /// * `Directive` - Compiler directive
 #[derive(Debug, Clone, PartialEq)]
@@ -235,7 +235,7 @@ pub enum TopLevelDecl
 	Variant(VariantDecl),
 	TypeAlias(TypeAliasDecl),
 	Trait(TraitDecl),
-	Namespace(NamespaceDecl),
+	Module(ModuleDecl),
 	Impl(ImplDecl),
 	Directive(DirectiveNode),
 }
@@ -253,7 +253,7 @@ impl Spanned for TopLevelDecl
 			TopLevelDecl::Variant(v) => v.span(),
 			TopLevelDecl::TypeAlias(t) => t.span(),
 			TopLevelDecl::Trait(t) => t.span(),
-			TopLevelDecl::Namespace(n) => n.span(),
+			TopLevelDecl::Module(n) => n.span(),
 			TopLevelDecl::Impl(i) => i.span(),
 			TopLevelDecl::Directive(d) => d.span(),
 		};
@@ -275,7 +275,7 @@ enum DeclKind
 	Trait,
 	Impl,
 	TypeAlias,
-	Namespace,
+	Module,
 	Variable,
 	Directive,
 }
@@ -534,7 +534,7 @@ impl Spanned for FunctionDecl
 ///
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
-/// * `name` - Qualified function name (can include namespace path)
+/// * `name` - Qualified function name (can include module path)
 /// * `generics` - Generic type parameters
 /// * `params` - Function parameters
 /// * `return_type` - Optional return type (None means void/unit)
@@ -2311,18 +2311,18 @@ impl Spanned for TypeAliasDecl
 	}
 }
 
-/// Namespace declaration.
+/// Module declaration.
 ///
-/// Represents a namespace/module containing top-level declarations.
+/// Represents a module containing top-level declarations.
 ///
 /// # Fields
 /// * `modifiers` - Visibility and other modifiers
-/// * `name` - Namespace name (can be qualified path)
-/// * `body` - Declarations within the namespace
+/// * `name` - Module name (can be qualified path)
+/// * `body` - Declarations within the module
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
-/// * `span` - Source location of the namespace
+/// * `span` - Source location of the module
 #[derive(Debug, Clone, PartialEq)]
-pub struct NamespaceDecl
+pub struct ModuleDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
@@ -2333,7 +2333,7 @@ pub struct NamespaceDecl
 	pub span: Span,
 }
 
-impl Spanned for NamespaceDecl
+impl Spanned for ModuleDecl
 {
 	fn span(&self) -> Span
 	{
@@ -2693,9 +2693,9 @@ impl<'s, 'c> Parser<'s, 'c>
 				self.expect(&TokenKind::Semicolon)?;
 				TopLevelDecl::TypeAlias(type_alias)
 			}
-			DeclKind::Namespace => {
-				let namespace_decl: NamespaceDecl = self.parse_namespace()?;
-				TopLevelDecl::Namespace(namespace_decl)
+			DeclKind::Module => {
+				let module_decl: ModuleDecl = self.parse_module()?;
+				TopLevelDecl::Module(module_decl)
 			}
 			DeclKind::Impl => {
 				let impl_decl: ImplDecl = self.parse_impl()?;
@@ -2765,7 +2765,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							| TokenKind::Enum
 							| TokenKind::Variant
 							| TokenKind::Type
-							| TokenKind::Namespace
+							| TokenKind::Module
 							| TokenKind::Impl
 							| TokenKind::Trait
 							| TokenKind::Var
@@ -2820,10 +2820,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Variable);
 				}
-				TokenKind::Namespace => {
+				TokenKind::Module => {
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Ok(DeclKind::Namespace);
+					return Ok(DeclKind::Module);
 				}
 				TokenKind::Impl => {
 					self.lexer = checkpoint;
@@ -5688,17 +5688,17 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_namespace(&mut self) -> Result<NamespaceDecl, CompileError>
+	fn parse_module(&mut self) -> Result<ModuleDecl, CompileError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
-		self.expect(&TokenKind::Namespace)?;
+		self.expect(&TokenKind::Module)?;
 		let name: Path = self.get_path()?;
 		self.expect(&TokenKind::LeftBrace)?;
 		let body: TopLevelBlock = self.parse_program()?;
 		self.expect(&TokenKind::RightBrace)?;
-		return Ok(NamespaceDecl {
+		return Ok(ModuleDecl {
 			modifiers,
 			name,
 			body,
@@ -6507,7 +6507,7 @@ fn write_top_level_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, decl: 
 			return write!(f, ";");
 		}
 		TopLevelDecl::Trait(t) => return write_trait_decl(f, w, t),
-		TopLevelDecl::Namespace(n) => return write_namespace_decl(f, w, n),
+		TopLevelDecl::Module(n) => return write_module_decl(f, w, n),
 		TopLevelDecl::Impl(i) => return write_impl_decl(f, w, i),
 		TopLevelDecl::Directive(d) => return write!(f, "{};", d),
 	}
@@ -7681,14 +7681,14 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &TypeA
 	return write!(f, " = {}", t.ty);
 }
 
-fn write_namespace_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &NamespaceDecl) -> fmt::Result
+fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &ModuleDecl) -> fmt::Result
 {
 	write_docs(f, w, &n.docs)?;
 	for modifier in &n.modifiers {
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "namespace {} {{", n.name)?;
+	writeln!(f, "module {} {{", n.name)?;
 	w.indent();
 
 	for item in &n.body.items {
