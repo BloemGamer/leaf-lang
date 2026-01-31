@@ -18,7 +18,7 @@ This document explains key design decisions behind Leaf-lang, including language
 - **Rationale:**
 	- No confusion about who owns the data
 	- No unnecessary cloning of structures you don't need anymore
-- **Impact:** Sometimes some references are used than would be optimal
+- **Impact:** Sometimes some references are used than would be optimal and the compiler has to do more checks
 
 ---
 
