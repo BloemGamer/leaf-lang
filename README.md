@@ -30,6 +30,7 @@ fn main()
 <br/>
 
 ### Current focus
+- [ ] Writing the symbol collections
 
 ### Still actively being developed
 - [x] Writing the lexer
@@ -134,7 +135,7 @@ Each stage transforms the program into a simpler or more constrained form.
 Leaf-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
 
-![Linux][Linux-shield] ![Linux Mint][Linux-Mint-shield] ![Windows][Windows-shield]
+![Linux][Linux-shield] ![Windows][Windows-shield]
 
 ### Cloning the Repository
 ```sh
@@ -178,6 +179,5 @@ Feel free to reach out via [GitHub Discussions](https://github.com/BloemGamer/le
 [license-shield]: https://img.shields.io/github/license/BloemGamer/leaf-lang.svg?style=flat
 [license-url]: https://github.com/BloemGamer/leaf-lang/blob/main/LICENSE
 
-[Linux-Mint-shield]: https://img.shields.io/badge/Linux%20Mint-87CF3E?logo=linuxmint&logoColor=fff
 [Linux-shield]: https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black
 [Windows-shield]: https://custom-icon-badges.demolab.com/badge/Windows-0078D6?logo=windows11&logoColor=white
