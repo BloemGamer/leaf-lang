@@ -617,14 +617,12 @@ impl Spanned for GenericParam
 /// # Fields
 /// * `ty` - Parameter type
 /// * `pattern` - Pattern for destructuring (can be identifier, tuple, etc.)
-/// * `mutable` - Whether the parameter is mutable
 /// * `span` - Source location of the parameter
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param
 {
 	pub ty: Type,
 	pub pattern: Pattern,
-	pub mutable: bool,
 	pub variadic: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -649,7 +647,6 @@ impl Spanned for Param
 #[derive(Debug, Clone, PartialEq)]
 pub struct Type
 {
-	pub modifiers: Vec<Modifier>,
 	pub core: Box<TypeCore>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -1517,6 +1514,7 @@ pub enum Pattern
 	TypedIdentifier
 	{
 		path: Path,
+		modifiers: Vec<Modifier>,
 		ty: Type,
 		call_constructor: Option<CallType>,
 		#[ignored(PartialEq)]
@@ -3178,10 +3176,8 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_type(&mut self) -> Result<Type, CompileError>
 	{
 		let span: Span = self.peek()?.span();
-		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
-			modifiers,
 			core: Box::new(self.parse_type_suffix(core)?),
 			span: span.merge(&self.last_span),
 		});
@@ -4451,6 +4447,9 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn parse_pattern_no_or(&mut self) -> Result<Pattern, CompileError>
 	{
 		let span: Span = self.peek()?.span();
+
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+
 		let tok: Token = self.peek()?.clone();
 
 		match &tok.kind {
@@ -4465,6 +4464,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on range patterns",
+						self.source_index,
+					)));
+				}
+
 				let inclusive: bool = self.at(&TokenKind::DotDotEquals)?;
 				self.next()?; // .. | ..=
 
@@ -4486,6 +4493,14 @@ impl<'s, 'c> Parser<'s, 'c>
 				let path: Path = self.get_path()?;
 
 				if self.consume(&TokenKind::LeftParen)? {
+					if !modifiers.is_empty() {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							span,
+							"modifiers not allowed on variant patterns",
+							self.source_index,
+						)));
+					}
+
 					let mut args: Vec<Pattern> = Vec::new();
 					if !self.at(&TokenKind::RightParen)? {
 						loop {
@@ -4505,6 +4520,14 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 					});
 				} else if self.consume(&TokenKind::LeftBrace)? {
+					if !modifiers.is_empty() {
+						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+							span,
+							"modifiers not allowed on variant patterns",
+							self.source_index,
+						)));
+					}
+
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
 					let mut has_rest: bool = false;
 
@@ -4522,6 +4545,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								break;
 							}
 
+							let field_modifiers: Vec<Modifier> = self.parse_modifiers()?;
 							let field_tok: Token = self.next()?;
 							let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 								name
@@ -4557,10 +4581,18 @@ impl<'s, 'c> Parser<'s, 'c>
 								Pattern::TypedIdentifier {
 									path: Path::simple(vec![field_name.clone()], field_tok.span),
 									ty,
+									modifiers: field_modifiers,
 									call_constructor,
 									span: field_tok.span.merge(&self.last_span),
 								}
 							} else {
+								if !modifiers.is_empty() {
+									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										span,
+										"modifiers require type annotation (use `: Type` after identifier)",
+										self.source_index,
+									)));
+								}
 								Pattern::Variant {
 									path: Path::simple(vec![field_name.clone()], field_tok.span),
 									args: Vec::new(),
@@ -4615,6 +4647,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					return Ok(Pattern::TypedIdentifier {
 						path,
 						ty,
+						modifiers,
 						call_constructor,
 						span: span.merge(&self.last_span),
 					});
@@ -4628,6 +4661,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::LeftParen => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on tuple patterns",
+						self.source_index,
+					)));
+				}
 				self.next()?; // (
 
 				if self.consume(&TokenKind::RightParen)? {
@@ -4695,6 +4735,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::True => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on literal patterns",
+						self.source_index,
+					)));
+				}
 				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Bool(true),
@@ -4703,6 +4750,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::False => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on literal patterns",
+						self.source_index,
+					)));
+				}
 				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Bool(false),
@@ -4711,6 +4765,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::StringLiteral(s) => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on literal patterns",
+						self.source_index,
+					)));
+				}
 				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::String(s.clone()),
@@ -4719,6 +4780,13 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			TokenKind::CharLiteral(c) => {
+				if !modifiers.is_empty() {
+					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						span,
+						"modifiers not allowed on literal patterns",
+						self.source_index,
+					)));
+				}
 				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::Char(*c),
@@ -5299,6 +5367,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let loop_span: Span = self.peek()?.span();
 
+			let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+
 			match self.peek_kind()? {
 				TokenKind::Ampersand => {
 					self.next()?; // &
@@ -5307,20 +5377,21 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					let self_span: Span = self.expect(&TokenKind::SelfKw)?.span();
 
+					let base: TypeCore = TypeCore::Base {
+						path: Path::simple(vec!["Self".to_string()], self_span),
+						generics: Vec::new(),
+					};
 					let self_type: Type = Type {
-						modifiers: Vec::new(),
 						core: Box::new(TypeCore::Reference {
 							mutable,
-							inner: Box::new(TypeCore::Base {
-								path: Path::simple(vec!["Self".to_string()], self_span),
-								generics: Vec::new(),
-							}),
+							inner: Box::new(base),
 						}),
 						span: loop_span.merge(&self.last_span),
 					};
 
 					let self_pattern = Pattern::TypedIdentifier {
 						path: Path::simple(vec!["self".to_string()], self_span),
+						modifiers,
 						ty: self_type.clone(),
 						call_constructor: None,
 						span: self_span,
@@ -5328,7 +5399,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						mutable,
 						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
@@ -5338,7 +5408,6 @@ impl<'s, 'c> Parser<'s, 'c>
 					let self_span: Span = self.next()?.span(); // self
 
 					let self_type = Type {
-						modifiers: Vec::new(),
 						core: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Self".to_string()], self_span),
 							generics: Vec::new(),
@@ -5348,6 +5417,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					let self_pattern = Pattern::TypedIdentifier {
 						path: Path::simple(vec!["self".to_string()], self_span),
+						modifiers,
 						ty: self_type.clone(),
 						call_constructor: None,
 						span: self_span,
@@ -5355,7 +5425,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						mutable: false,
 						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
@@ -5366,16 +5435,18 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.expect(&TokenKind::SelfKw)?;
 
 					let self_type = Type {
-						modifiers: Vec::new(),
-						core: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Self".to_string()], self_span),
-							generics: Vec::new(),
+						core: Box::new(TypeCore::Mutable {
+							inner: Box::new(TypeCore::Base {
+								path: Path::simple(vec!["Self".to_string()], self_span),
+								generics: Vec::new(),
+							}),
 						}),
 						span: loop_span.merge(&self.last_span),
 					};
 
 					let self_pattern = Pattern::TypedIdentifier {
 						path: Path::simple(vec!["self".to_string()], self_span),
+						modifiers,
 						ty: self_type.clone(),
 						call_constructor: None,
 						span: self_span,
@@ -5383,7 +5454,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: self_type,
-						mutable: true,
 						variadic: false,
 						pattern: self_pattern,
 						span: loop_span.merge(&self.last_span),
@@ -5403,7 +5473,6 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					params.push(Param {
 						ty: Type {
-							modifiers: vec![],
 							core: Box::new(TypeCore::Base {
 								path: Path::simple(vec!["_".to_string()], span),
 								generics: vec![],
@@ -5414,7 +5483,6 @@ impl<'s, 'c> Parser<'s, 'c>
 							span: loop_span,
 							ty: None,
 						},
-						mutable: false,
 						variadic: true,
 						span: loop_span.merge(&self.last_span),
 					});
@@ -5454,7 +5522,6 @@ impl<'s, 'c> Parser<'s, 'c>
 					};
 
 					params.push(Param {
-						mutable: false,
 						ty,
 						variadic: false,
 						pattern,
@@ -6420,14 +6487,12 @@ pub fn extract_type_from_pattern(pattern: &Pattern) -> Option<Type>
 				}
 			}
 			return Some(Type {
-				modifiers: Vec::new(),
 				core: Box::new(TypeCore::Tuple(types)),
 				span: *span,
 			});
 		}
 		Pattern::Struct { path, span, .. } | Pattern::Variant { path, span, .. } => {
 			return Some(Type {
-				modifiers: Vec::new(),
 				core: Box::new(TypeCore::Base {
 					path: path.clone(),
 					generics: vec![],
@@ -6726,9 +6791,6 @@ impl fmt::Display for Param
 			return write!(f, "...");
 		}
 
-		if self.mutable {
-			write!(f, "mut ")?;
-		}
 		return write!(f, "{}", self.pattern);
 	}
 }
@@ -6755,10 +6817,6 @@ impl fmt::Display for Type
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		for modifier in &self.modifiers {
-			write!(f, "{} ", modifier)?;
-		}
-
 		return write!(f, "{}", self.core);
 	}
 }
@@ -6858,10 +6916,14 @@ impl fmt::Display for Pattern
 			Pattern::Literal { value: lit, .. } => return write!(f, "{}", lit),
 			Pattern::TypedIdentifier {
 				path,
+				modifiers,
 				ty,
 				call_constructor,
 				..
 			} => {
+				for modifier in modifiers {
+					write!(f, "{} ", modifier)?;
+				}
 				write!(f, "{}: {}", path, ty)?;
 				if let Some(ct) = call_constructor {
 					match ct {

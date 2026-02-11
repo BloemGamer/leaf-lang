@@ -39,10 +39,9 @@ mod tests
 	fn simple_type(name: &str) -> Type
 	{
 		return Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Base {
 				path: Path::simple(vec![name.to_string()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 			}),
 			span: Span::default(),
 		};
@@ -53,6 +52,7 @@ mod tests
 	{
 		return Pattern::TypedIdentifier {
 			path: Path::simple(vec![name.to_string()], Span::default()),
+			modifiers: Vec::new(),
 			ty: simple_type(type_name),
 			call_constructor: None,
 			span: Span::default(),
@@ -64,7 +64,7 @@ mod tests
 	{
 		return Pattern::Variant {
 			path: Path::simple(vec![name.to_string()], Span::default()),
-			args: vec![],
+			args: Vec::new(),
 			span: Span::default(),
 		};
 	}
@@ -77,12 +77,12 @@ mod tests
 		let input = Stmt::If {
 			cond: bool_lit(true),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
 			else_branch: Some(Box::new(Stmt::Block(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			}))),
@@ -153,7 +153,7 @@ mod tests
 			pattern: typed_ident_pattern("x", "i32"),
 			expr: int_lit(42),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -185,7 +185,7 @@ mod tests
 			pattern: typed_ident_pattern("x", "i32"),
 			expr: ident("some_value"),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -254,7 +254,7 @@ mod tests
 			},
 			expr: ident("x"),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -287,14 +287,14 @@ mod tests
 					},
 					Pattern::Variant {
 						path: Path::simple(vec!["None".into()], Span::default()),
-						args: vec![],
+						args: Vec::new(),
 						span: Span::default(),
 					},
 				],
 				span: Span::default(),
 			},
 			body: SwitchBody::Block(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			}),
@@ -321,7 +321,7 @@ mod tests
 			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -358,7 +358,7 @@ mod tests
 					},
 					expr: ident("y"),
 					then_block: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -409,7 +409,7 @@ mod tests
 			},
 			iter: ident("iter"),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -535,7 +535,7 @@ mod tests
 				span: Span::default(),
 			},
 			body: SwitchBody::Block(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			}),
@@ -639,17 +639,17 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let ns = ModuleDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["test".into()], Span::default()),
 			body: Program {
 				items: vec![TopLevelDecl::Function(FunctionDecl {
 					signature: FunctionSignature {
-						modifiers: vec![],
+						modifiers: Vec::new(),
 						name: Path::simple(vec!["foo".into()], Span::default()),
-						generics: vec![],
-						params: vec![],
+						generics: Vec::new(),
+						params: Vec::new(),
 						return_type: None,
-						where_clause: vec![],
+						where_clause: Vec::new(),
 						call_type: CallType::Regular,
 						heap_generics: Vec::new(),
 						span: Span::default(),
@@ -660,7 +660,7 @@ mod tests
 							pattern: simple_for_pattern("i"),
 							iter: ident("items"),
 							body: Block {
-								stmts: vec![],
+								stmts: Vec::new(),
 								tail_expr: None,
 								span: Span::default(),
 							},
@@ -697,23 +697,23 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let impl_decl = ImplDecl {
-			modifiers: vec![],
-			generics: vec![],
+			modifiers: Vec::new(),
+			generics: Vec::new(),
 			target: ImplTarget {
 				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			},
 			trait_path: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			body: vec![ImplItem::Function(FunctionDecl {
 				signature: FunctionSignature {
-					modifiers: vec![],
+					modifiers: Vec::new(),
 					name: Path::simple(vec!["method".into()], Span::default()),
-					generics: vec![],
-					params: vec![],
+					generics: Vec::new(),
+					params: Vec::new(),
 					return_type: None,
-					where_clause: vec![],
+					where_clause: Vec::new(),
 					call_type: CallType::Regular,
 					heap_generics: Vec::new(),
 					span: Span::default(),
@@ -727,7 +727,7 @@ mod tests
 						},
 						expr: ident("x"),
 						body: Block {
-							stmts: vec![],
+							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
 						},
@@ -755,18 +755,18 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let trait_decl = TraitDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: vec![],
-			super_traits: vec![],
+			generics: Vec::new(),
+			super_traits: Vec::new(),
 			items: vec![TraitItem::Function {
 				signature: FunctionSignature {
-					modifiers: vec![],
+					modifiers: Vec::new(),
 					name: Path::simple(vec!["method".into()], Span::default()),
-					generics: vec![],
-					params: vec![],
+					generics: Vec::new(),
+					params: Vec::new(),
 					return_type: None,
-					where_clause: vec![],
+					where_clause: Vec::new(),
 					call_type: CallType::Regular,
 					heap_generics: Vec::new(),
 					span: Span::default(),
@@ -777,7 +777,7 @@ mod tests
 						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
-							stmts: vec![],
+							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
 						},
@@ -807,7 +807,7 @@ mod tests
 			value: Some(Expr::Binary {
 				op: BinaryOp::Add,
 				lhs: Box::new(Expr::Block(Box::new(Block {
-					stmts: vec![],
+					stmts: Vec::new(),
 					tail_expr: Some(Box::new(int_lit(1))),
 					span: Span::default(),
 				}))),
@@ -870,7 +870,7 @@ mod tests
 					pattern: simple_for_pattern("x"),
 					iter: ident("items"),
 					body: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -909,14 +909,14 @@ mod tests
 					callee: Box::new(ident("get_count")),
 					call_type: CallType::Regular,
 					named_generics: Vec::new(),
-					args: vec![],
+					args: Vec::new(),
 					span: Span::default(),
 				}),
 				rhs: Box::new(int_lit(10)),
 				span: Span::default(),
 			},
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -998,7 +998,7 @@ mod tests
 				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
-					stmts: vec![],
+					stmts: Vec::new(),
 					tail_expr: None,
 					span: Span::default(),
 				},
@@ -1031,7 +1031,7 @@ mod tests
 			call_type: CallType::Regular,
 			named_generics: Vec::new(),
 			args: vec![Expr::Block(Box::new(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(1))),
 				span: Span::default(),
 			}))],
@@ -1062,7 +1062,7 @@ mod tests
 				(
 					"x".into(),
 					Expr::Block(Box::new(Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: Some(Box::new(int_lit(1))),
 						span: Span::default(),
 					})),
@@ -1104,7 +1104,7 @@ mod tests
 						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
-							stmts: vec![],
+							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
 						},
@@ -1258,7 +1258,7 @@ mod tests
 			elements: vec![
 				int_lit(1),
 				Expr::Block(Box::new(Block {
-					stmts: vec![],
+					stmts: Vec::new(),
 					tail_expr: Some(Box::new(int_lit(2))),
 					span: Span::default(),
 				})),
@@ -1386,7 +1386,7 @@ mod tests
 				},
 				Pattern::Variant {
 					path: Path::simple(vec!["None".into()], Span::default()),
-					args: vec![],
+					args: Vec::new(),
 					span: Span::default(),
 				},
 			],
@@ -1417,7 +1417,7 @@ mod tests
 					pattern: simple_for_pattern("i"),
 					iter: ident("range1"),
 					body: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -1428,7 +1428,7 @@ mod tests
 					pattern: simple_for_pattern("j"),
 					iter: ident("range2"),
 					body: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -1512,7 +1512,7 @@ mod tests
 			},
 			expr: ident("point"),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -1555,7 +1555,7 @@ mod tests
 			},
 			expr: ident("result"),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -1584,7 +1584,7 @@ mod tests
 			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -1685,12 +1685,12 @@ mod tests
 		let expr = Expr::If {
 			cond: Box::new(bool_lit(true)),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(1))),
 				span: Span::default(),
 			},
 			else_branch: Some(Box::new(Expr::Block(Box::new(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(2))),
 				span: Span::default(),
 			})))),
@@ -1720,7 +1720,7 @@ mod tests
 			},
 			expr: Box::new(ident("opt")),
 			then_block: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: Some(Box::new(ident("x"))),
 				span: Span::default(),
 			},
@@ -1784,7 +1784,7 @@ mod tests
 				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
-					stmts: vec![],
+					stmts: Vec::new(),
 					tail_expr: None,
 					span: Span::default(),
 				},
@@ -2063,12 +2063,12 @@ mod tests
 
 		let func1 = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["func1".into()], Span::default()),
-				generics: vec![],
-				params: vec![],
+				generics: Vec::new(),
+				params: Vec::new(),
 				return_type: None,
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
 				heap_generics: Vec::new(),
 				span: Span::default(),
@@ -2077,7 +2077,7 @@ mod tests
 				stmts: vec![Stmt::Loop {
 					label: None,
 					body: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -2092,12 +2092,12 @@ mod tests
 
 		let func2 = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["func2".into()], Span::default()),
-				generics: vec![],
-				params: vec![],
+				generics: Vec::new(),
+				params: Vec::new(),
 				return_type: None,
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
 				heap_generics: Vec::new(),
 				span: Span::default(),
@@ -2106,7 +2106,7 @@ mod tests
 				stmts: vec![Stmt::Loop {
 					label: None,
 					body: Block {
-						stmts: vec![],
+						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
 					},
@@ -2136,11 +2136,11 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["Point".to_string()], Span::default()),
-						generics: vec![],
+						generics: Vec::new(),
 					}),
 					span: Span::default(),
 				},
@@ -2193,6 +2193,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: simple_type("Point"),
 				call_constructor: Some(CallType::Regular),
 				span: Span::default(),
@@ -2228,15 +2229,14 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["vec".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["Vec".to_string()], Span::default()),
 						generics: vec![Type {
-							modifiers: vec![],
 							core: Box::new(TypeCore::Base {
 								path: Path::simple(vec!["i32".to_string()], Span::default()),
-								generics: vec![],
+								generics: Vec::new(),
 							}),
 							span: Span::default(),
 						}],
@@ -2280,6 +2280,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: simple_type("Config"),
 				call_constructor: Some(CallType::Regular),
 				span: Span::default(),
@@ -2318,14 +2319,14 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["cfg".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(
 							vec!["std".to_string(), "config".to_string(), "Config".to_string()],
 							Span::default(),
 						),
-						generics: vec![],
+						generics: Vec::new(),
 					}),
 					span: Span::default(),
 				},
@@ -2366,6 +2367,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: simple_type("i32"),
 				call_constructor: None,
 				span: Span::default(),
@@ -2400,6 +2402,7 @@ mod tests
 				TopLevelDecl::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["a".to_string()], Span::default()),
+						modifiers: Vec::new(),
 						ty: simple_type("Point"),
 						call_constructor: Some(CallType::Regular),
 						span: Span::default(),
@@ -2412,6 +2415,7 @@ mod tests
 				TopLevelDecl::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["b".to_string()], Span::default()),
+						modifiers: Vec::new(),
 						ty: simple_type("Config"),
 						call_constructor: Some(CallType::Regular),
 						span: Span::default(),
@@ -2453,12 +2457,12 @@ mod tests
 
 		let func = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: vec![],
-				params: vec![],
+				generics: Vec::new(),
+				params: Vec::new(),
 				return_type: None,
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
 				heap_generics: Vec::new(),
 				span: Span::default(),
@@ -2467,6 +2471,7 @@ mod tests
 				stmts: vec![Stmt::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["local".to_string()], Span::default()),
+						modifiers: Vec::new(),
 						ty: simple_type("LocalType"),
 						call_constructor: Some(CallType::Regular),
 						span: Span::default(),
@@ -2515,14 +2520,12 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let original_ty = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Base {
 				path: Path::simple(vec!["MyType".to_string()], Span::default()),
 				generics: vec![Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["String".to_string()], Span::default()),
-						generics: vec![],
+						generics: Vec::new(),
 					}),
 					span: Span::default(),
 				}],
@@ -2533,6 +2536,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: original_ty,
 				call_constructor: Some(CallType::Regular),
 				span: Span::default(),
@@ -2877,7 +2881,7 @@ mod tests
 				span: Span::default(),
 			}),
 			body: Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
@@ -2998,14 +3002,14 @@ mod tests
 
 		// fn foo<T: Clone>()
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3035,17 +3039,17 @@ mod tests
 
 		// fn foo<T: Clone + Send + Debug>()
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param(
 				"T",
 				vec![trait_bound("Clone"), trait_bound("Send"), trait_bound("Debug")],
 			)],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3068,18 +3072,18 @@ mod tests
 
 		// fn foo<T: Clone, U: Send, V>()
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![
 				generic_param("T", vec![trait_bound("Clone")]),
 				generic_param("U", vec![trait_bound("Send")]),
-				generic_param("V", vec![]), // No bounds
+				generic_param("V", Vec::new()), // No bounds
 			],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3112,14 +3116,14 @@ mod tests
 		// fn foo<T: Clone>() where T: Send
 		// ERROR: T appears in both places
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], vec![])],
+			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3145,10 +3149,10 @@ mod tests
 		// fn foo<T: Clone>() where Vec<T>: Send
 		// ERROR: T appears in where clause
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![where_constraint(
 				"Vec",
@@ -3156,7 +3160,7 @@ mod tests
 				vec![simple_type("T")],
 			)],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3180,13 +3184,13 @@ mod tests
 		// fn foo<T: Clone, U>() where Vec<U>: Send
 		// OK: T has bounds, but where clause only mentions U
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![
 				generic_param("T", vec![trait_bound("Clone")]),
-				generic_param("U", vec![]),
+				generic_param("U", Vec::new()),
 			],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![where_constraint(
 				"Vec",
@@ -3194,7 +3198,7 @@ mod tests
 				vec![simple_type("U")],
 			)],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3218,14 +3222,14 @@ mod tests
 
 		// fn foo<T, U>()
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![]), generic_param("U", vec![])],
-			params: vec![],
+			generics: vec![generic_param("T", Vec::new()), generic_param("U", vec![])],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3247,10 +3251,10 @@ mod tests
 		// fn foo<T>() where Vec<T>: Clone
 		// OK: T has no bounds in generic list
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![])],
-			params: vec![],
+			generics: vec![generic_param("T", Vec::new())],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![where_constraint(
 				"Vec",
@@ -3258,7 +3262,7 @@ mod tests
 				vec![simple_type("T")],
 			)],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3280,12 +3284,12 @@ mod tests
 
 		// fn!<A: Allocator> foo<T: Clone>()
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			call_type: CallType::UserHeap,
 			heap_generics: vec![generic_param("A", vec![trait_bound("Allocator")])],
 			span: Span::default(),
@@ -3324,10 +3328,10 @@ mod tests
 		// fn!<A: Allocator> foo<T>() where Vec<A>: Clone
 		// ERROR: A has bounds in heap generics and appears in where clause
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![])],
-			params: vec![],
+			generics: vec![generic_param("T", Vec::new())],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![where_constraint(
 				"Vec",
@@ -3354,7 +3358,6 @@ mod tests
 		// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
 		// ERROR: T appears nested in where clause
 		let vec_t = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Base {
 				path: Path::simple(vec!["Vec".to_string()], Span::default()),
 				generics: vec![simple_type("T")],
@@ -3363,10 +3366,10 @@ mod tests
 		};
 
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![where_constraint(
 				"HashMap",
@@ -3374,7 +3377,7 @@ mod tests
 				vec![simple_type("K"), vec_t],
 			)],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3390,7 +3393,6 @@ mod tests
 		// fn foo<T: Clone>() where (T, U): Debug
 		// ERROR: T appears in tuple
 		let tuple_type = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Tuple(vec![simple_type("T"), simple_type("U")])),
 			span: Span::default(),
 		};
@@ -3398,10 +3400,10 @@ mod tests
 		// Note: This test assumes your where_constraint helper can handle non-simple types
 		// You might need to construct the WhereConstraint manually
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![WhereConstraint {
 				ty: Path::simple(vec!["tuple".to_string()], Span::default()), // placeholder
@@ -3410,7 +3412,7 @@ mod tests
 				span: Span::default(),
 			}],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3425,20 +3427,20 @@ mod tests
 
 		// impl<T: Clone> MyTrait for MyType<T> { }
 		let impl_decl = ImplDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
 			target: ImplTarget {
 				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			},
 			trait_path: Some(ImplTarget {
 				path: Path::simple(vec!["MyTrait".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			}),
-			where_clause: vec![],
-			body: vec![],
+			where_clause: Vec::new(),
+			body: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		};
@@ -3465,16 +3467,16 @@ mod tests
 		// impl<T: Clone> MyType<T> where T: Send { }
 		// ERROR: T has bounds in generic list and appears in where clause
 		let impl_decl = ImplDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
 			target: ImplTarget {
 				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			},
 			trait_path: None,
-			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], vec![])],
-			body: vec![],
+			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
+			body: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		};
@@ -3491,22 +3493,21 @@ mod tests
 		// fn foo<T: Clone>() where &T: Debug
 		// ERROR: T appears in reference type
 		let ref_type = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Reference {
 				mutable: false,
 				inner: Box::new(TypeCore::Base {
 					path: Path::simple(vec!["T".to_string()], Span::default()),
-					generics: vec![],
+					generics: Vec::new(),
 				}),
 			}),
 			span: Span::default(),
 		};
 
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![WhereConstraint {
 				ty: Path::simple(vec!["ref".to_string()], Span::default()),
@@ -3515,7 +3516,7 @@ mod tests
 				span: Span::default(),
 			}],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3531,29 +3532,29 @@ mod tests
 		// fn foo<T: Clone + Send>(x: T) -> T { x }
 		let func = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["foo".into()], Span::default()),
 				generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
 				params: vec![Param {
 					ty: simple_type("T"),
 					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["x".into()], Span::default()),
+						modifiers: Vec::new(),
 						ty: simple_type("T"),
 						call_constructor: None,
 						span: Span::default(),
 					},
-					mutable: false,
 					variadic: false,
 					span: Span::default(),
 				}],
 				return_type: Some(simple_type("T")),
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
-				heap_generics: vec![],
+				heap_generics: Vec::new(),
 				span: Span::default(),
 			},
 			body: Some(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: Some(Box::new(ident("x"))),
 				span: Span::default(),
 			}),
@@ -3580,11 +3581,10 @@ mod tests
 		// fn foo<T: Clone>() where [T; 10]: Debug
 		// ERROR: T appears in array type
 		let array_type = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::Array {
 				inner: Box::new(TypeCore::Base {
 					path: Path::simple(vec!["T".to_string()], Span::default()),
-					generics: vec![],
+					generics: Vec::new(),
 				}),
 				size: Some(Box::new(int_lit(10))),
 			}),
@@ -3592,10 +3592,10 @@ mod tests
 		};
 
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![WhereConstraint {
 				ty: Path::simple(vec!["array".to_string()], Span::default()),
@@ -3604,7 +3604,7 @@ mod tests
 				span: Span::default(),
 			}],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -3711,12 +3711,12 @@ mod tests
 						patterns: vec![
 							Pattern::Variant {
 								path: Path::simple(vec!["A".into()], Span::default()),
-								args: vec![],
+								args: Vec::new(),
 								span: Span::default(),
 							},
 							Pattern::Variant {
 								path: Path::simple(vec!["B".into()], Span::default()),
-								args: vec![],
+								args: Vec::new(),
 								span: Span::default(),
 							},
 						],
@@ -3899,24 +3899,23 @@ mod tests
 
 		let func = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				params: vec![Param {
 					pattern: typed_ident_pattern("args", "Array"),
 					ty: simple_type("Array"),
-					mutable: false,
 					variadic: true,
 					span: Span::default(),
 				}],
 				return_type: None,
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
-				heap_generics: vec![],
+				heap_generics: Vec::new(),
 				span: Span::default(),
 			},
 			body: Some(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			}),
@@ -3940,31 +3939,29 @@ mod tests
 		// fn test((x, y): (i32, i32)) { }
 		let func = FunctionDecl {
 			signature: FunctionSignature {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				params: vec![Param {
 					pattern: Pattern::Tuple {
 						patterns: vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
 						span: Span::default(),
 					},
 					ty: Type {
-						modifiers: vec![],
 						core: Box::new(TypeCore::Tuple(vec![simple_type("i32"), simple_type("i32")])),
 						span: Span::default(),
 					},
-					mutable: false,
 					variadic: false,
 					span: Span::default(),
 				}],
 				return_type: None,
-				where_clause: vec![],
+				where_clause: Vec::new(),
 				call_type: CallType::Regular,
-				heap_generics: vec![],
+				heap_generics: Vec::new(),
 				span: Span::default(),
 			},
 			body: Some(Block {
-				stmts: vec![],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			}),
@@ -4042,11 +4039,11 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let struct_decl = TopLevelDecl::Struct(StructDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["Point".into()], Span::default()),
-			generics: vec![],
-			fields: vec![],
-			where_clause: vec![],
+			generics: Vec::new(),
+			fields: Vec::new(),
+			where_clause: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		});
@@ -4066,11 +4063,11 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let union_decl = TopLevelDecl::Union(UnionDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyUnion".into()], Span::default()),
-			generics: vec![],
-			fields: vec![],
-			where_clause: vec![],
+			generics: Vec::new(),
+			fields: Vec::new(),
+			where_clause: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		});
@@ -4090,11 +4087,11 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let enum_decl = TopLevelDecl::Enum(EnumDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyEnum".into()], Span::default()),
-			generics: vec![],
-			variants: vec![],
-			where_clause: vec![],
+			generics: Vec::new(),
+			variants: Vec::new(),
+			where_clause: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		});
@@ -4114,11 +4111,11 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let variant_decl = TopLevelDecl::Variant(VariantDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyVariant".into()], Span::default()),
-			generics: vec![],
-			variants: vec![],
-			where_clause: vec![],
+			generics: Vec::new(),
+			variants: Vec::new(),
+			where_clause: Vec::new(),
 			docs: None,
 			span: Span::default(),
 		});
@@ -4138,9 +4135,9 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let alias = TopLevelDecl::TypeAlias(TypeAliasDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyType".into()], Span::default()),
-			generics: vec![],
+			generics: Vec::new(),
 			ty: simple_type("i32"),
 			docs: None,
 			span: Span::default(),
@@ -4163,19 +4160,19 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let impl_decl = ImplDecl {
-			modifiers: vec![],
-			generics: vec![],
+			modifiers: Vec::new(),
+			generics: Vec::new(),
 			target: ImplTarget {
 				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			},
 			trait_path: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			body: vec![ImplItem::TypeAlias(TypeAliasDecl {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["AssocType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				ty: simple_type("i32"),
 				docs: None,
 				span: Span::default(),
@@ -4194,15 +4191,15 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let impl_decl = ImplDecl {
-			modifiers: vec![],
-			generics: vec![],
+			modifiers: Vec::new(),
+			generics: Vec::new(),
 			target: ImplTarget {
 				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				span: Span::default(),
 			},
 			trait_path: None,
-			where_clause: vec![],
+			where_clause: Vec::new(),
 			body: vec![ImplItem::Const(VariableDecl {
 				pattern: typed_ident_pattern("CONST", "i32"),
 				init: Some(int_lit(42)),
@@ -4226,14 +4223,14 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let trait_decl = TraitDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: vec![],
-			super_traits: vec![],
+			generics: Vec::new(),
+			super_traits: Vec::new(),
 			items: vec![TraitItem::TypeAlias(TypeAliasDecl {
-				modifiers: vec![],
+				modifiers: Vec::new(),
 				name: Path::simple(vec!["AssocType".into()], Span::default()),
-				generics: vec![],
+				generics: Vec::new(),
 				ty: simple_type("i32"),
 				docs: None,
 				span: Span::default(),
@@ -4252,10 +4249,10 @@ mod tests
 		let mut desugarer = Desugarer::new();
 
 		let trait_decl = TraitDecl {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: vec![],
-			super_traits: vec![],
+			generics: Vec::new(),
+			super_traits: Vec::new(),
 			items: vec![TraitItem::Const(VariableDecl {
 				pattern: typed_ident_pattern("CONST", "i32"),
 				init: Some(int_lit(42)),
@@ -4280,14 +4277,14 @@ mod tests
 
 		// fn foo<F>() where F: Fn(i32) -> i32
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![crate::parser::GenericParam {
 				name: "F".to_string(),
-				bounds: vec![],
+				bounds: Vec::new(),
 				span: Span::default(),
 			}],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![WhereConstraint {
 				ty: Path::simple(vec!["F".to_string()], Span::default()),
@@ -4295,11 +4292,11 @@ mod tests
 					args: vec![simple_type("i32")],
 					ret: Some(simple_type("i32")),
 				})],
-				type_args: vec![],
+				type_args: Vec::new(),
 				span: Span::default(),
 			}],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -4314,14 +4311,14 @@ mod tests
 
 		// fn foo<T>() where Vec<T>: Clone
 		let sig = FunctionSignature {
-			modifiers: vec![],
+			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
 			generics: vec![crate::parser::GenericParam {
 				name: "T".to_string(),
-				bounds: vec![],
+				bounds: Vec::new(),
 				span: Span::default(),
 			}],
-			params: vec![],
+			params: Vec::new(),
 			return_type: None,
 			where_clause: vec![WhereConstraint {
 				ty: Path::simple(vec!["Vec".to_string()], Span::default()),
@@ -4333,7 +4330,7 @@ mod tests
 				span: Span::default(),
 			}],
 			call_type: CallType::Regular,
-			heap_generics: vec![],
+			heap_generics: Vec::new(),
 			span: Span::default(),
 		};
 
@@ -4377,7 +4374,7 @@ mod tests
 	fn test_cartesian_product_patterns_empty()
 	{
 		let desugarer = Desugarer::new();
-		let result = desugarer.cartesian_product_patterns(vec![]);
+		let result = desugarer.cartesian_product_patterns(Vec::new());
 		assert_eq!(result.len(), 1);
 		assert_eq!(result[0].len(), 0);
 	}
@@ -4550,8 +4547,8 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
 					span: Span::default(),
 				},
@@ -4591,12 +4588,12 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["arr".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Array {
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 						size: Some(Box::new(int_lit(5))),
 					}),
@@ -4643,12 +4640,12 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["arr".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Array {
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 						size: None,
 					}),
@@ -4686,12 +4683,12 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Mutable {
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 					}),
 					span: Span::default(),
@@ -4734,13 +4731,13 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Reference {
 						mutable: false,
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 					}),
 					span: Span::default(),
@@ -4775,13 +4772,13 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Reference {
 						mutable: true,
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 					}),
 					span: Span::default(),
@@ -4816,12 +4813,12 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Pointer {
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: vec![],
+							generics: Vec::new(),
 						}),
 					}),
 					span: Span::default(),
@@ -4856,8 +4853,8 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::ImplTrait {
 						bounds: vec![trait_bound("Trait")],
 					}),
@@ -4896,8 +4893,8 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Array {
 						inner: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
 						size: Some(Box::new(int_lit(3))),
@@ -4952,9 +4949,9 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
-					core: Box::new(TypeCore::Tuple(vec![])),
+					core: Box::new(TypeCore::Tuple(Vec::new())),
 					span: Span::default(),
 				},
 				call_constructor: Some(CallType::Regular),
@@ -4989,6 +4986,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: simple_type("Point"),
 				call_constructor: Some(CallType::UserHeap),
 				span: Span::default(),
@@ -5022,6 +5020,7 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: simple_type("Point"),
 				call_constructor: Some(CallType::UserMaybeHeap),
 				span: Span::default(),
@@ -5055,8 +5054,8 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["Vec".to_string()], Span::default()),
 						generics: vec![simple_type("String")],
@@ -5102,13 +5101,13 @@ mod tests
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec!["x".to_string()], Span::default()),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Array {
 						inner: Box::new(TypeCore::Array {
 							inner: Box::new(TypeCore::Base {
 								path: Path::simple(vec!["Point".to_string()], Span::default()),
-								generics: vec![],
+								generics: Vec::new(),
 							}),
 							size: Some(Box::new(int_lit(2))),
 						}),

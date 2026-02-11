@@ -375,11 +375,11 @@ impl Desugarer
 					new_params.push(Param {
 						pattern: Pattern::TypedIdentifier {
 							path: Path::simple(vec![temp.clone()], param_span),
+							modifiers: Vec::new(),
 							ty: param.ty.clone(),
 							call_constructor: None,
 							span: param_span,
 						},
-						mutable: param.mutable,
 						variadic: param.variadic,
 						ty: param.ty,
 						span: param_span,
@@ -584,7 +584,6 @@ impl Desugarer
 			}
 			TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
 				let mut inner_ty: Type = Type {
-					modifiers: Vec::new(),
 					core: inner.clone(),
 					span: ty.span,
 				};
@@ -594,7 +593,6 @@ impl Desugarer
 			}
 			TypeCore::Array { inner, .. } => {
 				let mut inner_ty = Type {
-					modifiers: Vec::new(),
 					core: inner.clone(),
 					span: ty.span,
 				};
@@ -915,8 +913,8 @@ impl Desugarer
 					let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 						pattern: Pattern::TypedIdentifier {
 							path: Path::simple(vec![temp.clone()], value_span),
+							modifiers: Vec::new(),
 							ty: Type {
-								modifiers: vec![],
 								core: Box::new(TypeCore::Base {
 									path: Path::simple(vec!["_".to_string()], value_span),
 									generics: vec![],
@@ -1018,7 +1016,6 @@ impl Desugarer
 
 		let item_type: Type = extract_type_from_pattern(&desugared_pattern).unwrap_or_else(|| {
 			return Type {
-				modifiers: vec![],
 				core: Box::new(TypeCore::Base {
 					path: Path::simple(vec!["_".to_string()], pattern_span),
 					generics: vec![],
@@ -1028,7 +1025,6 @@ impl Desugarer
 		});
 
 		let iterator_type = Type {
-			modifiers: vec![],
 			core: Box::new(TypeCore::ImplTrait {
 				bounds: vec![WhereBound::Path {
 					path: Path::simple(vec!["Iterator".to_string()], iter_span),
@@ -1045,6 +1041,7 @@ impl Desugarer
 		let iter_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![iter_temp.clone()], iter_span),
+				modifiers: vec![],
 				ty: iterator_type,
 				call_constructor: None,
 				span: iter_span,
@@ -1163,8 +1160,8 @@ impl Desugarer
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp_var.clone()], expr_span),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
@@ -1249,8 +1246,8 @@ impl Desugarer
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp_var.clone()], expr_span),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
@@ -1386,9 +1383,17 @@ impl Desugarer
 				call_constructor.expect("Because of the checks before this, this should not be none"),
 			)?);
 
-			if let Pattern::TypedIdentifier { path, ty, span, .. } = var.pattern.clone() {
+			if let Pattern::TypedIdentifier {
+				path,
+				ty,
+				span,
+				modifiers,
+				..
+			} = var.pattern.clone()
+			{
 				var.pattern = Pattern::TypedIdentifier {
 					path,
+					modifiers,
 					ty,
 					call_constructor: None,
 					span,
@@ -1582,8 +1587,8 @@ impl Desugarer
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp_var.clone()], expr_span),
+				modifiers: Vec::new(),
 				ty: Type {
-					modifiers: vec![],
 					core: Box::new(TypeCore::Base {
 						path: Path::simple(vec!["_".to_string()], expr_span),
 						generics: vec![],
@@ -1704,7 +1709,6 @@ impl Desugarer
 
 			TypeCore::Mutable { inner } => {
 				let inner_type: Type = Type {
-					modifiers: Vec::new(),
 					core: inner.clone(),
 					span,
 				};
@@ -1714,7 +1718,6 @@ impl Desugarer
 
 			TypeCore::Array { inner, size } => {
 				let inner_type: Type = Type {
-					modifiers: Vec::new(),
 					core: inner.clone(),
 					span,
 				};
@@ -1814,11 +1817,13 @@ impl Desugarer
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
 			Pattern::TypedIdentifier {
 				path,
+				modifiers,
 				ty,
 				call_constructor,
 				span,
 			} => Pattern::TypedIdentifier {
 				path,
+				modifiers,
 				ty,
 				call_constructor,
 				span,
@@ -1980,6 +1985,7 @@ impl Desugarer
 		if is_simple_binding {
 			if let Pattern::TypedIdentifier {
 				path,
+				modifiers,
 				ty,
 				call_constructor,
 				span: id_span,
@@ -1988,6 +1994,7 @@ impl Desugarer
 				statements.push(Stmt::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path,
+						modifiers,
 						ty,
 						call_constructor,
 						span: id_span,
@@ -2015,6 +2022,7 @@ impl Desugarer
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
 				path: Path::simple(vec![temp.clone()], temp_span),
+				modifiers: Vec::new(),
 				ty: temp_type,
 				call_constructor: None,
 				span: temp_span,

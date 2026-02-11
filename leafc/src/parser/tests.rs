@@ -4106,30 +4106,6 @@ mod tests
 		assert!(result.is_ok());
 	}
 
-	// ========== Complex Type Modifiers ==========
-
-	#[test]
-	fn test_parse_type_with_multiple_modifiers()
-	{
-		let config = Config::default();
-		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "const volatile i32", "test_file_53", &mut source_map);
-		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type();
-		assert!(result.is_ok());
-	}
-
-	#[test]
-	fn test_parse_type_modifiers_on_complex_type()
-	{
-		let config = Config::default();
-		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "const Vec<i32>*", "test_file_54", &mut source_map);
-		let mut parser = Parser::from(lexer);
-		let result = parser.parse_type();
-		assert!(result.is_ok());
-	}
-
 	// ========== Directive Bodies ==========
 
 	#[test]
