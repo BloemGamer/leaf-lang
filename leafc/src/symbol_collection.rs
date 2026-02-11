@@ -1,6 +1,6 @@
 use crate::{
 	lexer::{Span, Spanned},
-	parser::{self, Ident, Pattern, Program, TopLevelDecl},
+	parser::{self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Pattern, Program, Stmt, TopLevelDecl},
 	source_map::SourceIndex,
 };
 
@@ -272,9 +272,89 @@ impl Collector
 		};
 	}
 
-	fn collect_function_decl(&mut self, func: &parser::FunctionDecl) -> Result<(), SymbolCollectionError>
+	fn collect_block(&mut self, block: &Block) -> Result<(), SymbolCollectionError>
+	{
+		for item in &block.stmts {
+			self.collect_block_stmt(item)?;
+		}
+		return Ok(());
+	}
+
+	fn collect_block_stmt(&mut self, stmt: &Stmt) -> Result<(), SymbolCollectionError>
 	{
 		todo!()
+	}
+
+	fn collect_function_decl(&mut self, func: &FunctionDecl) -> Result<(), SymbolCollectionError>
+	{
+		let sig: &FunctionSignature = &func.signature;
+
+		if sig.name.segments.len() != 1 {
+			todo!("return error")
+		}
+		if let Some(name) = sig.name.segments.first() {
+			self.define(
+				name.name.clone(),
+				SymbolKind::Function {
+					signature_span: sig.span(),
+				},
+				sig.span(),
+			)?;
+		} else {
+			unreachable!("A signature should always have a segment, otherwise the parser did not do his job right");
+		}
+
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::FunctionBody, func.span());
+
+		self.in_scope(body_scope, |c| {
+			for generic in &sig.generics {
+				c.define(generic.name.clone(), SymbolKind::GenericParam, generic.span())?;
+			}
+
+			if sig.call_type != CallType::Regular {
+				for ge in ["IO", "Alloc"].iter() {
+					// TODO: maybe extract this one to a global variable, but not for now
+					c.define(
+						ge.to_string(),
+						SymbolKind::GenericParam,
+						sig.heap_generics
+							.iter()
+							.find(|g| return g.name == *ge)
+							.map_or_else(|| return sig.span(), |g| return g.span()),
+					)?;
+				}
+			} else {
+				debug_assert!(
+					sig.heap_generics.is_empty(),
+					"If the calltype is regular, there should not be any heap_generics",
+				);
+			}
+
+			for param in &sig.params {
+				let Pattern::TypedIdentifier { path, span, .. } = &param.pattern else {
+					todo!("Desugarer should have handled this");
+				};
+				if path.len() != 1 {
+					todo!("Error: path longer than one segment in param pattern");
+				}
+				if !path.segments[0].generics.is_empty() {
+					todo!("Error: generics in param pattern identifier");
+				}
+				c.define(
+					path.segments[0].name.clone(),
+					SymbolKind::Variable { mutable: param.mutable },
+					*span,
+				)?;
+			}
+
+			if let Some(body) = &func.body {
+				c.collect_block(body)?;
+			}
+
+			return Ok(());
+		})?;
+
+		return Ok(());
 	}
 
 	fn collect_variable_decl(&mut self, var: &parser::VariableDecl) -> Result<(), SymbolCollectionError>
@@ -345,7 +425,7 @@ impl Collector
 pub fn collect_symbols(program: &Program, source_index: SourceIndex) -> Result<SymbolTable, SymbolCollectionError>
 {
 	let mut collector: Collector = Collector::new(source_index);
-	collector.table.scopes[collector.table.root.0].span = program.span;
+	collector.table.scopes[collector.table.root.0].span = program.span();
 	collector.collect_program(program)?;
 	return Ok(collector.table);
 }
