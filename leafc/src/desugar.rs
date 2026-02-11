@@ -379,6 +379,7 @@ impl Desugarer
 							ty: param.ty.clone(),
 							call_constructor: None,
 							span: param_span,
+							mutable: false,
 						},
 						variadic: param.variadic,
 						ty: param.ty,
@@ -923,6 +924,7 @@ impl Desugarer
 							},
 							call_constructor: None,
 							span: value_span,
+							mutable: false,
 						},
 						docs: None,
 						init: Some(desugared_value),
@@ -1045,6 +1047,7 @@ impl Desugarer
 				ty: iterator_type,
 				call_constructor: None,
 				span: iter_span,
+				mutable: false,
 			},
 			docs: None,
 			init: Some(desugared_iter),
@@ -1170,6 +1173,7 @@ impl Desugarer
 				},
 				call_constructor: None,
 				span: expr_span,
+				mutable: false,
 			},
 			docs: None,
 			init: Some(desugared_expr),
@@ -1256,6 +1260,7 @@ impl Desugarer
 				},
 				call_constructor: None,
 				span: expr_span,
+				mutable: false,
 			},
 			docs: None,
 			init: Some(desugared_expr),
@@ -1388,7 +1393,8 @@ impl Desugarer
 				ty,
 				span,
 				modifiers,
-				..
+				call_constructor: _,
+				mutable,
 			} = var.pattern.clone()
 			{
 				var.pattern = Pattern::TypedIdentifier {
@@ -1396,6 +1402,7 @@ impl Desugarer
 					modifiers,
 					ty,
 					call_constructor: None,
+					mutable,
 					span,
 				};
 			}
@@ -1597,6 +1604,7 @@ impl Desugarer
 				},
 				call_constructor: None,
 				span: expr_span,
+				mutable: false,
 			},
 			docs: None,
 			init: Some(desugared_expr),
@@ -1821,12 +1829,14 @@ impl Desugarer
 				ty,
 				call_constructor,
 				span,
+				mutable,
 			} => Pattern::TypedIdentifier {
 				path,
 				modifiers,
 				ty,
 				call_constructor,
 				span,
+				mutable,
 			},
 
 			Pattern::Variant { path, args, span } => Pattern::Variant {
@@ -1989,6 +1999,7 @@ impl Desugarer
 				ty,
 				call_constructor,
 				span: id_span,
+				mutable,
 			} = pattern
 			{
 				statements.push(Stmt::VariableDecl(VariableDecl {
@@ -1998,6 +2009,7 @@ impl Desugarer
 						ty,
 						call_constructor,
 						span: id_span,
+						mutable,
 					},
 					init: Some(self.desugar_expr(init)?),
 					comp_const,
@@ -2026,6 +2038,7 @@ impl Desugarer
 				ty: temp_type,
 				call_constructor: None,
 				span: temp_span,
+				mutable: false,
 			},
 			init: Some(self.desugar_expr(init)?),
 			comp_const,

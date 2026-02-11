@@ -301,6 +301,7 @@ pub enum Modifier
 	Inline,
 	Const, // for variables this one is not used, for functions it is
 	Volatile,
+	Mut, // only used for the parse modifier function and should not be seed anywere else, if it's anywere else it should return an error
 	Directive(Directive),
 }
 
@@ -1519,6 +1520,7 @@ pub enum Pattern
 		call_constructor: Option<CallType>,
 		#[ignored(PartialEq)]
 		span: Span,
+		mutable: bool,
 	},
 	Variant
 	{
@@ -4448,7 +4450,8 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek()?.span();
 
-		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		let mut modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		let mutable: bool = modifiers.pop_if(|m| return *m == Modifier::Mut).is_some();
 
 		let tok: Token = self.peek()?.clone();
 
@@ -4581,6 +4584,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								Pattern::TypedIdentifier {
 									path: Path::simple(vec![field_name.clone()], field_tok.span),
 									ty,
+									mutable: true, // this one just is just ignored, because the mutable on a structfield is not usefull, but maybe will later be used for pub/priv
 									modifiers: field_modifiers,
 									call_constructor,
 									span: field_tok.span.merge(&self.last_span),
@@ -4650,6 +4654,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						modifiers,
 						call_constructor,
 						span: span.merge(&self.last_span),
+						mutable,
 					});
 				} else {
 					return Ok(Pattern::Variant {
@@ -5367,7 +5372,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let loop_span: Span = self.peek()?.span();
 
-			let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+			let mut modifiers: Vec<Modifier> = self.parse_modifiers()?;
+			let mutable: bool = modifiers.pop_if(|m| return *m == Modifier::Mut).is_some();
 
 			match self.peek_kind()? {
 				TokenKind::Ampersand => {
@@ -5395,6 +5401,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						ty: self_type.clone(),
 						call_constructor: None,
 						span: self_span,
+						mutable,
 					};
 
 					params.push(Param {
@@ -5407,7 +5414,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				TokenKind::SelfKw => {
 					let self_span: Span = self.next()?.span(); // self
 
-					let self_type = Type {
+					let self_type: Type = Type {
 						core: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Self".to_string()], self_span),
 							generics: Vec::new(),
@@ -5415,12 +5422,13 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: loop_span.merge(&self.last_span),
 					};
 
-					let self_pattern = Pattern::TypedIdentifier {
+					let self_pattern: Pattern = Pattern::TypedIdentifier {
 						path: Path::simple(vec!["self".to_string()], self_span),
 						modifiers,
 						ty: self_type.clone(),
 						call_constructor: None,
 						span: self_span,
+						mutable,
 					};
 
 					params.push(Param {
@@ -5430,36 +5438,35 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: loop_span.merge(&self.last_span),
 					});
 				}
-				TokenKind::Mut => {
-					let self_span: Span = self.next()?.span(); // mut
-					self.expect(&TokenKind::SelfKw)?;
-
-					let self_type = Type {
-						core: Box::new(TypeCore::Mutable {
-							inner: Box::new(TypeCore::Base {
-								path: Path::simple(vec!["Self".to_string()], self_span),
-								generics: Vec::new(),
-							}),
-						}),
-						span: loop_span.merge(&self.last_span),
-					};
-
-					let self_pattern = Pattern::TypedIdentifier {
-						path: Path::simple(vec!["self".to_string()], self_span),
-						modifiers,
-						ty: self_type.clone(),
-						call_constructor: None,
-						span: self_span,
-					};
-
-					params.push(Param {
-						ty: self_type,
-						variadic: false,
-						pattern: self_pattern,
-						span: loop_span.merge(&self.last_span),
-					});
-				}
-
+				// TokenKind::Mut => {
+				// 	let self_span: Span = self.next()?.span(); // mut
+				// 	self.expect(&TokenKind::SelfKw)?;
+				//
+				// 	let self_type = Type {
+				// 		core: Box::new(TypeCore::Mutable {
+				// 			inner: Box::new(TypeCore::Base {
+				// 				path: Path::simple(vec!["Self".to_string()], self_span),
+				// 				generics: Vec::new(),
+				// 			}),
+				// 		}),
+				// 		span: loop_span.merge(&self.last_span),
+				// 	};
+				//
+				// 	let self_pattern = Pattern::TypedIdentifier {
+				// 		path: Path::simple(vec!["self".to_string()], self_span),
+				// 		modifiers,
+				// 		ty: self_type.clone(),
+				// 		call_constructor: None,
+				// 		span: self_span,
+				// 	};
+				//
+				// 	params.push(Param {
+				// 		ty: self_type,
+				// 		variadic: false,
+				// 		pattern: self_pattern,
+				// 		span: loop_span.merge(&self.last_span),
+				// 	});
+				// }
 				TokenKind::Ellipsis => {
 					let span: Span = self.next()?.span(); // ...
 
@@ -5567,6 +5574,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::Volatile => {
 					ret.push(Modifier::Volatile);
+					self.next()?;
+				}
+				&TokenKind::Mut => {
+					ret.push(Modifier::Mut);
 					self.next()?;
 				}
 				TokenKind::Const => {
@@ -6588,6 +6599,7 @@ impl fmt::Display for Modifier
 			Modifier::Inline => return write!(f, "inline"),
 			Modifier::Const => return write!(f, "const"),
 			Modifier::Volatile => return write!(f, "volatile"),
+			Modifier::Mut => return write!(f, "mut"),
 			Modifier::Directive(d) => return write!(f, "{}", d),
 		}
 	}
