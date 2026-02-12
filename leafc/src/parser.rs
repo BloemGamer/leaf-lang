@@ -1,6 +1,6 @@
 mod tests;
 
-use std::{convert::TryFrom, iter::Peekable};
+use std::{cmp::Ordering, convert::TryFrom, iter::Peekable};
 
 use ignorable::PartialEq;
 
@@ -291,18 +291,42 @@ enum DeclKind
 /// * `Inline` - Inline optimization hint
 /// * `Const` - Constant function (not used for variables)
 /// * `Volatile` - Volatile memory access
+/// * `Mut` Mutable variable
 /// * `Directive` - Custom compiler directive
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Modifier
 {
+	Mut, // only used for the parse modifier function and should not be seed anywere else, if it's anywere else it should return an error
 	Pub,
 	Unsafe,
 	Inline,
 	Const, // for variables this one is not used, for functions it is
 	Volatile,
-	Mut, // only used for the parse modifier function and should not be seed anywere else, if it's anywere else it should return an error
 	Directive(Directive),
+}
+
+impl PartialOrd for Modifier
+{
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering>
+	{
+		const fn rank(m: &Modifier) -> u8
+		{
+			// ordering:
+			// @directive pub const unsafe inline volatile mut
+			return match m {
+				Modifier::Directive(_) => 0,
+				Modifier::Pub => 1,
+				Modifier::Const => 2,
+				Modifier::Unsafe => 3,
+				Modifier::Inline => 4,
+				Modifier::Volatile => 5,
+				Modifier::Mut => 6,
+			};
+		}
+
+		return rank(self).partial_cmp(&rank(other));
+	}
 }
 
 /// Compiler directive types.
@@ -3718,7 +3742,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
-			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
 			let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
 			self.next()?; // (
 
@@ -4252,7 +4276,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn lookahead_for_struct_field(&mut self) -> Result<bool, CompileError>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
-			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
 			self.next()?; // identifier
 
 			let is_struct_field: bool = self.at(&TokenKind::Arrow)?
@@ -4946,7 +4970,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::If => {
-					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
 					let checkpoint_span: Span = self.last_span;
 					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
 
@@ -5584,9 +5608,13 @@ impl<'s, 'c> Parser<'s, 'c>
 					ret.push(Modifier::Const);
 					self.next()?;
 				}
-				_ => return Ok(ret),
+				_ => break,
 			}
 		}
+		if !ret.is_sorted() {
+			todo!("return ordering error")
+		}
+		return Ok(ret);
 	}
 
 	fn parse_struct(&mut self) -> Result<StructDecl, CompileError>
