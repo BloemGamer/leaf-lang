@@ -126,6 +126,10 @@ pub enum SymbolCollectionErrorKind
 	{
 		name: String, first_definition: Span
 	},
+	Generic
+	{
+		message: String
+	},
 }
 
 impl std::fmt::Display for SymbolCollectionError
@@ -141,6 +145,9 @@ impl std::fmt::Display for SymbolCollectionError
 					first_definition,
 					self.span()
 				);
+			}
+			SymbolCollectionErrorKind::Generic { message } => {
+				return write!(f, "{}", message);
 			}
 		}
 	}
