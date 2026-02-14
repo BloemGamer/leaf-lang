@@ -313,7 +313,15 @@ impl Collector
 		let sig: &FunctionSignature = &func.signature;
 
 		if sig.name.segments.len() != 1 {
-			todo!("return error")
+			return Err(SymbolCollectionError {
+				span: sig.name.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A fucntion signature can't be a path, and only can have one segment".to_string(),
+				},
+			});
 		}
 		if let Some(name) = sig.name.segments.first() {
 			self.define(
@@ -358,10 +366,26 @@ impl Collector
 					unreachable!("Desugarer should have handled this");
 				};
 				if path.len() != 1 {
-					todo!("Error: path longer than one segment in param pattern");
+					return Err(SymbolCollectionError {
+						span: path.span(),
+						context: Vec::new(),
+						source_index: c.source_index,
+						scope: c.current_scope,
+						kind: SymbolCollectionErrorKind::Generic {
+							message: "A function parameter can't be a path, and only can have one segment".to_string(),
+						},
+					});
 				}
 				if !path.segments[0].generics.is_empty() {
-					todo!("Error: generics in param pattern identifier");
+					return Err(SymbolCollectionError {
+						span: path.span(),
+						context: Vec::new(),
+						source_index: c.source_index,
+						scope: c.current_scope,
+						kind: SymbolCollectionErrorKind::Generic {
+							message: "A function parameter can't have a generic in the path".to_string(),
+						},
+					});
 				}
 				c.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
 			}
