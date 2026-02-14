@@ -61,6 +61,7 @@ pub enum ScopeKind
 	},
 	FunctionBody,
 	StructFields,
+	UnionFields,
 	EnumVariants,
 	VariantMembers,
 	TraitBody,
@@ -506,9 +507,9 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Struct, u.span())?;
+		self.define(path.segments[0].name.clone(), SymbolKind::Union, u.span())?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, u.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span());
 
 		self.in_scope(body_scope, |c| {
 			for f in &u.fields {
@@ -521,7 +522,41 @@ impl Collector
 
 	fn collect_enum_decl(&mut self, e: &parser::EnumDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let path: &Path = &e.name;
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A enum can't be a path, and only can have one segment".to_string(),
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A enum can't have a generic in the path".to_string(),
+				},
+			});
+		}
+
+		self.define(path.segments[0].name.clone(), SymbolKind::Struct, e.span())?;
+
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span());
+
+		self.in_scope(body_scope, |c| {
+			for f in &e.variants {
+				c.define(f.name.clone(), SymbolKind::EnumVariant, f.span())?;
+			}
+			return Ok(());
+		})?;
+		return Ok(());
 	}
 
 	fn collect_variant_decl(&mut self, v: &parser::VariantDecl) -> Result<(), SymbolCollectionError>
