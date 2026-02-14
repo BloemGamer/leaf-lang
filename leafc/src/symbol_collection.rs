@@ -403,13 +403,29 @@ impl Collector
 	fn collect_variable_decl(&mut self, var: &VariableDecl) -> Result<(), SymbolCollectionError>
 	{
 		let Pattern::TypedIdentifier { path, span, .. } = &var.pattern else {
-			todo!("Desugarer should have handled this");
+			unreachable!("Desugarer should have handled this");
 		};
 		if path.len() != 1 {
-			todo!("Error: path longer than one segment in param pattern");
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A variable can't be a path, and only can have one segment".to_string(),
+				},
+			});
 		}
 		if !path.segments[0].generics.is_empty() {
-			todo!("Error: generics in param pattern identifier");
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A variable can't have a generic in the path".to_string(),
+				},
+			});
 		}
 		self.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
 
