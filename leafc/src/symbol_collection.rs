@@ -1,8 +1,8 @@
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
-		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Pattern, Program, Stmt, TopLevelDecl,
-		VariableDecl,
+		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Path, Pattern, Program, Stmt, StructDecl,
+		TopLevelDecl, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -17,7 +17,10 @@ pub struct SymbolId(pub usize);
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind
 {
-	Variable,
+	Variable
+	{
+		mutable: bool,
+	},
 	Function
 	{
 		signature_span: Span,
@@ -387,7 +390,10 @@ impl Collector
 						},
 					});
 				}
-				c.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
+				let Pattern::TypedIdentifier { mutable, .. } = param.pattern else {
+					unreachable!("Should be handeled by the desugarer");
+				};
+				c.define(path.segments[0].name.clone(), SymbolKind::Variable { mutable }, *span)?;
 			}
 
 			if let Some(body) = &func.body {
@@ -427,7 +433,10 @@ impl Collector
 				},
 			});
 		}
-		self.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
+		let Pattern::TypedIdentifier { mutable, .. } = var.pattern else {
+			unreachable!("Should be handeled by the desugarer");
+		};
+		self.define(path.segments[0].name.clone(), SymbolKind::Variable { mutable }, *span)?;
 
 		return Ok(());
 	}
