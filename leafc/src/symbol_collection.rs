@@ -546,7 +546,7 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Struct, e.span())?;
+		self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span())?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span());
 
@@ -561,7 +561,41 @@ impl Collector
 
 	fn collect_variant_decl(&mut self, v: &parser::VariantDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let path: &Path = &v.name;
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A variant can't be a path, and only can have one segment".to_string(),
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A variant can't have a generic in the path".to_string(),
+				},
+			});
+		}
+
+		self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span())?;
+
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span());
+
+		self.in_scope(body_scope, |c| {
+			for f in &v.variants {
+				c.define(f.name.clone(), SymbolKind::VariantMember, f.span())?;
+			}
+			return Ok(());
+		})?;
+		return Ok(());
 	}
 
 	fn collect_type_alias_decl(&mut self, t: &parser::TypeAliasDecl) -> Result<(), SymbolCollectionError>
