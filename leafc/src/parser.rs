@@ -437,6 +437,14 @@ pub struct Path
 	pub span: Span,
 }
 
+impl Spanned for Path
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
 /// A single segment in a path, optionally with generic arguments
 ///
 /// # Fields
