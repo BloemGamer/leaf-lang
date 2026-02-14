@@ -1,6 +1,9 @@
 use crate::{
 	lexer::{Span, Spanned},
-	parser::{self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Pattern, Program, Stmt, TopLevelDecl},
+	parser::{
+		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Pattern, Program, Stmt, TopLevelDecl,
+		VariableDecl,
+	},
 	source_map::SourceIndex,
 };
 
@@ -14,10 +17,7 @@ pub struct SymbolId(pub usize);
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind
 {
-	Variable
-	{
-		mutable: bool,
-	},
+	Variable,
 	Function
 	{
 		signature_span: Span,
@@ -102,14 +102,29 @@ impl SymbolTable
 }
 
 #[derive(Debug, Clone)]
-pub enum SymbolCollectionError
+pub struct SymbolCollectionError
+{
+	pub span: Span,
+	pub kind: SymbolCollectionErrorKind,
+	pub context: Vec<String>,
+	pub source_index: SourceIndex,
+	scope: ScopeId,
+}
+
+impl Spanned for SymbolCollectionError
+{
+	fn span(&self) -> Span
+	{
+		return self.span;
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum SymbolCollectionErrorKind
 {
 	DuplicateDefinition
 	{
-		name: Ident,
-		first_span: Span,
-		second_span: Span,
-		scope: ScopeId,
+		name: String, first_definition: Span
 	},
 }
 
@@ -117,17 +132,14 @@ impl std::fmt::Display for SymbolCollectionError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
-		match self {
-			Self::DuplicateDefinition {
-				name,
-				first_span,
-				second_span,
-				..
-			} => {
+		match &self.kind {
+			SymbolCollectionErrorKind::DuplicateDefinition { name, first_definition } => {
 				return write!(
 					f,
 					"duplicate definition of `{}`: first at {:?}, again at {:?}",
-					name, first_span, second_span
+					name,
+					first_definition,
+					self.span()
 				);
 			}
 		}
@@ -209,10 +221,14 @@ impl Collector
 			for &sid in &self.table.scopes[scope.0].symbols {
 				let existing: &Symbol = &self.table.symbols[sid.0];
 				if existing.name == name && !matches!(existing.kind, SymbolKind::Label) {
-					return Err(SymbolCollectionError::DuplicateDefinition {
-						name,
-						first_span: existing.def_span,
-						second_span: def_span,
+					return Err(SymbolCollectionError {
+						span: def_span,
+						source_index: self.source_index,
+						context: Vec::new(),
+						kind: SymbolCollectionErrorKind::DuplicateDefinition {
+							name,
+							first_definition: existing.def_span,
+						},
 						scope,
 					});
 				}
@@ -332,7 +348,7 @@ impl Collector
 
 			for param in &sig.params {
 				let Pattern::TypedIdentifier { path, span, .. } = &param.pattern else {
-					todo!("Desugarer should have handled this");
+					unreachable!("Desugarer should have handled this");
 				};
 				if path.len() != 1 {
 					todo!("Error: path longer than one segment in param pattern");
@@ -340,11 +356,7 @@ impl Collector
 				if !path.segments[0].generics.is_empty() {
 					todo!("Error: generics in param pattern identifier");
 				}
-				c.define(
-					path.segments[0].name.clone(),
-					SymbolKind::Variable { mutable: param.mutable },
-					*span,
-				)?;
+				c.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
 			}
 
 			if let Some(body) = &func.body {
@@ -357,9 +369,20 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_variable_decl(&mut self, var: &parser::VariableDecl) -> Result<(), SymbolCollectionError>
+	fn collect_variable_decl(&mut self, var: &VariableDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let Pattern::TypedIdentifier { path, span, .. } = &var.pattern else {
+			todo!("Desugarer should have handled this");
+		};
+		if path.len() != 1 {
+			todo!("Error: path longer than one segment in param pattern");
+		}
+		if !path.segments[0].generics.is_empty() {
+			todo!("Error: generics in param pattern identifier");
+		}
+		self.define(path.segments[0].name.clone(), SymbolKind::Variable, *span)?;
+
+		return Ok(());
 	}
 
 	fn collect_struct_decl(&mut self, s: &parser::StructDecl) -> Result<(), SymbolCollectionError>
