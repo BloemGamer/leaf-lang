@@ -5320,7 +5320,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 
 		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan)? {
-			self.get_generics()?
+			self.get_generics()? // TODO: add a validator here
 		} else {
 			Vec::new()
 		};
