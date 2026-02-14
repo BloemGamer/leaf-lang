@@ -441,9 +441,43 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_struct_decl(&mut self, s: &parser::StructDecl) -> Result<(), SymbolCollectionError>
+	fn collect_struct_decl(&mut self, s: &StructDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let path: &Path = &s.name;
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A struct can't be a path, and only can have one segment".to_string(),
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A struct can't have a generic in the path".to_string(),
+				},
+			});
+		}
+
+		self.define(path.segments[0].name.clone(), SymbolKind::Struct, s.span())?;
+
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span());
+
+		self.in_scope(body_scope, |c| {
+			for f in &s.fields {
+				c.define(f.name.clone(), SymbolKind::Field, f.span())?;
+			}
+			return Ok(());
+		})?;
+		return Ok(());
 	}
 
 	fn collect_union_decl(&mut self, u: &parser::UnionDecl) -> Result<(), SymbolCollectionError>
