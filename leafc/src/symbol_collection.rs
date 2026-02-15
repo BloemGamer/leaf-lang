@@ -1,8 +1,8 @@
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
-		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Path, Pattern, Program, Stmt, StructDecl,
-		TopLevelDecl, VariableDecl,
+		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Modifier, Path, Pattern, Program, Stmt,
+		StructDecl, TopLevelDecl, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -45,6 +45,7 @@ pub struct Symbol
 	pub kind: SymbolKind,
 	pub def_span: Span,
 	pub scope: ScopeId,
+	pub visibility: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,6 +101,13 @@ impl SymbolTable
 	{
 		return &self.symbols[id.0];
 	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Visibility
+{
+	Public,
+	Private,
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +231,7 @@ impl Collector
 		name: Ident,
 		kind: SymbolKind,
 		def_span: Span,
+		visibility: Visibility,
 	) -> Result<SymbolId, SymbolCollectionError>
 	{
 		if !matches!(kind, SymbolKind::Label) {
@@ -249,15 +258,22 @@ impl Collector
 			kind,
 			def_span,
 			scope,
+			visibility,
 		});
 		self.table.scopes[scope.0].symbols.push(id);
 		return Ok(id);
 	}
 
-	fn define(&mut self, name: Ident, kind: SymbolKind, def_span: Span) -> Result<SymbolId, SymbolCollectionError>
+	fn define(
+		&mut self,
+		name: Ident,
+		kind: SymbolKind,
+		def_span: Span,
+		visibility: Visibility,
+	) -> Result<SymbolId, SymbolCollectionError>
 	{
 		let scope = self.current_scope;
-		return self.insert_symbol(scope, name, kind, def_span);
+		return self.insert_symbol(scope, name, kind, def_span, visibility);
 	}
 
 	fn in_scope<F, R>(&mut self, scope: ScopeId, f: F) -> Result<R, SymbolCollectionError>
@@ -325,7 +341,12 @@ impl Collector
 			});
 		}
 		if let Some(name) = sig.name.segments.first() {
-			self.define(name.name.clone(), SymbolKind::Function, sig.span())?;
+			self.define(
+				name.name.clone(),
+				SymbolKind::Function,
+				sig.span(),
+				get_visability(&func.signature.modifiers),
+			)?;
 		} else {
 			unreachable!("A signature should always have a segment, otherwise the parser did not do his job right");
 		}
@@ -334,7 +355,12 @@ impl Collector
 
 		self.in_scope(body_scope, |c| {
 			for generic in &sig.generics {
-				c.define(generic.name.clone(), SymbolKind::GenericParam, generic.span())?;
+				c.define(
+					generic.name.clone(),
+					SymbolKind::GenericParam,
+					generic.span(),
+					Visibility::Private,
+				)?;
 			}
 
 			if sig.call_type != CallType::Regular {
@@ -347,6 +373,7 @@ impl Collector
 							.iter()
 							.find(|g| return g.name == *ge)
 							.map_or_else(|| return sig.span(), |g| return g.span()),
+						Visibility::Private,
 					)?;
 				}
 			} else {
@@ -385,7 +412,12 @@ impl Collector
 				let Pattern::TypedIdentifier { mutable, .. } = param.pattern else {
 					unreachable!("Should be handeled by the desugarer");
 				};
-				c.define(path.segments[0].name.clone(), SymbolKind::Variable { mutable }, *span)?;
+				c.define(
+					path.segments[0].name.clone(),
+					SymbolKind::Variable { mutable },
+					*span,
+					Visibility::Private,
+				)?;
 			}
 
 			if let Some(body) = &func.body {
@@ -400,7 +432,10 @@ impl Collector
 
 	fn collect_variable_decl(&mut self, var: &VariableDecl) -> Result<(), SymbolCollectionError>
 	{
-		let Pattern::TypedIdentifier { path, span, .. } = &var.pattern else {
+		let Pattern::TypedIdentifier {
+			path, span, modifiers, ..
+		} = &var.pattern
+		else {
 			unreachable!("Desugarer should have handled this");
 		};
 		if path.len() != 1 {
@@ -428,7 +463,12 @@ impl Collector
 		let Pattern::TypedIdentifier { mutable, .. } = var.pattern else {
 			unreachable!("Should be handeled by the desugarer");
 		};
-		self.define(path.segments[0].name.clone(), SymbolKind::Variable { mutable }, *span)?;
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::Variable { mutable },
+			*span,
+			get_visability(&modifiers),
+		)?;
 
 		return Ok(());
 	}
@@ -459,13 +499,23 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Struct, s.span())?;
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::Struct,
+			s.span(),
+			get_visability(&s.modifiers),
+		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span());
 
 		self.in_scope(body_scope, |c| {
 			for f in &s.fields {
-				c.define(f.name.clone(), SymbolKind::Field, f.span())?;
+				c.define(
+					f.name.clone(),
+					SymbolKind::Field,
+					f.span(),
+					get_visability(&f.modifiers),
+				)?;
 			}
 			return Ok(());
 		})?;
@@ -498,13 +548,23 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Union, u.span())?;
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::Union,
+			u.span(),
+			get_visability(&u.modifiers),
+		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span());
 
 		self.in_scope(body_scope, |c| {
 			for f in &u.fields {
-				c.define(f.name.clone(), SymbolKind::Field, f.span())?;
+				c.define(
+					f.name.clone(),
+					SymbolKind::Field,
+					f.span(),
+					get_visability(&f.modifiers),
+				)?;
 			}
 			return Ok(());
 		})?;
@@ -537,13 +597,14 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span())?;
+		let visibility: Visibility = get_visability(&e.modifiers);
+		self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span());
 
 		self.in_scope(body_scope, |c| {
 			for f in &e.variants {
-				c.define(f.name.clone(), SymbolKind::EnumVariant, f.span())?;
+				c.define(f.name.clone(), SymbolKind::EnumVariant, f.span(), visibility)?;
 			}
 			return Ok(());
 		})?;
@@ -576,13 +637,14 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span())?;
+		let visibility: Visibility = get_visability(&v.modifiers);
+		self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span());
 
 		self.in_scope(body_scope, |c| {
 			for f in &v.variants {
-				c.define(f.name.clone(), SymbolKind::VariantMember, f.span())?;
+				c.define(f.name.clone(), SymbolKind::VariantMember, f.span(), visibility)?;
 			}
 			return Ok(());
 		})?;
@@ -615,7 +677,12 @@ impl Collector
 			});
 		}
 
-		self.define(path.segments[0].name.clone(), SymbolKind::TypeAlias, path.span())?;
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::TypeAlias,
+			path.span(),
+			get_visability(&t.modifiers),
+		)?;
 
 		return Ok(());
 	}
@@ -661,4 +728,13 @@ pub fn collect_symbols(program: &Program, source_index: SourceIndex) -> Result<S
 	collector.table.scopes[collector.table.root.0].span = program.span();
 	collector.collect_program(program)?;
 	return Ok(collector.table);
+}
+
+fn get_visability(mods: &Vec<Modifier>) -> Visibility
+{
+	if mods.iter().any(|m| matches!(m, Modifier::Pub)) {
+		return Visibility::Public;
+	} else {
+		return Visibility::Private;
+	}
 }
