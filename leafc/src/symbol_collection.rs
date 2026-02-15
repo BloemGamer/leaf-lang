@@ -1,8 +1,8 @@
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
-		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Modifier, ModuleDecl, Path, Pattern, Program,
-		Stmt, StructDecl, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, ImplDecl, ImplItem, Modifier, ModuleDecl, Path,
+		Pattern, Program, Stmt, StructDecl, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -31,8 +31,6 @@ pub enum SymbolKind
 	TypeAlias,
 	GenericParam,
 	Trait,
-	AssociatedType,
-	AssociatedConst,
 	Module,
 	Field,
 	Label,
@@ -784,9 +782,32 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_impl_decl(&mut self, i: &parser::ImplDecl) -> Result<(), SymbolCollectionError>
+	fn collect_impl_decl(&mut self, i: &ImplDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ImplBody, i.span());
+
+		self.in_scope(body_scope, |c| {
+			for generic in &i.generics {
+				c.define(
+					generic.name.clone(),
+					SymbolKind::GenericParam,
+					generic.span(),
+					Visibility::Private,
+				)?;
+			}
+
+			for item in &i.body {
+				match item {
+					ImplItem::TypeAlias(ty) => c.collect_type_alias_decl(ty),
+					ImplItem::Function(func) => c.collect_function_decl(func),
+					ImplItem::Const(var) => c.collect_variable_decl(var),
+				}?;
+			}
+
+			return Ok(());
+		})?;
+
+		return Ok(());
 	}
 
 	fn collect_stmt(&mut self, stmt: &parser::Stmt) -> Result<(), SymbolCollectionError>
