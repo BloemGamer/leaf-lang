@@ -21,10 +21,7 @@ pub enum SymbolKind
 	{
 		mutable: bool,
 	},
-	Function
-	{
-		signature_span: Span,
-	},
+	Function,
 	Struct,
 	Union,
 	Enum,
@@ -328,13 +325,7 @@ impl Collector
 			});
 		}
 		if let Some(name) = sig.name.segments.first() {
-			self.define(
-				name.name.clone(),
-				SymbolKind::Function {
-					signature_span: sig.span(),
-				},
-				sig.span(),
-			)?;
+			self.define(name.name.clone(), SymbolKind::Function, sig.span())?;
 		} else {
 			unreachable!("A signature should always have a segment, otherwise the parser did not do his job right");
 		}
