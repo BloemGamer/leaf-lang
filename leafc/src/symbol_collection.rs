@@ -2,7 +2,7 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, Modifier, Path, Pattern, Program, Stmt,
-		StructDecl, TopLevelDecl, VariableDecl,
+		StructDecl, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -687,9 +687,61 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_trait_decl(&mut self, t: &parser::TraitDecl) -> Result<(), SymbolCollectionError>
+	fn collect_trait_decl(&mut self, t: &TraitDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let path: &Path = &t.name;
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A trait can't be a path, and only can have one segment".to_string(),
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A trait can't have a generic in the path".to_string(),
+				},
+			});
+		}
+
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::Trait,
+			path.span(),
+			get_visability(&t.modifiers),
+		)?;
+
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::TraitBody, t.span());
+		self.in_scope(body_scope, |c| {
+			for generic in &t.generics {
+				c.define(
+					generic.name.clone(),
+					SymbolKind::GenericParam,
+					generic.span(),
+					Visibility::Private,
+				)?;
+			}
+
+			for item in &t.items {
+				match item {
+					TraitItem::TypeAlias(ty) => c.collect_type_alias_decl(ty),
+					TraitItem::Function(func) => c.collect_function_decl(func),
+					TraitItem::Const(var) => c.collect_variable_decl(var),
+				}?;
+			}
+
+			return Ok(());
+		})?;
+		todo!();
 	}
 
 	fn collect_module_decl(&mut self, n: &parser::ModuleDecl) -> Result<(), SymbolCollectionError>
