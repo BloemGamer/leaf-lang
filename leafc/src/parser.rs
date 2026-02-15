@@ -2418,6 +2418,7 @@ impl Spanned for DocsComment
 /// * `ty` - The type of the field
 /// * `name` - The name of the field
 /// * `default_value` - Optinal default value `member: i64 = 0`
+/// * `modifiers` - Visibility and other modifiers
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
@@ -2426,6 +2427,7 @@ pub struct StructField
 	pub ty: Type,
 	pub name: Ident,
 	pub default_value: Option<Expr>,
+	pub modifiers: Vec<Modifier>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -2445,6 +2447,7 @@ impl Spanned for StructField
 /// # Fields
 /// * `ty` - The type of the field
 /// * `name` - The name of the field
+/// * `modifiers` - Visibility and other modifiers
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
 #[derive(Debug, Clone, PartialEq)]
@@ -2452,6 +2455,7 @@ pub struct UnionField
 {
 	pub ty: Type,
 	pub name: Ident,
+	pub modifiers: Vec<Modifier>,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
@@ -5668,6 +5672,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			let field_start = self.peek()?.span();
 			let field_docs: Option<DocsComment> = self.parse_docs()?;
 
+			let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+
 			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
@@ -5693,6 +5699,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			fields.push(StructField {
 				docs: field_docs,
 				ty: field_type,
+				modifiers,
 				name: field_name,
 				default_value,
 				span: field_start.merge(&self.last_span),
@@ -5760,6 +5767,8 @@ impl<'s, 'c> Parser<'s, 'c>
 			let field_start = self.peek()?.span();
 			let field_docs: Option<DocsComment> = self.parse_docs()?;
 
+			let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+
 			let field_name: Ident = if let TokenKind::Identifier(str) = self.next()?.kind {
 				str
 			} else {
@@ -5779,6 +5788,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			fields.push(UnionField {
 				docs: field_docs,
 				ty: field_type,
+				modifiers,
 				name: field_name,
 				span: field_start.merge(&self.last_span),
 			});
