@@ -600,7 +600,33 @@ impl Collector
 
 	fn collect_type_alias_decl(&mut self, t: &parser::TypeAliasDecl) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		let path: &Path = &t.name;
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A type can't be a path, and only can have one segment".to_string(),
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::Generic {
+					message: "A type can't have a generic in the path".to_string(),
+				},
+			});
+		}
+
+		self.define(path.segments[0].name.clone(), SymbolKind::TypeAlias, path.span())?;
+
+		return Ok(());
 	}
 
 	fn collect_trait_decl(&mut self, t: &parser::TraitDecl) -> Result<(), SymbolCollectionError>
