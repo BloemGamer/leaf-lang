@@ -1776,13 +1776,7 @@ impl Spanned for TraitDecl
 #[derive(Debug, Clone, PartialEq)]
 pub enum TraitItem
 {
-	Function
-	{
-		signature: FunctionSignature,
-		body: Option<Block>,
-		#[ignored(PartialEq)]
-		span: Span,
-	},
+	Function(FunctionDecl),
 	TypeAlias(TypeAliasDecl),
 	Const(VariableDecl),
 }
@@ -1793,7 +1787,7 @@ impl Spanned for TraitItem
 	{
 		#[allow(clippy::match_same_arms)]
 		match self {
-			TraitItem::Function { span, .. } => return *span,
+			TraitItem::Function(FunctionDecl { span, .. }) => return *span,
 			TraitItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
 			TraitItem::Const(VariableDecl { span, .. }) => return *span,
 		}
@@ -6443,26 +6437,13 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_trait_item(&mut self) -> Result<TraitItem, CompileError>
 	{
-		let span: Span = self.peek()?.span;
-
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
 		let node: TraitItem = match decl_kind {
 			DeclKind::Function => {
-				let signature: FunctionSignature = self.parse_function_signature()?;
+				let func = self.parse_function_decl()?;
 
-				let body: Option<Block> = if self.at(&TokenKind::LeftBrace)? {
-					Some(self.parse_block()?)
-				} else {
-					self.expect(&TokenKind::Semicolon)?;
-					None
-				};
-
-				TraitItem::Function {
-					signature,
-					body,
-					span: span.merge(&self.last_span),
-				}
+				TraitItem::Function(func)
 			}
 			DeclKind::TypeAlias => {
 				let type_alias: TypeAliasDecl = self.parse_type_alias()?;
@@ -7870,14 +7851,8 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &TraitItem) -> fmt::Result
 {
 	match item {
-		TraitItem::Function { signature, body, .. } => {
-			write_function_signature(f, w, signature)?;
-			if let Some(b) = body {
-				write!(f, " ")?;
-				return write_block(f, w, b);
-			} else {
-				return write!(f, ";");
-			}
+		TraitItem::Function(func) => {
+			return write_function_decl(f, w, func);
 		}
 		TraitItem::TypeAlias(ta) => {
 			write_type_alias_decl(f, w, ta)?;

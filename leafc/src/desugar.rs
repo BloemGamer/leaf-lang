@@ -712,14 +712,9 @@ impl Desugarer
 			.into_iter()
 			.map(|item| {
 				return Ok(match item {
-					TraitItem::Function { signature, body, span } => {
+					TraitItem::Function(func) => {
 						debug_assert!(self.loop_stack.is_empty());
-						let desugared_body = body.map(|b| return self.desugar_block(b)).transpose()?;
-						return Ok(TraitItem::Function {
-							signature,
-							body: desugared_body,
-							span,
-						});
+						TraitItem::Function(self.desugar_function(func)?)
 					}
 					TraitItem::TypeAlias(t) => TraitItem::TypeAlias(t),
 					TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)?),

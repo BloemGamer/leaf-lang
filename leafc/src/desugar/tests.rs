@@ -760,7 +760,7 @@ mod tests
 			name: Path::simple(vec!["MyTrait".into()], Span::default()),
 			generics: Vec::new(),
 			super_traits: Vec::new(),
-			items: vec![TraitItem::Function {
+			items: vec![TraitItem::Function(FunctionDecl {
 				signature: FunctionSignature {
 					modifiers: Vec::new(),
 					name: Path::simple(vec!["method".into()], Span::default()),
@@ -787,8 +787,9 @@ mod tests
 					tail_expr: None,
 					span: Span::default(),
 				}),
+				docs: None,
 				span: Span::default(),
-			}],
+			})],
 			docs: None,
 			span: Span::default(),
 		};
