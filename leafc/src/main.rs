@@ -116,7 +116,7 @@ use std::{fs, process::exit};
 use self::{
 	desugar::{DesugarError, Desugarer},
 	lexer::Lexer,
-	parser::{ParseError, Parser, Program, TopLevelBlock},
+	parser::{ParseError, Parser, Program},
 	source_map::SourceMap,
 };
 
@@ -209,6 +209,7 @@ fn main()
 		)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
+	println!("{}", desugared);
 	let symbols = symbol_collection::collect_symbols(&desugared, desugared.source_index);
 	println!("{:#?}", symbols);
 }
