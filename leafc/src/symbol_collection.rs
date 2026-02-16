@@ -709,9 +709,39 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_stmt(&mut self, stmt: &parser::Stmt) -> Result<(), SymbolCollectionError>
+	fn collect_stmt(&mut self, stmt: &Stmt) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		match stmt {
+			Stmt::For { .. } | Stmt::While { .. } | Stmt::WhileVarLoop { .. } | Stmt::IfVar { .. } => {
+				unreachable!("this should be filtered out by the desugarer")
+			}
+			Stmt::Directive(_) => {
+				unimplemented!("For now, directives are not stable for standalone things")
+			}
+			Stmt::Continue { .. } => {}
+			Stmt::Loop {
+				label: labelv,
+				body,
+				span,
+			} => {
+				let Some(label): Option<&String> = labelv.as_ref() else {
+					unreachable!("desugarer should have added a label")
+				};
+				self.define(label.clone(), SymbolKind::Label, *span, Visibility::Private)?;
+
+				let body_scope: ScopeId = self.alloc_scope(ScopeKind::LoopBody, *span);
+
+				self.in_scope(body_scope, |c| {
+					for item in &body.stmts {
+						c.collect_stmt(item)?;
+					}
+
+					return Ok(());
+				})?;
+			}
+			_ => todo!(),
+		}
+		return Ok(());
 	}
 
 	fn collect_expr(&mut self, expr: &parser::Expr) -> Result<(), SymbolCollectionError>
