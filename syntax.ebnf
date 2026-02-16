@@ -18,7 +18,10 @@ character  = ? any Unicode character ? ;
 
 // --- Identifiers ---
 identifier = ( letter | "_" ) , { letter | digit | "_" } ;
-path = identifier , { "::" , identifier } ;
+
+// Path: can have generics at each segment (e.g., Vec::<i32>::new or std::vec::Vec::<i32>)
+path = path_segment , { "::" , path_segment } ;
+path_segment = identifier , [ "::" , generic_args ] ;
 
 // Label for loops: 'label:
 label = "'" , identifier ;
@@ -39,14 +42,18 @@ float_literal = digit , { digit | "_" } , "." , digit , { digit | "_" } ;
 string_literal = '"' , { character - '"' | escape_sequence } , '"' ;
 char_literal   = "'" , ( character - "'" | escape_sequence ) , "'" ;
 
-escape_sequence = "\" , ( "n" | "t" | "r" | "0" | "\" | "'" | '"' ) ;
+escape_sequence = "\" , ( "n" | "t" | "r" | "0" | "\" | "'" | '"' | hex_escape | unicode_escape ) ;
+
+hex_escape = "x" , hex_digit , hex_digit ;
+
+unicode_escape = "u{" , hex_digit , { hex_digit } , "}" ;
 
 boolean_literal = "true" | "false" ;
 
 // --- Array literals ---
 // [1, 2, 3] or [value; count] or []
 array_literal = "[" , [ array_content ] , "]" ;
-array_content = expression , ( ";" , expression )  // repeat: [0; 10]
+array_content = expression , ";" , expression                 // repeat: [0; 10]
               | expression , { "," , expression } , [ "," ] ; // list: [1, 2, 3]
 
 // --- Tuple literals ---
@@ -55,10 +62,10 @@ tuple_literal = "(" , [ tuple_content ] , ")" ;
 tuple_content = expression , "," , [ expression , { "," , expression } , [ "," ] ] ;
 
 // --- Struct literals ---
-// Point { x = 10, y = 20 }
+// Point { x -> 10, y -> 20 } or Point { x, y } or Point { x -> 1, ..base }
 struct_literal = path , "{" , [ struct_field_list ] , "}" ;
-struct_field_list = struct_field , { "," , struct_field } , [ "," ] ;
-struct_field = identifier , "=" , expression ;
+struct_field_list = struct_field , { "," , struct_field } , [ "," ] , [ ".." , [ expression ] ] ;
+struct_field = identifier , [ "->" , expression ] ;
 
 // --- Range expressions ---
 // 1..10 or 1..=10 or 1.. or ..10 or ..
@@ -70,7 +77,7 @@ range_expr = [ expression ] , ( ".." | "..=" ) , [ expression ] ;
 
 // Assignment operators
 assign_op = "=" | "+=" | "-=" | "*=" | "/=" | "%="
-          | "&=" | "|=" | "^=" | "~=" | ">>=" | "<<=" ;
+          | "&=" | "|=" | "^=" | ">>=" | "<<=" ;
 
 // Binary operators (by precedence level)
 logical_or_op  = "||" ;
@@ -141,13 +148,13 @@ unary_expr = unary_op , unary_expr
 // Precedence level 14: Postfix (field access, indexing, calls)
 postfix_expr = primary_expr , { postfix_op } ;
 
-postfix_op = "." , identifier                      // field access
+postfix_op = "." , path                            // field access (can be path for module access)
            | "[" , expression , "]"                // array indexing
            | heap_call_op                          // heap call: !<IO: x>() or ?<IO: x>()
            | "(" , [ argument_list ] , ")" ;       // function call
 
-// Heap call operator: !<Name: Type, ...>(...) or ?<Name: Type, ...>(...)
-heap_call_op = ( "!" | "?" ) , [ named_generic_args ] , "(" , [ argument_list ] , ")" ;
+// Heap call operator: !<Name: Type, ...> or ?<Name: Type, ...>
+heap_call_op = ( "!" | "?" ) , [ named_generic_args ] ;
 
 // Named generic arguments: <Name: Type, Name2: Type2>
 named_generic_args = "<" , named_generic_arg , { "," , named_generic_arg } , [ "," ] , ">" ;
@@ -194,15 +201,15 @@ switch_expr = "switch" , expression , "{" , { switch_arm } , "}" ;
 
 switch_arm = pattern , "=>" , switch_arm_body ;
 
-switch_arm_body = expression , ","      // expression arm
-                | block_expr , [ "," ] ; // block arm
+switch_arm_body = expression , ","      // expression arm (requires comma)
+                | block_expr , [ "," ] ; // block arm (optional comma)
 
 // If expression: if cond { } else { }
-if_expr = "if" , [ "var" ] , if_condition , block_expr ,
+if_expr = "if" , if_condition , block_expr ,
           [ "else" , ( block_expr | if_expr ) ] ;
 
-if_condition = pattern , "=" , expression  // if var pattern = expr
-             | expression ;                // if expr
+if_condition = "var" , pattern , "=" , expression  // if var pattern = expr
+             | expression ;                         // if expr
 
 // Loop expression: loop { } or 'label: loop { }
 loop_expr = [ label , ":" ] , "loop" , block_expr ;
@@ -231,20 +238,23 @@ literal_pattern = integer_literal
                 | char_literal
                 | boolean_literal ;
 
-// Typed identifier with optional heap constructor: x: i32 or x: i32() or x: i32!() or x: i32?()
-typed_identifier_pattern = identifier , ":" , type , [ heap_constructor ] ;
+// Typed identifier with optional modifiers and heap constructor:
+// mut x: i32 or x: i32() or x: i32!() or x: i32?()
+typed_identifier_pattern = [ modifiers ] , path , ":" , type , [ heap_constructor ] ;
 
 // Heap constructor: () or !() or ?()
 heap_constructor = [ ( "!" | "?" ) ] , "(" , ")" ;
 
+// Variant pattern: Variant or Variant(args)
 variant_pattern = path , [ "(" , [ pattern_list ] , ")" ] ;
 
 tuple_pattern = "(" , [ pattern_list ] , ")" ;
 
+// Struct pattern: Point { x -> pat, y -> pat } or Point { x, y, .. }
 struct_pattern = path , "{" , [ struct_pattern_field_list ] , "}" ;
 
-struct_pattern_field_list = struct_pattern_field , { "," , struct_pattern_field } , [ "," ] ;
-struct_pattern_field = [ identifier , ":" ] , pattern ;
+struct_pattern_field_list = struct_pattern_field , { "," , struct_pattern_field } , [ "," ] , [ ".." ] ;
+struct_pattern_field = identifier , [ "->" , pattern ] ;
 
 range_pattern = [ expression ] , ( ".." | "..=" ) , [ expression ] ;
 
@@ -254,30 +264,41 @@ pattern_list = pattern , { "," , pattern } , [ "," ] ;
 // TYPES
 // ============================================================================
 
-type = [ type_modifier , { type_modifier } ] , type_core ;
+type = type_core ;
 
 type_core = reference_type
+          | mutable_type
           | base_type
-          | tuple_type ;
+          | tuple_type
+          | array_type
+          | impl_trait_type ;
 
 // Reference type: &T or &mut T
 reference_type = "&" , [ "mut" ] , type_core ;
 
-// Base type: Name<T, U> followed by suffixes
-base_type = path , [ generic_args ] , { type_suffix } ;
+// Mutable type: mut T
+mutable_type = "mut" , type_core ;
 
-// Type suffixes: pointers
-type_suffix = "*"                          // pointer: T*
-            | "[" , [ expression ] , "]" ; // array: T[10]
+// Base type: Name<T, U> followed by pointer suffixes
+base_type = path , [ generic_args ] , { pointer_suffix } ;
+
+// Pointer suffix: T*
+pointer_suffix = "*" ;
+
+// Array type: [T; size] or [T]
+array_type = "[" , type_core , [ ";" , [ expression ] ] , "]" , { pointer_suffix } ;
 
 // Tuple type: (T, U) or () or (T,)
 tuple_type = "(" , [ type , { "," , type } , [ "," ] ] , ")" ;
 
-// Generic arguments: <T, U>
-generic_args = "<" , type , { "," , type } , [ "," ] , ">" ;
+// Impl trait type: impl Trait or impl Trait + Trait2
+impl_trait_type = "impl" , trait_bound_list ;
 
-// Type modifiers
-type_modifier = "const" | "volatile" | directive ;
+// Generic arguments: <T, U> or <T, Item = U>
+generic_args = "<" , generic_arg , { "," , generic_arg } , [ "," ] , ">" ;
+
+generic_arg = type                                      // Type argument
+            | identifier , "=" , type ;                 // Associated type binding
 
 // ============================================================================
 // STATEMENTS
@@ -300,8 +321,8 @@ statement_kind = variable_decl_stmt
                | block_stmt
                | directive_stmt ;
 
-// Variable declaration: var x: i32 = 5; or const X: i32 = 5; or var x: i64();
-variable_decl_stmt = ( "var" | "const" ) , pattern , [ ( "(" , ")" ) | ( "=" , expression ) ] , ";" ;
+// Variable declaration: var x: i32 = 5; or const X: i32 = 5; or var x: i64() or var x: i64!() or var x: i64?()
+variable_decl_stmt = ( "var" | "const" ) , pattern , [ heap_constructor | ( "=" , expression ) ] , ";" ;
 
 // Assignment: x = 5; or x += 5;
 assignment_stmt = expression , assign_op , expression , ";" ;
@@ -319,23 +340,23 @@ continue_stmt = "continue" , [ label ] , ";" ;
 expr_stmt = expression , ";" ;
 
 // If statement: if cond { } else { }
-if_stmt = "if" , [ "var" ] , if_condition , block_expr ,
+if_stmt = "if" , if_condition , block_expr ,
           [ "else" , ( block_expr | if_stmt ) ] ;
 
 // While statement: while cond { } or while var pattern = expr { }
-while_stmt = "while" , [ "var" ] , while_condition , block_expr ;
+while_stmt = [ label , ":" ] , "while" , while_condition , block_expr ;
 
-while_condition = "while" , pattern , "=" , expression  // while var pattern = expr
+while_condition = "var" , pattern , "=" , expression    // while var pattern = expr
                 | expression ;                          // while expr
 
-// For statement: for x in iter { }
-for_stmt = "for" , path , "in" , expression , block_expr ;
+// For statement: for pattern in iter { }
+for_stmt = [ label , ":" ] , "for" , pattern , "in" , expression , block_expr ;
 
 // Loop statement: loop { }
-loop_stmt = "loop" , block_expr ;
+loop_stmt = [ label , ":" ] , "loop" , block_expr ;
 
-// Delete statement: delete ptr;
-delete_stmt = "delete" , path , ";" ;
+// Delete statement: delete expr;
+delete_stmt = "delete" , expression , ";" ;
 
 // Unsafe statement: unsafe { }
 unsafe_stmt = "unsafe" , block_expr ;
@@ -344,7 +365,7 @@ unsafe_stmt = "unsafe" , block_expr ;
 block_stmt = block_expr ;
 
 // Directive statement: @directive; or @directive { }
-directive_stmt = directive_node ;
+directive_stmt = directive_node , [ ";" ] ;
 
 // ============================================================================
 // DIRECTIVES
@@ -352,7 +373,7 @@ directive_stmt = directive_node ;
 
 directive_node = directive , [ directive_body ] ;
 
-directive_body = "{" , ( block_content | program ) , "}" ;
+directive_body = "{" , ( block_content | top_level_block ) , "}" ;
 
 directive = import_directive
           | use_directive
@@ -362,56 +383,65 @@ import_directive = "@import" , string_literal ;
 
 use_directive = "@use" , path ;
 
-custom_directive = "@" , identifier , [ "(" , [ argument_list ] , ")" ] ;
+custom_directive = "@" , identifier , [ "(" , [ directive_param_list ] , ")" ] ;
+
+directive_param_list = directive_param , { "," , directive_param } , [ "," ] ;
+
+directive_param = identifier , "=" , literal          // Named parameter
+                | identifier                          // Identifier parameter
+                | literal ;                           // Literal parameter
+
+literal = integer_literal
+        | float_literal
+        | string_literal
+        | char_literal
+        | boolean_literal ;
 
 // ============================================================================
 // MODIFIERS
 // ============================================================================
 
-modifier = "pub"
-         | "unsafe"
-         | "inline"
-         | "const"
-         | "volatile"
-         | directive ;
-
-modifier_list = { modifier } ;
+modifiers = { directive } , "pub" , "const" , "unsafe" , "inline" , "volatile" , "mut" ;
 
 // ============================================================================
 // FUNCTION DECLARATIONS
 // ============================================================================
 
-function_decl = function_signature , ( block_expr | ";" ) ;
+function_decl = [ doc_comment ] , function_signature , ( block_expr | ";" ) ;
 
 // Function signature with heap call support:
 // fn name<T>(...) -> RetType           (regular)
 // fn!<IO: Allocator> name<T>(...) -> RetType  (heap with allocator)
 // fn?<IO: Allocator> name<T>(...) -> RetType  (maybe-heap with allocator)
-function_signature = modifier_list ,
+function_signature = modifiers ,
                      "fn" ,
                      [ ( "!" | "?" ) ] ,        (* heap function marker *)
                      [ generic_params ] ,       (* heap generics: fn!<IO: Allocator> *)
-                     path ,
-                     [ patterns ] ,       (* regular generics: name<T> *)
+                     ( path | "delete" ) ,      (* function name or delete operator *)
+                     [ generic_params ] ,       (* regular generics: name<T> *)
                      "(" , [ parameter_list ] , ")" ,
                      [ "->" , type ] ,
                      [ where_clause ] ;
 
-// Generic parameters: <T, U>
+// Generic parameters: <T, U> or <T: Trait>
 generic_params = "<" , generic_param , { "," , generic_param } , [ "," ] , ">" ;
 
 // Generic parameter with optional bounds: T or T: Clone or T: Clone + Debug
 generic_param = identifier , [ ":" , trait_bound_list ] ;
 
 // Function parameters
-parameter_list = parameter , { "," , parameter } , [ "," ] ;
+parameter_list = parameter , { "," , parameter } , [ "," ] | "..." ;
 
 parameter = self_parameter
-          | regular_parameter ;
+          | regular_parameter
+          | variadic_parameter ;
 
-self_parameter = [ "&" , [ "mut" ] ] , "self" ;
+self_parameter = [ "&" , [ "mut" ] ] , "self"
+               | "mut" , "self" ;
 
-regular_parameter = path , ":" , type ;
+regular_parameter = pattern ;
+
+variadic_parameter = "..." ;
 
 // Where clause: where T: Trait1 + Trait2, U: Trait3
 where_clause = "where" , constraint , { "," , constraint } , [ "," ] ;
@@ -420,8 +450,9 @@ constraint = path , [ generic_args ] , ":" , trait_bound_list ;
 
 trait_bound_list = trait_bound , { "+" , trait_bound } ;
 
-// Trait bound: either a path (MyTrait) or function trait (Fn(i32) -> i32)
-trait_bound = func_bound | path ;
+// Trait bound: either a path (MyTrait<Item = T>) or function trait (Fn(i32) -> i32)
+trait_bound = path , [ generic_args ]
+            | func_bound ;
 
 // Function trait bounds: Fn(T, U) -> R
 func_bound = "Fn" , "(" , [ type , { "," , type } , [ "," ] ] , ")" , [ "->" , type ] ;
@@ -430,50 +461,64 @@ func_bound = "Fn" , "(" , [ type , { "," , type } , [ "," ] ] , ")" , [ "->" , t
 // TYPE DECLARATIONS
 // ============================================================================
 
-// Struct: struct Point { x: i32, y: i32 }
-struct_decl = modifier_list ,
+// Struct: struct Point<T> where T: Clone { x: i32 = 0, y: i32 = 0 }
+struct_decl = [ doc_comment ] ,
+              modifiers ,
               "struct" ,
               path ,
+              [ generic_params ] ,
+              [ where_clause ] ,
               "{" , [ struct_field_decl_list ] , "}" ;
 
 struct_field_decl_list = struct_field_decl , { "," , struct_field_decl } , [ "," ] ;
 
-struct_field_decl = identifier , ":" , type , [ "=" , expression ] ;
+struct_field_decl = [ doc_comment ] , [ modifiers ] , identifier , ":" , type , [ "=" , expression ] ;
 
-// Union: union Data { i: i32, f: f64 }
-union_decl = modifier_list ,
+// Union: union Data<T> { i: i32, f: f64 }
+union_decl = [ doc_comment ] ,
+             modifiers ,
              "union" ,
              path ,
+             [ generic_params ] ,
+             [ where_clause ] ,
              "{" , [ union_field_decl_list ] , "}" ;
 
 union_field_decl_list = union_field_decl , { "," , union_field_decl } , [ "," ] ;
 
-union_field_decl = identifier , ":" , type ;
+union_field_decl = [ doc_comment ] , [ modifiers ] , identifier , ":" , type ;
 
-// Enum (C-style): enum Color { Red, Green, Blue }
-enum_decl = modifier_list ,
+// Enum (C-style): enum Color { Red, Green = 5, Blue }
+enum_decl = [ doc_comment ] ,
+            modifiers ,
             "enum" ,
             path ,
+            [ generic_params ] ,
+            [ where_clause ] ,
             "{" , [ enum_variant_list ] , "}" ;
 
 enum_variant_list = enum_variant , { "," , enum_variant } , [ "," ] ;
 
-enum_variant = identifier , [ "=" , expression ] ;
+enum_variant = [ doc_comment ] , identifier , [ "=" , expression ] ;
 
-// Variant (Rust-style enum): variant Option { Some(i32), None }
-variant_decl = modifier_list ,
+// Variant (Rust-style enum): variant Option<T> { Some(T), None, Error = 99 }
+variant_decl = [ doc_comment ] ,
+               modifiers ,
                "variant" ,
                path ,
-               "{" , [ variant_variant_list ] , "}" ;
+               [ generic_params ] ,
+               [ where_clause ] ,
+               "{" , [ variant_member_list ] , "}" ;
 
-variant_variant_list = variant_variant , { "," , variant_variant } , [ "," ] ;
+variant_member_list = variant_member , { "," , variant_member } , [ "," ] ;
 
-variant_variant = identifier , [ "(" , type , ")" ] , [ "=" , expression ] ; // "=" only for value variants, so it's easier to use with C
+variant_member = [ doc_comment ] , identifier , [ "(" , type , ")" ] , [ "=" , expression ] ;
 
-// Type alias: type Int = i32;
-type_alias_decl = modifier_list ,
+// Type alias: type Int<T> = Vec<T>;
+type_alias_decl = [ doc_comment ] ,
+                  modifiers ,
                   "type" ,
                   path ,
+                  [ generic_params ] ,
                   "=" ,
                   type ,
                   ";" ;
@@ -482,7 +527,8 @@ type_alias_decl = modifier_list ,
 // TRAIT DECLARATIONS
 // ============================================================================
 
-trait_decl = modifier_list ,
+trait_decl = [ doc_comment ] ,
+             modifiers ,
              "trait" ,
              path ,
              [ generic_params ] ,
@@ -493,9 +539,9 @@ trait_item = trait_function
            | trait_type_alias
            | trait_const ;
 
-trait_function = function_signature , ( block_expr | ";" ) ;
+trait_function = function_decl ;
 
-trait_type_alias = modifier_list , "type" , path , "=" , type , ";" ;
+trait_type_alias = type_alias_decl ;
 
 trait_const = "const" , pattern , [ "=" , expression ] , ";" ;
 
@@ -503,7 +549,8 @@ trait_const = "const" , pattern , [ "=" , expression ] , ";" ;
 // IMPL BLOCKS
 // ============================================================================
 
-impl_decl = modifier_list ,
+impl_decl = [ doc_comment ] ,
+            modifiers ,
             "impl" ,
             [ generic_params ] ,
             impl_target ,
@@ -524,19 +571,20 @@ impl_type_alias = type_alias_decl ;
 impl_const = "const" , pattern , [ "=" , expression ] , ";" ;
 
 // ============================================================================
-// NAMESPACE DECLARATIONS
+// MODULE DECLARATIONS
 // ============================================================================
 
-namespace_decl = modifier_list ,
-                 "namespace" ,
-                 path ,
-                 "{" , program , "}" ;
+module_decl = [ doc_comment ] ,
+              modifiers ,
+              "module" ,
+              path ,
+              "{" , top_level_block , "}" ;
 
 // ============================================================================
 // TOP-LEVEL DECLARATIONS
 // ============================================================================
 
-top_level_decl = directive_stmt
+top_level_decl = directive_node
                | variable_decl_stmt
                | function_decl
                | struct_decl
@@ -546,19 +594,21 @@ top_level_decl = directive_stmt
                | type_alias_decl
                | trait_decl
                | impl_decl
-               | namespace_decl ;
+               | module_decl ;
+
+top_level_block = { top_level_decl } ;
 
 // ============================================================================
 // PROGRAM (entry point)
 // ============================================================================
 
-program = { top_level_decl } ;
+program = top_level_block ;
 
 // ============================================================================
 // NOTES ON OPERATOR PRECEDENCE AND PARSING
 // ============================================================================
 //
-// Operator precedence (lowest to highest): // should be the same as C
+// Operator precedence (lowest to highest):
 //   1.  ||           (logical OR)
 //   2.  &&           (logical AND)
 //   3.  |            (bitwise OR)
@@ -583,6 +633,8 @@ program = { top_level_decl } ;
 //   - &String*[5]
 //   - (i32, bool)
 //   - ()
+//   - mut T
+//   - impl Trait + Clone
 //
 // Block with tail expression:
 //   {
@@ -627,7 +679,13 @@ program = { top_level_decl } ;
 //     y: i32 = 0,
 //   }
 //
+// Struct literal with rest pattern:
+//   Point { x -> 1, y -> 2 }
+//   Point { x -> 1, ..base }
+//   Point { x, y, .. }
+//
 // Heap-allocated functions and calls:
+// (Maybe are only allowed in templates, macro's and compiler generated things)
 //   // Function declaration with heap allocator
 //   fn!<IO: Allocator> allocate<T>(size: usize) -> T* { ... }
 //   fn?<IO: Allocator> maybe_allocate<T>(size: usize) -> T* { ... }
@@ -645,8 +703,13 @@ program = { top_level_decl } ;
 //     // x is bound with heap-allocated Vec
 //   }
 //
+// Path with generics at segments:
+//   Vec::<i32>::new       // generics on first segment
+//   std::vec::Vec::<i32>  // generics on last segment
+//
 // Special keywords:
-//   - default: represents default value for a struct
+//   - default: represents default value for a type
 //   - self: current instance
+//   - delete: deallocate memory
 //
 // ============================================================================
