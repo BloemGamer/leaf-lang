@@ -3,9 +3,9 @@ mod tests;
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
-		self, ArrayLiteral, Block, CallType, Expr, FunctionDecl, FunctionSignature, Ident, ImplDecl, ImplItem,
-		Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody, TopLevelBlock,
-		TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
+		ImplDecl, ImplItem, Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody,
+		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -42,6 +42,7 @@ pub enum SymbolKind
 	Label,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Symbol
 {
@@ -52,7 +53,8 @@ pub struct Symbol
 	pub visibility: Visibility,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[allow(unused)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScopeKind
 {
 	ModuleImport,
@@ -381,7 +383,7 @@ impl Collector
 			TopLevelDecl::Trait(t) => self.collect_trait_decl(t),
 			TopLevelDecl::Module(n) => self.collect_module_decl(n),
 			TopLevelDecl::Impl(i) => self.collect_impl_decl(i),
-			TopLevelDecl::Directive(_) => Ok(()),
+			TopLevelDecl::Directive(d) => self.collect_directive(d),
 		};
 	}
 
@@ -1073,6 +1075,25 @@ impl Collector
 			}
 		}
 
+		return Ok(());
+	}
+
+	fn collect_directive(&mut self, directive: &DirectiveNode) -> Result<(), SymbolCollectionError>
+	{
+		let dir = &directive.directive;
+		match dir {
+			Directive::Use(_)
+			| Directive::Import(_)
+			| Directive::ValidateStructPattern {
+				struct_path: _,
+				pattern_fields: _,
+				has_rest: _,
+			} => {}
+			Directive::ValidateType { ty: _, expr } => {
+				self.collect_expr(expr)?;
+			}
+			Directive::Custom { .. } => unimplemented!("not yet supported"),
+		}
 		return Ok(());
 	}
 }
