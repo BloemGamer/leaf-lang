@@ -18,14 +18,14 @@ mod tests
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
-	fn parse_program_from_str(input: &str) -> Result<Program, CompileError>
+	fn parse_program_from_str(input: &str) -> Result<TopLevelBlock, CompileError>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "program", &mut source_map);
 		let mut parser = Parser::from(lexer);
 		return parser
-			.parse_program()
+			.parse_top_level_block()
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 

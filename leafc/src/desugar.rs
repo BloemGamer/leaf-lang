@@ -6,8 +6,8 @@ use crate::{
 	parser::{
 		ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound, FunctionDecl,
 		FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, Param, Path, PathSegment,
-		Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelDecl, TraitDecl, TraitItem, Type, TypeCore,
-		VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
+		Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem,
+		Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -306,27 +306,27 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	pub fn desugar_program(&mut self, program: Program) -> Result<Program, CompileError>
 	{
-		let items: Vec<TopLevelDecl> = program
+		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block)?;
+
+		debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone())?);
+
+		return Ok(Program {
+			top_level_block: top_lvl,
+			source_index: program.source_index,
+		});
+	}
+
+	fn desugar_top_level_block(&mut self, top_level_block: TopLevelBlock) -> Result<TopLevelBlock, CompileError>
+	{
+		let items: Vec<TopLevelDecl> = top_level_block
 			.items
 			.into_iter()
 			.map(|item| return self.desugar_top_level_decl(item))
 			.collect::<Result<Vec<_>, _>>()?;
 
-		#[allow(clippy::debug_assert_with_mut_call)]
-		{
-			debug_assert_eq!(
-				// checks if the desugar function is called twice, the output will be the same, so if everything is fully desugared
-				items,
-				items
-					.clone()
-					.into_iter()
-					.map(|item| return self.desugar_top_level_decl(item))
-					.collect::<Result<Vec<_>, _>>()?
-			);
-		}
-		return Ok(Program {
+		return Ok(TopLevelBlock {
 			items,
-			span: program.span,
+			span: top_level_block.span,
 		});
 	}
 
@@ -619,7 +619,7 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_module(&mut self, mut ns: ModuleDecl) -> Result<ModuleDecl, CompileError>
 	{
-		ns.body = self.desugar_program(ns.body)?;
+		ns.body = self.desugar_top_level_block(ns.body)?;
 		return Ok(ns);
 	}
 
@@ -792,7 +792,7 @@ impl Desugarer
 	{
 		return Ok(match content {
 			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)?),
-			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_program(block)?),
+			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_top_level_block(block)?),
 		});
 	}
 

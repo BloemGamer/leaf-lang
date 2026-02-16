@@ -617,7 +617,7 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let program = Program {
+		let program = TopLevelBlock {
 			items: vec![TopLevelDecl::VariableDecl(VariableDecl {
 				pattern: typed_ident_pattern("x", "i32"),
 				init: Some(int_lit(42)),
@@ -628,7 +628,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
+		let result = desugarer
+			.desugar_top_level_block(program)
+			.inspect_err(|e| eprintln!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 		assert_eq!(output.items.len(), 1);
@@ -642,7 +644,7 @@ mod tests
 		let ns = ModuleDecl {
 			modifiers: Vec::new(),
 			name: Path::simple(vec!["test".into()], Span::default()),
-			body: Program {
+			body: TopLevelBlock {
 				items: vec![TopLevelDecl::Function(FunctionDecl {
 					signature: FunctionSignature {
 						modifiers: Vec::new(),
@@ -2405,7 +2407,7 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		let program = Program {
+		let program = TopLevelBlock {
 			items: vec![
 				TopLevelDecl::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
@@ -2439,7 +2441,9 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_program(program).inspect_err(|e| eprintln!("{e}"));
+		let result = desugarer
+			.desugar_top_level_block(program)
+			.inspect_err(|e| eprintln!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 

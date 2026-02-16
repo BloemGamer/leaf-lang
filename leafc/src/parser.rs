@@ -94,8 +94,6 @@ impl Spanned for Token
 	}
 }
 
-/// The root node of the Abstract Syntax Tree.
-///
 /// Represents a complete program or compilation unit as a sequence of
 /// top-level declarations.
 ///
@@ -103,18 +101,38 @@ impl Spanned for Token
 /// * `items` - List of top-level declarations (functions, structs, traits, etc.)
 /// * `span` - Source location of the entire program
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program
+pub struct TopLevelBlock
 {
 	pub items: Vec<TopLevelDecl>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
 
-impl Spanned for Program
+impl Spanned for TopLevelBlock
 {
 	fn span(&self) -> Span
 	{
 		return self.span;
+	}
+}
+
+/// The root node of the Abstract Syntax Tree.
+///
+/// # Fields
+/// * `top_level_block` - The real programm
+/// * `source_index` - The source index of the file
+#[derive(Debug, Clone, PartialEq)]
+pub struct Program
+{
+	pub top_level_block: TopLevelBlock,
+	pub source_index: SourceIndex,
+}
+
+impl Spanned for Program
+{
+	fn span(&self) -> Span
+	{
+		return self.top_level_block.span();
 	}
 }
 
@@ -159,7 +177,7 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
 	}
 }
 
-impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
+impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 {
 	type Error = CompileError;
 
@@ -197,15 +215,9 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for Program
 	{
 		let mut parser: Parser<'_, '_> = Parser::from(lexer);
 
-		return parser.parse_program();
+		return parser.parse_top_level_block();
 	}
 }
-
-/// Type alias for top-level blocks (same structure as Program).
-///
-/// Used in contexts like module where a block of top-level declarations
-/// is needed.
-pub type TopLevelBlock = Program;
 
 /// Top-level declaration types.
 ///
@@ -2664,6 +2676,16 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// ```
 	pub fn parse_program(&mut self) -> Result<Program, CompileError>
 	{
+		let top_level_block: TopLevelBlock = self.parse_top_level_block()?;
+
+		return Ok(Program {
+			top_level_block,
+			source_index: self.source_index,
+		});
+	}
+
+	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, CompileError>
+	{
 		let mut items: Vec<TopLevelDecl> = Vec::new();
 
 		while !matches!(self.peek()?.kind, TokenKind::Eof | TokenKind::RightBrace) {
@@ -2684,7 +2706,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				.merge(&items.last().expect("this should not be possible").span())
 		};
 
-		return Ok(Program { items, span });
+		return Ok(TopLevelBlock { items, span });
 	}
 
 	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, CompileError>
@@ -2931,7 +2953,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.next()?; // {
 
 			let content: BlockContent = if self.should_parse_as_top_level_block(&directive) {
-				BlockContent::TopLevelBlock(self.parse_program()?)
+				BlockContent::TopLevelBlock(self.parse_top_level_block()?)
 			} else {
 				BlockContent::Block(self.parse_block_content()?)
 			};
@@ -5814,7 +5836,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.expect(&TokenKind::Module)?;
 		let name: Path = self.get_path()?;
 		self.expect(&TokenKind::LeftBrace)?;
-		let body: TopLevelBlock = self.parse_program()?;
+		let body: TopLevelBlock = self.parse_top_level_block()?;
 		self.expect(&TokenKind::RightBrace)?;
 		return Ok(ModuleDecl {
 			modifiers,
@@ -6581,6 +6603,14 @@ impl IndentWriter
 }
 
 impl fmt::Display for Program
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return write!(f, "{}", self.top_level_block);
+	}
+}
+
+impl fmt::Display for TopLevelBlock
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
