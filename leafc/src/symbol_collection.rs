@@ -805,7 +805,22 @@ impl Collector
 
 				if let Some(el) = else_branch {
 					let else_scope: ScopeId = self.alloc_scope(ScopeKind::ElseBlock, el.span());
-					self.in_scope(else_scope, |c| return c.collect_stmt(el))?;
+					match &**el {
+						Stmt::Block(block) => {
+							self.in_scope(else_scope, |c| {
+								for item in &block.stmts {
+									c.collect_stmt(item)?;
+								}
+								if let Some(expr) = &block.tail_expr {
+									c.collect_expr(expr)?;
+								}
+								return Ok(());
+							})?;
+						}
+						Stmt::If { .. } => self.in_scope(else_scope, |c| return c.collect_stmt(el))?,
+
+						_ => unreachable!(),
+					}
 				}
 			}
 		}
