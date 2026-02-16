@@ -21,7 +21,10 @@ pub enum SymbolKind
 	{
 		mutability: Mutability,
 	},
-	Function,
+	Function
+	{
+		comp_const: bool,
+	},
 	Struct,
 	Union,
 	Enum,
@@ -349,7 +352,9 @@ impl Collector
 		if let Some(name) = sig.name.segments.first() {
 			self.define(
 				name.name.clone(),
-				SymbolKind::Function,
+				SymbolKind::Function {
+					comp_const: sig.modifiers.iter().any(|m| matches!(m, Modifier::Const)),
+				},
 				sig.span(),
 				get_visability(&func.signature.modifiers),
 			)?;
