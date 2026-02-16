@@ -1970,7 +1970,7 @@ mod tests
 		let lexer = Lexer::new(
 			&config,
 			"{ if var Some(x: i32) = opt1 { x } else if var Some(y: i32) = opt2 { y } else { 0 }; }",
-			0,
+			SourceIndex::new(0),
 		);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();
@@ -2121,7 +2121,7 @@ mod tests
 		let lexer = Lexer::new(
 			&config,
 			"{ if var Some(Point { x -> a: i32, t -> b: i32 }) = opt { a } }",
-			0,
+			SourceIndex::new(0),
 		);
 		let mut parser = Parser::from(lexer);
 		let result = parser.parse_block();

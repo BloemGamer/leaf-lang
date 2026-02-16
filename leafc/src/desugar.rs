@@ -25,7 +25,7 @@ use crate::{
 /// - Expanding or-patterns into multiple match arms
 /// - Converting range expressions to constructor calls
 /// - And more
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Desugarer
 {
 	tmp_counter: usize,
@@ -250,9 +250,13 @@ impl Desugarer
 	/// let mut desugarer = Desugarer::new();
 	/// let desugared = desugarer.desugar_program(parsed_program)?;
 	/// ```
-	pub fn new() -> Self
+	pub const fn new(source_index: SourceIndex) -> Self
 	{
-		return Desugarer::default();
+		return Desugarer {
+			tmp_counter: 0,
+			source_index,
+			loop_stack: Vec::new(),
+		};
 	}
 
 	fn gen_temp(&mut self, name: &str) -> Ident

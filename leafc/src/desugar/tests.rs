@@ -73,7 +73,7 @@ mod tests
 	#[test]
 	fn test_desugar_if_with_else_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::If {
 			cond: bool_lit(true),
@@ -105,7 +105,7 @@ mod tests
 	#[test]
 	fn test_compound_assignment_not_desugared()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::Assignment {
 			target: ident("x"),
@@ -133,7 +133,7 @@ mod tests
 	#[test]
 	fn test_gen_temp_unique()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let temp1 = desugarer.gen_temp("test");
 		let temp2 = desugarer.gen_temp("test");
@@ -148,7 +148,7 @@ mod tests
 	#[test]
 	fn test_desugar_if_var()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::IfVar {
 			pattern: typed_ident_pattern("x", "i32"),
@@ -179,7 +179,7 @@ mod tests
 	#[test]
 	fn test_desugar_while_var_loop()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::WhileVarLoop {
 			label: None,
@@ -246,7 +246,7 @@ mod tests
 	#[test]
 	fn test_no_expr_block_in_desugared_if_var()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::IfVar {
 			pattern: Pattern::Wildcard {
@@ -273,7 +273,7 @@ mod tests
 	#[test]
 	fn test_desugar_switch_arm_pattern_recursive()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let arm = SwitchArm {
 			pattern: Pattern::Or {
@@ -315,7 +315,7 @@ mod tests
 	#[test]
 	fn test_desugar_for_loop_shape()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::For {
 			label: None,
@@ -346,7 +346,7 @@ mod tests
 	#[test]
 	fn test_nested_if_var_desugar()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::IfVar {
 			pattern: typed_ident_pattern("x", "i32"),
@@ -400,7 +400,7 @@ mod tests
 	#[test]
 	fn test_for_tuple_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::For {
 			label: None,
@@ -434,7 +434,7 @@ mod tests
 	#[test]
 	fn test_expr_block_in_call()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Expr::Call {
 			callee: Box::new(ident("foo")),
@@ -469,7 +469,7 @@ mod tests
 	#[test]
 	fn test_desugar_array_literals()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let list_array = ArrayLiteral::List {
 			elements: vec![ident("x"), ident("y")],
@@ -507,7 +507,7 @@ mod tests
 	#[test]
 	fn test_desugar_nested_switch_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 		let arm = SwitchArm {
 			pattern: Pattern::Tuple {
 				patterns: vec![
@@ -615,7 +615,7 @@ mod tests
 	#[test]
 	fn test_desugar_top_level_program()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let program = TopLevelBlock {
 			items: vec![TopLevelDecl::VariableDecl(VariableDecl {
@@ -639,7 +639,7 @@ mod tests
 	#[test]
 	fn test_desugar_module_recursively()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let ns = ModuleDecl {
 			modifiers: Vec::new(),
@@ -697,7 +697,7 @@ mod tests
 	#[test]
 	fn test_desugar_impl_with_functions()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
 			modifiers: Vec::new(),
@@ -755,7 +755,7 @@ mod tests
 	#[test]
 	fn test_desugar_trait_with_default_impl()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let trait_decl = TraitDecl {
 			modifiers: Vec::new(),
@@ -805,7 +805,7 @@ mod tests
 	#[test]
 	fn test_desugar_return_with_nested_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Return {
 			value: Some(Expr::Binary {
@@ -834,7 +834,7 @@ mod tests
 	#[test]
 	fn test_desugar_assignment_with_complex_target()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Assignment {
 			target: Expr::Index {
@@ -864,7 +864,7 @@ mod tests
 	#[test]
 	fn test_desugar_nested_for_in_if()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::If {
 			cond: bool_lit(true),
@@ -903,7 +903,7 @@ mod tests
 	#[test]
 	fn test_desugar_while_with_complex_condition()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::While {
 			label: None,
@@ -948,7 +948,7 @@ mod tests
 	#[test]
 	fn test_desugar_loop_with_nested_structures()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Loop {
 			label: None,
@@ -994,7 +994,7 @@ mod tests
 	#[test]
 	fn test_desugar_unsafe_block_with_for()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Unsafe(Block {
 			stmts: vec![Stmt::For {
@@ -1028,7 +1028,7 @@ mod tests
 	#[test]
 	fn test_desugar_expr_call_with_if_var_in_args()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Call {
 			callee: Box::new(ident("foo")),
@@ -1058,7 +1058,7 @@ mod tests
 	#[test]
 	fn test_desugar_struct_init_with_block_fields()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::StructInit {
 			path: Path::simple(vec!["Point".into()], Span::default()),
@@ -1093,7 +1093,7 @@ mod tests
 	#[test]
 	fn test_desugar_switch_with_nested_blocks()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Switch {
 			expr: Box::new(ident("x")),
@@ -1143,7 +1143,7 @@ mod tests
 	#[test]
 	fn test_desugar_array_literal_list()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Array(ArrayLiteral::List {
 			elements: vec![
@@ -1173,7 +1173,7 @@ mod tests
 	#[test]
 	fn test_desugar_array_repeat_complex()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Array(ArrayLiteral::Repeat {
 			value: Box::new(Expr::Binary {
@@ -1201,7 +1201,7 @@ mod tests
 	#[test]
 	fn test_desugar_field_access_chain()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Field {
 			base: Box::new(Expr::Field {
@@ -1228,7 +1228,7 @@ mod tests
 	#[test]
 	fn test_desugar_index_with_complex_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Index {
 			base: Box::new(ident("arr")),
@@ -1256,7 +1256,7 @@ mod tests
 	#[test]
 	fn test_desugar_tuple_with_blocks()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Tuple {
 			elements: vec![
@@ -1287,7 +1287,7 @@ mod tests
 	#[test]
 	fn test_desugar_cast_with_nested_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Cast {
 			ty: Box::new(simple_type("i64")),
@@ -1315,7 +1315,7 @@ mod tests
 	#[test]
 	fn test_desugar_unary_with_nested_binary()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Unary {
 			op: UnaryOp::Neg,
@@ -1343,7 +1343,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_variant_with_nested_patterns()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let pattern = Pattern::Variant {
 			path: Path::simple(vec!["Some".into()], Span::default()),
@@ -1376,7 +1376,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_or_with_variants()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let pattern = Pattern::Or {
 			patterns: vec![
@@ -1412,7 +1412,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_sequential_for_loops()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let block = Block {
 			stmts: vec![
@@ -1455,7 +1455,7 @@ mod tests
 	#[test]
 	fn test_desugar_variable_decl_with_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::Tuple {
@@ -1489,7 +1489,7 @@ mod tests
 	#[test]
 	fn test_gen_temp_with_different_names()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let temp1 = desugarer.gen_temp("loop");
 		let temp2 = desugarer.gen_temp("ifvar");
@@ -1505,7 +1505,7 @@ mod tests
 	#[test]
 	fn test_desugar_if_var_with_complex_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::IfVar {
 			pattern: Pattern::Struct {
@@ -1539,7 +1539,7 @@ mod tests
 	#[test]
 	fn test_desugar_while_var_with_nested_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::WhileVarLoop {
 			label: None,
@@ -1581,7 +1581,7 @@ mod tests
 	#[test]
 	fn test_desugar_labeled_for_loop()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::For {
 			label: Some("outer".into()),
@@ -1615,7 +1615,7 @@ mod tests
 	#[test]
 	fn test_desugar_break_with_value()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Loop {
 			label: None,
@@ -1650,7 +1650,7 @@ mod tests
 	#[test]
 	fn test_desugar_continue_with_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Loop {
 			label: Some("outer".into()),
@@ -1684,7 +1684,7 @@ mod tests
 	#[test]
 	fn test_desugar_if_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::If {
 			cond: Box::new(bool_lit(true)),
@@ -1714,7 +1714,7 @@ mod tests
 	#[test]
 	fn test_desugar_if_var_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::IfVar {
 			pattern: Pattern::Variant {
@@ -1748,7 +1748,7 @@ mod tests
 	#[test]
 	fn test_desugar_loop_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Loop {
 			label: Some("outer".into()),
@@ -1780,7 +1780,7 @@ mod tests
 	#[test]
 	fn test_desugar_unsafe_block_expr()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::UnsafeBlock(Box::new(Block {
 			stmts: vec![Stmt::For {
@@ -1814,7 +1814,7 @@ mod tests
 	#[test]
 	fn test_unlabeled_while_gets_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::While {
 			label: None,
@@ -1857,7 +1857,7 @@ mod tests
 	#[test]
 	fn test_labeled_loop_preserves_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Loop {
 			label: Some("my_loop".into()),
@@ -1894,7 +1894,7 @@ mod tests
 	#[test]
 	fn test_break_with_explicit_label_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Loop {
 			label: Some("outer".into()),
@@ -1944,7 +1944,7 @@ mod tests
 	#[test]
 	fn test_for_loop_gets_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let input = Stmt::For {
 			label: None,
@@ -1984,7 +1984,7 @@ mod tests
 	#[test]
 	fn test_while_var_gets_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::WhileVarLoop {
 			label: None,
@@ -2027,7 +2027,7 @@ mod tests
 	#[test]
 	fn test_loop_expr_gets_label()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Loop {
 			label: None,
@@ -2063,7 +2063,7 @@ mod tests
 	#[test]
 	fn test_multiple_functions_reset_loop_counter()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let func1 = FunctionDecl {
 			signature: FunctionSignature {
@@ -2135,7 +2135,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_with_constructor_call()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -2192,7 +2192,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_with_constructor_and_existing_init()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// If there's already an initializer, call_constructor should be ignored
 		let var = VariableDecl {
@@ -2230,7 +2230,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_with_generic_type_constructor()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -2282,7 +2282,7 @@ mod tests
 	#[test]
 	fn test_desugar_const_with_constructor()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -2322,7 +2322,7 @@ mod tests
 	#[test]
 	fn test_desugar_qualified_type_constructor()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -2370,7 +2370,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_without_constructor_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Normal variable without constructor syntax
 		let var = VariableDecl {
@@ -2405,7 +2405,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_vars_with_constructors()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let program = TopLevelBlock {
 			items: vec![
@@ -2467,7 +2467,7 @@ mod tests
 	#[test]
 	fn test_desugar_constructor_in_function()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let func = FunctionDecl {
 			signature: FunctionSignature {
@@ -2532,7 +2532,7 @@ mod tests
 	#[test]
 	fn test_constructor_call_preserves_type_info()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let original_ty = Type {
 			core: Box::new(TypeCore::Base {
@@ -2589,7 +2589,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_full()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test a..b (exclusive end)
 		let range = RangeExpr {
@@ -2624,7 +2624,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_inclusive()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test a..=b (inclusive end)
 		let range = RangeExpr {
@@ -2659,7 +2659,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_from()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test a.. (no end)
 		let range = RangeExpr {
@@ -2694,7 +2694,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_to()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test ..b (no start, exclusive end)
 		let range = RangeExpr {
@@ -2729,7 +2729,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_to_inclusive()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test ..=b (no start, inclusive end)
 		let range = RangeExpr {
@@ -2764,7 +2764,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_full_unbounded()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test .. (no start, no end)
 		let range = RangeExpr {
@@ -2799,7 +2799,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_with_complex_expressions()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test (a + 1)..(b * 2)
 		let range = RangeExpr {
@@ -2847,7 +2847,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_with_identifiers()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test start..end
 		let range = RangeExpr {
@@ -2884,7 +2884,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_in_for_loop()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test for i in 0..10 { }
 		let stmt = Stmt::For {
@@ -2940,7 +2940,7 @@ mod tests
 	#[test]
 	fn test_desugar_range_in_array_index()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Test arr[0..5]
 		let expr = Expr::Index {
@@ -3014,7 +3014,7 @@ mod tests
 	#[test]
 	fn test_desugar_simple_generic_bound()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>()
 		let sig = FunctionSignature {
@@ -3051,7 +3051,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone + Send + Debug>()
 		let sig = FunctionSignature {
@@ -3084,7 +3084,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_generics()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone, U: Send, V>()
 		let sig = FunctionSignature {
@@ -3127,7 +3127,7 @@ mod tests
 	#[test]
 	fn test_error_on_duplicate_simple_constraint()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where T: Send
 		// ERROR: T appears in both places
@@ -3160,7 +3160,7 @@ mod tests
 	#[test]
 	fn test_error_on_complex_type_using_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where Vec<T>: Send
 		// ERROR: T appears in where clause
@@ -3195,7 +3195,7 @@ mod tests
 	#[test]
 	fn test_ok_different_params_in_where()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone, U>() where Vec<U>: Send
 		// OK: T has bounds, but where clause only mentions U
@@ -3234,7 +3234,7 @@ mod tests
 	#[test]
 	fn test_no_bounds_no_where()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T, U>()
 		let sig = FunctionSignature {
@@ -3262,7 +3262,7 @@ mod tests
 	#[test]
 	fn test_only_where_clause_no_generic_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T>() where Vec<T>: Clone
 		// OK: T has no bounds in generic list
@@ -3296,7 +3296,7 @@ mod tests
 	#[test]
 	fn test_heap_generics_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn!<A: Allocator> foo<T: Clone>()
 		let sig = FunctionSignature {
@@ -3339,7 +3339,7 @@ mod tests
 	#[test]
 	fn test_error_heap_generic_in_where_clause()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn!<A: Allocator> foo<T>() where Vec<A>: Clone
 		// ERROR: A has bounds in heap generics and appears in where clause
@@ -3369,7 +3369,7 @@ mod tests
 	#[test]
 	fn test_nested_type_args()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
 		// ERROR: T appears nested in where clause
@@ -3404,7 +3404,7 @@ mod tests
 	#[test]
 	fn test_tuple_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where (T, U): Debug
 		// ERROR: T appears in tuple
@@ -3439,7 +3439,7 @@ mod tests
 	#[test]
 	fn test_desugar_impl_generics()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// impl<T: Clone> MyTrait for MyType<T> { }
 		let impl_decl = ImplDecl {
@@ -3478,7 +3478,7 @@ mod tests
 	#[test]
 	fn test_error_impl_generic_in_where()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// impl<T: Clone> MyType<T> where T: Send { }
 		// ERROR: T has bounds in generic list and appears in where clause
@@ -3504,7 +3504,7 @@ mod tests
 	#[test]
 	fn test_reference_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where &T: Debug
 		// ERROR: T appears in reference type
@@ -3543,7 +3543,7 @@ mod tests
 	#[test]
 	fn test_complete_function_desugaring()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone + Send>(x: T) -> T { x }
 		let func = FunctionDecl {
@@ -3593,7 +3593,7 @@ mod tests
 	#[test]
 	fn test_array_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T: Clone>() where [T; 10]: Debug
 		// ERROR: T appears in array type
@@ -3633,7 +3633,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_literal()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let pattern = Pattern::Literal {
 			value: Literal::Int(42),
@@ -3655,7 +3655,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_range()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let pattern = Pattern::Range(RangeExpr {
 			start: Some(Box::new(int_lit(1))),
@@ -3676,7 +3676,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_single_tuple_unwraps()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Single element tuple should unwrap to just the element
 		let pattern = Pattern::Tuple {
@@ -3696,7 +3696,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_single_or_unwraps()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Single pattern in Or should unwrap
 		let pattern = Pattern::Or {
@@ -3716,7 +3716,7 @@ mod tests
 	#[test]
 	fn test_expand_or_in_struct_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// struct Point { x: (A | B), y: i32 }
 		let pattern = Pattern::Struct {
@@ -3766,7 +3766,7 @@ mod tests
 	#[test]
 	fn test_desugar_delete_statement()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Delete {
 			expr: ident("x"),
@@ -3787,7 +3787,7 @@ mod tests
 	#[test]
 	fn test_desugar_struct_assignment()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Point { x, y } = value
 		let stmt = Stmt::Assignment {
@@ -3819,7 +3819,7 @@ mod tests
 	#[test]
 	fn test_desugar_tuple_assignment()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// (a, b) = value
 		let stmt = Stmt::Assignment {
@@ -3849,7 +3849,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_decl_struct_pattern()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::Struct {
@@ -3874,7 +3874,7 @@ mod tests
 	#[test]
 	fn test_desugar_var_decl_wildcard_with_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::Wildcard {
@@ -3894,7 +3894,7 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_to_statements_variant_error()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let pattern = Pattern::Variant {
 			path: Path::simple(vec!["Some".into()], Span::default()),
@@ -3912,7 +3912,7 @@ mod tests
 	#[test]
 	fn test_desugar_function_with_variadic_param()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let func = FunctionDecl {
 			signature: FunctionSignature {
@@ -3951,7 +3951,7 @@ mod tests
 	#[test]
 	fn test_desugar_function_with_pattern_param()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn test((x, y): (i32, i32)) { }
 		let func = FunctionDecl {
@@ -4008,7 +4008,7 @@ mod tests
 	#[test]
 	fn test_desugar_expr_default()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::Default {
 			heap_call: CallType::Regular,
@@ -4027,7 +4027,7 @@ mod tests
 	#[test]
 	fn test_desugar_struct_init_with_base()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::StructInit {
 			path: Path::simple(vec!["Point".into()], Span::default()),
@@ -4053,7 +4053,7 @@ mod tests
 	#[test]
 	fn test_desugar_struct_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let struct_decl = TopLevelDecl::Struct(StructDecl {
 			modifiers: Vec::new(),
@@ -4077,7 +4077,7 @@ mod tests
 	#[test]
 	fn test_desugar_union_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let union_decl = TopLevelDecl::Union(UnionDecl {
 			modifiers: Vec::new(),
@@ -4101,7 +4101,7 @@ mod tests
 	#[test]
 	fn test_desugar_enum_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let enum_decl = TopLevelDecl::Enum(EnumDecl {
 			modifiers: Vec::new(),
@@ -4125,7 +4125,7 @@ mod tests
 	#[test]
 	fn test_desugar_variant_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let variant_decl = TopLevelDecl::Variant(VariantDecl {
 			modifiers: Vec::new(),
@@ -4149,7 +4149,7 @@ mod tests
 	#[test]
 	fn test_desugar_type_alias_unchanged()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let alias = TopLevelDecl::TypeAlias(TypeAliasDecl {
 			modifiers: Vec::new(),
@@ -4174,7 +4174,7 @@ mod tests
 	#[test]
 	fn test_desugar_impl_type_alias()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
 			modifiers: Vec::new(),
@@ -4205,7 +4205,7 @@ mod tests
 	#[test]
 	fn test_desugar_impl_const()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
 			modifiers: Vec::new(),
@@ -4237,7 +4237,7 @@ mod tests
 	#[test]
 	fn test_desugar_trait_type_alias()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let trait_decl = TraitDecl {
 			modifiers: Vec::new(),
@@ -4263,7 +4263,7 @@ mod tests
 	#[test]
 	fn test_desugar_trait_const()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let trait_decl = TraitDecl {
 			modifiers: Vec::new(),
@@ -4290,7 +4290,7 @@ mod tests
 	#[test]
 	fn test_where_clause_with_func_bound()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<F>() where F: Fn(i32) -> i32
 		let sig = FunctionSignature {
@@ -4324,7 +4324,7 @@ mod tests
 	#[test]
 	fn test_where_clause_with_generic_args()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// fn foo<T>() where Vec<T>: Clone
 		let sig = FunctionSignature {
@@ -4390,7 +4390,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_empty()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 		let result = desugarer.cartesian_product_patterns(Vec::new());
 		assert_eq!(result.len(), 1);
 		assert_eq!(result[0].len(), 0);
@@ -4399,7 +4399,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_single()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 		let lists = vec![vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")]];
 
 		let result = desugarer.cartesian_product_patterns(lists);
@@ -4411,7 +4411,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_multiple()
 	{
-		let desugarer = Desugarer::new();
+		let desugarer = Desugarer::new(SourceIndex::new(0));
 		let lists = vec![
 			vec![typed_ident_pattern("a", "i32"), typed_ident_pattern("b", "i32")],
 			vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
@@ -4430,7 +4430,7 @@ mod tests
 	#[test]
 	fn test_desugar_nested_tuple_in_struct()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let var = VariableDecl {
 			pattern: Pattern::Struct {
@@ -4458,7 +4458,7 @@ mod tests
 	#[test]
 	fn test_loop_stack_management()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Push and pop loops
 		let label1 = desugarer.push_loop(Some("outer".into()));
@@ -4479,7 +4479,7 @@ mod tests
 	#[test]
 	fn test_desugar_error_display()
 	{
-		let error = DesugarError::generic(Span::default(), "test error", crate::source_map::SourceIndex::default());
+		let error = DesugarError::generic(Span::default(), "test error", SourceIndex::new(0));
 
 		let display = format!("{}", error);
 		assert!(display.contains("test error"));
@@ -4488,7 +4488,7 @@ mod tests
 	#[test]
 	fn test_desugar_error_with_context()
 	{
-		let error = DesugarError::generic(Span::default(), "test error", crate::source_map::SourceIndex::default())
+		let error = DesugarError::generic(Span::default(), "test error", SourceIndex::new(0))
 			.with_context("while desugaring function");
 
 		let display = format!("{}", error);
@@ -4502,7 +4502,7 @@ mod tests
 	#[test]
 	fn test_desugar_struct_init_without_rest()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// Point { x: 1, y: 2 } - no rest, should not wrap
 		let expr = Expr::StructInit {
@@ -4530,7 +4530,7 @@ mod tests
 	#[test]
 	fn test_idempotent_desugaring_struct_init()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::StructInit {
 			path: Path::simple(vec!["Point".into()], Span::default()),
@@ -4558,7 +4558,7 @@ mod tests
 	#[test]
 	fn test_constructor_tuple_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: (Point, Config)();
 		let var = VariableDecl {
@@ -4600,7 +4600,7 @@ mod tests
 	#[test]
 	fn test_constructor_array_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var arr: [Point; 5]();
 		let var = VariableDecl {
@@ -4653,7 +4653,7 @@ mod tests
 	#[test]
 	fn test_constructor_unsized_array()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var arr: [Point]();
 		let var = VariableDecl {
@@ -4697,7 +4697,7 @@ mod tests
 	#[test]
 	fn test_constructor_mut_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: mut Point();
 		let var = VariableDecl {
@@ -4746,7 +4746,7 @@ mod tests
 	#[test]
 	fn test_constructor_reference_error()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: &Point(); - should error
 		let var = VariableDecl {
@@ -4788,7 +4788,7 @@ mod tests
 	#[test]
 	fn test_constructor_mut_reference_error()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: &mut Point(); - should error
 		let var = VariableDecl {
@@ -4830,7 +4830,7 @@ mod tests
 	#[test]
 	fn test_constructor_pointer_error()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: Point*(); - should error
 		let var = VariableDecl {
@@ -4871,7 +4871,7 @@ mod tests
 	#[test]
 	fn test_constructor_impl_trait_error()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: impl Trait(); - should error
 		let var = VariableDecl {
@@ -4912,7 +4912,7 @@ mod tests
 	#[test]
 	fn test_constructor_nested_tuple_array()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: [(Point, Config); 3]();
 		let var = VariableDecl {
@@ -4969,7 +4969,7 @@ mod tests
 	#[test]
 	fn test_constructor_empty_tuple()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: ()(); - unit type
 		let var = VariableDecl {
@@ -5007,7 +5007,7 @@ mod tests
 	#[test]
 	fn test_constructor_heap_call_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: Point!();
 		let var = VariableDecl {
@@ -5042,7 +5042,7 @@ mod tests
 	#[test]
 	fn test_constructor_maybe_heap_call_type()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: Point?();
 		let var = VariableDecl {
@@ -5077,7 +5077,7 @@ mod tests
 	#[test]
 	fn test_constructor_with_generics_preserves_generics()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: Vec<String>();
 		let var = VariableDecl {
@@ -5125,7 +5125,7 @@ mod tests
 	#[test]
 	fn test_constructor_nested_arrays()
 	{
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		// var x: [[Point; 2]; 3]();
 		let var = VariableDecl {

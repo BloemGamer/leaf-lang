@@ -5,7 +5,16 @@ pub struct SourceFile
 	pub src: String,
 }
 
-pub type SourceIndex = usize;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceIndex(usize);
+
+impl SourceIndex
+{
+	pub const fn new(index: usize) -> SourceIndex
+	{
+		return SourceIndex(index);
+	}
+}
 
 #[derive(Debug, Default)]
 pub struct SourceMap
@@ -22,11 +31,11 @@ impl SourceMap
 			src: src.into(),
 		};
 		self.files.push(file);
-		return self.files.len() - 1;
+		return SourceIndex(self.files.len() - 1);
 	}
 
-	pub fn get(&self, index: usize) -> &SourceFile
+	pub fn get(&self, source_index: SourceIndex) -> &SourceFile
 	{
-		return &self.files[index];
+		return &self.files[source_index.0];
 	}
 }

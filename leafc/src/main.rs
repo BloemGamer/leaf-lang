@@ -189,7 +189,10 @@ fn main()
 	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
-	let program: Result<Program, CompileError> = parsed.try_into();
+	let program: Program = parsed
+		.try_into()
+		.inspect_err(|e: &CompileError| println!("{}", e.to_string_with_source(&source_map).expect("")))
+		.expect("found an error in the program");
 	// match &program {
 	// 	Ok(ast) => {
 	// 		println!("{ast:#?}");
@@ -199,14 +202,10 @@ fn main()
 	// 	}
 	// }
 
-	let mut desugager: Desugarer = Desugarer::new();
+	let mut desugager: Desugarer = Desugarer::new(program.source_index);
 
 	let desugared: Program = desugager
-		.desugar_program(
-			program
-				.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
-				.expect("found an error in the program"),
-		)
+		.desugar_program(program)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 	println!("{}", desugared);

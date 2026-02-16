@@ -7,6 +7,7 @@ mod tests
 		desugar::Desugarer,
 		lexer::Lexer,
 		parser::Parser,
+		source_map::SourceIndex,
 		symbol_collection::{
 			Mutability, ScopeKind, Symbol, SymbolCollectionError, SymbolId, SymbolKind, SymbolTable, Visibility,
 			collect_symbols,
@@ -16,12 +17,12 @@ mod tests
 	fn parse_and_collect(source: &str) -> Result<SymbolTable, SymbolCollectionError>
 	{
 		let config = Config::default();
-		let source_index = 0;
+		let source_index = SourceIndex::new(0);
 		let lexer = Lexer::new(&config, source, source_index);
 		let mut parser = Parser::from(lexer);
 		let program = parser.parse_program().unwrap();
 
-		let mut desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 		let desugared = desugarer.desugar_program(program).unwrap();
 		println!("{}", desugared);
 
