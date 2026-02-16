@@ -10,12 +10,70 @@ use crate::{
 	source_map::SourceIndex,
 };
 
+/// Unique identifier for a scope in the symbol table.
+///
+/// Scopes represent lexical regions where symbols can be defined and looked up.
+/// Each scope has a unique ID that can be used to index into the symbol table's
+/// scope storage.
+///
+/// # Examples
+/// ```ignore
+/// let scope_id = ScopeId(0); // Root scope
+/// let scope = symbol_table.scope(scope_id);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScopeId(pub usize);
 
+/// Unique identifier for a symbol in the symbol table.
+///
+/// Symbols represent named entities like variables, functions, types, etc.
+/// Each symbol has a unique ID that can be used to index into the symbol table's
+/// symbol storage.
+///
+/// # Examples
+/// ```ignore
+/// let symbol_id = SymbolId(5);
+/// let symbol = symbol_table.symbol(symbol_id);
+/// println!("Symbol name: {}", symbol.name);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub usize);
 
+/// The kind of symbol and its associated metadata.
+///
+/// Different symbol kinds represent different language constructs and may have
+/// specific attributes. For example, variables track mutability, while functions
+/// track whether they're compile-time constant.
+///
+/// # Variants
+///
+/// * `Variable { mutability }` - A variable binding (local or global)
+/// * `Function { comp_const }` - A function declaration
+/// * `Struct` - A structure type definition
+/// * `Union` - An untagged union type
+/// * `Enum` - A C-style enumeration
+/// * `Variant` - A tagged union (Rust-style enum)
+/// * `VariantMember` - A member of a tagged union variant
+/// * `EnumVariant` - A variant in a C-style enum
+/// * `TypeAlias` - A type alias declaration
+/// * `GenericParam` - A generic type parameter
+/// * `Trait` - A trait definition
+/// * `Module` - A module declaration
+/// * `Field` - A field in a struct or union
+/// * `Label` - A loop label
+///
+/// # Examples
+/// ```ignore
+/// match symbol.kind {
+///     SymbolKind::Variable { mutability: Mutability::Mutable } => {
+///         println!("Mutable variable: {}", symbol.name);
+///     }
+///     SymbolKind::Function { comp_const: true } => {
+///         println!("Compile-time constant function: {}", symbol.name);
+///     }
+///     _ => {}
+/// }
+/// ```
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind
@@ -42,6 +100,29 @@ pub enum SymbolKind
 	Label,
 }
 
+/// A symbol in the program with its metadata.
+///
+/// Symbols represent named entities in the source code. Each symbol knows its name,
+/// what kind of entity it is, where it's defined, which scope it belongs to, and
+/// its visibility.
+///
+/// # Fields
+///
+/// * `name` - The identifier name of the symbol
+/// * `kind` - What kind of symbol this is (variable, function, type, etc.)
+/// * `def_span` - Source location where the symbol is defined
+/// * `scope` - The scope this symbol belongs to
+/// * `visibility` - Whether the symbol is public or private
+///
+/// # Examples
+/// ```ignore
+/// let symbol = symbol_table.symbol(symbol_id);
+/// println!("Found {} at {:?}", symbol.name, symbol.def_span);
+///
+/// if symbol.visibility == Visibility::Public {
+///     println!("Symbol is public");
+/// }
+/// ```
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Symbol
@@ -53,16 +134,44 @@ pub struct Symbol
 	pub visibility: Visibility,
 }
 
+/// The kind of lexical scope.
+///
+/// Different scope kinds represent different language constructs that create
+/// new scoping regions. Each scope kind has specific semantics about what
+/// symbols it can contain and how name resolution works.
+///
+/// # Variants
+///
+/// * `ModuleImport` - Scope created by an import statement
+/// * `ModuleInline` - Scope for an inline module definition
+/// * `FunctionBody` - Scope for the body of a function
+/// * `StructFields` - Scope containing struct field definitions
+/// * `UnionFields` - Scope containing union field definitions
+/// * `EnumVariants` - Scope containing enum variant definitions
+/// * `VariantMembers` - Scope containing tagged union variant members
+/// * `TraitBody` - Scope for trait items
+/// * `ImplBody` - Scope for implementation block items
+/// * `Block` - Scope for a general code block `{ }`
+/// * `SwitchArm` - Scope for a single switch/match arm
+/// * `IfThen` - Scope for the then-branch of an if statement
+/// * `ElseBlock` - Scope for the else-branch of an if statement
+/// * `LoopBody` - Scope for the body of an infinite loop
+///
+/// # Examples
+/// ```ignore
+/// let scope = symbol_table.scope(scope_id);
+/// match scope.kind {
+///     ScopeKind::FunctionBody => println!("In function body"),
+///     ScopeKind::Block => println!("In regular block"),
+///     _ => {}
+/// }
+/// ```
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScopeKind
 {
 	ModuleImport,
 	ModuleInline,
-	Generics
-	{
-		body_scope: ScopeId,
-	},
 	FunctionBody,
 	StructFields,
 	UnionFields,
@@ -74,13 +183,41 @@ pub enum ScopeKind
 	SwitchArm,
 	IfThen,
 	ElseBlock,
-	WhileBody,
-	ForBody,
 	LoopBody,
 }
 
-#[allow(unused)]
+/// A lexical scope containing symbols and child scopes.
+///
+/// Scopes form a tree structure representing the lexical nesting of the program.
+/// Each scope knows its parent scope, the symbols defined directly in it, and
+/// any child scopes nested within it.
+///
+/// # Fields
+///
+/// * `kind` - What kind of scope this is
+/// * `parent` - Parent scope ID (None for the root scope)
+/// * `symbols` - Symbols defined directly in this scope
+/// * `children` - Child scopes nested within this scope
+/// * `span` - Source location covered by this scope
+///
+/// # Examples
+/// ```ignore
+/// let scope = symbol_table.scope(scope_id);
+///
+/// // Iterate through symbols in this scope
+/// for &symbol_id in &scope.symbols {
+///     let symbol = symbol_table.symbol(symbol_id);
+///     println!("  {}", symbol.name);
+/// }
+///
+/// // Check parent scope
+/// if let Some(parent_id) = scope.parent {
+///     let parent = symbol_table.scope(parent_id);
+///     println!("Parent scope: {:?}", parent.kind);
+/// }
+/// ```
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub struct Scope
 {
 	pub kind: ScopeKind,
@@ -90,6 +227,34 @@ pub struct Scope
 	pub span: Span,
 }
 
+/// The complete symbol table for a program.
+///
+/// Contains all scopes and symbols collected from the program's AST.
+/// Provides methods to look up scopes and symbols by their IDs.
+/// The symbol table forms a tree structure with scopes as nodes.
+///
+/// # Fields
+///
+/// * `scopes` - All scopes in the program
+/// * `symbols` - All symbols in the program
+/// * `root` - The root scope ID (typically the module scope)
+///
+/// # Examples
+/// ```ignore
+/// use crate::symbol_collection::collect_symbols;
+///
+/// let symbol_table = collect_symbols(&program, source_index)?;
+///
+/// // Access root scope
+/// let root = symbol_table.scope(symbol_table.root);
+/// println!("Root has {} symbols", root.symbols.len());
+///
+/// // Look up a symbol
+/// for &symbol_id in &root.symbols {
+///     let symbol = symbol_table.symbol(symbol_id);
+///     println!("Top-level symbol: {}", symbol.name);
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SymbolTable
 {
@@ -100,11 +265,44 @@ pub struct SymbolTable
 
 impl SymbolTable
 {
+	/// Gets a reference to a scope by its ID.
+	///
+	/// # Arguments
+	/// * `id` - The scope ID to look up
+	///
+	/// # Returns
+	/// A reference to the scope
+	///
+	/// # Panics
+	/// Panics if the scope ID is invalid
+	///
+	/// # Examples
+	/// ```ignore
+	/// let scope = symbol_table.scope(ScopeId(0));
+	/// println!("Scope kind: {:?}", scope.kind);
+	/// ```
 	#[allow(unused)]
 	pub fn scope(&self, id: ScopeId) -> &Scope
 	{
 		return &self.scopes[id.0];
 	}
+
+	/// Gets a reference to a symbol by its ID.
+	///
+	/// # Arguments
+	/// * `id` - The symbol ID to look up
+	///
+	/// # Returns
+	/// A reference to the symbol
+	///
+	/// # Panics
+	/// Panics if the symbol ID is invalid
+	///
+	/// # Examples
+	/// ```ignore
+	/// let symbol = symbol_table.symbol(SymbolId(5));
+	/// println!("Symbol: {} ({:?})", symbol.name, symbol.kind);
+	/// ```
 	#[allow(unused)]
 	pub fn symbol(&self, id: SymbolId) -> &Symbol
 	{
@@ -112,6 +310,24 @@ impl SymbolTable
 	}
 }
 
+/// Symbol visibility level.
+///
+/// Determines whether a symbol can be accessed from outside its defining module.
+/// This is typically controlled by the `pub` keyword in the source code.
+///
+/// # Variants
+///
+/// * `Public` - Symbol is visible outside its module (marked with `pub`)
+/// * `Private` - Symbol is only visible within its module (default)
+///
+/// # Examples
+/// ```ignore
+/// if symbol.visibility == Visibility::Public {
+///     println!("{} is exported from this module", symbol.name);
+/// } else {
+///     println!("{} is internal to this module", symbol.name);
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility
 {
@@ -119,6 +335,32 @@ pub enum Visibility
 	Private,
 }
 
+/// Mutability level of a variable.
+///
+/// Variables can be immutable (default), mutable (can be reassigned), or
+/// compile-time constant (evaluated at compile time).
+///
+/// # Variants
+///
+/// * `Mutable` - Variable can be reassigned (`var mut x`)
+/// * `Const` - Compile-time constant (`const X`)
+/// * `Immutable` - Cannot be reassigned (`var x`)
+///
+/// # Examples
+/// ```ignore
+/// match symbol.kind {
+///     SymbolKind::Variable { mutability: Mutability::Mutable } => {
+///         println!("Can reassign {}", symbol.name);
+///     }
+///     SymbolKind::Variable { mutability: Mutability::Const } => {
+///         println!("{} is a compile-time constant", symbol.name);
+///     }
+///     SymbolKind::Variable { mutability: Mutability::Immutable } => {
+///         println!("{} cannot be reassigned", symbol.name);
+///     }
+///     _ => {}
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mutability
 {
@@ -127,6 +369,29 @@ pub enum Mutability
 	Immutable,
 }
 
+/// Error that occurred during symbol collection.
+///
+/// Contains information about what went wrong, where it happened, and context
+/// about what was being processed at the time.
+///
+/// # Fields
+///
+/// * `span` - Source location where the error occurred
+/// * `kind` - The specific kind of error
+/// * `context` - Stack of processing contexts
+/// * `source_index` - Index into the source map
+/// * `scope` - The scope being processed when the error occurred
+///
+/// # Examples
+/// ```ignore
+/// match collect_symbols(&program, source_index) {
+///     Ok(table) => { /* use table */ }
+///     Err(error) => {
+///         eprintln!("Symbol collection failed: {}", error);
+///         eprintln!("At: {:?}", error.span);
+///     }
+/// }
+/// ```
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct SymbolCollectionError
@@ -135,7 +400,7 @@ pub struct SymbolCollectionError
 	pub kind: SymbolCollectionErrorKind,
 	pub context: Vec<String>,
 	pub source_index: SourceIndex,
-	scope: ScopeId,
+	pub scope: ScopeId,
 }
 
 impl Spanned for SymbolCollectionError
@@ -146,6 +411,31 @@ impl Spanned for SymbolCollectionError
 	}
 }
 
+/// The specific kind of symbol collection error.
+///
+/// Categorizes different types of errors that can occur during symbol collection,
+/// such as duplicate definitions or invalid paths in declarations.
+///
+/// # Variants
+///
+/// * `DuplicateDefinition { name, first_definition }` - A symbol is defined twice in the same scope
+/// * `InvalidPath { declaration_type, reason }` - A declaration uses an invalid path
+/// * `Generic { message }` - A generic error with a custom message
+///
+/// # Examples
+/// ```ignore
+/// match error.kind {
+///     SymbolCollectionErrorKind::DuplicateDefinition { ref name, first_definition } => {
+///         eprintln!("Symbol '{}' is already defined at {:?}", name, first_definition);
+///     }
+///     SymbolCollectionErrorKind::InvalidPath { ref declaration_type, .. } => {
+///         eprintln!("Invalid path in {} declaration", declaration_type);
+///     }
+///     SymbolCollectionErrorKind::Generic { ref message } => {
+///         eprintln!("Error: {}", message);
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub enum SymbolCollectionErrorKind
 {
@@ -164,6 +454,27 @@ pub enum SymbolCollectionErrorKind
 	},
 }
 
+/// Reason why a path is invalid in a declaration.
+///
+/// Some declarations (like functions and structs) must use simple single-segment
+/// paths without generics. This enum explains why a given path is invalid.
+///
+/// # Variants
+///
+/// * `MultipleSegments` - Path has multiple segments (e.g., `foo::bar`) where only one is allowed
+/// * `HasGenerics` - Path has generic arguments (e.g., `Foo<T>`) where none are allowed
+///
+/// # Examples
+/// ```ignore
+/// match reason {
+///     PathErrorReason::MultipleSegments => {
+///         eprintln!("Declaration must use a simple name, not a path");
+///     }
+///     PathErrorReason::HasGenerics => {
+///         eprintln!("Declaration name cannot have generic arguments");
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub enum PathErrorReason
 {
@@ -1103,6 +1414,59 @@ impl Collector
 	}
 }
 
+/// Collects all symbols from a program AST into a symbol table.
+///
+/// This is the main entry point for symbol collection. It traverses the entire
+/// program AST and builds a complete symbol table containing all scopes and
+/// symbols, along with their relationships.
+///
+/// The symbol table provides:
+/// - All named entities (functions, variables, types, etc.)
+/// - Scope hierarchy (which scopes contain which symbols)
+/// - Symbol metadata (visibility, mutability, etc.)
+/// - Source locations for all definitions
+///
+/// # Arguments
+///
+/// * `program` - The program AST to collect symbols from
+/// * `source_index` - Index into the source map for error reporting
+///
+/// # Returns
+///
+/// * `Ok(SymbolTable)` - Complete symbol table for the program
+/// * `Err(SymbolCollectionError)` - If an error occurs (e.g., duplicate definitions)
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - A symbol is defined multiple times in the same scope
+/// - A declaration uses an invalid path (multiple segments or generics where not allowed)
+/// - Other structural issues are detected
+///
+/// # Examples
+///
+/// ```ignore
+/// use crate::symbol_collection::collect_symbols;
+/// use crate::source_map::SourceIndex;
+///
+/// // After parsing and desugaring
+/// let symbol_table = collect_symbols(&program, SourceIndex(0))?;
+///
+/// // Access root scope
+/// let root = symbol_table.scope(symbol_table.root);
+/// println!("Found {} top-level symbols", root.symbols.len());
+///
+/// // Iterate through all symbols
+/// for (i, symbol) in symbol_table.symbols.iter().enumerate() {
+///     println!("Symbol {}: {} ({:?})", i, symbol.name, symbol.kind);
+/// }
+/// ```
+///
+/// # Note
+///
+/// This function should be called on a desugared AST, as it expects certain
+/// transformations to have already been applied (e.g., loop labels added,
+/// patterns simplified).
 pub fn collect_symbols(program: &Program, source_index: SourceIndex) -> Result<SymbolTable, SymbolCollectionError>
 {
 	let mut collector: Collector = Collector::new(source_index);
