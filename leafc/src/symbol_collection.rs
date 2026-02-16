@@ -144,10 +144,22 @@ pub enum SymbolCollectionErrorKind
 	{
 		name: String, first_definition: Span
 	},
+	InvalidPath
+	{
+		declaration_type: String,
+		reason: PathErrorReason,
+	},
 	Generic
 	{
 		message: String
 	},
+}
+
+#[derive(Debug, Clone)]
+pub enum PathErrorReason
+{
+	MultipleSegments,
+	HasGenerics,
 }
 
 impl std::fmt::Display for SymbolCollectionError
@@ -163,6 +175,20 @@ impl std::fmt::Display for SymbolCollectionError
 					first_definition,
 					self.span()
 				);
+			}
+			SymbolCollectionErrorKind::InvalidPath {
+				declaration_type,
+				reason,
+			} => {
+				let reason_str = match reason {
+					PathErrorReason::MultipleSegments => {
+						format!("A {} can't be a path, and only can have one segment", declaration_type)
+					}
+					PathErrorReason::HasGenerics => {
+						format!("A {} can't have a generic in the path", declaration_type)
+					}
+				};
+				return write!(f, "{}", reason_str);
 			}
 			SymbolCollectionErrorKind::Generic { message } => {
 				return write!(f, "{}", message);
@@ -296,6 +322,35 @@ impl Collector
 		return result;
 	}
 
+	fn validate_simple_path(&self, path: &Path, declaration_type: &str) -> Result<(), SymbolCollectionError>
+	{
+		if path.len() != 1 {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::InvalidPath {
+					declaration_type: declaration_type.to_string(),
+					reason: PathErrorReason::MultipleSegments,
+				},
+			});
+		}
+		if !path.segments[0].generics.is_empty() {
+			return Err(SymbolCollectionError {
+				span: path.span(),
+				context: Vec::new(),
+				source_index: self.source_index,
+				scope: self.current_scope,
+				kind: SymbolCollectionErrorKind::InvalidPath {
+					declaration_type: declaration_type.to_string(),
+					reason: PathErrorReason::HasGenerics,
+				},
+			});
+		}
+		return Ok(());
+	}
+
 	fn collect_program(&mut self, program: &Program) -> Result<(), SymbolCollectionError>
 	{
 		for item in &program.items {
@@ -345,7 +400,7 @@ impl Collector
 				source_index: self.source_index,
 				scope: self.current_scope,
 				kind: SymbolCollectionErrorKind::Generic {
-					message: "A fucntion signature can't be a path, and only can have one segment".to_string(),
+					message: "A function signature can't be a path, and only can have one segment".to_string(),
 				},
 			});
 		}
@@ -398,28 +453,8 @@ impl Collector
 				let Pattern::TypedIdentifier { path, span, .. } = &param.pattern else {
 					unreachable!("Desugarer should have handled this");
 				};
-				if path.len() != 1 {
-					return Err(SymbolCollectionError {
-						span: path.span(),
-						context: Vec::new(),
-						source_index: c.source_index,
-						scope: c.current_scope,
-						kind: SymbolCollectionErrorKind::Generic {
-							message: "A function parameter can't be a path, and only can have one segment".to_string(),
-						},
-					});
-				}
-				if !path.segments[0].generics.is_empty() {
-					return Err(SymbolCollectionError {
-						span: path.span(),
-						context: Vec::new(),
-						source_index: c.source_index,
-						scope: c.current_scope,
-						kind: SymbolCollectionErrorKind::Generic {
-							message: "A function parameter can't have a generic in the path".to_string(),
-						},
-					});
-				}
+				c.validate_simple_path(path, "function")?;
+
 				let Pattern::TypedIdentifier { mutable, .. } = param.pattern else {
 					unreachable!("Should be handeled by the desugarer");
 				};
@@ -455,28 +490,9 @@ impl Collector
 		else {
 			unreachable!("Desugarer should have handled this");
 		};
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A variable can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A variable can't have a generic in the path".to_string(),
-				},
-			});
-		}
+
+		self.validate_simple_path(path, "variable")?;
+
 		let Pattern::TypedIdentifier { mutable, .. } = var.pattern else {
 			unreachable!("Should be handeled by the desugarer");
 		};
@@ -504,28 +520,7 @@ impl Collector
 	fn collect_struct_decl(&mut self, s: &StructDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &s.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A struct can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A struct can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "struct")?;
 
 		self.define(
 			path.segments[0].name.clone(),
@@ -553,28 +548,7 @@ impl Collector
 	fn collect_union_decl(&mut self, u: &parser::UnionDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &u.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A union can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A union can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "union")?;
 
 		self.define(
 			path.segments[0].name.clone(),
@@ -602,28 +576,7 @@ impl Collector
 	fn collect_enum_decl(&mut self, e: &parser::EnumDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &e.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A enum can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A enum can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "enum")?;
 
 		let visibility: Visibility = get_visability(&e.modifiers);
 		self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
@@ -642,28 +595,7 @@ impl Collector
 	fn collect_variant_decl(&mut self, v: &parser::VariantDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &v.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A variant can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A variant can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "variant")?;
 
 		let visibility: Visibility = get_visability(&v.modifiers);
 		self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
@@ -682,28 +614,7 @@ impl Collector
 	fn collect_type_alias_decl(&mut self, t: &parser::TypeAliasDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &t.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A type can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A type can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "type")?;
 
 		self.define(
 			path.segments[0].name.clone(),
@@ -718,28 +629,7 @@ impl Collector
 	fn collect_trait_decl(&mut self, t: &TraitDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &t.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A trait can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A trait can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "trait")?;
 
 		self.define(
 			path.segments[0].name.clone(),
@@ -775,28 +665,7 @@ impl Collector
 	fn collect_module_decl(&mut self, m: &ModuleDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &m.name;
-		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A module can't be a path, and only can have one segment".to_string(),
-				},
-			});
-		}
-		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				source_index: self.source_index,
-				scope: self.current_scope,
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A module can't have a generic in the path".to_string(),
-				},
-			});
-		}
+		self.validate_simple_path(path, "module")?;
 
 		self.define(
 			path.segments[0].name.clone(),
