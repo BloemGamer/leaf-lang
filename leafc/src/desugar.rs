@@ -308,7 +308,10 @@ impl Desugarer
 	{
 		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block)?;
 
-		debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone())?);
+		#[allow(clippy::debug_assert_with_mut_call)]
+		{
+			debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone())?);
+		}
 
 		return Ok(Program {
 			top_level_block: top_lvl,
