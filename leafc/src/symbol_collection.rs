@@ -19,7 +19,7 @@ pub enum SymbolKind
 {
 	Variable
 	{
-		mutable: bool,
+		mutability: Mutability,
 	},
 	Function,
 	Struct,
@@ -101,11 +101,19 @@ impl SymbolTable
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility
 {
 	Public,
 	Private,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mutability
+{
+	Mutable,
+	Const,
+	Immutable,
 }
 
 #[derive(Debug, Clone)]
@@ -412,7 +420,13 @@ impl Collector
 				};
 				c.define(
 					path.segments[0].name.clone(),
-					SymbolKind::Variable { mutable },
+					SymbolKind::Variable {
+						mutability: (if mutable {
+							Mutability::Mutable
+						} else {
+							Mutability::Immutable
+						}),
+					},
 					*span,
 					Visibility::Private,
 				)?;
@@ -463,9 +477,20 @@ impl Collector
 		};
 		self.define(
 			path.segments[0].name.clone(),
-			SymbolKind::Variable { mutable },
+			SymbolKind::Variable {
+				mutability: if var.comp_const {
+					if mutable {
+						todo!("const can't be mixed with const")
+					}
+					Mutability::Const
+				} else if mutable {
+					Mutability::Mutable
+				} else {
+					Mutability::Immutable
+				},
+			},
 			*span,
-			get_visability(&modifiers),
+			get_visability(modifiers),
 		)?;
 
 		return Ok(());
