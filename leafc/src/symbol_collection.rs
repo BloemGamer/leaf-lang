@@ -1,8 +1,9 @@
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
-		self, Block, CallType, FunctionDecl, FunctionSignature, Ident, ImplDecl, ImplItem, Modifier, ModuleDecl, Path,
-		Pattern, Program, Stmt, StructDecl, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		self, ArrayLiteral, Block, CallType, Expr, FunctionDecl, FunctionSignature, Ident, ImplDecl, ImplItem,
+		Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody, TopLevelDecl, TraitDecl,
+		TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -808,9 +809,183 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_expr(&mut self, expr: &parser::Expr) -> Result<(), SymbolCollectionError>
+	fn collect_expr(&mut self, expr: &Expr) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		match expr {
+			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Default { .. } => {}
+
+			Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
+				self.collect_expr(expr)?;
+			}
+
+			Expr::Binary { lhs, rhs, .. } => {
+				self.collect_expr(lhs)?;
+				self.collect_expr(rhs)?;
+			}
+
+			Expr::Call { callee, args, .. } => {
+				self.collect_expr(callee)?;
+				for arg in args {
+					self.collect_expr(arg)?;
+				}
+			}
+
+			Expr::Field { base, .. } => {
+				self.collect_expr(base)?;
+			}
+
+			Expr::Index { base, index, .. } => {
+				self.collect_expr(base)?;
+				self.collect_expr(index)?;
+			}
+
+			Expr::Range(RangeExpr { start, end, .. }) => {
+				if let Some(s) = start {
+					self.collect_expr(s)?;
+				}
+				if let Some(e) = end {
+					self.collect_expr(e)?;
+				}
+			}
+
+			Expr::Tuple { elements, .. } => {
+				for elem in elements {
+					self.collect_expr(elem)?;
+				}
+			}
+
+			Expr::Array(array_lit) => match array_lit {
+				ArrayLiteral::List { elements, .. } => {
+					for elem in elements {
+						self.collect_expr(elem)?;
+					}
+				}
+				ArrayLiteral::Repeat { value, count, .. } => {
+					self.collect_expr(value)?;
+					self.collect_expr(count)?;
+				}
+			},
+
+			Expr::StructInit { fields, base, .. } => {
+				for (_, field_expr) in fields {
+					self.collect_expr(field_expr)?;
+				}
+				if let Some(base_expr) = base {
+					self.collect_expr(base_expr)?;
+				}
+			}
+
+			Expr::Block(block) | Expr::UnsafeBlock(block) => {
+				let block_scope = self.alloc_scope(ScopeKind::Block, block.span());
+				self.in_scope(block_scope, |c| {
+					for stmt in &block.stmts {
+						c.collect_stmt(stmt)?;
+					}
+					if let Some(tail) = &block.tail_expr {
+						c.collect_expr(tail)?;
+					}
+					return Ok(());
+				})?;
+			}
+
+			Expr::Switch { expr, arms, .. } => {
+				self.collect_expr(expr)?;
+
+				for arm in arms {
+					let arm_scope = self.alloc_scope(ScopeKind::SwitchArm, arm.span());
+					self.in_scope(arm_scope, |c| {
+						c.collect_pattern_bindings(&arm.pattern, false)?;
+
+						match &arm.body {
+							SwitchBody::Expr(e) => c.collect_expr(e)?,
+							SwitchBody::Block(block) => {
+								for stmt in &block.stmts {
+									c.collect_stmt(stmt)?;
+								}
+								if let Some(tail) = &block.tail_expr {
+									c.collect_expr(tail)?;
+								}
+							}
+						}
+						return Ok(());
+					})?;
+				}
+			}
+
+			Expr::If {
+				cond,
+				then_block,
+				else_branch,
+				..
+			} => {
+				self.collect_expr(cond)?;
+
+				let then_scope = self.alloc_scope(ScopeKind::IfThen, then_block.span());
+				self.in_scope(then_scope, |c| {
+					for stmt in &then_block.stmts {
+						c.collect_stmt(stmt)?;
+					}
+					if let Some(tail) = &then_block.tail_expr {
+						c.collect_expr(tail)?;
+					}
+					return Ok(());
+				})?;
+
+				if let Some(else_expr) = else_branch {
+					let else_scope = self.alloc_scope(ScopeKind::ElseBlock, else_expr.span());
+					self.in_scope(else_scope, |c| return c.collect_expr(else_expr))?;
+				}
+			}
+
+			Expr::IfVar {
+				pattern,
+				expr,
+				then_block,
+				else_branch,
+				..
+			} => {
+				self.collect_expr(expr)?;
+
+				let then_scope = self.alloc_scope(ScopeKind::IfThen, then_block.span());
+				self.in_scope(then_scope, |c| {
+					c.collect_pattern_bindings(pattern, false)?;
+
+					for stmt in &then_block.stmts {
+						c.collect_stmt(stmt)?;
+					}
+					if let Some(tail) = &then_block.tail_expr {
+						c.collect_expr(tail)?;
+					}
+					return Ok(());
+				})?;
+
+				if let Some(else_expr) = else_branch {
+					let else_scope = self.alloc_scope(ScopeKind::ElseBlock, else_expr.span());
+					self.in_scope(else_scope, |c| return c.collect_expr(else_expr))?;
+				}
+			}
+
+			Expr::Loop { label, body, span } => {
+				let Some(label_str) = label else {
+					unreachable!("desugarer should have added a label")
+				};
+
+				self.define(label_str.clone(), SymbolKind::Label, *span, Visibility::Private)?;
+
+				let loop_scope = self.alloc_scope(ScopeKind::LoopBody, body.span());
+				self.in_scope(loop_scope, |c| {
+					for stmt in &body.stmts {
+						c.collect_stmt(stmt)?;
+					}
+					if let Some(tail) = &body.tail_expr {
+						c.collect_expr(tail)?;
+					}
+					return Ok(());
+				})?;
+			}
+		}
+
+		return Ok(());
 	}
 
 	fn collect_pattern_bindings(
