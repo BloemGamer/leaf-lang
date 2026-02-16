@@ -735,11 +735,75 @@ impl Collector
 					for item in &body.stmts {
 						c.collect_stmt(item)?;
 					}
+					if let Some(expr) = &body.tail_expr {
+						c.collect_expr(expr)?;
+					}
 
 					return Ok(());
 				})?;
 			}
-			_ => todo!(),
+			Stmt::Block(block) | Stmt::Unsafe(block) => {
+				let body_scope: ScopeId = self.alloc_scope(ScopeKind::Block, block.span());
+				self.in_scope(body_scope, |c| {
+					for item in &block.stmts {
+						c.collect_stmt(item)?;
+					}
+					if let Some(expr) = &block.tail_expr {
+						c.collect_expr(expr)?;
+					}
+
+					return Ok(());
+				})?;
+			}
+			Stmt::VariableDecl(var) => self.collect_variable_decl(var)?,
+			Stmt::Assignment {
+				target,
+				op: _,
+				value,
+				span: _,
+			} => {
+				self.collect_expr(target)?;
+				self.collect_expr(value)?;
+			}
+			Stmt::Delete { expr, span: _ } | Stmt::Expr(expr) => {
+				self.collect_expr(expr)?;
+			}
+			Stmt::Return { value, span: _ } => {
+				if let Some(expr) = value {
+					self.collect_expr(expr)?;
+				}
+			}
+			Stmt::Break { label, value, span: _ } => {
+				debug_assert!(label.is_some());
+
+				if let Some(expr) = value {
+					self.collect_expr(expr)?;
+				}
+			}
+			Stmt::If {
+				cond,
+				then_block,
+				else_branch,
+				span: _,
+			} => {
+				self.collect_expr(cond)?;
+
+				let then_scope: ScopeId = self.alloc_scope(ScopeKind::IfThen, then_block.span());
+				self.in_scope(then_scope, |c| {
+					for item in &then_block.stmts {
+						c.collect_stmt(item)?;
+					}
+					if let Some(expr) = &then_block.tail_expr {
+						c.collect_expr(expr)?;
+					}
+					return Ok(());
+				})?;
+
+				if let Some(el) = else_branch {
+					let else_scope: ScopeId = self.alloc_scope(ScopeKind::ElseBlock, el.span());
+					self.in_scope(else_scope, |c| return c.collect_stmt(el))?;
+				}
+			}
 		}
 		return Ok(());
 	}
