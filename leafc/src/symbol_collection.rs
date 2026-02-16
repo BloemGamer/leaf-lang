@@ -1,9 +1,11 @@
+mod tests;
+
 use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, ArrayLiteral, Block, CallType, Expr, FunctionDecl, FunctionSignature, Ident, ImplDecl, ImplItem,
-		Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody, TopLevelDecl, TraitDecl,
-		TraitItem, VariableDecl,
+		Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody, TopLevelBlock,
+		TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -354,7 +356,13 @@ impl Collector
 
 	fn collect_program(&mut self, program: &Program) -> Result<(), SymbolCollectionError>
 	{
-		for item in &program.items {
+		self.collect_top_level_block(&program.top_level_block)?;
+		return Ok(());
+	}
+
+	fn collect_top_level_block(&mut self, top_level_block: &TopLevelBlock) -> Result<(), SymbolCollectionError>
+	{
+		for item in &top_level_block.items {
 			self.collect_top_level_decl(item)?;
 		}
 		return Ok(());
@@ -380,14 +388,9 @@ impl Collector
 	fn collect_block(&mut self, block: &Block) -> Result<(), SymbolCollectionError>
 	{
 		for item in &block.stmts {
-			self.collect_block_stmt(item)?;
+			self.collect_stmt(item)?;
 		}
 		return Ok(());
-	}
-
-	fn collect_block_stmt(&mut self, stmt: &Stmt) -> Result<(), SymbolCollectionError>
-	{
-		todo!()
 	}
 
 	fn collect_function_decl(&mut self, func: &FunctionDecl) -> Result<(), SymbolCollectionError>
@@ -677,7 +680,7 @@ impl Collector
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span());
 		self.in_scope(body_scope, |c| {
-			return c.collect_program(&m.body);
+			return c.collect_top_level_block(&m.body);
 		})?;
 		return Ok(());
 	}
@@ -894,7 +897,7 @@ impl Collector
 				for arm in arms {
 					let arm_scope = self.alloc_scope(ScopeKind::SwitchArm, arm.span());
 					self.in_scope(arm_scope, |c| {
-						c.collect_pattern_bindings(&arm.pattern, false)?;
+						c.collect_pattern_bindings(&arm.pattern)?;
 
 						match &arm.body {
 							SwitchBody::Expr(e) => c.collect_expr(e)?,
@@ -948,7 +951,7 @@ impl Collector
 
 				let then_scope = self.alloc_scope(ScopeKind::IfThen, then_block.span());
 				self.in_scope(then_scope, |c| {
-					c.collect_pattern_bindings(pattern, false)?;
+					c.collect_pattern_bindings(pattern)?;
 
 					for stmt in &then_block.stmts {
 						c.collect_stmt(stmt)?;
@@ -988,13 +991,74 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_pattern_bindings(
-		&mut self,
-		pattern: &parser::Pattern,
-		mutable: bool,
-	) -> Result<(), SymbolCollectionError>
+	fn collect_pattern_bindings(&mut self, pattern: &parser::Pattern) -> Result<(), SymbolCollectionError>
 	{
-		todo!()
+		match pattern {
+			Pattern::Wildcard { .. } | Pattern::Literal { .. } => {}
+
+			Pattern::TypedIdentifier {
+				path,
+				mutable,
+				span,
+				modifiers,
+				ty: _,
+				call_constructor: _,
+			} => {
+				self.validate_simple_path(path, "pattern")?;
+
+				self.define(
+					path.segments[0].name.clone(),
+					SymbolKind::Variable {
+						mutability: if *mutable {
+							Mutability::Mutable
+						} else {
+							Mutability::Immutable
+						},
+					},
+					*span,
+					get_visability(modifiers),
+				)?;
+			}
+
+			Pattern::Variant { args, path: _, span: _ } => {
+				for arg_pattern in args {
+					self.collect_pattern_bindings(arg_pattern)?;
+				}
+			}
+
+			Pattern::Tuple { patterns, span: _ } | Pattern::Or { patterns, span: _ } => {
+				for pat in patterns {
+					self.collect_pattern_bindings(pat)?;
+				}
+			}
+
+			Pattern::Struct {
+				fields,
+				span: _,
+				path: _,
+				has_rest: _,
+			} => {
+				for (_, field_pattern) in fields {
+					self.collect_pattern_bindings(field_pattern)?;
+				}
+			}
+
+			Pattern::Range(RangeExpr {
+				start,
+				end,
+				span: _,
+				inclusive: _,
+			}) => {
+				if let Some(start_expr) = start {
+					self.collect_expr(start_expr)?;
+				}
+				if let Some(end_expr) = end {
+					self.collect_expr(end_expr)?;
+				}
+			}
+		}
+
+		return Ok(());
 	}
 }
 
@@ -1006,7 +1070,7 @@ pub fn collect_symbols(program: &Program, source_index: SourceIndex) -> Result<S
 	return Ok(collector.table);
 }
 
-fn get_visability(mods: &Vec<Modifier>) -> Visibility
+fn get_visability(mods: &[Modifier]) -> Visibility
 {
 	if mods.iter().any(|m| matches!(m, Modifier::Pub)) {
 		return Visibility::Public;
