@@ -79,6 +79,7 @@ pub enum ScopeKind
 	LoopBody,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct Scope
 {
@@ -99,10 +100,12 @@ pub struct SymbolTable
 
 impl SymbolTable
 {
+	#[allow(unused)]
 	pub fn scope(&self, id: ScopeId) -> &Scope
 	{
 		return &self.scopes[id.0];
 	}
+	#[allow(unused)]
 	pub fn symbol(&self, id: SymbolId) -> &Symbol
 	{
 		return &self.symbols[id.0];
@@ -124,6 +127,7 @@ pub enum Mutability
 	Immutable,
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct SymbolCollectionError
 {
@@ -250,6 +254,7 @@ impl Collector
 		return id;
 	}
 
+	#[allow(unused)]
 	fn alloc_scope_under(&mut self, parent: ScopeId, kind: ScopeKind, span: Span) -> ScopeId
 	{
 		let id: ScopeId = ScopeId(self.table.scopes.len());
@@ -721,8 +726,8 @@ impl Collector
 			Stmt::For { .. } | Stmt::While { .. } | Stmt::WhileVarLoop { .. } | Stmt::IfVar { .. } => {
 				unreachable!("this should be filtered out by the desugarer")
 			}
-			Stmt::Directive(_) => {
-				unimplemented!("For now, directives are not stable for standalone things")
+			Stmt::Directive(d) => {
+				self.collect_directive(d)?;
 			}
 			Stmt::Continue { .. } => {}
 			Stmt::Loop {
@@ -1092,7 +1097,7 @@ impl Collector
 			Directive::ValidateType { ty: _, expr } => {
 				self.collect_expr(expr)?;
 			}
-			Directive::Custom { .. } => unimplemented!("not yet supported"),
+			Directive::Custom { .. } => unimplemented!("For now, directives are not stable for standalone things"),
 		}
 		return Ok(());
 	}

@@ -6,8 +6,7 @@ mod tests
 		Config,
 		desugar::Desugarer,
 		lexer::Lexer,
-		parser::{Parser, Program},
-		source_map::{SourceIndex, SourceMap},
+		parser::Parser,
 		symbol_collection::{
 			Mutability, ScopeKind, Symbol, SymbolCollectionError, SymbolId, SymbolKind, SymbolTable, Visibility,
 			collect_symbols,
