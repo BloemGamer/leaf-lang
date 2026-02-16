@@ -11,7 +11,7 @@ A language that is designed to be used with C, with modern features and a platfo
 ## Code preview
 ```leaf
 // Note: Leaf-lang compiler is under development. This example is illustrative only.
-fn main()
+fn! main()
 {
 	var a: i64 = 0;
 	var v: Vec<i64> = Vec::with_len!(5);
@@ -30,12 +30,14 @@ fn main()
 <br/>
 
 ### Current focus
-- [ ] Writing the symbol collections
+- [ ] Small improvements in the compiler
+- [ ] Writing the name resolutions
 
 ### Still actively being developed
 - [x] Writing the lexer
 - [x] Writing the parser
 - [x] Writing the desugarer
+- [x] Writing the symbol collections
 - [ ] Refining the syntax
 
 ### Short-term
@@ -82,7 +84,7 @@ Each stage transforms the program into a simpler or more constrained form.
 
 ### Semantic Analysis (AST -> HIR)
 
-- [ ] **Symbol Collection**
+- [x] **Symbol Collection**
 	- Scope creation
 	- Symbol tables
 - [ ] **Name Resolution**
