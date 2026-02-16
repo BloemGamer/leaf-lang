@@ -5424,6 +5424,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let loop_span: Span = self.peek()?.span();
 
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+
 			let mut modifiers: Vec<Modifier> = self.parse_modifiers()?;
 			let mutable: bool = modifiers.pop_if(|m| return *m == Modifier::Mut).is_some();
 
@@ -5550,6 +5552,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				_ => {
+					self.load_checkpoint(checkpoint);
 					let pattern: Pattern = self.parse_pattern()?;
 
 					let ty: Type = if let Some(extracted_ty) = extract_type_from_pattern(&pattern) {
@@ -6988,10 +6991,14 @@ impl fmt::Display for Pattern
 				modifiers,
 				ty,
 				call_constructor,
+				mutable,
 				..
 			} => {
 				for modifier in modifiers {
 					write!(f, "{} ", modifier)?;
+				}
+				if *mutable {
+					write!(f, "mut ")?;
 				}
 				write!(f, "{}: {}", path, ty)?;
 				if let Some(ct) = call_constructor {
