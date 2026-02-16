@@ -116,7 +116,7 @@ use std::{fs, process::exit};
 use self::{
 	desugar::{DesugarError, Desugarer},
 	lexer::Lexer,
-	parser::{ParseError, Parser},
+	parser::{ParseError, Parser, Program, TopLevelBlock},
 	source_map::SourceMap,
 };
 
@@ -189,7 +189,7 @@ fn main()
 	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
 	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	let parsed: Parser = lexed.into();
-	let program: Result<parser::Program, CompileError> = parsed.try_into();
+	let program: Result<Program, CompileError> = parsed.try_into();
 	// match &program {
 	// 	Ok(ast) => {
 	// 		println!("{ast:#?}");
@@ -201,17 +201,14 @@ fn main()
 
 	let mut desugager: Desugarer = Desugarer::new();
 
-	let desugared: Result<parser::Program, CompileError> = desugager.desugar_program(
-		program
-			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
-			.expect("found an error in the program"),
-	);
-	match &desugared {
-		Ok(ast) => {
-			println!("{ast}");
-		}
-		Err(e) => {
-			println!("{}", e.to_string_with_source(&source_map).expect(""));
-		}
-	}
+	let desugared: Program = desugager
+		.desugar_program(
+			program
+				.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
+				.expect("found an error in the program"),
+		)
+		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
+		.expect("found an error in the program");
+	let symbols = symbol_collection::collect_symbols(&desugared, desugared.source_index);
+	println!("{:#?}", symbols);
 }
