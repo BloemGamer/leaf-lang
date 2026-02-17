@@ -3147,7 +3147,7 @@ mod tests
 		assert!(result.is_err(), "Should error on duplicate constraint");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				// Verify error message mentions the duplicate
 				let error_str = format!("{}", e);
 				assert!(error_str.contains("T"), "Error should mention type parameter T");
@@ -3184,7 +3184,7 @@ mod tests
 		assert!(result.is_err(), "Should error when T appears in Vec<T>");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				let error_str = format!("{}", e);
 				assert!(error_str.contains("T"), "Error should mention T");
 			}
@@ -4777,7 +4777,7 @@ mod tests
 		assert!(result.is_err(), "Should error on reference constructor");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				let error_str = format!("{}", e);
 				assert!(error_str.contains("reference"), "Error should mention references");
 			}
@@ -4819,7 +4819,7 @@ mod tests
 		assert!(result.is_err(), "Should error on mutable reference constructor");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				let error_str = format!("{}", e);
 				assert!(error_str.contains("reference"), "Error should mention references");
 			}
@@ -4860,7 +4860,7 @@ mod tests
 		assert!(result.is_err(), "Should error on pointer constructor");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				let error_str = format!("{}", e);
 				assert!(error_str.contains("pointer"), "Error should mention pointers");
 			}
@@ -4898,7 +4898,7 @@ mod tests
 		assert!(result.is_err(), "Should error on impl trait constructor");
 
 		match result {
-			Err(CompileError::DesugarError(e)) => {
+			Err(e) => {
 				let error_str = format!("{}", e);
 				assert!(
 					error_str.contains("impl Trait") || error_str.contains("abstract"),
