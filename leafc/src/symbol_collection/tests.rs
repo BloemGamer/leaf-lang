@@ -3,8 +3,7 @@
 mod tests
 {
 	use crate::{
-		Config,
-		desugar::Desugarer,
+		Config, desugar,
 		lexer::Lexer,
 		parser::Parser,
 		source_map::SourceIndex,
@@ -22,8 +21,7 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		let program = parser.parse_program().unwrap();
 
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-		let desugared = desugarer.desugar_program(program).unwrap();
+		let desugared = desugar::desugar_program(program).unwrap();
 		println!("{}", desugared);
 
 		return collect_symbols(&desugared, source_index);

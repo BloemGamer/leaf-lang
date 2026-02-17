@@ -114,7 +114,7 @@
 use std::{fs, process::exit};
 
 use self::{
-	desugar::{DesugarError, DesugaredAST, Desugarer},
+	desugar::{DesugarError, DesugaredAST},
 	lexer::Lexer,
 	parser::{AST, ParseError, Parser},
 	source_map::SourceMap,
@@ -222,10 +222,7 @@ fn main()
 		println!("{}", program);
 	}
 
-	let mut desugager: Desugarer = Desugarer::new(program.source_index);
-
-	let desugared: DesugaredAST = desugager
-		.desugar_program(program)
+	let desugared: DesugaredAST = desugar::desugar_program(program)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 	if args.desugared {

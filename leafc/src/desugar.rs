@@ -41,21 +41,8 @@ impl Spanned for DesugaredAST
 	}
 }
 
-/// Compiler pass that transforms high-level syntax into simpler forms.
-///
-/// The desugarer converts complex language constructs into their equivalent
-/// primitive forms, making later compiler stages simpler. This includes:
-///
-/// - Converting `for` loops into `while` loops with iterators
-/// - Expanding pattern matching in variable declarations
-/// - Converting `if let` and `while let` into pattern matching
-/// - Expanding `impl Trait` in function signatures to generic parameters
-/// - Normalizing generic bounds from parameter lists to where clauses
-/// - Expanding or-patterns into multiple match arms
-/// - Converting range expressions to constructor calls
-/// - And more
 #[derive(Debug)]
-pub struct Desugarer
+struct Desugarer
 {
 	tmp_counter: usize,
 	source_index: SourceIndex,
@@ -267,19 +254,7 @@ impl std::error::Error for DesugarError {}
 
 impl Desugarer
 {
-	/// Creates a new desugarer instance.
-	///
-	/// The desugarer starts with all counters at zero and no active loops.
-	///
-	/// # Returns
-	/// A new `Desugarer` ready to process a program
-	///
-	/// # Example
-	/// ```ignore
-	/// let mut desugarer = Desugarer::new();
-	/// let desugared = desugarer.desugar_program(parsed_program)?;
-	/// ```
-	pub const fn new(source_index: SourceIndex) -> Self
+	const fn new(source_index: SourceIndex) -> Self
 	{
 		return Desugarer {
 			tmp_counter: 0,
@@ -318,26 +293,8 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
-	/// Desugars a complete program.
-	///
-	/// This is the main entry point for desugaring. It processes all top-level
-	/// declarations and ensures the result is idempotent (running desugaring
-	/// on already-desugared code produces the same result).
-	///
-	/// # Arguments
-	/// * `program` - The program AST to desugar
-	///
-	/// # Returns
-	/// * `Ok(Program)` - The desugared program
-	/// * `Err(CompileError)` - If desugaring encounters an error
-	///
-	/// # Example
-	/// ```ignore
-	/// let mut desugarer = Desugarer::new();
-	/// let desugared = desugarer.desugar_program(parsed_program)?;
-	/// ```
 	#[allow(clippy::result_large_err)]
-	pub fn desugar_program(&mut self, program: AST) -> Result<DesugaredAST, CompileError>
+	fn desugar_program(&mut self, program: AST) -> Result<DesugaredAST, CompileError>
 	{
 		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block)?;
 
@@ -2480,4 +2437,35 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
 		TypeCore::ImplTrait { .. } => return Vec::new(),
 	}
+}
+
+/// Desugars a complete program AST into its simplified form.
+///
+/// This is the main entry point for desugaring. It transforms high-level syntax
+/// constructs into equivalent primitive forms, making later compiler stages simpler.
+///
+/// # Arguments
+/// * `program` - The parsed program AST to desugar
+///
+/// # Returns
+/// * `Ok(DesugaredAST)` - The fully desugared program
+/// * `Err(CompileError)` - If desugaring encounters a semantic error
+///
+/// # Errors
+/// Returns an error if:
+/// - A constructor call is attempted on a reference or pointer type
+/// - A complex pattern binding lacks an initializer
+/// - A variant pattern is used in a variable binding (use `switch` instead)
+/// - A type parameter appears in both the generic list (with bounds) and the where clause
+///
+/// # Examples
+/// ```ignore
+/// use crate::desugar::desugar_program;
+///
+/// let desugared = desugar_program(parsed_program)?;
+/// ```
+pub fn desugar_program(program: AST) -> Result<DesugaredAST, CompileError>
+{
+	let mut desugarer = Desugarer::new(program.source_index);
+	return desugarer.desugar_program(program);
 }

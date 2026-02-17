@@ -150,12 +150,12 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 	/// * `parser` - The parser to consume
 	///
 	/// # Returns
-	/// * `Ok(Program)` - The successfully parsed program AST
+	/// * `Ok(AST)` - The successfully parsed program AST
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
 	/// ```ignore
-	/// # use crate::{Parser, Program, CompileError, Config, SourceIndex};
+	/// # use crate::{Parser, AST, CompileError, Config, SourceIndex};
 	/// # use crate::lexer::Lexer;
 	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
@@ -164,11 +164,11 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 	/// let lexer = Lexer::new(&config, source, source_index);
 	/// let parser = Parser::from(lexer);
 	///
-	/// // Convert parser to Program using TryFrom
-	/// let program = Program::try_from(parser)?;
+	/// // Convert parser to AST using TryFrom
+	/// let program = AST::try_from(parser)?;
 	///
 	/// // Or more idiomatically in a single chain:
-	/// let program = Program::try_from(Parser::from(Lexer::new(&config, source, source_index)))?;
+	/// let program = AST::try_from(Parser::from(Lexer::new(&config, source, source_index)))?;
 	/// # Ok(())
 	/// # }
 	/// ```
@@ -191,24 +191,24 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 	/// * `lexer` - The lexer to consume
 	///
 	/// # Returns
-	/// * `Ok(Program)` - The successfully parsed program AST
+	/// * `Ok(AST)` - The successfully parsed program AST
 	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
 	/// ```ignore
 	/// # use crate::lexer::Lexer;
-	/// # use crate::{Parser, Program, Config, CompileError, SourceIndex};
+	/// # use crate::{Parser, AST, Config, CompileError, SourceIndex};
 	/// # fn main() -> Result<(), CompileError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
 	/// let source_index = SourceIndex(0);
 	/// let lexer = Lexer::new(&config, source, source_index);
 	///
-	/// // Convert lexer directly to a Program
-	/// let program = Program::try_from(lexer)?;
+	/// // Convert lexer directly to a AST
+	/// let program = AST::try_from(lexer)?;
 	///
 	/// // Or in a single chain:
-	/// let program = Program::try_from(Lexer::new(&config, source, source_index))?;
+	/// let program = AST::try_from(Lexer::new(&config, source, source_index))?;
 	/// # Ok(())
 	/// # }
 	/// ```
@@ -2663,12 +2663,12 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// until EOF is reached.
 	///
 	/// # Returns
-	/// * `Ok(Program)` - The parsed program AST
+	/// * `Ok(AST)` - The parsed program AST
 	/// * `Err(CompileError)` - If a syntax error is encountered
 	///
 	/// # Example
 	/// ```ignore
-	/// # use crate::{Parser, Program, CompileError};
+	/// # use crate::{Parser, AST, CompileError};
 	/// # fn example(parser: &mut Parser) -> Result<(), CompileError> {
 	/// let program = parser.parse_program()?;
 	/// println!("Parsed {} items", program.items.len());
