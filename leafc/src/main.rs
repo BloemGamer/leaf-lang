@@ -173,9 +173,32 @@ impl CompileError
 	}
 }
 
+#[derive(clap::Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args
+{
+	#[arg(short, long)]
+	lexed: bool,
+	#[arg(short, long)]
+	parsed: bool,
+	#[arg(short, long)]
+	desugared: bool,
+	#[arg(short, long)]
+	symbols: bool,
+}
+
+impl Args
+{
+	const fn all_false(&self) -> bool
+	{
+		return !(self.lexed || self.parsed || self.desugared || self.symbols);
+	}
+}
+
 fn main()
 {
 	const FILE_NAME: &str = "leaf-test/main.leaf";
+	let args: Args = <Args as clap::Parser>::parse();
 	let config: Config = Config::default();
 	let mut source_map: SourceMap = SourceMap::default();
 
@@ -187,20 +210,17 @@ fn main()
 		|f| return f,
 	);
 	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
-	// println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	if args.lexed {
+		println!("{:#?}", lexed.clone().collect::<Vec<_>>());
+	}
 	let parsed: Parser = lexed.into();
 	let program: Program = parsed
 		.try_into()
 		.inspect_err(|e: &CompileError| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
-	// match &program {
-	// 	Ok(ast) => {
-	// 		println!("{ast:#?}");
-	// 	}
-	// 	Err(e) => {
-	// 		println!("{e}");
-	// 	}
-	// }
+	if args.parsed {
+		println!("{}", program);
+	}
 
 	let mut desugager: Desugarer = Desugarer::new(program.source_index);
 
@@ -208,7 +228,15 @@ fn main()
 		.desugar_program(program)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
-	println!("{}", desugared);
+	if args.desugared {
+		println!("{}", desugared);
+	}
 	let symbols = symbol_collection::collect_symbols(&desugared, desugared.source_index);
-	println!("{:#?}", symbols);
+	if args.symbols {
+		println!("{:#?}", symbols);
+	}
+
+	if args.all_false() {
+		println!("{:#?}", symbols);
+	}
 }
