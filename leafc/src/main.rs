@@ -118,6 +118,7 @@ use self::{
 	lexer::Lexer,
 	parser::{AST, ParseError, Parser},
 	source_map::SourceMap,
+	symbol_collection::SymbolCollectionError,
 };
 
 mod desugar;
@@ -134,6 +135,7 @@ pub enum CompileError
 {
 	ParseError(ParseError),
 	DesugarError(DesugarError),
+	SymbolCollectionError(SymbolCollectionError),
 }
 
 impl std::fmt::Display for CompileError
@@ -145,6 +147,9 @@ impl std::fmt::Display for CompileError
 				write!(f, "{}", error)
 			}
 			CompileError::DesugarError(error) => {
+				write!(f, "{}", error)
+			}
+			CompileError::SymbolCollectionError(error) => {
 				write!(f, "{}", error)
 			}
 		};
@@ -161,6 +166,7 @@ impl CompileError
 		return match self {
 			CompileError::ParseError(err) => err.write(f, sm),
 			CompileError::DesugarError(err) => err.write(f, sm),
+			CompileError::SymbolCollectionError(err) => err.write(f, sm),
 		};
 	}
 

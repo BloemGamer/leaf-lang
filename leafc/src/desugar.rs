@@ -633,7 +633,7 @@ impl Desugarer
 		impl_decl.body = impl_decl
 			.body
 			.into_iter()
-			.map(|item| {
+			.map(|item| -> Result<ImplItem, CompileError> {
 				return Ok(match item {
 					ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)?),
 					ImplItem::TypeAlias(t) => ImplItem::TypeAlias(t),
@@ -712,7 +712,7 @@ impl Desugarer
 		trait_decl.items = trait_decl
 			.items
 			.into_iter()
-			.map(|item| {
+			.map(|item| -> Result<TraitItem, CompileError> {
 				return Ok(match item {
 					TraitItem::Function(func) => {
 						debug_assert!(self.loop_stack.is_empty());
@@ -779,7 +779,7 @@ impl Desugarer
 
 		let tail_expr = block
 			.tail_expr
-			.map(|expr| return Ok(Box::new(self.desugar_expr(*expr)?)))
+			.map(|expr| -> Result<Box<Expr>, CompileError> { return Ok(Box::new(self.desugar_expr(*expr)?)) })
 			.transpose()?;
 
 		return Ok(Block {
@@ -819,7 +819,7 @@ impl Desugarer
 				cond: self.desugar_expr(cond)?,
 				then_block: self.desugar_block(then_block)?,
 				else_branch: else_branch
-					.map(|stmt| return Ok(Box::new(self.desugar_stmt(*stmt)?)))
+					.map(|stmt| -> Result<Box<Stmt>, CompileError> { return Ok(Box::new(self.desugar_stmt(*stmt)?)) })
 					.transpose()?,
 				span,
 			},
@@ -1190,7 +1190,7 @@ impl Desugarer
 				ty: None,
 			},
 			body: else_branch.map_or_else(
-				|| {
+				|| -> Result<SwitchBody, CompileError> {
 					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
@@ -1491,7 +1491,9 @@ impl Desugarer
 			} => {
 				let desugared_fields: Vec<(Ident, Expr)> = fields
 					.into_iter()
-					.map(|(name, expr)| return Ok((name, self.desugar_expr(expr)?)))
+					.map(|(name, expr)| -> Result<(String, Expr), CompileError> {
+						return Ok((name, self.desugar_expr(expr)?));
+					})
 					.collect::<Result<Vec<_>, _>>()?;
 
 				let desugared_base = base
@@ -1565,7 +1567,7 @@ impl Desugarer
 			cond: Box::new(self.desugar_expr(cond)?),
 			then_block: self.desugar_block(then_block)?,
 			else_branch: else_branch
-				.map(|e| return Ok(Box::new(self.desugar_expr(*e)?)))
+				.map(|e| -> Result<Box<Expr>, CompileError> { return Ok(Box::new(self.desugar_expr(*e)?)) })
 				.transpose()?,
 			span,
 		});
@@ -1621,7 +1623,7 @@ impl Desugarer
 				ty: None,
 			},
 			body: else_branch.map_or_else(
-				|| {
+				|| -> Result<SwitchBody, CompileError> {
 					return Ok(SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
@@ -1870,7 +1872,9 @@ impl Desugarer
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, pat)| return Ok((name, self.desugar_pattern(pat)?)))
+					.map(|(name, pat)| -> Result<(String, Pattern), CompileError> {
+						return Ok((name, self.desugar_pattern(pat)?));
+					})
 					.collect::<Result<Vec<_>, _>>()?,
 				span,
 				has_rest,

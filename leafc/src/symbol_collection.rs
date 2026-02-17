@@ -1,6 +1,7 @@
 mod tests;
 
 use crate::{
+	CompileError,
 	desugar::DesugaredAST,
 	lexer::{Span, Spanned},
 	parser::{
@@ -409,6 +410,38 @@ impl Spanned for SymbolCollectionError
 	fn span(&self) -> Span
 	{
 		return self.span;
+	}
+}
+
+impl SymbolCollectionError
+{
+	/// Writes the error to a formatter with source context.
+	///
+	/// Formats the error message along with the relevant source code snippet,
+	/// pointing to where the error occurred.
+	///
+	/// # Arguments
+	/// * `f` - The formatter to write to
+	/// * `source_map` - Source map for looking up source text
+	///
+	/// # Returns
+	/// Result of the formatting operation
+	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return write!(
+			f,
+			"{}",
+			self.span
+				.format_error(&source_map.get(self.source_index).src, &format!("{self}"))
+		);
+	}
+}
+
+impl From<SymbolCollectionError> for CompileError
+{
+	fn from(val: SymbolCollectionError) -> Self
+	{
+		return CompileError::SymbolCollectionError(val);
 	}
 }
 
