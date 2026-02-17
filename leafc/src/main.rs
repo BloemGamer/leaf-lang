@@ -222,8 +222,9 @@ fn main()
 		println!("{}", program);
 	}
 
-	let desugared: DesugaredAST = desugar::desugar_program(program)
-		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
+	let desugared: DesugaredAST = program
+		.try_into()
+		.inspect_err(|e: &CompileError| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 	if args.desugared {
 		println!("{}", desugared);

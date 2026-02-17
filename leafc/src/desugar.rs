@@ -25,6 +25,15 @@ pub struct DesugaredAST
 	pub source_index: SourceIndex,
 }
 
+impl TryFrom<AST> for DesugaredAST
+{
+	type Error = CompileError;
+	fn try_from(value: AST) -> Result<Self, Self::Error>
+	{
+		return desugar_program(value);
+	}
+}
+
 impl std::fmt::Display for DesugaredAST
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
