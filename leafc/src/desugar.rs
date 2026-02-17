@@ -259,6 +259,14 @@ impl std::fmt::Display for DesugarError
 	}
 }
 
+impl From<DesugarError> for CompileError
+{
+	fn from(value: DesugarError) -> Self
+	{
+		return CompileError::DesugarError(value);
+	}
+}
+
 impl std::error::Error for DesugarError {}
 
 impl Desugarer
