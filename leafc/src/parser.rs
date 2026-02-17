@@ -445,6 +445,7 @@ impl Spanned for DirectiveNode
 pub struct Path
 {
 	pub segments: Vec<PathSegment>,
+	pub glob: bool,
 	#[allow(dead_code)]
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -496,6 +497,7 @@ impl Path
 					};
 				})
 				.collect(),
+			glob: false,
 			span,
 		};
 	}
@@ -3000,8 +3002,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		return match direct {
 			lexer::Directive::Use => {
-				let ret: Directive = Directive::Use(self.get_path()?);
-				Ok(ret)
+				return Ok(Directive::Use(self.get_path_with_glob()?));
 			}
 			lexer::Directive::Import => {
 				let incl: Token = self.next()?;
@@ -3397,8 +3398,97 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 		}
 
+		if self.peek()?.kind == TokenKind::DoubleColon {
+			let checkpoint = self.make_checkpoint();
+			self.next()?; // ::
+			if self.at(&TokenKind::Star)? {
+				// Someone wrote foo::* outside of @use — give a clear error
+				return Err(ParseError::generic(
+					self.peek()?.span(),
+					"glob imports (`::*`) are only allowed in `@use` directives",
+					self.source_index,
+				));
+			}
+			self.load_checkpoint(checkpoint);
+		}
+
 		return Ok(Path {
 			segments,
+			glob: false,
+			span: start_span.merge(&self.last_span),
+		});
+	}
+
+	fn get_path_with_glob(&mut self) -> Result<Path, ParseError>
+	{
+		let start_span: Span = self.peek()?.span();
+		let mut segments: Vec<PathSegment> = Vec::new();
+
+		loop {
+			let tok: Token = self.next()?;
+			let segment_start = tok.span;
+			let name: Ident = match tok.kind {
+				TokenKind::Identifier(s) => s,
+				_ => {
+					return Err(ParseError::unexpected_token(
+						tok.span,
+						Expected::Identifier,
+						tok.kind,
+						self.source_index,
+					));
+				}
+			};
+
+			let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
+				let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+				self.next()?; // ::
+
+				if self.peek()?.kind == TokenKind::LessThan {
+					self.parse_type_generics()?
+				} else {
+					self.load_checkpoint(checkpoint);
+					Vec::new()
+				}
+			} else {
+				Vec::new()
+			};
+
+			segments.push(PathSegment {
+				name,
+				generics,
+				span: segment_start.merge(&self.last_span),
+			});
+
+			if self.peek()?.kind != TokenKind::DoubleColon {
+				break;
+			}
+
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			self.next()?; // ::
+
+			if !matches!(self.peek()?.kind, TokenKind::Identifier(_)) {
+				self.load_checkpoint(checkpoint);
+				break;
+			}
+		}
+
+		let glob: bool = if self.peek()?.kind == TokenKind::DoubleColon {
+			let checkpoint = self.make_checkpoint();
+			self.next()?; // ::
+			if self.at(&TokenKind::Star)? {
+				self.next()?; // *
+				true
+			} else {
+				self.load_checkpoint(checkpoint);
+				false
+			}
+		} else {
+			false
+		};
+
+		return Ok(Path {
+			segments,
+			glob,
 			span: start_span.merge(&self.last_span),
 		});
 	}
@@ -6699,16 +6789,21 @@ impl std::fmt::Display for Path
 			write!(f, "{}", segment.name)?;
 			if !segment.generics.is_empty() {
 				write!(f, "::<")?;
-				for (i, generic) in segment.generics.iter().enumerate() {
+				for (i, g) in segment.generics.iter().enumerate() {
 					if i > 0 {
 						write!(f, ", ")?;
 					}
-					write!(f, "{}", generic)?;
+					write!(f, "{}", g)?;
 				}
 				write!(f, ">")?;
 			}
 		}
-
+		if self.glob {
+			if !self.segments.is_empty() {
+				write!(f, "::")?;
+			}
+			write!(f, "*")?;
+		}
 		return Ok(());
 	}
 }
