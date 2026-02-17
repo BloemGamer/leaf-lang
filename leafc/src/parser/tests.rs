@@ -2,10 +2,10 @@
 #[allow(clippy::module_inception)]
 mod tests
 {
-	use crate::Config;
 	use crate::lexer::Lexer;
 	use crate::parser::*;
 	use crate::source_map::SourceMap;
+	use crate::{CompileError, Config};
 
 	fn parse_expr_from_str(input: &str) -> Result<Expr, CompileError>
 	{
@@ -15,6 +15,7 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_expr()
+			.map_err(CompileError::ParseError)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -26,6 +27,7 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_top_level_block()
+			.map_err(CompileError::ParseError)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -37,6 +39,7 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_block()
+			.map_err(CompileError::ParseError)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -48,6 +51,7 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		return parser
 			.parse_directive_node()
+			.map_err(|e| return CompileError::ParseError(e))
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 

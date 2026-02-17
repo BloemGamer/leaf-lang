@@ -222,7 +222,14 @@ fn main()
 	let parsed: Parser = lexed.into();
 	let program: AST = parsed
 		.try_into()
-		.inspect_err(|e: &CompileError| println!("{}", e.to_string_with_source(&source_map).expect("")))
+		.inspect_err(|e: &ParseError| {
+			println!(
+				"{}",
+				CompileError::ParseError(e.clone())
+					.to_string_with_source(&source_map)
+					.expect("")
+			);
+		})
 		.expect("found an error in the program");
 	if args.parsed {
 		println!("{}", program);

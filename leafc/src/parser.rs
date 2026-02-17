@@ -5,7 +5,7 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable};
 use ignorable::PartialEq;
 
 use crate::{
-	CompileError, Config,
+	Config,
 	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
@@ -139,7 +139,7 @@ impl Spanned for AST
 
 impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 {
-	type Error = CompileError;
+	type Error = ParseError;
 
 	/// Converts a parser into a parsed program result.
 	///
@@ -151,13 +151,13 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 	///
 	/// # Returns
 	/// * `Ok(AST)` - The successfully parsed program AST
-	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
+	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
 	/// ```ignore
-	/// # use crate::{Parser, AST, CompileError, Config, SourceIndex};
+	/// # use crate::{Parser, AST, ParseError, Config, SourceIndex};
 	/// # use crate::lexer::Lexer;
-	/// # fn main() -> Result<(), CompileError> {
+	/// # fn main() -> Result<(), ParseError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
 	/// let source_index = SourceIndex(0);
@@ -180,7 +180,7 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 
 impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 {
-	type Error = CompileError;
+	type Error = ParseError;
 
 	/// Converts a lexer into a parsed program.
 	///
@@ -192,13 +192,13 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 	///
 	/// # Returns
 	/// * `Ok(AST)` - The successfully parsed program AST
-	/// * `Err(CompileError)` - If a syntax error is encountered during parsing
+	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
 	///
 	/// # Example
 	/// ```ignore
 	/// # use crate::lexer::Lexer;
-	/// # use crate::{Parser, AST, Config, CompileError, SourceIndex};
-	/// # fn main() -> Result<(), CompileError> {
+	/// # use crate::{Parser, AST, Config, ParseError, SourceIndex};
+	/// # fn main() -> Result<(), ParseError> {
 	/// let config = Config::default();
 	/// let source = "fn main() { var x = 42; }";
 	/// let source_index = SourceIndex(0);
@@ -2533,14 +2533,14 @@ impl Spanned for VariantMember
 
 impl<'s, 'c> Parser<'s, 'c>
 {
-	fn peek(&mut self) -> Result<&Token, CompileError>
+	fn peek(&mut self) -> Result<&Token, ParseError>
 	{
 		if let Some(token) = self.buffered_token.as_ref() {
 			return Ok(token);
 		}
 
-		let token: Result<&Token, CompileError> = self.lexer.peek().ok_or_else(|| {
-			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
+		let token: Result<&Token, ParseError> = self.lexer.peek().ok_or_else(|| {
+			return ParseError::unexpected_eof(self.last_span, self.source_index) ;
 		});
 
 		let Ok(tok) = token else {
@@ -2549,17 +2549,17 @@ impl<'s, 'c> Parser<'s, 'c>
 		match tok.check_reserved() {
 			Ok(_) => return Ok(tok),
 			Err(e) => {
-				return Err(CompileError::ParseError(ParseError {
+				return Err(ParseError {
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
-				}));
+				} );
 			}
 		}
 	}
 
-	fn next(&mut self) -> Result<Token, CompileError>
+	fn next(&mut self) -> Result<Token, ParseError>
 	{
 		if let Some(tok) = self.buffered_token.take() {
 			self.last_span = tok.span;
@@ -2567,19 +2567,19 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		let tok: Token = self.lexer.next().ok_or_else(|| {
-			return CompileError::ParseError(ParseError::unexpected_eof(self.last_span, self.source_index));
+			return ParseError::unexpected_eof(self.last_span, self.source_index) ;
 		})?;
 
 		self.last_span = tok.span;
 		match tok.check_reserved() {
 			Ok(_) => return Ok(tok),
 			Err(e) => {
-				return Err(CompileError::ParseError(ParseError {
+				return Err(ParseError {
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
-				}));
+				} );
 			}
 		}
 	}
@@ -2597,17 +2597,17 @@ impl<'s, 'c> Parser<'s, 'c>
 		self.buffered_token = buffered_token;
 	}
 
-	fn peek_kind(&mut self) -> Result<&TokenKind, CompileError>
+	fn peek_kind(&mut self) -> Result<&TokenKind, ParseError>
 	{
 		return Ok(&self.peek()?.kind);
 	}
 
-	fn at(&mut self, kind: &TokenKind) -> Result<bool, CompileError>
+	fn at(&mut self, kind: &TokenKind) -> Result<bool, ParseError>
 	{
 		return Ok(self.peek_kind()? == kind);
 	}
 
-	fn consume(&mut self, kind: &TokenKind) -> Result<bool, CompileError>
+	fn consume(&mut self, kind: &TokenKind) -> Result<bool, ParseError>
 	{
 		if self.at(kind)? {
 			self.next()?;
@@ -2617,7 +2617,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn consume_greater_than(&mut self) -> Result<bool, CompileError>
+	fn consume_greater_than(&mut self) -> Result<bool, ParseError>
 	{
 		if self.at(&TokenKind::GreaterThan)? {
 			self.next()?;
@@ -2640,7 +2640,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(false);
 	}
 
-	fn expect(&mut self, expected: &TokenKind) -> Result<Token, CompileError>
+	fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError>
 	{
 		let tok: &Token = self.peek()?;
 
@@ -2648,12 +2648,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			return self.next();
 		} else {
 			let err_tok: Token = tok.clone();
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
+			return Err(ParseError::unexpected_token(
 				err_tok.span,
 				Expected::Token(expected.clone()),
 				err_tok.kind,
 				self.source_index,
-			)));
+			) );
 		}
 	}
 
@@ -2664,18 +2664,18 @@ impl<'s, 'c> Parser<'s, 'c>
 	///
 	/// # Returns
 	/// * `Ok(AST)` - The parsed program AST
-	/// * `Err(CompileError)` - If a syntax error is encountered
+	/// * `Err(ParseError)` - If a syntax error is encountered
 	///
 	/// # Example
 	/// ```ignore
-	/// # use crate::{Parser, AST, CompileError};
-	/// # fn example(parser: &mut Parser) -> Result<(), CompileError> {
+	/// # use crate::{Parser, AST, ParseError};
+	/// # fn example(parser: &mut Parser) -> Result<(), ParseError> {
 	/// let program = parser.parse_program()?;
 	/// println!("Parsed {} items", program.items.len());
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn parse_program(&mut self) -> Result<AST, CompileError>
+	pub fn parse_program(&mut self) -> Result<AST, ParseError>
 	{
 		let top_level_block: TopLevelBlock = self.parse_top_level_block()?;
 
@@ -2685,7 +2685,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, CompileError>
+	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, ParseError>
 	{
 		let mut items: Vec<TopLevelDecl> = Vec::new();
 
@@ -2710,7 +2710,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(TopLevelBlock { items, span });
 	}
 
-	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, CompileError>
+	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, ParseError>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -2771,7 +2771,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(ret);
 	}
 
-	fn peek_declaration_kind(&mut self) -> Result<DeclKind, CompileError>
+	fn peek_declaration_kind(&mut self) -> Result<DeclKind, ParseError>
 	{
 		let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
 		let checkpoint_span: Span = self.last_span;
@@ -2892,18 +2892,13 @@ impl<'s, 'c> Parser<'s, 'c>
 					let tok: Token = self.peek()?.clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Err(CompileError::ParseError(ParseError::unexpected_item(
-						tok.span,
-						"declaration",
-						tok.kind,
-						self.source_index,
-					)));
+					return Err(ParseError::unexpected_item(tok.span, "declaration", tok.kind, self.source_index) );
 				}
 			}
 		}
 	}
 
-	fn skip_until_balanced_paren(&mut self) -> Result<(), CompileError>
+	fn skip_until_balanced_paren(&mut self) -> Result<(), ParseError>
 	{
 		if !self.at(&TokenKind::LeftParen)? {
 			return Ok(());
@@ -2922,10 +2917,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next()?;
 				}
 				TokenKind::Eof => {
-					return Err(CompileError::ParseError(ParseError::unexpected_eof(
-						self.peek()?.span,
-						self.source_index,
-					)));
+					return Err(ParseError::unexpected_eof(self.peek()?.span, self.source_index) );
 				}
 				_ => {
 					self.next()?;
@@ -2935,7 +2927,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(());
 	}
 
-	fn parse_directive_node(&mut self) -> Result<DirectiveNode, CompileError>
+	fn parse_directive_node(&mut self) -> Result<DirectiveNode, ParseError>
 	{
 		#[allow(clippy::debug_assert_with_mut_call)]
 		{
@@ -2979,7 +2971,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		todo!("Directives with blocks are not supported yet")
 	}
 
-	fn parse_directive(&mut self) -> Result<Directive, CompileError>
+	fn parse_directive(&mut self) -> Result<Directive, ParseError>
 	{
 		#[allow(clippy::debug_assert_with_mut_call)]
 		{
@@ -2996,7 +2988,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(node);
 	}
 
-	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, CompileError>
+	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
 	{
 		return match direct {
 			lexer::Directive::Use => {
@@ -3008,12 +3000,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				let ret: Directive = match &incl.kind {
 					TokenKind::StringLiteral(str) => Directive::Import(str.clone()),
 					_ => {
-						return Err(CompileError::ParseError(ParseError::unexpected_token(
+						return Err(ParseError::unexpected_token(
 							incl.span,
 							Expected::Token(TokenKind::StringLiteral(String::new())),
 							incl.kind,
 							self.source_index,
-						)));
+						) );
 					}
 				};
 				Ok(ret)
@@ -3030,7 +3022,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 	}
 
-	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, CompileError>
+	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, ParseError>
 	{
 		if !self.consume(&TokenKind::LeftParen)? {
 			return Ok(Vec::new());
@@ -3051,11 +3043,11 @@ impl<'s, 'c> Parser<'s, 'c>
 			let arg: DirectiveParam = match tok.kind {
 				TokenKind::StringLiteral(s) => {
 					if is_negative {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok_span,
 							"A string can't be negative",
 							self.source_index,
-						)));
+						) );
 					}
 					DirectiveParam::Literal(Literal::String(s))
 				}
@@ -3069,41 +3061,41 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				TokenKind::CharLiteral(c) => {
 					if is_negative {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok_span,
 							"A character can't be negative",
 							self.source_index,
-						)));
+						) );
 					}
 					DirectiveParam::Literal(Literal::Char(c))
 				}
 				TokenKind::True => {
 					if is_negative {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok_span,
 							"A bool can't be negative",
 							self.source_index,
-						)));
+						) );
 					}
 					DirectiveParam::Literal(Literal::Bool(true))
 				}
 				TokenKind::False => {
 					if is_negative {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok_span,
 							"A bool can't be negative",
 							self.source_index,
-						)));
+						) );
 					}
 					DirectiveParam::Literal(Literal::Bool(false))
 				}
 				TokenKind::Identifier(ident) => {
 					if is_negative {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok_span,
 							"An identifier can't be negative",
 							self.source_index,
-						)));
+						) );
 					}
 
 					match self.peek_kind()? {
@@ -3118,11 +3110,11 @@ impl<'s, 'c> Parser<'s, 'c>
 							let lit: Literal = match token.kind {
 								TokenKind::StringLiteral(s) => {
 									if value_is_negative {
-										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										return Err(ParseError::invalid_pattern(
 											token_span,
 											"Cannot negate a string literal",
 											self.source_index,
-										)));
+										) );
 									}
 									Literal::String(s)
 								}
@@ -3136,40 +3128,40 @@ impl<'s, 'c> Parser<'s, 'c>
 								}
 								TokenKind::CharLiteral(c) => {
 									if value_is_negative {
-										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										return Err(ParseError::invalid_pattern(
 											token_span,
 											"Cannot negate a character literal",
 											self.source_index,
-										)));
+										) );
 									}
 									Literal::Char(c)
 								}
 								TokenKind::True => {
 									if value_is_negative {
-										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										return Err(ParseError::invalid_pattern(
 											token_span,
 											"Cannot negate a boolean literal",
 											self.source_index,
-										)));
+										) );
 									}
 									Literal::Bool(true)
 								}
 								TokenKind::False => {
 									if value_is_negative {
-										return Err(CompileError::ParseError(ParseError::invalid_pattern(
+										return Err(ParseError::invalid_pattern(
 											token_span,
 											"Cannot negate a boolean literal",
 											self.source_index,
-										)));
+										) );
 									}
 									Literal::Bool(false)
 								}
 								_ => {
-									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									return Err(ParseError::invalid_pattern(
 										token_span,
 										format!("Expected an identifier or a literal, got {:?}", tok_kind),
 										self.source_index,
-									)));
+									) );
 								}
 							};
 							DirectiveParam::Named { name: ident, arg: lit }
@@ -3178,11 +3170,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 				}
 				_ => {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						tok_span,
 						format!("Expected an identifier or a literal, got {:?}", tok_kind),
 						self.source_index,
-					)));
+					) );
 				}
 			};
 			params.push(arg);
@@ -3197,7 +3189,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(params);
 	}
 
-	fn parse_var_decl(&mut self) -> Result<VariableDecl, CompileError>
+	fn parse_var_decl(&mut self) -> Result<VariableDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let tok: Token = self.next()?;
@@ -3228,7 +3220,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_type(&mut self) -> Result<Type, CompileError>
+	fn parse_type(&mut self) -> Result<Type, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let core: TypeCore = self.parse_type_core()?;
@@ -3238,7 +3230,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_type_core(&mut self) -> Result<TypeCore, CompileError>
+	fn parse_type_core(&mut self) -> Result<TypeCore, ParseError>
 	{
 		let tok: &Token = self.peek()?;
 		match &tok.kind {
@@ -3326,16 +3318,16 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let err_tok: Token = tok.clone();
-				return Err(CompileError::ParseError(ParseError::invalid_type(
+				return Err(ParseError::invalid_type(
 					err_tok.span,
 					"expected '&', 'mut', identifier, '[' or '(' to start a type",
 					self.source_index,
-				)));
+				) );
 			}
 		}
 	}
 
-	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, CompileError>
+	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, ParseError>
 	{
 		while matches!(self.peek_kind()?, TokenKind::Star) {
 			self.next()?; // *
@@ -3344,7 +3336,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(base);
 	}
 
-	fn get_path(&mut self) -> Result<Path, CompileError>
+	fn get_path(&mut self) -> Result<Path, ParseError>
 	{
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
@@ -3355,12 +3347,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
-					return Err(CompileError::ParseError(ParseError::unexpected_token(
+					return Err(ParseError::unexpected_token(
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
 						self.source_index,
-					)));
+					) );
 				}
 			};
 
@@ -3403,7 +3395,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn get_generics(&mut self) -> Result<Vec<GenericParam>, CompileError>
+	fn get_generics(&mut self) -> Result<Vec<GenericParam>, ParseError>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -3422,12 +3414,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(name) => name,
 				_ => {
-					return Err(CompileError::ParseError(ParseError::unexpected_token(
+					return Err(ParseError::unexpected_token(
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
 						self.source_index,
-					)));
+					) );
 				}
 			};
 
@@ -3449,12 +3441,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 
 			if self.consume_greater_than()? {
@@ -3465,22 +3457,22 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(generics);
 	}
 
-	fn parse_expr(&mut self) -> Result<Expr, CompileError>
+	fn parse_expr(&mut self) -> Result<Expr, ParseError>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NONE);
 	}
 
-	fn parse_expr_no_struct(&mut self) -> Result<Expr, CompileError>
+	fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NO_STRUCT_LITERAL);
 	}
 
-	fn parse_expr_with_restrictions(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_expr_with_restrictions(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		return self.parse_logical_or(restrictions);
 	}
 
-	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_logical_and(restrictions)?;
@@ -3498,7 +3490,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_or(restrictions)?;
@@ -3516,7 +3508,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_xor(restrictions)?;
@@ -3535,7 +3527,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_and(restrictions)?;
@@ -3554,7 +3546,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_equality(restrictions)?;
@@ -3573,7 +3565,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_relational(restrictions)?;
@@ -3598,7 +3590,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_shift(restrictions)?;
@@ -3625,7 +3617,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_range(restrictions)?;
@@ -3650,7 +3642,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -3716,7 +3708,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		);
 	}
 
-	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_multiplicative(restrictions)?;
@@ -3741,7 +3733,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_cast(restrictions)?;
@@ -3767,7 +3759,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(lhs);
 	}
 
-	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
@@ -3801,7 +3793,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return self.parse_unary(restrictions);
 	}
 
-	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let op: UnaryOp = match self.peek_kind()? {
@@ -3833,7 +3825,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut expr: Expr = self.parse_primary(restrictions)?;
@@ -3905,7 +3897,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(expr);
 	}
 
-	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, CompileError>
+	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
 	{
 		let tok: Token = self.peek()?.clone();
 		let span: Span = tok.span();
@@ -4110,12 +4102,12 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				}
 
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 
 			TokenKind::LeftBracket => {
@@ -4209,27 +4201,27 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else {
 					let tok: Token = self.next()?;
-					return Err(CompileError::ParseError(ParseError::unexpected_item(
+					return Err(ParseError::unexpected_item(
 						tok.span,
 						"Expected a loop, only a loop can have a label and return a value",
 						tok.kind,
 						self.source_index,
-					)));
+					) );
 				}
 			}
 
 			_ => {
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Expression,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 		}
 	}
 
-	fn stmt_if_to_expr_wrapper(&self, stmt: Stmt) -> Result<Expr, CompileError>
+	fn stmt_if_to_expr_wrapper(&self, stmt: Stmt) -> Result<Expr, ParseError>
 	{
 		return match stmt {
 			Stmt::If {
@@ -4246,11 +4238,11 @@ impl<'s, 'c> Parser<'s, 'c>
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(CompileError::ParseError(ParseError::generic(
+							return Err(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
 								self.source_index,
-							)));
+							) );
 						}
 					},
 					None => None,
@@ -4273,11 +4265,11 @@ impl<'s, 'c> Parser<'s, 'c>
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(CompileError::ParseError(ParseError::generic(
+							return Err(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
 								self.source_index,
-							)));
+							) );
 						}
 					},
 					None => None,
@@ -4302,7 +4294,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn lookahead_for_struct_field(&mut self) -> Result<bool, CompileError>
+	fn lookahead_for_struct_field(&mut self) -> Result<bool, ParseError>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
 			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
@@ -4320,7 +4312,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, CompileError>
+	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError>
 	{
 		if self.at(&TokenKind::RightParen)? {
 			return Ok(Vec::new());
@@ -4338,7 +4330,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(args);
 	}
 
-	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, CompileError>
+	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, ParseError>
 	{
 		if self.at(&TokenKind::RightBrace)? || self.at(&TokenKind::DotDot)? {
 			return Ok(Vec::new());
@@ -4355,12 +4347,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
 				str
 			} else {
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					name_tok.span,
 					Expected::Identifier,
 					name_tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			let value: Expr = if self.consume(&TokenKind::Arrow)? {
@@ -4385,7 +4377,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(fields);
 	}
 
-	fn parse_switch_arm(&mut self) -> Result<SwitchArm, CompileError>
+	fn parse_switch_arm(&mut self) -> Result<SwitchArm, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -4480,7 +4472,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_pattern(&mut self) -> Result<Pattern, CompileError>
+	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut patterns: Vec<Pattern> = vec![self.parse_pattern_no_or()?];
@@ -4499,7 +4491,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn parse_pattern_no_or(&mut self) -> Result<Pattern, CompileError>
+	fn parse_pattern_no_or(&mut self) -> Result<Pattern, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -4521,11 +4513,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on range patterns",
 						self.source_index,
-					)));
+					) );
 				}
 
 				let inclusive: bool = self.at(&TokenKind::DotDotEquals)?;
@@ -4550,11 +4542,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 				if self.consume(&TokenKind::LeftParen)? {
 					if !modifiers.is_empty() {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							span,
 							"modifiers not allowed on variant patterns",
 							self.source_index,
-						)));
+						) );
 					}
 
 					let mut args: Vec<Pattern> = Vec::new();
@@ -4577,11 +4569,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else if self.consume(&TokenKind::LeftBrace)? {
 					if !modifiers.is_empty() {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							span,
 							"modifiers not allowed on variant patterns",
 							self.source_index,
-						)));
+						) );
 					}
 
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
@@ -4592,11 +4584,11 @@ impl<'s, 'c> Parser<'s, 'c>
 							if self.consume(&TokenKind::DotDot)? {
 								has_rest = true;
 								if !self.at(&TokenKind::RightBrace)? {
-									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									return Err(ParseError::invalid_pattern(
 										self.peek()?.span(),
 										".. must be the last element in a struct pattern",
 										self.source_index,
-									)));
+									) );
 								}
 								break;
 							}
@@ -4606,12 +4598,12 @@ impl<'s, 'c> Parser<'s, 'c>
 							let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 								name
 							} else {
-								return Err(CompileError::ParseError(ParseError::unexpected_token(
+								return Err(ParseError::unexpected_token(
 									field_tok.span,
 									Expected::Identifier,
 									field_tok.kind,
 									self.source_index,
-								)));
+								) );
 							};
 
 							let pattern: Pattern = if self.consume(&TokenKind::Arrow)? {
@@ -4644,11 +4636,11 @@ impl<'s, 'c> Parser<'s, 'c>
 								}
 							} else {
 								if !modifiers.is_empty() {
-									return Err(CompileError::ParseError(ParseError::invalid_pattern(
+									return Err(ParseError::invalid_pattern(
 										span,
 										"modifiers require type annotation (use `: Type` after identifier)",
 										self.source_index,
-									)));
+									) );
 								}
 								Pattern::Variant {
 									path: Path::simple(vec![field_name.clone()], field_tok.span),
@@ -4677,11 +4669,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					});
 				} else if self.consume(&TokenKind::Colon)? {
 					if path.len() != 1 {
-						return Err(CompileError::ParseError(ParseError::invalid_pattern(
+						return Err(ParseError::invalid_pattern(
 							tok.span,
 							"binding patterns must be simple identifiers, not paths",
 							self.source_index,
-						)));
+						) );
 					}
 
 					let ty: Type = self.parse_type()?;
@@ -4720,11 +4712,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::LeftParen => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on tuple patterns",
 						self.source_index,
-					)));
+					) );
 				}
 				self.next()?; // (
 
@@ -4794,11 +4786,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::True => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					)));
+					) );
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4809,11 +4801,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::False => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					)));
+					) );
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4824,11 +4816,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::StringLiteral(s) => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					)));
+					) );
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4839,11 +4831,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::CharLiteral(c) => {
 				if !modifiers.is_empty() {
-					return Err(CompileError::ParseError(ParseError::invalid_pattern(
+					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					)));
+					) );
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4853,17 +4845,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			_ => {
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
-					tok.span,
-					Expected::Pattern,
-					tok.kind,
-					self.source_index,
-				)));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Pattern, tok.kind, self.source_index) );
 			}
 		}
 	}
 
-	fn parse_block(&mut self) -> Result<Block, CompileError>
+	fn parse_block(&mut self) -> Result<Block, ParseError>
 	{
 		self.expect(&TokenKind::LeftBrace)?;
 
@@ -4873,7 +4860,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(ret);
 	}
 
-	fn parse_block_content(&mut self) -> Result<Block, CompileError>
+	fn parse_block_content(&mut self) -> Result<Block, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let mut stmts: Vec<Stmt> = Vec::new();
@@ -5122,12 +5109,12 @@ impl<'s, 'c> Parser<'s, 'c>
 								break;
 							} else {
 								let tok: Token = self.next()?;
-								return Err(CompileError::ParseError(ParseError::unexpected_token(
+								return Err(ParseError::unexpected_token(
 									tok.span,
 									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
 									tok.kind,
 									self.source_index,
-								)));
+								) );
 							}
 						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(expr));
@@ -5173,7 +5160,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		);
 	}
 
-	fn parse_assign_op(&mut self) -> Result<AssignOp, CompileError>
+	fn parse_assign_op(&mut self) -> Result<AssignOp, ParseError>
 	{
 		let op: AssignOp = match self.peek_kind()? {
 			TokenKind::Equals => AssignOp::Assign,
@@ -5189,19 +5176,19 @@ impl<'s, 'c> Parser<'s, 'c>
 			TokenKind::RShiftEquals => AssignOp::ShrAssign,
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Description("assignment operator".to_string()),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 		};
 		self.next()?;
 		return Ok(op);
 	}
 
-	fn parse_if(&mut self) -> Result<Stmt, CompileError>
+	fn parse_if(&mut self) -> Result<Stmt, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::If)?;
@@ -5254,7 +5241,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 	}
 
-	fn parse_while(&mut self) -> Result<Stmt, CompileError>
+	fn parse_while(&mut self) -> Result<Stmt, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::While)?;
@@ -5285,7 +5272,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn parse_for(&mut self) -> Result<Stmt, CompileError>
+	fn parse_for(&mut self) -> Result<Stmt, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::For)?;
@@ -5303,7 +5290,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_loop(&mut self) -> Result<Stmt, CompileError>
+	fn parse_loop(&mut self) -> Result<Stmt, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::Loop)?;
@@ -5314,7 +5301,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_function_decl(&mut self) -> Result<FunctionDecl, CompileError>
+	fn parse_function_decl(&mut self) -> Result<FunctionDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let mut span: Span = self.peek()?.span();
@@ -5333,7 +5320,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_function_signature(&mut self) -> Result<FunctionSignature, CompileError>
+	fn parse_function_signature(&mut self) -> Result<FunctionSignature, ParseError>
 	{
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
@@ -5361,12 +5348,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-				self.source_index,
-			)));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5386,12 +5368,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
 			self.next()?; // where
 			if !matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					self.peek()?.span(),
 					Expected::Identifier,
 					self.next()?.kind,
 					self.source_index,
-				)));
+				) );
 			}
 			self.parse_where_clause()?
 		} else {
@@ -5411,7 +5393,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_function_arguments(&mut self) -> Result<Vec<Param>, CompileError>
+	fn parse_function_arguments(&mut self) -> Result<Vec<Param>, ParseError>
 	{
 		self.expect(&TokenKind::LeftParen)?;
 
@@ -5526,11 +5508,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					let span: Span = self.next()?.span(); // ...
 
 					if !self.at(&TokenKind::RightParen)? {
-						return Err(CompileError::ParseError(ParseError::generic(
+						return Err(ParseError::generic(
 							loop_span,
 							"variadic parameter (...) must be the last parameter",
 							self.source_index,
-						)));
+						) );
 					}
 
 					params.push(Param {
@@ -5561,25 +5543,25 @@ impl<'s, 'c> Parser<'s, 'c>
 					} else {
 						match &pattern {
 							Pattern::Variant { args, .. } if args.is_empty() => {
-								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
 									self.source_index,
-								)));
+								) );
 							}
 							Pattern::Tuple { .. } => {
-								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
 									self.source_index,
-								)));
+								) );
 							}
 							_ => {
-								return Err(CompileError::ParseError(ParseError::invalid_pattern(
+								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"parameter patterns must either be simple identifiers or tuples with type annotations",
 									self.source_index,
-								)));
+								) );
 							}
 						}
 					};
@@ -5606,7 +5588,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(params);
 	}
 
-	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, CompileError>
+	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ParseError>
 	{
 		let mut ret: Vec<Modifier> = Vec::new();
 
@@ -5649,7 +5631,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(ret);
 	}
 
-	fn parse_struct(&mut self) -> Result<StructDecl, CompileError>
+	fn parse_struct(&mut self) -> Result<StructDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5660,12 +5642,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-				self.source_index,
-			)));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5698,12 +5675,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5744,7 +5721,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_union(&mut self) -> Result<UnionDecl, CompileError>
+	fn parse_union(&mut self) -> Result<UnionDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5755,12 +5732,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-				self.source_index,
-			)));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5793,12 +5765,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5832,7 +5804,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_module(&mut self) -> Result<ModuleDecl, CompileError>
+	fn parse_module(&mut self) -> Result<ModuleDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5851,7 +5823,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_enum(&mut self) -> Result<EnumDecl, CompileError>
+	fn parse_enum(&mut self) -> Result<EnumDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5862,12 +5834,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-				self.source_index,
-			)));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5898,12 +5865,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			let variant_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
@@ -5939,7 +5906,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_variant(&mut self) -> Result<VariantDecl, CompileError>
+	fn parse_variant(&mut self) -> Result<VariantDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5950,12 +5917,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(CompileError::ParseError(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-				self.source_index,
-			)));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5986,12 +5948,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			let member_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
@@ -6037,7 +5999,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_impl(&mut self) -> Result<ImplDecl, CompileError>
+	fn parse_impl(&mut self) -> Result<ImplDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6089,7 +6051,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_impl_target(&mut self) -> Result<ImplTarget, CompileError>
+	fn parse_impl_target(&mut self) -> Result<ImplTarget, ParseError>
 	{
 		let span: Span = self.peek()?.span();
 		let path: Path = self.get_path()?;
@@ -6107,7 +6069,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_type_generics(&mut self) -> Result<Vec<Type>, CompileError>
+	fn parse_type_generics(&mut self) -> Result<Vec<Type>, ParseError>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6128,12 +6090,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok = self.peek()?.clone();
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 
 			if self.consume_greater_than()? {
@@ -6144,7 +6106,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(generics);
 	}
 
-	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, CompileError>
+	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, ParseError>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6161,12 +6123,12 @@ impl<'s, 'c> Parser<'s, 'c>
 				name
 			} else {
 				let tok: Token = self.peek()?.clone();
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -6181,12 +6143,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok = self.peek()?.clone();
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 
 			if self.consume_greater_than()? {
@@ -6197,7 +6159,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(named_generics);
 	}
 
-	fn parse_generic_args(&mut self) -> Result<Vec<GenericArg>, CompileError>
+	fn parse_generic_args(&mut self) -> Result<Vec<GenericArg>, ParseError>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6235,12 +6197,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok: Token = self.peek()?.clone();
-				return Err(CompileError::ParseError(ParseError::unexpected_token(
+				return Err(ParseError::unexpected_token(
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				)));
+				) );
 			}
 
 			if self.consume_greater_than()? {
@@ -6251,7 +6213,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(args);
 	}
 
-	fn parse_impl_item(&mut self) -> Result<ImplItem, CompileError>
+	fn parse_impl_item(&mut self) -> Result<ImplItem, ParseError>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -6272,19 +6234,14 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok = self.peek()?.clone();
-				return Err(CompileError::ParseError(ParseError::unexpected_item(
-					tok.span,
-					"impl block",
-					tok.kind,
-					self.source_index,
-				)));
+				return Err(ParseError::unexpected_item(tok.span, "impl block", tok.kind, self.source_index) );
 			}
 		};
 
 		return Ok(node);
 	}
 
-	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, CompileError>
+	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, ParseError>
 	{
 		let mut constraints: Vec<WhereConstraint> = Vec::new();
 
@@ -6330,7 +6287,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(constraints);
 	}
 
-	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, CompileError>
+	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6358,7 +6315,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_trait(&mut self) -> Result<TraitDecl, CompileError>
+	fn parse_trait(&mut self) -> Result<TraitDecl, ParseError>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6401,7 +6358,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	fn parse_trait_bounds(&mut self) -> Result<Vec<WhereBound>, CompileError>
+	fn parse_trait_bounds(&mut self) -> Result<Vec<WhereBound>, ParseError>
 	{
 		let mut bounds: Vec<WhereBound> = Vec::new();
 
@@ -6417,7 +6374,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(bounds);
 	}
 
-	fn parse_where_bound(&mut self) -> Result<WhereBound, CompileError>
+	fn parse_where_bound(&mut self) -> Result<WhereBound, ParseError>
 	{
 		let bound: WhereBound = if matches!(self.peek_kind()?, TokenKind::Identifier(s) if *s == "Fn") {
 			self.next()?; // Fn
@@ -6461,7 +6418,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(bound);
 	}
 
-	fn parse_trait_item(&mut self) -> Result<TraitItem, CompileError>
+	fn parse_trait_item(&mut self) -> Result<TraitItem, ParseError>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -6483,26 +6440,21 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(CompileError::ParseError(ParseError::unexpected_item(
-					tok.span,
-					"trait block",
-					tok.kind,
-					self.source_index,
-				)));
+				return Err(ParseError::unexpected_item(tok.span, "trait block", tok.kind, self.source_index) );
 			}
 		};
 
 		return Ok(node);
 	}
 
-	fn parse_delete(&mut self) -> Result<Expr, CompileError>
+	fn parse_delete(&mut self) -> Result<Expr, ParseError>
 	{
 		self.expect(&TokenKind::Delete)?;
 
 		return self.parse_expr();
 	}
 
-	fn parse_docs(&mut self) -> Result<Option<DocsComment>, CompileError>
+	fn parse_docs(&mut self) -> Result<Option<DocsComment>, ParseError>
 	{
 		let mut combined_content = String::new();
 		let mut start_span: Option<Span> = None;
