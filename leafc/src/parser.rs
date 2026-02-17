@@ -5,7 +5,7 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable};
 use ignorable::PartialEq;
 
 use crate::{
-	Config,
+	CompileError, Config,
 	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
@@ -2292,6 +2292,14 @@ impl std::fmt::Display for ParseError
 	}
 }
 
+impl From<ParseError> for CompileError
+{
+	fn from(value: ParseError) -> Self
+	{
+		return CompileError::ParseError(value);
+	}
+}
+
 impl std::fmt::Display for Expected
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -2540,7 +2548,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		let token: Result<&Token, ParseError> = self.lexer.peek().ok_or_else(|| {
-			return ParseError::unexpected_eof(self.last_span, self.source_index) ;
+			return ParseError::unexpected_eof(self.last_span, self.source_index);
 		});
 
 		let Ok(tok) = token else {
@@ -2554,7 +2562,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
-				} );
+				});
 			}
 		}
 	}
@@ -2567,7 +2575,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		let tok: Token = self.lexer.next().ok_or_else(|| {
-			return ParseError::unexpected_eof(self.last_span, self.source_index) ;
+			return ParseError::unexpected_eof(self.last_span, self.source_index);
 		})?;
 
 		self.last_span = tok.span;
@@ -2579,7 +2587,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
-				} );
+				});
 			}
 		}
 	}
@@ -2653,7 +2661,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				Expected::Token(expected.clone()),
 				err_tok.kind,
 				self.source_index,
-			) );
+			));
 		}
 	}
 
@@ -2892,7 +2900,12 @@ impl<'s, 'c> Parser<'s, 'c>
 					let tok: Token = self.peek()?.clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Err(ParseError::unexpected_item(tok.span, "declaration", tok.kind, self.source_index) );
+					return Err(ParseError::unexpected_item(
+						tok.span,
+						"declaration",
+						tok.kind,
+						self.source_index,
+					));
 				}
 			}
 		}
@@ -2917,7 +2930,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.next()?;
 				}
 				TokenKind::Eof => {
-					return Err(ParseError::unexpected_eof(self.peek()?.span, self.source_index) );
+					return Err(ParseError::unexpected_eof(self.peek()?.span, self.source_index));
 				}
 				_ => {
 					self.next()?;
@@ -3005,7 +3018,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							Expected::Token(TokenKind::StringLiteral(String::new())),
 							incl.kind,
 							self.source_index,
-						) );
+						));
 					}
 				};
 				Ok(ret)
@@ -3047,7 +3060,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok_span,
 							"A string can't be negative",
 							self.source_index,
-						) );
+						));
 					}
 					DirectiveParam::Literal(Literal::String(s))
 				}
@@ -3065,7 +3078,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok_span,
 							"A character can't be negative",
 							self.source_index,
-						) );
+						));
 					}
 					DirectiveParam::Literal(Literal::Char(c))
 				}
@@ -3075,7 +3088,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok_span,
 							"A bool can't be negative",
 							self.source_index,
-						) );
+						));
 					}
 					DirectiveParam::Literal(Literal::Bool(true))
 				}
@@ -3085,7 +3098,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok_span,
 							"A bool can't be negative",
 							self.source_index,
-						) );
+						));
 					}
 					DirectiveParam::Literal(Literal::Bool(false))
 				}
@@ -3095,7 +3108,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok_span,
 							"An identifier can't be negative",
 							self.source_index,
-						) );
+						));
 					}
 
 					match self.peek_kind()? {
@@ -3114,7 +3127,7 @@ impl<'s, 'c> Parser<'s, 'c>
 											token_span,
 											"Cannot negate a string literal",
 											self.source_index,
-										) );
+										));
 									}
 									Literal::String(s)
 								}
@@ -3132,7 +3145,7 @@ impl<'s, 'c> Parser<'s, 'c>
 											token_span,
 											"Cannot negate a character literal",
 											self.source_index,
-										) );
+										));
 									}
 									Literal::Char(c)
 								}
@@ -3142,7 +3155,7 @@ impl<'s, 'c> Parser<'s, 'c>
 											token_span,
 											"Cannot negate a boolean literal",
 											self.source_index,
-										) );
+										));
 									}
 									Literal::Bool(true)
 								}
@@ -3152,7 +3165,7 @@ impl<'s, 'c> Parser<'s, 'c>
 											token_span,
 											"Cannot negate a boolean literal",
 											self.source_index,
-										) );
+										));
 									}
 									Literal::Bool(false)
 								}
@@ -3161,7 +3174,7 @@ impl<'s, 'c> Parser<'s, 'c>
 										token_span,
 										format!("Expected an identifier or a literal, got {:?}", tok_kind),
 										self.source_index,
-									) );
+									));
 								}
 							};
 							DirectiveParam::Named { name: ident, arg: lit }
@@ -3174,7 +3187,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						tok_span,
 						format!("Expected an identifier or a literal, got {:?}", tok_kind),
 						self.source_index,
-					) );
+					));
 				}
 			};
 			params.push(arg);
@@ -3322,7 +3335,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					err_tok.span,
 					"expected '&', 'mut', identifier, '[' or '(' to start a type",
 					self.source_index,
-				) );
+				));
 			}
 		}
 	}
@@ -3352,7 +3365,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						Expected::Identifier,
 						tok.kind,
 						self.source_index,
-					) );
+					));
 				}
 			};
 
@@ -3419,7 +3432,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						Expected::Identifier,
 						tok.kind,
 						self.source_index,
-					) );
+					));
 				}
 			};
 
@@ -3446,7 +3459,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 
 			if self.consume_greater_than()? {
@@ -4107,7 +4120,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 
 			TokenKind::LeftBracket => {
@@ -4206,7 +4219,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						"Expected a loop, only a loop can have a label and return a value",
 						tok.kind,
 						self.source_index,
-					) );
+					));
 				}
 			}
 
@@ -4216,7 +4229,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Expression,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 		}
 	}
@@ -4242,7 +4255,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								b.span(),
 								"expected expression, block, or if statement in else branch",
 								self.source_index,
-							) );
+							));
 						}
 					},
 					None => None,
@@ -4269,7 +4282,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								b.span(),
 								"expected expression, block, or if statement in else branch",
 								self.source_index,
-							) );
+							));
 						}
 					},
 					None => None,
@@ -4352,7 +4365,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					name_tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			let value: Expr = if self.consume(&TokenKind::Arrow)? {
@@ -4517,7 +4530,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on range patterns",
 						self.source_index,
-					) );
+					));
 				}
 
 				let inclusive: bool = self.at(&TokenKind::DotDotEquals)?;
@@ -4546,7 +4559,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							span,
 							"modifiers not allowed on variant patterns",
 							self.source_index,
-						) );
+						));
 					}
 
 					let mut args: Vec<Pattern> = Vec::new();
@@ -4573,7 +4586,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							span,
 							"modifiers not allowed on variant patterns",
 							self.source_index,
-						) );
+						));
 					}
 
 					let mut fields: Vec<(Ident, Pattern)> = Vec::new();
@@ -4588,7 +4601,7 @@ impl<'s, 'c> Parser<'s, 'c>
 										self.peek()?.span(),
 										".. must be the last element in a struct pattern",
 										self.source_index,
-									) );
+									));
 								}
 								break;
 							}
@@ -4603,7 +4616,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									Expected::Identifier,
 									field_tok.kind,
 									self.source_index,
-								) );
+								));
 							};
 
 							let pattern: Pattern = if self.consume(&TokenKind::Arrow)? {
@@ -4640,7 +4653,7 @@ impl<'s, 'c> Parser<'s, 'c>
 										span,
 										"modifiers require type annotation (use `: Type` after identifier)",
 										self.source_index,
-									) );
+									));
 								}
 								Pattern::Variant {
 									path: Path::simple(vec![field_name.clone()], field_tok.span),
@@ -4673,7 +4686,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							tok.span,
 							"binding patterns must be simple identifiers, not paths",
 							self.source_index,
-						) );
+						));
 					}
 
 					let ty: Type = self.parse_type()?;
@@ -4716,7 +4729,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on tuple patterns",
 						self.source_index,
-					) );
+					));
 				}
 				self.next()?; // (
 
@@ -4790,7 +4803,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					) );
+					));
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4805,7 +4818,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					) );
+					));
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4820,7 +4833,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					) );
+					));
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4835,7 +4848,7 @@ impl<'s, 'c> Parser<'s, 'c>
 						span,
 						"modifiers not allowed on literal patterns",
 						self.source_index,
-					) );
+					));
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
@@ -4845,7 +4858,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 
 			_ => {
-				return Err(ParseError::unexpected_token(tok.span, Expected::Pattern, tok.kind, self.source_index) );
+				return Err(ParseError::unexpected_token(
+					tok.span,
+					Expected::Pattern,
+					tok.kind,
+					self.source_index,
+				));
 			}
 		}
 	}
@@ -5114,7 +5132,7 @@ impl<'s, 'c> Parser<'s, 'c>
 									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
 									tok.kind,
 									self.source_index,
-								) );
+								));
 							}
 						} else if self.at(&TokenKind::RightBrace)? {
 							tail_expr = Some(Box::new(expr));
@@ -5181,7 +5199,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Description("assignment operator".to_string()),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 		};
 		self.next()?;
@@ -5348,7 +5366,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5373,7 +5396,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					self.next()?.kind,
 					self.source_index,
-				) );
+				));
 			}
 			self.parse_where_clause()?
 		} else {
@@ -5512,7 +5535,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							loop_span,
 							"variadic parameter (...) must be the last parameter",
 							self.source_index,
-						) );
+						));
 					}
 
 					params.push(Param {
@@ -5547,21 +5570,21 @@ impl<'s, 'c> Parser<'s, 'c>
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
 									self.source_index,
-								) );
+								));
 							}
 							Pattern::Tuple { .. } => {
 								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
 									self.source_index,
-								) );
+								));
 							}
 							_ => {
 								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"parameter patterns must either be simple identifiers or tuples with type annotations",
 									self.source_index,
-								) );
+								));
 							}
 						}
 					};
@@ -5642,7 +5665,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5680,7 +5708,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5732,7 +5760,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5770,7 +5803,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5834,7 +5867,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5870,7 +5908,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			let variant_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
@@ -5917,7 +5955,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind, self.source_index) );
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Identifier,
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5953,7 +5996,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			let member_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
@@ -6095,7 +6138,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 
 			if self.consume_greater_than()? {
@@ -6128,7 +6171,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::Identifier,
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -6148,7 +6191,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 
 			if self.consume_greater_than()? {
@@ -6202,7 +6245,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
 					self.source_index,
-				) );
+				));
 			}
 
 			if self.consume_greater_than()? {
@@ -6234,7 +6277,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok = self.peek()?.clone();
-				return Err(ParseError::unexpected_item(tok.span, "impl block", tok.kind, self.source_index) );
+				return Err(ParseError::unexpected_item(
+					tok.span,
+					"impl block",
+					tok.kind,
+					self.source_index,
+				));
 			}
 		};
 
@@ -6440,7 +6488,12 @@ impl<'s, 'c> Parser<'s, 'c>
 			}
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_item(tok.span, "trait block", tok.kind, self.source_index) );
+				return Err(ParseError::unexpected_item(
+					tok.span,
+					"trait block",
+					tok.kind,
+					self.source_index,
+				));
 			}
 		};
 
