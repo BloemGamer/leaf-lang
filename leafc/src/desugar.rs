@@ -1,7 +1,7 @@
 mod tests;
 
 use crate::{
-	CompileError,
+	CompileDiagnostic, CompileError,
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
@@ -210,27 +210,6 @@ impl DesugarError
 			source_index,
 		);
 	}
-
-	/// Writes the error to a formatter with source context.
-	///
-	/// Formats the error message along with the relevant source code snippet,
-	/// pointing to where the error occurred.
-	///
-	/// # Arguments
-	/// * `f` - The formatter to write to
-	/// * `source_map` - Source map for looking up source text
-	///
-	/// # Returns
-	/// Result of the formatting operation
-	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
-	{
-		return write!(
-			f,
-			"{}",
-			self.span
-				.format_error(&source_map.get(self.source_index).src, &format!("{self}"))
-		);
-	}
 }
 
 impl std::fmt::Display for DesugarError
@@ -268,6 +247,19 @@ impl From<DesugarError> for CompileError
 }
 
 impl std::error::Error for DesugarError {}
+
+impl CompileDiagnostic for DesugarError
+{
+	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return write!(
+			f,
+			"{}",
+			self.span
+				.format_error(&sm.get(self.source_index).src, &format!("{self}"))
+		);
+	}
+}
 
 impl Desugarer
 {

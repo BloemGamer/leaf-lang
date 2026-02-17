@@ -130,6 +130,19 @@ mod symbol_collection;
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Config {}
 
+pub trait CompileDiagnostic
+{
+	#[allow(clippy::missing_errors_doc)]
+	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result;
+	#[allow(clippy::missing_errors_doc)]
+	fn to_string_with_source(&self, sm: &crate::source_map::SourceMap) -> Result<String, std::fmt::Error>
+	{
+		let mut out: String = String::new();
+		self.fmt_with_source(&mut out, sm)?;
+		return Ok(out);
+	}
+}
+
 #[derive(Debug, Clone)]
 pub enum CompileError
 {
@@ -158,24 +171,16 @@ impl std::fmt::Display for CompileError
 
 impl std::error::Error for CompileError {}
 
-impl CompileError
+impl CompileDiagnostic for CompileError
 {
 	#[allow(clippy::missing_errors_doc)]
-	pub fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
 	{
 		return match self {
-			CompileError::ParseError(err) => err.write(f, sm),
-			CompileError::DesugarError(err) => err.write(f, sm),
-			CompileError::SymbolCollectionError(err) => err.write(f, sm),
+			CompileError::ParseError(err) => err.fmt_with_source(f, sm),
+			CompileError::DesugarError(err) => err.fmt_with_source(f, sm),
+			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
 		};
-	}
-
-	#[allow(clippy::missing_errors_doc)]
-	pub fn to_string_with_source(&self, sm: &crate::source_map::SourceMap) -> Result<String, std::fmt::Error>
-	{
-		let mut out: String = String::new();
-		self.fmt_with_source(&mut out, sm)?;
-		return Ok(out);
 	}
 }
 
@@ -222,14 +227,7 @@ fn main()
 	let parsed: Parser = lexed.into();
 	let program: AST = parsed
 		.try_into()
-		.inspect_err(|e: &ParseError| {
-			println!(
-				"{}",
-				CompileError::ParseError(e.clone())
-					.to_string_with_source(&source_map)
-					.expect("")
-			);
-		})
+		.inspect_err(|e: &ParseError| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 	if args.parsed {
 		println!("{}", program);
@@ -237,19 +235,16 @@ fn main()
 
 	let desugared: DesugaredAST = program
 		.try_into()
-		.inspect_err(|e: &DesugarError| {
-			println!(
-				"{}",
-				CompileError::DesugarError(e.clone())
-					.to_string_with_source(&source_map)
-					.expect("")
-			);
-		})
+		.inspect_err(|e: &DesugarError| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 	if args.desugared {
 		println!("{}", desugared);
 	}
-	let symbols = symbol_collection::collect_symbols(&desugared, desugared.source_index);
+
+	let symbols: symbol_collection::SymbolTable =
+		symbol_collection::collect_symbols(&desugared, desugared.source_index)
+			.inspect_err(|e: &SymbolCollectionError| println!("{}", e.to_string_with_source(&source_map).expect("")))
+			.expect("found an error in the program");
 	if args.symbols {
 		println!("{:#?}", symbols);
 	}

@@ -5,7 +5,7 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable};
 use ignorable::PartialEq;
 
 use crate::{
-	CompileError, Config,
+	CompileDiagnostic, CompileError, Config,
 	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
@@ -2228,24 +2228,6 @@ impl ParseError
 			source_index,
 		);
 	}
-
-	/// Writes the error to a formatter with source context.
-	///
-	/// # Arguments
-	/// * `f` - The formatter to write to
-	/// * `source_map` - Source map for looking up source text
-	///
-	/// # Returns
-	/// Result of the formatting operation
-	pub fn write(&self, f: &mut impl std::fmt::Write, source_map: &crate::source_map::SourceMap) -> std::fmt::Result
-	{
-		return write!(
-			f,
-			"{}",
-			self.span
-				.format_error(&source_map.get(self.source_index).src, &format!("{self}"))
-		);
-	}
 }
 
 impl std::fmt::Display for ParseError
@@ -2297,6 +2279,19 @@ impl From<ParseError> for CompileError
 	fn from(value: ParseError) -> Self
 	{
 		return CompileError::ParseError(value);
+	}
+}
+
+impl CompileDiagnostic for ParseError
+{
+	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		return write!(
+			f,
+			"{}",
+			self.span
+				.format_error(&sm.get(self.source_index).src, &format!("{self}"))
+		);
 	}
 }
 

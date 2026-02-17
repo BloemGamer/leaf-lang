@@ -3,8 +3,8 @@
 mod tests
 {
 	use crate::lexer::Lexer;
-	use crate::parser::*;
 	use crate::source_map::SourceMap;
+	use crate::{CompileDiagnostic, parser::*};
 	use crate::{CompileError, Config};
 
 	fn parse_expr_from_str(input: &str) -> Result<Expr, CompileError>
