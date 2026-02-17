@@ -220,31 +220,37 @@ fn main()
 		},
 		|f| return f,
 	);
-	let lexed: Lexer = Lexer::new_add_to_source_map(&config, file, FILE_NAME, &mut source_map);
+
+	run(&args, &config, file, FILE_NAME, &mut source_map)
+		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
+		.expect("found an error in the program");
+}
+
+fn run(
+	args: &Args,
+	config: &Config,
+	file: String,
+	filename: &str,
+	source_map: &mut SourceMap,
+) -> Result<(), CompileError>
+{
+	let lexed: Lexer = Lexer::new_add_to_source_map(config, file, filename, source_map);
 	if args.lexed {
 		println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	}
 	let parsed: Parser = lexed.into();
-	let program: AST = parsed
-		.try_into()
-		.inspect_err(|e: &ParseError| println!("{}", e.to_string_with_source(&source_map).expect("")))
-		.expect("found an error in the program");
+	let program: AST = parsed.try_into()?;
 	if args.parsed {
 		println!("{}", program);
 	}
 
-	let desugared: DesugaredAST = program
-		.try_into()
-		.inspect_err(|e: &DesugarError| println!("{}", e.to_string_with_source(&source_map).expect("")))
-		.expect("found an error in the program");
+	let desugared: DesugaredAST = program.try_into()?;
 	if args.desugared {
 		println!("{}", desugared);
 	}
 
 	let symbols: symbol_collection::SymbolTable =
-		symbol_collection::collect_symbols(&desugared, desugared.source_index)
-			.inspect_err(|e: &SymbolCollectionError| println!("{}", e.to_string_with_source(&source_map).expect("")))
-			.expect("found an error in the program");
+		symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
 	if args.symbols {
 		println!("{:#?}", symbols);
 	}
@@ -252,4 +258,5 @@ fn main()
 	if args.all_false() {
 		println!("{:#?}", symbols);
 	}
+	return Ok(());
 }
