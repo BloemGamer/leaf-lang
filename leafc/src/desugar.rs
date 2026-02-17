@@ -4,13 +4,42 @@ use crate::{
 	CompileError,
 	lexer::{Span, Spanned},
 	parser::{
-		ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound, FunctionDecl,
-		FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, Param, Path, PathSegment,
-		Pattern, Program, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem,
-		Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
+		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
+		FunctionDecl, FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, Param, Path,
+		PathSegment, Pattern, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl,
+		TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
+
+/// The root node of the Desugared Abstract Syntax Tree.
+///
+/// # Fields
+/// * `top_level_block` - The real programm
+/// * `source_index` - The source index of the file
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct DesugaredAST
+{
+	pub top_level_block: TopLevelBlock,
+	pub source_index: SourceIndex,
+}
+
+impl std::fmt::Display for DesugaredAST
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return write!(f, "{}", self.top_level_block);
+	}
+}
+
+impl Spanned for DesugaredAST
+{
+	fn span(&self) -> Span
+	{
+		return self.top_level_block.span();
+	}
+}
 
 /// Compiler pass that transforms high-level syntax into simpler forms.
 ///
@@ -308,7 +337,7 @@ impl Desugarer
 	/// let desugared = desugarer.desugar_program(parsed_program)?;
 	/// ```
 	#[allow(clippy::result_large_err)]
-	pub fn desugar_program(&mut self, program: Program) -> Result<Program, CompileError>
+	pub fn desugar_program(&mut self, program: AST) -> Result<DesugaredAST, CompileError>
 	{
 		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block)?;
 
@@ -317,7 +346,7 @@ impl Desugarer
 			debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone())?);
 		}
 
-		return Ok(Program {
+		return Ok(DesugaredAST {
 			top_level_block: top_lvl,
 			source_index: program.source_index,
 		});

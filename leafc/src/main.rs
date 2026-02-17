@@ -114,9 +114,9 @@
 use std::{fs, process::exit};
 
 use self::{
-	desugar::{DesugarError, Desugarer},
+	desugar::{DesugarError, DesugaredAST, Desugarer},
 	lexer::Lexer,
-	parser::{ParseError, Parser, Program},
+	parser::{AST, ParseError, Parser},
 	source_map::SourceMap,
 };
 
@@ -214,7 +214,7 @@ fn main()
 		println!("{:#?}", lexed.clone().collect::<Vec<_>>());
 	}
 	let parsed: Parser = lexed.into();
-	let program: Program = parsed
+	let program: AST = parsed
 		.try_into()
 		.inspect_err(|e: &CompileError| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
@@ -224,7 +224,7 @@ fn main()
 
 	let mut desugager: Desugarer = Desugarer::new(program.source_index);
 
-	let desugared: Program = desugager
+	let desugared: DesugaredAST = desugager
 		.desugar_program(program)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");

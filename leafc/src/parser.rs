@@ -121,14 +121,15 @@ impl Spanned for TopLevelBlock
 /// # Fields
 /// * `top_level_block` - The real programm
 /// * `source_index` - The source index of the file
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program
+pub struct AST
 {
 	pub top_level_block: TopLevelBlock,
 	pub source_index: SourceIndex,
 }
 
-impl Spanned for Program
+impl Spanned for AST
 {
 	fn span(&self) -> Span
 	{
@@ -136,7 +137,7 @@ impl Spanned for Program
 	}
 }
 
-impl<'s, 'c> TryFrom<Parser<'s, 'c>> for Program
+impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 {
 	type Error = CompileError;
 
@@ -2674,11 +2675,11 @@ impl<'s, 'c> Parser<'s, 'c>
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn parse_program(&mut self) -> Result<Program, CompileError>
+	pub fn parse_program(&mut self) -> Result<AST, CompileError>
 	{
 		let top_level_block: TopLevelBlock = self.parse_top_level_block()?;
 
-		return Ok(Program {
+		return Ok(AST {
 			top_level_block,
 			source_index: self.source_index,
 		});
@@ -6605,7 +6606,7 @@ impl IndentWriter
 	}
 }
 
-impl fmt::Display for Program
+impl fmt::Display for AST
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{

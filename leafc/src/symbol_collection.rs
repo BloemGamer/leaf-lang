@@ -1,10 +1,11 @@
 mod tests;
 
 use crate::{
+	desugar::DesugaredAST,
 	lexer::{Span, Spanned},
 	parser::{
 		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
-		ImplDecl, ImplItem, Modifier, ModuleDecl, Path, Pattern, Program, RangeExpr, Stmt, StructDecl, SwitchBody,
+		ImplDecl, ImplItem, Modifier, ModuleDecl, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
 		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
@@ -672,7 +673,7 @@ impl Collector
 		return Ok(());
 	}
 
-	fn collect_program(&mut self, program: &Program) -> Result<(), SymbolCollectionError>
+	fn collect_program(&mut self, program: &DesugaredAST) -> Result<(), SymbolCollectionError>
 	{
 		self.collect_top_level_block(&program.top_level_block)?;
 		return Ok(());
@@ -1461,13 +1462,8 @@ impl Collector
 ///     println!("Symbol {}: {} ({:?})", i, symbol.name, symbol.kind);
 /// }
 /// ```
-///
-/// # Note
-///
-/// This function should be called on a desugared AST, as it expects certain
-/// transformations to have already been applied (e.g., loop labels added,
-/// patterns simplified).
-pub fn collect_symbols(program: &Program, source_index: SourceIndex) -> Result<SymbolTable, SymbolCollectionError>
+pub fn collect_symbols(program: &DesugaredAST, source_index: SourceIndex)
+-> Result<SymbolTable, SymbolCollectionError>
 {
 	let mut collector: Collector = Collector::new(source_index);
 	collector.table.scopes[collector.table.root.0].span = program.span();
