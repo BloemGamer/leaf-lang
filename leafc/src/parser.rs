@@ -100,7 +100,7 @@ impl Spanned for Token
 /// # Fields
 /// * `items` - List of top-level declarations (functions, structs, traits, etc.)
 /// * `span` - Source location of the entire program
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct TopLevelBlock
 {
 	pub items: Vec<TopLevelDecl>,
@@ -357,12 +357,17 @@ impl PartialOrd for Modifier
 #[allow(clippy::large_enum_variant)]
 pub enum Directive
 {
-	Import(String),
-	Use(Path),
+	Import
+	{
+		modifers: Vec<Modifier>, import: String
+	},
+	Use
+	{
+		modifers: Vec<Modifier>, use_path: Path
+	},
 	Custom
 	{
-		name: Ident,
-		params: Vec<DirectiveParam>,
+		name: Ident, params: Vec<DirectiveParam>
 	},
 	ValidateStructPattern
 	{
@@ -372,8 +377,7 @@ pub enum Directive
 	},
 	ValidateType
 	{
-		ty: Type,
-		expr: Expr,
+		ty: Type, expr: Expr
 	},
 }
 
@@ -2355,6 +2359,7 @@ impl Spanned for TypeAliasDecl
 	}
 }
 
+//TODO: fix docs
 /// Module declaration.
 ///
 /// Represents a module containing top-level declarations.
@@ -2370,11 +2375,19 @@ pub struct ModuleDecl
 {
 	pub modifiers: Vec<Modifier>,
 	pub name: Path,
-	pub body: TopLevelBlock,
+	pub kind: ModuleKind,
 	#[ignored(PartialEq)]
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
+}
+
+//TODO: add docs
+#[derive(Debug, Clone, PartialEq)]
+pub enum ModuleKind
+{
+	Inline(TopLevelBlock),
+	External,
 }
 
 impl Spanned for ModuleDecl
@@ -2939,28 +2952,45 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive_node(&mut self) -> Result<DirectiveNode, ParseError>
 	{
-		#[allow(clippy::debug_assert_with_mut_call)]
-		{
-			debug_assert!(matches!(self.peek()?.kind, TokenKind::Directive(_)));
-		}
+		let start: Span = self.peek()?.span;
 
-		let tok: Token = self.next()?;
-		let start: Span = tok.span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 
-		let directive: Directive = match tok.kind {
-			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
-			_ => unreachable!("Bug: Token should be a directive"),
+		let directive: Directive = if modifiers.len() == 1 {
+			if let Some(Modifier::Directive(d)) = modifiers.into_iter().next() {
+				d
+			} else {
+				let tok: Token = self.next()?;
+				return Err(ParseError::unexpected_token(
+					tok.span,
+					Expected::Description("directive".to_string()),
+					tok.kind,
+					self.source_index,
+				));
+			}
+		} else if modifiers.is_empty() {
+			let tok: Token = self.next()?;
+			match tok.kind {
+				TokenKind::Directive(d) => self.parse_directive_kind(d, Vec::new())?,
+				_ => unreachable!("Bug: Token should be a directive"),
+			}
+		} else {
+			let tok: Token = self.next()?;
+			return Err(ParseError::unexpected_token(
+				tok.span,
+				Expected::Description("directive".to_string()),
+				tok.kind,
+				self.source_index,
+			));
 		};
 
 		let body: Option<BlockContent> = if self.at(&TokenKind::LeftBrace)? {
-			self.next()?; // {
-
+			self.next()?;
 			let content: BlockContent = if self.should_parse_as_top_level_block(&directive) {
 				BlockContent::TopLevelBlock(self.parse_top_level_block()?)
 			} else {
 				BlockContent::Block(self.parse_block_content()?)
 			};
-
 			self.expect(&TokenKind::RightBrace)?;
 			Some(content)
 		} else {
@@ -2981,33 +3011,24 @@ impl<'s, 'c> Parser<'s, 'c>
 		todo!("Directives with blocks are not supported yet")
 	}
 
-	fn parse_directive(&mut self) -> Result<Directive, ParseError>
-	{
-		#[allow(clippy::debug_assert_with_mut_call)]
-		{
-			debug_assert!(matches!(self.peek()?.kind, TokenKind::Directive(_)));
-		}
-
-		let tok: Token = self.next()?;
-
-		let node: Directive = match tok.kind {
-			TokenKind::Directive(d) => self.parse_directive_kind(d)?,
-			_ => unreachable!("Bug: Token should be a directive"),
-		};
-
-		return Ok(node);
-	}
-
-	fn parse_directive_kind(&mut self, direct: lexer::Directive) -> Result<Directive, ParseError>
+	fn parse_directive_kind(
+		&mut self,
+		direct: lexer::Directive,
+		modifiers: Vec<Modifier>,
+	) -> Result<Directive, ParseError>
 	{
 		return match direct {
-			lexer::Directive::Use => {
-				return Ok(Directive::Use(self.get_path_with_glob()?));
-			}
+			lexer::Directive::Use => Ok(Directive::Use {
+				modifers: modifiers,
+				use_path: self.get_path_with_glob()?,
+			}),
 			lexer::Directive::Import => {
 				let incl: Token = self.next()?;
-				let ret: Directive = match &incl.kind {
-					TokenKind::StringLiteral(str) => Directive::Import(str.clone()),
+				let ret = match &incl.kind {
+					TokenKind::StringLiteral(str) => Directive::Import {
+						modifers: modifiers,
+						import: str.clone(),
+					},
 					_ => {
 						return Err(ParseError::unexpected_token(
 							incl.span,
@@ -3020,9 +3041,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				Ok(ret)
 			}
 			lexer::Directive::Custom(name) => {
-				let params: Vec<DirectiveParam> = if self.at(&TokenKind::LeftParen)? {
-					let args: Vec<DirectiveParam> = self.parse_directive_params()?;
-					args
+				let params = if self.at(&TokenKind::LeftParen)? {
+					self.parse_directive_params()?
 				} else {
 					Vec::new()
 				};
@@ -5704,7 +5724,20 @@ impl<'s, 'c> Parser<'s, 'c>
 			let tok: &Token = self.peek()?;
 			match &tok.kind {
 				TokenKind::Directive(_) => {
-					ret.push(Modifier::Directive(self.parse_directive()?));
+					let tok = self.next()?;
+					match tok.kind {
+						TokenKind::Directive(d @ (lexer::Directive::Use | lexer::Directive::Import)) => {
+							let collected: Vec<Modifier> = std::mem::take(&mut ret);
+							let dir: Directive = self.parse_directive_kind(d, collected)?;
+							ret.push(Modifier::Directive(dir));
+							break;
+						}
+						TokenKind::Directive(d) => {
+							let dir: Directive = self.parse_directive_kind(d, Vec::new())?;
+							ret.push(Modifier::Directive(dir));
+						}
+						_ => unreachable!(),
+					}
 				}
 				TokenKind::Pub => {
 					ret.push(Modifier::Pub);
@@ -5722,7 +5755,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					ret.push(Modifier::Volatile);
 					self.next()?;
 				}
-				&TokenKind::Mut => {
+				TokenKind::Mut => {
 					ret.push(Modifier::Mut);
 					self.next()?;
 				}
@@ -5733,6 +5766,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				_ => break,
 			}
 		}
+
 		if !ret.is_sorted() {
 			todo!("return ordering error")
 		}
@@ -5929,13 +5963,18 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Module)?;
 		let name: Path = self.get_path()?;
-		self.expect(&TokenKind::LeftBrace)?;
-		let body: TopLevelBlock = self.parse_top_level_block()?;
-		self.expect(&TokenKind::RightBrace)?;
+		let kind = if self.consume(&TokenKind::LeftBrace)? {
+			let body: TopLevelBlock = self.parse_top_level_block()?;
+			self.expect(&TokenKind::RightBrace)?;
+			ModuleKind::Inline(body)
+		} else {
+			self.expect(&TokenKind::Semicolon)?;
+			ModuleKind::External
+		};
 		return Ok(ModuleDecl {
 			modifiers,
 			name,
-			body,
+			kind,
 			docs,
 			span: span.merge(&self.last_span),
 		});
@@ -6813,10 +6852,18 @@ impl std::fmt::Display for Directive
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		match self {
-			Directive::Import(path) => return write!(f, "@import \"{}\"", path),
-			Directive::Use(path) => {
+			Directive::Import { modifers, import } => {
+				for m in modifers {
+					write!(f, "{} ", m)?;
+				}
+				return write!(f, "@import \"{}\"", import);
+			}
+			Directive::Use { modifers, use_path } => {
+				for m in modifers {
+					write!(f, "{} ", m)?;
+				}
 				write!(f, "@use ")?;
-				write!(f, "{}", path)?;
+				write!(f, "{}", use_path)?;
 				return Ok(());
 			}
 			Directive::Custom { name, params } => {
@@ -7922,19 +7969,27 @@ fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Modul
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "module {} {{", n.name)?;
-	w.indent();
+	writeln!(f, "module {}", n.name)?;
 
-	for item in &n.body.items {
-		w.write_indent(f)?;
-		write_top_level_decl(f, w, item)?;
-		writeln!(f)?;
-		writeln!(f)?;
+	match &n.kind {
+		ModuleKind::Inline(inline) => {
+			write!(f, "{{")?;
+			w.indent();
+			for item in &inline.items {
+				w.write_indent(f)?;
+				write_top_level_decl(f, w, item)?;
+				writeln!(f)?;
+				writeln!(f)?;
+			}
+			w.dedent();
+			w.write_indent(f)?;
+			write!(f, "}}")?;
+		}
+		ModuleKind::External => {
+			write!(f, ";")?;
+		}
 	}
-
-	w.dedent();
-	w.write_indent(f)?;
-	return write!(f, "}}");
+	return Ok(());
 }
 
 fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result

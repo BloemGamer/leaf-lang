@@ -6,7 +6,7 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
-		ImplDecl, ImplItem, Modifier, ModuleDecl, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
+		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
 		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
@@ -1021,7 +1021,11 @@ impl Collector
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span());
 		self.in_scope(body_scope, |c| {
-			return c.collect_top_level_block(&m.body);
+			match &m.kind {
+				ModuleKind::Inline(body) => c.collect_top_level_block(body)?,
+				ModuleKind::External => {}
+			}
+			return Ok(());
 		})?;
 		return Ok(());
 	}
@@ -1421,8 +1425,8 @@ impl Collector
 	{
 		let dir = &directive.directive;
 		match dir {
-			Directive::Use(_)
-			| Directive::Import(_)
+			Directive::Use { .. }
+			| Directive::Import { .. }
 			| Directive::ValidateStructPattern {
 				struct_path: _,
 				pattern_fields: _,

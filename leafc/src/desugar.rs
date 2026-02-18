@@ -5,9 +5,9 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
-		FunctionDecl, FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, Param, Path,
-		PathSegment, Pattern, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl,
-		TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
+		FunctionDecl, FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, ModuleKind,
+		Param, Path, PathSegment, Pattern, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl,
+		TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
 };
@@ -624,7 +624,12 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_module(&mut self, mut ns: ModuleDecl) -> Result<ModuleDecl, DesugarError>
 	{
-		ns.body = self.desugar_top_level_block(ns.body)?;
+		match &mut ns.kind {
+			ModuleKind::Inline(body) => {
+				*body = self.desugar_top_level_block(std::mem::take(body))?;
+			}
+			ModuleKind::External => {}
+		}
 		return Ok(ns);
 	}
 

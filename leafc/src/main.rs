@@ -124,8 +124,9 @@ use self::{
 mod desugar;
 mod lexer;
 mod parser;
-mod source_map;
 mod symbol_collection;
+
+mod source_map;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
 pub struct Config {}

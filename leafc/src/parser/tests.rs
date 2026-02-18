@@ -1663,7 +1663,10 @@ mod tests
 				assert_eq!(n.name.segments.len(), 1);
 
 				assert_eq!(n.name.segments[0].name, "std");
-				assert_eq!(n.body.items.len(), 1);
+				let ModuleKind::Inline(body) = &n.kind else {
+					panic!("expected inline module")
+				};
+				assert_eq!(body.items.len(), 1);
 			}
 			_ => panic!("Expected module declaration"),
 		}
@@ -2256,10 +2259,10 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Directive(DirectiveNode {
-				directive: Directive::Import(path),
+				directive: Directive::Import { import, .. },
 				..
 			}) => {
-				assert_eq!(path, "file.rs");
+				assert_eq!(import, "file.rs");
 			}
 			_ => panic!("Expected import directive"),
 		}
@@ -2274,11 +2277,11 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Directive(DirectiveNode {
-				directive: Directive::Use(path),
+				directive: Directive::Use { use_path, .. },
 				..
 			}) => {
 				assert_eq!(
-					path,
+					use_path,
 					&Path::simple(
 						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
 						Default::default()
@@ -2906,8 +2909,11 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Module(n) => {
-				assert_eq!(n.body.items.len(), 1);
-				match &n.body.items[0] {
+				let ModuleKind::Inline(body) = &n.kind else {
+					panic!("expected inline module")
+				};
+				assert_eq!(body.items.len(), 1);
+				match &body.items[0] {
 					TopLevelDecl::Module(_) => (),
 					_ => panic!("Expected nested module"),
 				}

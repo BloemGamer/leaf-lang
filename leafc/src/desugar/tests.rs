@@ -644,7 +644,7 @@ mod tests
 		let ns = ModuleDecl {
 			modifiers: Vec::new(),
 			name: Path::simple(vec!["test".into()], Span::default()),
-			body: TopLevelBlock {
+			kind: ModuleKind::Inline(TopLevelBlock {
 				items: vec![TopLevelDecl::Function(FunctionDecl {
 					signature: FunctionSignature {
 						modifiers: Vec::new(),
@@ -676,7 +676,7 @@ mod tests
 					docs: None,
 				})],
 				span: Span::default(),
-			},
+			}),
 			docs: None,
 			span: Span::default(),
 		};
@@ -686,7 +686,10 @@ mod tests
 		let output = result.unwrap();
 
 		// Verify the for loop inside was desugared
-		if let TopLevelDecl::Function(func) = &output.body.items[0]
+		let ModuleKind::Inline(body) = output.kind else {
+			panic!("expected an inline module")
+		};
+		if let TopLevelDecl::Function(func) = &body.items[0]
 			&& let Some(body) = &func.body
 		{
 			// For loop should be desugared to a block
