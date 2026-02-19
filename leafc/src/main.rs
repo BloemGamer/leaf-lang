@@ -273,30 +273,46 @@ fn run(
 		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
 		if args.lexed {
 			println!(
-				"{}\t=> {:#?}",
+				"-------------------------------------------------------\n{} =>\n{:#?}",
 				pm.logical_path.join("::"),
 				lexer.clone().collect::<Vec<_>>()
 			);
 		}
 		let ast: AST = Parser::from(lexer).try_into()?;
 		if args.parsed {
-			println!("{}\t=> {}", pm.logical_path.join("::"), ast);
+			println!(
+				"-------------------------------------------------------\n{} =>\n{}",
+				pm.logical_path.join("::"),
+				ast
+			);
 		}
-		queue.extend(modules::collect_pending(&ast, &pm.file_path));
+		queue.extend(modules::collect_pending(&ast, &pm.file_path, &pm.logical_path));
 		let desugared: DesugaredAST = ast.try_into()?;
 		if args.desugared {
-			println!("{}\t=> {}", pm.logical_path.join("::"), desugared);
+			println!(
+				"-------------------------------------------------------\n{} =>\n{}",
+				pm.logical_path.join("::"),
+				desugared
+			);
 		}
 		let symbols: SymbolTable = symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
 		if args.symbols {
-			println!("{}\t=> {:#?}", pm.logical_path.join("::"), symbols);
+			println!(
+				"-------------------------------------------------------\n{} =>\n{:#?}",
+				pm.logical_path.join("::"),
+				symbols
+			);
 		}
 		modules.push((pm.logical_path, desugared, symbols));
 	}
 
 	if args.all_false() {
 		for (path, _, symbols) in modules {
-			println!("{}\t=> {:#?}", path.join("::"), symbols);
+			println!(
+				"-------------------------------------------------------\n{} =>\n{:#?}",
+				path.join("::"),
+				symbols
+			);
 		}
 	}
 

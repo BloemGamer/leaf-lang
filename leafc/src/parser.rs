@@ -7973,7 +7973,7 @@ fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Modul
 
 	match &n.kind {
 		ModuleKind::Inline(inline) => {
-			write!(f, "{{")?;
+			writeln!(f, " {{")?;
 			w.indent();
 			for item in &inline.items {
 				w.write_indent(f)?;
