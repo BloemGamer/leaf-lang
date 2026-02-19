@@ -204,6 +204,8 @@ struct Args
 	#[arg(short, long)]
 	parsed: bool,
 	#[arg(short, long)]
+	modules: bool,
+	#[arg(short, long)]
 	desugared: bool,
 	#[arg(short, long)]
 	symbols: bool,
@@ -213,7 +215,7 @@ impl Args
 {
 	const fn all_false(&self) -> bool
 	{
-		return !(self.lexed || self.parsed || self.desugared || self.symbols);
+		return !(self.lexed || self.parsed || self.desugared || self.modules || self.symbols);
 	}
 }
 
@@ -237,7 +239,7 @@ fn run(
 ) -> Result<(), CompileError>
 {
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
-		logical_path: vec!["#".to_string()], // TODO:the `#` is just for testing, and will be removed later
+		logical_path: Vec::new(),
 		file_path: filename.into(),
 		declared_at_span: Span {
 			// just a default value, because the main is not really a module file
@@ -254,6 +256,9 @@ fn run(
 	let mut modules: Vec<(Vec<String>, DesugaredAST, SymbolTable)> = Vec::new();
 
 	while let Some(pm) = queue.pop_front() {
+		if args.modules {
+			println!("::{}", pm.logical_path.join("::"));
+		}
 		if !visited.insert(pm.logical_path.clone()) {
 			continue;
 		}
@@ -274,7 +279,7 @@ fn run(
 		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
 		if args.lexed {
 			println!(
-				"-------------------------------------------------------\n{} =>\n{:#?}",
+				"-------------------------------------------------------\n::{} =>\n{:#?}",
 				pm.logical_path.join("::"),
 				lexer.clone().collect::<Vec<_>>()
 			);
@@ -282,7 +287,7 @@ fn run(
 		let ast: AST = Parser::from(lexer).try_into()?;
 		if args.parsed {
 			println!(
-				"-------------------------------------------------------\n{} =>\n{}",
+				"-------------------------------------------------------\n::{} =>\n{}",
 				pm.logical_path.join("::"),
 				ast
 			);
@@ -291,7 +296,7 @@ fn run(
 		let desugared: DesugaredAST = ast.try_into()?;
 		if args.desugared {
 			println!(
-				"-------------------------------------------------------\n{} =>\n{}",
+				"-------------------------------------------------------\n::{} =>\n{}",
 				pm.logical_path.join("::"),
 				desugared
 			);
@@ -299,7 +304,7 @@ fn run(
 		let symbols: SymbolTable = symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
 		if args.symbols {
 			println!(
-				"-------------------------------------------------------\n{} =>\n{:#?}",
+				"-------------------------------------------------------\n::{} =>\n{:#?}",
 				pm.logical_path.join("::"),
 				symbols
 			);
@@ -310,7 +315,7 @@ fn run(
 	if args.all_false() {
 		for (path, _, symbols) in modules {
 			println!(
-				"-------------------------------------------------------\n{} =>\n{:#?}",
+				"-------------------------------------------------------\n::{} =>\n{:#?}",
 				path.join("::"),
 				symbols
 			);
