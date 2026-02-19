@@ -1,5 +1,7 @@
 mod tests;
 
+use std::path;
+
 use leaf_proc::generate_lexer;
 
 use crate::Config;
@@ -699,7 +701,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 	pub fn new_add_to_source_map(
 		config: &'config Config,
 		source: impl Into<String>,
-		file_name: impl Into<String>,
+		file_name: impl Into<path::PathBuf>,
 		source_map: &'source mut SourceMap,
 	) -> Self
 	{

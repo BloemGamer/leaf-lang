@@ -7969,7 +7969,7 @@ fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Modul
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "module {}", n.name)?;
+	write!(f, "module {}", n.name)?;
 
 	match &n.kind {
 		ModuleKind::Inline(inline) => {

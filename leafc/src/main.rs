@@ -111,18 +111,23 @@
 
 // #![warn(clippy::todo)]
 
-use std::{fs, process::exit};
+use std::{
+	collections::{HashSet, VecDeque},
+	fs, path,
+};
 
 use self::{
 	desugar::{DesugarError, DesugaredAST},
-	lexer::Lexer,
+	lexer::{Lexer, Span},
+	modules::{ModuleError, ModuleErrorKind},
 	parser::{AST, ParseError, Parser},
-	source_map::SourceMap,
-	symbol_collection::SymbolCollectionError,
+	source_map::{SourceIndex, SourceMap},
+	symbol_collection::{SymbolCollectionError, SymbolTable},
 };
 
 mod desugar;
 mod lexer;
+mod modules;
 mod parser;
 mod symbol_collection;
 
@@ -149,6 +154,7 @@ pub enum CompileError
 {
 	ParseError(ParseError),
 	DesugarError(DesugarError),
+	ModuleError(ModuleError),
 	SymbolCollectionError(SymbolCollectionError),
 }
 
@@ -161,6 +167,9 @@ impl std::fmt::Display for CompileError
 				write!(f, "{}", error)
 			}
 			CompileError::DesugarError(error) => {
+				write!(f, "{}", error)
+			}
+			CompileError::ModuleError(error) => {
 				write!(f, "{}", error)
 			}
 			CompileError::SymbolCollectionError(error) => {
@@ -180,6 +189,7 @@ impl CompileDiagnostic for CompileError
 		return match self {
 			CompileError::ParseError(err) => err.fmt_with_source(f, sm),
 			CompileError::DesugarError(err) => err.fmt_with_source(f, sm),
+			CompileError::ModuleError(err) => err.fmt_with_source(f, sm),
 			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
 		};
 	}
@@ -214,15 +224,7 @@ fn main()
 	let config: Config = Config::default();
 	let mut source_map: SourceMap = SourceMap::default();
 
-	let file: String = fs::read_to_string(FILE_NAME).map_or_else(
-		|_| {
-			println!("could not open file");
-			exit(1)
-		},
-		|f| return f,
-	);
-
-	run(&args, &config, file, FILE_NAME, &mut source_map)
+	run(&args, &config, FILE_NAME, &mut source_map)
 		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
 		.expect("found an error in the program");
 }
@@ -230,34 +232,73 @@ fn main()
 fn run(
 	args: &Args,
 	config: &Config,
-	file: String,
-	filename: &str,
+	filename: impl Into<path::PathBuf> + Clone,
 	source_map: &mut SourceMap,
 ) -> Result<(), CompileError>
 {
-	let lexed: Lexer = Lexer::new_add_to_source_map(config, file, filename, source_map);
-	if args.lexed {
-		println!("{:#?}", lexed.clone().collect::<Vec<_>>());
-	}
-	let parsed: Parser = lexed.into();
-	let program: AST = parsed.try_into()?;
-	if args.parsed {
-		println!("{}", program);
-	}
+	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
+		logical_path: vec!["#".to_string()],
+		file_path: filename.into(),
+		declared_at_span: Span {
+			start: 0,
+			end: 0,
+			start_line: 0,
+			start_col: 0,
+			end_line: 0,
+			end_col: 0,
+		},
+		declared_at_source: SourceIndex::new(0),
+	}]);
+	let mut visited: HashSet<Vec<String>> = HashSet::new();
+	let mut modules: Vec<(Vec<String>, DesugaredAST, SymbolTable)> = Vec::new();
 
-	let desugared: DesugaredAST = program.try_into()?;
-	if args.desugared {
-		println!("{}", desugared);
-	}
+	while let Some(pm) = queue.pop_front() {
+		if !visited.insert(pm.logical_path.clone()) {
+			continue;
+		}
+		let source = fs::read_to_string(&pm.file_path).map_err(|e| {
+			let kind: ModuleErrorKind = if e.kind() == std::io::ErrorKind::NotFound {
+				ModuleErrorKind::FileNotFound(pm.file_path.clone())
+			} else {
+				ModuleErrorKind::IoError(e.to_string())
+			};
+			return CompileError::from(ModuleError {
+				logical_path: pm.logical_path.clone(),
+				span: pm.declared_at_span,
+				source_index: pm.declared_at_source,
+				kind,
+			});
+		})?;
 
-	let symbols: symbol_collection::SymbolTable =
-		symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
-	if args.symbols {
-		println!("{:#?}", symbols);
+		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
+		if args.lexed {
+			println!(
+				"{}\t=> {:#?}",
+				pm.logical_path.join("::"),
+				lexer.clone().collect::<Vec<_>>()
+			);
+		}
+		let ast: AST = Parser::from(lexer).try_into()?;
+		if args.parsed {
+			println!("{}\t=> {}", pm.logical_path.join("::"), ast);
+		}
+		queue.extend(modules::collect_pending(&ast, &pm.file_path));
+		let desugared: DesugaredAST = ast.try_into()?;
+		if args.desugared {
+			println!("{}\t=> {}", pm.logical_path.join("::"), desugared);
+		}
+		let symbols: SymbolTable = symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
+		if args.symbols {
+			println!("{}\t=> {:#?}", pm.logical_path.join("::"), symbols);
+		}
+		modules.push((pm.logical_path, desugared, symbols));
 	}
 
 	if args.all_false() {
-		println!("{:#?}", symbols);
+		for (path, _, symbols) in modules {
+			println!("{}\t=> {:#?}", path.join("::"), symbols);
+		}
 	}
+
 	return Ok(());
 }

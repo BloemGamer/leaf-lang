@@ -1,7 +1,9 @@
+use std::path;
+
 #[derive(Debug, Clone)]
 pub struct SourceFile
 {
-	pub path: String,
+	pub path: path::PathBuf,
 	pub src: String,
 }
 
@@ -24,7 +26,7 @@ pub struct SourceMap
 
 impl SourceMap
 {
-	pub fn add_file(&mut self, path: impl Into<String>, src: impl Into<String>) -> SourceIndex
+	pub fn add_file(&mut self, path: impl Into<path::PathBuf>, src: impl Into<String>) -> SourceIndex
 	{
 		let file: SourceFile = SourceFile {
 			path: path.into(),
