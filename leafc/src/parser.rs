@@ -429,6 +429,7 @@ impl Spanned for DirectiveNode
 	}
 }
 
+// TODO: fix docs
 /// Qualified path representing a sequence of identifiers separated by `::`.
 ///
 /// A path is used to reference items across module boundaries and can include
@@ -450,6 +451,7 @@ pub struct Path
 {
 	pub segments: Vec<PathSegment>,
 	pub glob: bool,
+	pub global: bool,
 	#[allow(dead_code)]
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -502,6 +504,7 @@ impl Path
 				})
 				.collect(),
 			glob: false,
+			global: false,
 			span,
 		};
 	}
@@ -3273,7 +3276,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let inner: Box<TypeCore> = Box::new(self.parse_type_core()?);
 				return Ok(TypeCore::Mutable { inner });
 			}
-			TokenKind::Identifier(_) => {
+			TokenKind::Identifier(_) | TokenKind::DoubleColon => {
 				let path: Path = self.get_path()?;
 				let generics: Vec<Type> = if self.at(&TokenKind::LessThan)? {
 					self.parse_type_generics()?
@@ -3370,6 +3373,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
 
+		let global: bool = self.consume(&TokenKind::DoubleColon)?;
+
 		loop {
 			let tok: Token = self.next()?;
 			let segment_start = tok.span;
@@ -3435,6 +3440,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(Path {
 			segments,
 			glob: false,
+			global,
 			span: start_span.merge(&self.last_span),
 		});
 	}
@@ -3443,6 +3449,8 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
+
+		let global: bool = self.consume(&TokenKind::DoubleColon)?;
 
 		loop {
 			let tok: Token = self.next()?;
@@ -3509,6 +3517,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(Path {
 			segments,
 			glob,
+			global,
 			span: start_span.merge(&self.last_span),
 		});
 	}
@@ -4090,7 +4099,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 
-			TokenKind::Identifier(_) => {
+			TokenKind::Identifier(_) | TokenKind::DoubleColon => {
 				let path: Path = self.get_path()?;
 
 				let call_type = if self.consume(&TokenKind::Bang)? {
@@ -4655,7 +4664,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}));
 			}
 
-			TokenKind::Identifier(_) => {
+			TokenKind::Identifier(_) | TokenKind::DoubleColon => {
 				let path: Path = self.get_path()?;
 
 				if self.consume(&TokenKind::LeftParen)? {
@@ -5464,7 +5473,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			Vec::new()
 		};
 
-		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_) | TokenKind::DoubleColon) {
 			self.get_path()?
 		} else if self.at(&TokenKind::Delete)? {
 			let tok = self.next()?;
@@ -5780,7 +5789,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Struct)?;
 
-		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_) | TokenKind::DoubleColon) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
@@ -5875,7 +5884,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Union)?;
 
-		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_) | TokenKind::DoubleColon) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
@@ -5987,7 +5996,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Enum)?;
 
-		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_) | TokenKind::DoubleColon) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
@@ -6075,7 +6084,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
 		self.expect(&TokenKind::Variant)?;
 
-		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
+		let name: Path = if matches!(self.peek_kind()?, TokenKind::Identifier(_) | TokenKind::DoubleColon) {
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
@@ -6821,6 +6830,9 @@ impl std::fmt::Display for Path
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
+		if self.global {
+			write!(f, "::")?;
+		}
 		for (i, segment) in self.segments.iter().enumerate() {
 			if i > 0 {
 				write!(f, "::")?;
