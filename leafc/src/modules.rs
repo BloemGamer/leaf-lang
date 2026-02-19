@@ -1,4 +1,4 @@
-// modules.rs
+mod tests;
 
 use std::path::{self, PathBuf};
 
