@@ -237,9 +237,10 @@ fn run(
 ) -> Result<(), CompileError>
 {
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
-		logical_path: vec!["#".to_string()],
+		logical_path: vec!["#".to_string()], // TODO:the `#` is just for testing, and will be removed later
 		file_path: filename.into(),
 		declared_at_span: Span {
+			// just a default value, because the main is not really a module file
 			start: 0,
 			end: 0,
 			start_line: 0,
@@ -247,7 +248,7 @@ fn run(
 			end_line: 0,
 			end_col: 0,
 		},
-		declared_at_source: SourceIndex::new(0),
+		declared_at_source: SourceIndex::new(0), // just a default value (should be itself, but no guarantees), because the main is not really a module file
 	}]);
 	let mut visited: HashSet<Vec<String>> = HashSet::new();
 	let mut modules: Vec<(Vec<String>, DesugaredAST, SymbolTable)> = Vec::new();
@@ -256,7 +257,7 @@ fn run(
 		if !visited.insert(pm.logical_path.clone()) {
 			continue;
 		}
-		let source = fs::read_to_string(&pm.file_path).map_err(|e| {
+		let source: String = fs::read_to_string(&pm.file_path).map_err(|e| {
 			let kind: ModuleErrorKind = if e.kind() == std::io::ErrorKind::NotFound {
 				ModuleErrorKind::FileNotFound(pm.file_path.clone())
 			} else {
