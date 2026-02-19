@@ -73,11 +73,12 @@ impl crate::CompileDiagnostic for ModuleError
 	}
 }
 
-pub fn collect_pending(ast: &AST, declaring_file: &path::Path) -> Vec<PendingModule>
+pub fn collect_pending(ast: &AST, declaring_file: &path::Path, current_modue: &[String]) -> Vec<PendingModule>
 {
 	let mut pending: Vec<PendingModule> = Vec::new();
 	collect_from_block(
 		&ast.top_level_block,
+		current_modue,
 		&[],
 		declaring_file,
 		ast.source_index,
@@ -89,6 +90,7 @@ pub fn collect_pending(ast: &AST, declaring_file: &path::Path) -> Vec<PendingMod
 fn collect_from_block(
 	block: &TopLevelBlock,
 	parent_path: &[String],
+	file_path_segments: &[String],
 	declaring_file: &path::Path,
 	declaring_source: SourceIndex,
 	pending: &mut Vec<PendingModule>,
@@ -102,21 +104,28 @@ fn collect_from_block(
 				.iter()
 				.map(|s| return s.name.clone())
 				.collect();
-
 			let mut full_path: Vec<String> = parent_path.to_vec();
-			full_path.extend(name);
-
+			full_path.extend(name.clone());
+			let mut file_segments: Vec<String> = file_path_segments.to_vec();
+			file_segments.extend(name);
 			match &module_decl.kind {
 				ModuleKind::External => {
 					pending.push(PendingModule {
-						file_path: resolve_file(&full_path, declaring_file),
+						file_path: resolve_file(&file_segments, declaring_file),
 						logical_path: full_path,
 						declared_at_span: module_decl.span,
 						declared_at_source: declaring_source,
 					});
 				}
 				ModuleKind::Inline(body) => {
-					collect_from_block(body, &full_path, declaring_file, declaring_source, pending);
+					collect_from_block(
+						body,
+						&full_path,
+						file_path_segments,
+						declaring_file,
+						declaring_source,
+						pending,
+					);
 				}
 			}
 		}
