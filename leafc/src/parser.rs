@@ -429,7 +429,6 @@ impl Spanned for DirectiveNode
 	}
 }
 
-// TODO: fix docs
 /// Qualified path representing a sequence of identifiers separated by `::`.
 ///
 /// A path is used to reference items across module boundaries and can include
@@ -445,6 +444,8 @@ impl Spanned for DirectiveNode
 /// # Fields
 ///
 /// * `segments` - The path segments, each potentially with generic arguments
+/// * `glob` - If the last element is `*`, just used for the `@use` statement
+/// * `global` - If the path starts with `::`, means no module, so ignore all the `@use` statements
 /// * `span` - Source location information for error reporting and debugging
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Path
@@ -2362,7 +2363,6 @@ impl Spanned for TypeAliasDecl
 	}
 }
 
-//TODO: fix docs
 /// Module declaration.
 ///
 /// Represents a module containing top-level declarations.
@@ -2371,6 +2371,7 @@ impl Spanned for TypeAliasDecl
 /// * `modifiers` - Visibility and other modifiers
 /// * `name` - Module name (can be qualified path)
 /// * `body` - Declarations within the module
+/// * `kind` - The module kind, Inline or External
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the module
 #[derive(Debug, Clone, PartialEq)]
@@ -2385,7 +2386,11 @@ pub struct ModuleDecl
 	pub span: Span,
 }
 
-//TODO: add docs
+/// Module kind.
+///
+/// # Fields
+/// * `Inline` - A `TopLevelBlock` that represents if the module is defined inline (`module name { /* code */ }`)
+/// * `External` - The module is just `module name;`
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModuleKind
 {
