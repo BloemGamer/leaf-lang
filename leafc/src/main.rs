@@ -120,6 +120,7 @@ use self::{
 	desugar::{DesugarError, DesugaredAST},
 	lexer::{Lexer, Span},
 	modules::{ModuleError, ModuleErrorKind},
+	name_resolution::{NameResolutionError, ResolvedModule},
 	parser::{AST, ParseError, Parser},
 	source_map::{SourceIndex, SourceMap},
 	symbol_collection::{SymbolCollectionError, SymbolTable},
@@ -128,6 +129,7 @@ use self::{
 mod desugar;
 mod lexer;
 mod modules;
+mod name_resolution;
 mod parser;
 mod symbol_collection;
 
@@ -156,6 +158,7 @@ pub enum CompileError
 	DesugarError(DesugarError),
 	ModuleError(ModuleError),
 	SymbolCollectionError(SymbolCollectionError),
+	NameResolutionError(NameResolutionError),
 }
 
 impl std::fmt::Display for CompileError
@@ -175,6 +178,9 @@ impl std::fmt::Display for CompileError
 			CompileError::SymbolCollectionError(error) => {
 				write!(f, "{}", error)
 			}
+			CompileError::NameResolutionError(error) => {
+				write!(f, "{}", error)
+			}
 		};
 	}
 }
@@ -191,6 +197,7 @@ impl CompileDiagnostic for CompileError
 			CompileError::DesugarError(err) => err.fmt_with_source(f, sm),
 			CompileError::ModuleError(err) => err.fmt_with_source(f, sm),
 			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
+			CompileError::NameResolutionError(err) => err.fmt_with_source(f, sm),
 		};
 	}
 }
@@ -209,13 +216,15 @@ struct Args
 	desugared: bool,
 	#[arg(short, long)]
 	symbols: bool,
+	#[arg(short, long)]
+	name_resolution: bool,
 }
 
 impl Args
 {
 	const fn all_false(&self) -> bool
 	{
-		return !(self.lexed || self.parsed || self.desugared || self.modules || self.symbols);
+		return !(self.lexed || self.parsed || self.desugared || self.modules || self.symbols || self.name_resolution);
 	}
 }
 
@@ -312,12 +321,26 @@ fn run(
 		modules.push((pm.logical_path, desugared, symbols));
 	}
 
-	if args.all_false() {
-		for (path, _, symbols) in modules {
+	let mut resolved_modules: Vec<ResolvedModule> = Vec::new();
+	for (path, desugared, symbols) in &modules {
+		let resolved = name_resolution::resolve_names(path, desugared, symbols, &modules)?;
+		resolved_modules.push(resolved);
+	}
+	if args.name_resolution {
+		for ResolvedModule { path, ast, symbols: _ } in &resolved_modules {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{:#?}",
 				path.join("::"),
-				symbols
+				ast
+			);
+		}
+	}
+	if args.all_false() {
+		for ResolvedModule { path, ast, symbols: _ } in &resolved_modules {
+			println!(
+				"-------------------------------------------------------\n::{} =>\n{:#?}",
+				path.join("::"),
+				ast
 			);
 		}
 	}
