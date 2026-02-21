@@ -3895,18 +3895,16 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
-			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
-			let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // (
 
 			if let Ok(ty) = self.parse_type()
 				&& self.consume(&TokenKind::RightParen)?
 			{
-				let next_tok = self.peek_kind()?;
+				let next_tok: &TokenKind = self.peek_kind()?;
 
 				if matches!(next_tok, TokenKind::DotDot | TokenKind::DotDotEquals) {
-					self.lexer = checkpoint;
-					self.buffered_token = checkpoint_buffered;
+					self.load_checkpoint(checkpoint);
 					return self.parse_unary(restrictions);
 				}
 
@@ -3918,8 +3916,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				});
 			}
 
-			self.lexer = checkpoint;
-			self.buffered_token = checkpoint_buffered;
+			self.load_checkpoint(checkpoint);
 		}
 
 		return self.parse_unary(restrictions);
