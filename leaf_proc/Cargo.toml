@@ -2,6 +2,7 @@
 name = "leaf_proc"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/BloemGamer/leaf-lang/tree/main/leaf_proc"
 
 [dependencies]
 proc-macro2 = "1.0.105"
