@@ -1,4 +1,4 @@
-mod tests;
+use std::fmt;
 
 use crate::{
 	CompileDiagnostic, CompileError,
@@ -102,6 +102,7 @@ pub enum SymbolKind
 	Label,
 }
 
+#[allow(clippy::doc_overindented_list_items)]
 /// A symbol in the program with its metadata.
 ///
 /// Symbols represent named entities in the source code. Each symbol knows its name,
@@ -114,6 +115,9 @@ pub enum SymbolKind
 /// * `kind` - What kind of symbol this is (variable, function, type, etc.)
 /// * `def_span` - Source location where the symbol is defined
 /// * `scope` - The scope this symbol belongs to
+/// * `introduced_scope` - The scope this symbol introduces, if any (e.g. a module's
+///                        body, a struct's fields, a function body). `None` for symbols
+///                        that do not open a new scope (variables, fields, labels, etc.)
 /// * `visibility` - Whether the symbol is public or private
 ///
 /// # Examples
@@ -133,6 +137,7 @@ pub struct Symbol
 	pub kind: SymbolKind,
 	pub def_span: Span,
 	pub scope: ScopeId,
+	pub introduced_scope: Option<ScopeId>,
 	pub visibility: Visibility,
 }
 
@@ -423,7 +428,7 @@ impl From<SymbolCollectionError> for CompileError
 
 impl CompileDiagnostic for SymbolCollectionError
 {
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	fn fmt_with_source(&self, f: &mut impl fmt::Write, sm: &crate::source_map::SourceMap) -> fmt::Result
 	{
 		return write!(
 			f,
@@ -505,9 +510,9 @@ pub enum PathErrorReason
 	HasGenerics,
 }
 
-impl std::fmt::Display for SymbolCollectionError
+impl fmt::Display for SymbolCollectionError
 {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match &self.kind {
 			SymbolCollectionErrorKind::DuplicateDefinition { name, first_definition } => {
@@ -574,8 +579,8 @@ impl Collector
 
 	fn alloc_scope(&mut self, kind: ScopeKind, span: Span) -> ScopeId
 	{
-		let id: ScopeId = ScopeId(self.table.scopes.len());
-		let parent: ScopeId = self.current_scope;
+		let id = ScopeId(self.table.scopes.len());
+		let parent = self.current_scope;
 
 		self.table.scopes.push(Scope {
 			kind,
@@ -591,7 +596,7 @@ impl Collector
 	#[allow(unused)]
 	fn alloc_scope_under(&mut self, parent: ScopeId, kind: ScopeKind, span: Span) -> ScopeId
 	{
-		let id: ScopeId = ScopeId(self.table.scopes.len());
+		let id = ScopeId(self.table.scopes.len());
 
 		self.table.scopes.push(Scope {
 			kind,
@@ -602,6 +607,17 @@ impl Collector
 		});
 		self.table.scopes[parent.0].children.push(id);
 		return id;
+	}
+
+	fn in_scope<F, R>(&mut self, scope: ScopeId, f: F) -> Result<R, SymbolCollectionError>
+	where
+		F: FnOnce(&mut Self) -> Result<R, SymbolCollectionError>,
+	{
+		let prev = self.current_scope;
+		self.current_scope = scope;
+		let result = f(self);
+		self.current_scope = prev;
+		return result;
 	}
 
 	fn insert_symbol(
@@ -631,12 +647,13 @@ impl Collector
 			}
 		}
 
-		let id: SymbolId = SymbolId(self.table.symbols.len());
+		let id = SymbolId(self.table.symbols.len());
 		self.table.symbols.push(Symbol {
 			name,
 			kind,
 			def_span,
 			scope,
+			introduced_scope: None,
 			visibility,
 		});
 		self.table.scopes[scope.0].symbols.push(id);
@@ -655,15 +672,9 @@ impl Collector
 		return self.insert_symbol(scope, name, kind, def_span, visibility);
 	}
 
-	fn in_scope<F, R>(&mut self, scope: ScopeId, f: F) -> Result<R, SymbolCollectionError>
-	where
-		F: FnOnce(&mut Self) -> Result<R, SymbolCollectionError>,
+	fn set_introduced_scope(&mut self, sym_id: SymbolId, scope_id: ScopeId)
 	{
-		let prev: ScopeId = self.current_scope;
-		self.current_scope = scope;
-		let result: Result<R, SymbolCollectionError> = f(self);
-		self.current_scope = prev;
-		return result;
+		self.table.symbols[sym_id.0].introduced_scope = Some(scope_id);
 	}
 
 	fn validate_simple_path(&self, path: &Path, declaration_type: &str) -> Result<(), SymbolCollectionError>
@@ -749,20 +760,26 @@ impl Collector
 				},
 			});
 		}
-		if let Some(name) = sig.name.segments.first() {
-			self.define(
-				name.name.clone(),
-				SymbolKind::Function {
-					comp_const: sig.modifiers.iter().any(|m| matches!(m, Modifier::Const)),
-				},
-				sig.span(),
-				get_visability(&func.signature.modifiers),
-			)?;
-		} else {
-			unreachable!("A signature should always have a segment, otherwise the parser did not do his job right");
-		}
+
+		let name: String = sig
+			.name
+			.segments
+			.first()
+			.expect("parser guarantees at least one segment")
+			.name
+			.clone();
+
+		let sym_id: SymbolId = self.define(
+			name,
+			SymbolKind::Function {
+				comp_const: sig.modifiers.iter().any(|m| matches!(m, Modifier::Const)),
+			},
+			sig.span(),
+			get_visability(&func.signature.modifiers),
+		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::FunctionBody, func.span());
+		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for generic in &sig.generics {
@@ -774,8 +791,13 @@ impl Collector
 				)?;
 			}
 
-			if sig.call_type != CallType::Regular {
-				for ge in ["IO", "Alloc"].iter() {
+			if sig.call_type == CallType::Regular {
+				debug_assert!(
+					sig.heap_generics.is_empty(),
+					"If the calltype is regular, there should not be any heap_generics",
+				);
+			} else {
+				for ge in &["IO", "Alloc"] {
 					// TODO: maybe extract this one to a global variable, but not for now
 					c.define(
 						ge.to_string(),
@@ -787,11 +809,6 @@ impl Collector
 						Visibility::Private,
 					)?;
 				}
-			} else {
-				debug_assert!(
-					sig.heap_generics.is_empty(),
-					"If the calltype is regular, there should not be any heap_generics",
-				);
 			}
 
 			for param in &sig.params {
@@ -801,16 +818,16 @@ impl Collector
 				c.validate_simple_path(path, "function")?;
 
 				let Pattern::TypedIdentifier { mutable, .. } = param.pattern else {
-					unreachable!("Should be handeled by the desugarer");
+					unreachable!("Should be handled by the desugarer");
 				};
 				c.define(
 					path.segments[0].name.clone(),
 					SymbolKind::Variable {
-						mutability: (if mutable {
+						mutability: if mutable {
 							Mutability::Mutable
 						} else {
 							Mutability::Immutable
-						}),
+						},
 					},
 					*span,
 					Visibility::Private,
@@ -839,14 +856,15 @@ impl Collector
 		self.validate_simple_path(path, "variable")?;
 
 		let Pattern::TypedIdentifier { mutable, .. } = var.pattern else {
-			unreachable!("Should be handeled by the desugarer");
+			unreachable!("Should be handled by the desugarer");
 		};
+
 		self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Variable {
 				mutability: if var.comp_const {
 					if mutable {
-						todo!("const can't be mixed with const")
+						todo!("const can't be mixed with mut")
 					}
 					Mutability::Const
 				} else if mutable {
@@ -867,7 +885,7 @@ impl Collector
 		let path: &Path = &s.name;
 		self.validate_simple_path(path, "struct")?;
 
-		self.define(
+		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Struct,
 			s.span(),
@@ -875,6 +893,7 @@ impl Collector
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span());
+		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &s.fields {
@@ -887,6 +906,7 @@ impl Collector
 			}
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -895,7 +915,7 @@ impl Collector
 		let path: &Path = &u.name;
 		self.validate_simple_path(path, "union")?;
 
-		self.define(
+		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Union,
 			u.span(),
@@ -903,6 +923,7 @@ impl Collector
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span());
+		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &u.fields {
@@ -915,6 +936,7 @@ impl Collector
 			}
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -924,9 +946,10 @@ impl Collector
 		self.validate_simple_path(path, "enum")?;
 
 		let visibility: Visibility = get_visability(&e.modifiers);
-		self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
+		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span());
+		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &e.variants {
@@ -934,6 +957,7 @@ impl Collector
 			}
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -943,9 +967,10 @@ impl Collector
 		self.validate_simple_path(path, "variant")?;
 
 		let visibility: Visibility = get_visability(&v.modifiers);
-		self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
+		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span());
+		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &v.variants {
@@ -953,6 +978,7 @@ impl Collector
 			}
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -976,7 +1002,7 @@ impl Collector
 		let path: &Path = &t.name;
 		self.validate_simple_path(path, "trait")?;
 
-		self.define(
+		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Trait,
 			path.span(),
@@ -984,6 +1010,8 @@ impl Collector
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::TraitBody, t.span());
+		self.set_introduced_scope(sym_id, body_scope);
+
 		self.in_scope(body_scope, |c| {
 			for generic in &t.generics {
 				c.define(
@@ -1004,6 +1032,7 @@ impl Collector
 
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -1012,7 +1041,7 @@ impl Collector
 		let path: &Path = &m.name;
 		self.validate_simple_path(path, "module")?;
 
-		self.define(
+		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Module,
 			path.span(),
@@ -1020,6 +1049,8 @@ impl Collector
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span());
+		self.set_introduced_scope(sym_id, body_scope);
+
 		self.in_scope(body_scope, |c| {
 			match &m.kind {
 				ModuleKind::Inline(body) => c.collect_top_level_block(body)?,
@@ -1027,6 +1058,7 @@ impl Collector
 			}
 			return Ok(());
 		})?;
+
 		return Ok(());
 	}
 
@@ -1073,12 +1105,12 @@ impl Collector
 				body,
 				span,
 			} => {
-				let Some(label): Option<&String> = labelv.as_ref() else {
+				let Some(label) = labelv.as_ref() else {
 					unreachable!("desugarer should have added a label")
 				};
 				self.define(label.clone(), SymbolKind::Label, *span, Visibility::Private)?;
 
-				let body_scope: ScopeId = self.alloc_scope(ScopeKind::LoopBody, *span);
+				let body_scope = self.alloc_scope(ScopeKind::LoopBody, *span);
 
 				self.in_scope(body_scope, |c| {
 					for item in &body.stmts {
@@ -1092,7 +1124,7 @@ impl Collector
 				})?;
 			}
 			Stmt::Block(block) | Stmt::Unsafe(block) => {
-				let body_scope: ScopeId = self.alloc_scope(ScopeKind::Block, block.span());
+				let body_scope = self.alloc_scope(ScopeKind::Block, block.span());
 				self.in_scope(body_scope, |c| {
 					for item in &block.stmts {
 						c.collect_stmt(item)?;
@@ -1122,7 +1154,7 @@ impl Collector
 					self.collect_expr(expr)?;
 				}
 			}
-			Stmt::Break { label, value, span: _ } => {
+			Stmt::Break { value, label, span: _ } => {
 				debug_assert!(label.is_some());
 
 				if let Some(expr) = value {
@@ -1423,8 +1455,7 @@ impl Collector
 
 	fn collect_directive(&mut self, directive: &DirectiveNode) -> Result<(), SymbolCollectionError>
 	{
-		let dir = &directive.directive;
-		match dir {
+		match &directive.directive {
 			Directive::Use { .. }
 			| Directive::Import { .. }
 			| Directive::ValidateStructPattern {
@@ -1501,7 +1532,6 @@ fn get_visability(mods: &[Modifier]) -> Visibility
 {
 	if mods.iter().any(|m| matches!(m, Modifier::Pub)) {
 		return Visibility::Public;
-	} else {
-		return Visibility::Private;
 	}
+	return Visibility::Private;
 }
