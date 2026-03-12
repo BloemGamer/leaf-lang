@@ -1032,7 +1032,7 @@ impl Desugarer
 			};
 		});
 
-		let iterator_type = Type {
+		let iterator_type: Type = Type {
 			core: Box::new(TypeCore::ImplTrait {
 				bounds: vec![WhereBound::Path {
 					path: Path::simple(vec!["Iterator".to_string()], iter_span),
