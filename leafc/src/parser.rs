@@ -6695,7 +6695,7 @@ pub fn extract_type_from_pattern(pattern: &Pattern) -> Option<Type>
 				span: *span,
 			});
 		}
-		Pattern::Struct { path, span, .. } | Pattern::Variant { path, span, .. } => {
+		Pattern::Struct { path, span, .. } => {
 			return Some(Type {
 				core: Box::new(TypeCore::Base {
 					path: path.clone(),
