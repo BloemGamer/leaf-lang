@@ -7,6 +7,8 @@ mod tests
 	use crate::{CompileDiagnostic, parser::*};
 	use crate::{CompileError, Config};
 
+	use std::fmt::Write;
+
 	fn parse_expr_from_str(input: &str) -> Result<Expr, CompileError>
 	{
 		let config = Config::default();
@@ -149,8 +151,7 @@ mod tests
 		let result = parse_expr_from_str("variable");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Identifier { path, .. } if path == Path::simple(vec!["variable".to_string()], Default::default()) => {
-			}
+			Expr::Identifier { path, .. } if path == Path::simple(vec!["variable".to_string()], Span::default()) => {}
 			_ => panic!("Expected simple identifier"),
 		}
 	}
@@ -165,7 +166,7 @@ mod tests
 				if path
 					== Path::simple(
 						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
-						Default::default(),
+						Span::default(),
 					) => {}
 			_ => panic!("Expected path identifier"),
 		}
@@ -177,7 +178,7 @@ mod tests
 		let result = parse_expr_from_str("self");
 		assert!(result.is_ok());
 		match result.unwrap() {
-			Expr::Identifier { path, .. } if path == Path::simple(vec!["self".to_string()], Default::default()) => (),
+			Expr::Identifier { path, .. } if path == Path::simple(vec!["self".to_string()], Span::default()) => (),
 			_ => panic!("Expected self identifier"),
 		}
 	}
@@ -1240,11 +1241,11 @@ mod tests
 	#[test]
 	fn test_parse_switch_expression()
 	{
-		let input = r#"switch x {
+		let input = r"switch x {
             1 => 10,
             2 => 20,
             _ => 0,
-        }"#;
+        }";
 		let result = parse_expr_from_str(input);
 		match &result {
 			Ok(program) => {
@@ -1387,11 +1388,11 @@ mod tests
 	#[test]
 	fn test_parse_simple_function()
 	{
-		let input = r#"
+		let input = r"
             fn foo() {
                 return 42;
             }
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -1400,7 +1401,7 @@ mod tests
 			TopLevelDecl::Function(func) => {
 				assert_eq!(
 					func.signature.name,
-					Path::simple(vec!["foo".to_string()], Default::default())
+					Path::simple(vec!["foo".to_string()], Span::default())
 				);
 				assert_eq!(func.signature.params.len(), 0);
 				assert!(func.body.is_some());
@@ -1735,7 +1736,7 @@ mod tests
 			TopLevelDecl::Impl(i) => {
 				assert_eq!(
 					i.target.path,
-					Path::simple(vec!["MyStruct".to_string()], Default::default())
+					Path::simple(vec!["MyStruct".to_string()], Span::default())
 				);
 				assert!(i.trait_path.is_none());
 				assert_eq!(i.body.len(), 1);
@@ -1756,7 +1757,7 @@ mod tests
 				assert!(i.trait_path.is_some());
 				assert_eq!(
 					i.target.path,
-					Path::simple(vec!["MyStruct".to_string()], Default::default())
+					Path::simple(vec!["MyStruct".to_string()], Span::default())
 				);
 			}
 			_ => panic!("Expected impl declaration"),
@@ -2170,12 +2171,12 @@ mod tests
 	#[test]
 	fn test_parse_switch_with_typed_patterns()
 	{
-		let input = r#"
+		let input = r"
 			switch x {
 				Some(val: i32) => val,
 				None => 0,
 			}
-		"#;
+		";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -2239,7 +2240,7 @@ mod tests
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path,
-						&Path::simple(vec!["std".to_string(), "ptr".to_string()], Default::default())
+						&Path::simple(vec!["std".to_string(), "ptr".to_string()], Span::default())
 					);
 				}
 				_ => panic!("Expected identifier expression"),
@@ -2284,7 +2285,7 @@ mod tests
 					use_path,
 					&Path::simple(
 						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
-						Default::default()
+						Span::default()
 					)
 				);
 			}
@@ -2497,7 +2498,7 @@ mod tests
 					path,
 					&Path::simple(
 						vec!["std".to_string(), "vec".to_string(), "Vec".to_string()],
-						Default::default()
+						Span::default()
 					)
 				);
 			}
@@ -2933,7 +2934,7 @@ mod tests
 			TopLevelDecl::Module(n) => {
 				assert_eq!(
 					n.name,
-					Path::simple(vec!["std".to_string(), "vec".to_string()], Default::default())
+					Path::simple(vec!["std".to_string(), "vec".to_string()], Span::default())
 				);
 			}
 			_ => panic!("Expected module"),
@@ -3101,7 +3102,7 @@ mod tests
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(
 					s.name,
-					Path::simple(vec!["ns".to_string(), "Name".to_string()], Default::default())
+					Path::simple(vec!["ns".to_string(), "Name".to_string()], Span::default())
 				);
 			}
 			_ => panic!("Expected struct"),
@@ -3193,8 +3194,8 @@ mod tests
 		let program = parse_program_from_str(input).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("Point"));
-		assert!(output.contains("x"));
-		assert!(output.contains("y"));
+		assert!(output.contains('x'));
+		assert!(output.contains('y'));
 	}
 
 	// ========== Error Recovery Tests ==========
@@ -3475,13 +3476,13 @@ mod tests
 	#[test]
 	fn test_parse_nested_labeled_loops()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: loop {
 			'inner: loop {
 				break 'outer;
 			};
 		};
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 		let block = result.unwrap();
@@ -3508,7 +3509,7 @@ mod tests
 	#[test]
 	fn test_parse_break_to_outer_loop()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: loop {
 			'inner: loop {
 				if condition {
@@ -3517,7 +3518,7 @@ mod tests
 				break 'inner;
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3525,7 +3526,7 @@ mod tests
 	#[test]
 	fn test_parse_continue_to_outer_loop()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: for i: i32 in 0..10 {
 			'inner: for j: i32 in 0..10 {
 				if j == 5 {
@@ -3533,7 +3534,7 @@ mod tests
 				}
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3541,13 +3542,13 @@ mod tests
 	#[test]
 	fn test_parse_loop_with_break_value_as_expression()
 	{
-		let input = r#"{
+		let input = r"{
 		var result: i32 = loop {
 			if condition {
 				break 42;
 			}
 		};
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3555,13 +3556,13 @@ mod tests
 	#[test]
 	fn test_parse_labeled_loop_with_break_value()
 	{
-		let input = r#"{
+		let input = r"{
 		var result: i32 = 'search: loop {
 			if found {
 				break 'search 100;
 			}
 		};
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3569,11 +3570,11 @@ mod tests
 	#[test]
 	fn test_parse_break_with_complex_expression()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break x * 2 + y;
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3581,11 +3582,11 @@ mod tests
 	#[test]
 	fn test_parse_break_with_function_call()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break compute_result();
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3607,14 +3608,14 @@ mod tests
 	#[test]
 	fn test_parse_multiple_labeled_loops_same_level()
 	{
-		let input = r#"{
+		let input = r"{
 		'first: loop {
 			break 'first;
 		}
 		'second: loop {
 			break 'second;
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3622,7 +3623,7 @@ mod tests
 	#[test]
 	fn test_parse_deeply_nested_labeled_loops()
 	{
-		let input = r#"{
+		let input = r"{
 		'level1: loop {
 			'level2: while true {
 				'level3: for i: i32 in 0..10 {
@@ -3632,7 +3633,7 @@ mod tests
 				}
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3640,14 +3641,14 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_block_expression()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break {
 				var x: i32 = 10;
 				x + 5
 			};
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3655,11 +3656,11 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_if_expression()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break if condition { 1 } else { 2 };
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3667,7 +3668,7 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_match()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break switch x {
 				1 => 10,
@@ -3675,7 +3676,7 @@ mod tests
 				_ => 0,
 			};
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3704,14 +3705,14 @@ mod tests
 	#[test]
 	fn test_parse_char_literal_and_label_in_same_block()
 	{
-		let input = r#"{
+		let input = r"{
 		var ch: char = 'a';
 		'outer: loop {
 			if ch == 'b' {
 				break 'outer;
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3726,11 +3727,11 @@ mod tests
 	#[test]
 	fn test_parse_while_with_break_value()
 	{
-		let input = r#"{
+		let input = r"{
 		while true {
 			break 42;
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3738,13 +3739,13 @@ mod tests
 	#[test]
 	fn test_parse_for_with_break_value()
 	{
-		let input = r#"{
+		let input = r"{
 		for i: i64 in 0..10 {
 			if i == 5 {
 				break i;
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3752,7 +3753,7 @@ mod tests
 	#[test]
 	fn test_parse_labeled_for_with_continue_and_break()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: for i: i32 in 0..10 {
 			if i == 3 {
 				continue 'outer;
@@ -3761,7 +3762,7 @@ mod tests
 				break 'outer i;
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3769,7 +3770,7 @@ mod tests
 	#[test]
 	fn test_parse_multiple_breaks_different_labels()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: loop {
 			'inner: loop {
 				if a {
@@ -3780,7 +3781,7 @@ mod tests
 				}
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3831,13 +3832,13 @@ mod tests
 	#[test]
 	fn test_parse_real_world_example_search()
 	{
-		let input = r#"{
+		let input = r"{
 		'search: for item: CollectItem in collection {
 			if item.matches(target) {
 				break 'search item.value;
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3845,7 +3846,7 @@ mod tests
 	#[test]
 	fn test_parse_real_world_example_nested_iteration()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: for row: Height in 0..height {
 			'inner: for col: Width in 0..width {
 				if grid[row][col] == target {
@@ -3853,7 +3854,7 @@ mod tests
 				}
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3861,7 +3862,7 @@ mod tests
 	#[test]
 	fn test_parse_real_world_example_state_machine()
 	{
-		let input = r#"{
+		let input = r"{
 		'state_machine: loop {
 			switch current_state {
 				State::Init => {
@@ -3880,7 +3881,7 @@ mod tests
 				_ => break 'state_machine Result::Error,
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3888,7 +3889,7 @@ mod tests
 	#[test]
 	fn test_parse_break_in_nested_if_in_loop()
 	{
-		let input = r#"{
+		let input = r"{
 		'outer: loop {
 			if condition1 {
 				if condition2 {
@@ -3896,7 +3897,7 @@ mod tests
 				}
 			}
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3921,11 +3922,11 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_tuple()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break (1, 2, 3);
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3933,11 +3934,11 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_array()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break [1, 2, 3];
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -3945,11 +3946,11 @@ mod tests
 	#[test]
 	fn test_parse_break_value_with_struct_init()
 	{
-		let input = r#"{
+		let input = r"{
 		loop {
 			break Point { x -> 1, y -> 2 };
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -4312,7 +4313,7 @@ mod tests
 				assert_eq!(
 					bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -4426,10 +4427,10 @@ mod tests
 	#[test]
 	fn test_parse_regular_vs_heap_function()
 	{
-		let input = r#"
+		let input = r"
             fn regular() {}
             fn! heap() {}
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -4946,7 +4947,7 @@ mod tests
 		let expr = parse_expr_from_str(input).unwrap();
 		let output = format!("{}", expr);
 		assert!(output.contains("allocate"));
-		assert!(output.contains("!"));
+		assert!(output.contains('!'));
 	}
 
 	#[test]
@@ -4956,7 +4957,7 @@ mod tests
 		let expr = parse_expr_from_str(input).unwrap();
 		let output = format!("{}", expr);
 		assert!(output.contains("default"));
-		assert!(output.contains("!"));
+		assert!(output.contains('!'));
 	}
 
 	// ========== Error Cases ==========
@@ -4991,12 +4992,12 @@ mod tests
 	#[test]
 	fn test_parse_allocator_pattern()
 	{
-		let input = r#"
+		let input = r"
             fn! create_buffer<A: Allocator>(allocator: A, size: usize) -> Buffer {
                 var ptr: u8* = allocator.allocate!(size);
                 return Buffer { ptr, size };
             }
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5004,13 +5005,13 @@ mod tests
 	#[test]
 	fn test_parse_conditional_heap_allocation()
 	{
-		let input = r#"{
+		let input = r"{
             if should_heap {
                 create!<Alloc: Heap>(data)
             } else {
                 create(data)
             }
-        }"#;
+        }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5026,12 +5027,12 @@ mod tests
 	#[test]
 	fn test_parse_heap_call_in_match_arm()
 	{
-		let input = r#"{
+		let input = r"{
             switch val {
                 Some(x: i32) => process!(x),
                 None => default!(),
             }
-        }"#;
+        }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5047,11 +5048,11 @@ mod tests
 	#[test]
 	fn test_parse_function_returning_heap_allocated()
 	{
-		let input = r#"
+		let input = r"
             fn! create_vec<T>() -> Vec<T> {
                 Vec!<Alloc: System>()
             }
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5059,12 +5060,12 @@ mod tests
 	#[test]
 	fn test_parse_trait_with_heap_methods()
 	{
-		let input = r#"
+		let input = r"
             trait Allocator {
                 fn! allocate(&self, size: usize) -> u8*;
                 fn! deallocate(&self, ptr: u8*);
             }
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5072,13 +5073,13 @@ mod tests
 	#[test]
 	fn test_parse_impl_with_heap_methods()
 	{
-		let input = r#"
+		let input = r"
             impl Allocator for SystemAlloc {
                 fn! allocate(&self, size: usize) -> u8* {
                     system_alloc!(size)
                 }
             }
-        "#;
+        ";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5100,7 +5101,7 @@ mod tests
 				assert_eq!(
 					func.signature.generics[0].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5124,21 +5125,21 @@ mod tests
 				assert_eq!(
 					func.signature.generics[0].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
 				assert_eq!(
 					func.signature.generics[0].bounds[1],
 					WhereBound::Path {
-						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						path: Path::simple(vec!["Debug".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
 				assert_eq!(
 					func.signature.generics[0].bounds[2],
 					WhereBound::Path {
-						path: Path::simple(vec!["Display".to_string()], Default::default()),
+						path: Path::simple(vec!["Display".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5168,7 +5169,7 @@ mod tests
 				assert_eq!(
 					func.signature.generics[1].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5179,14 +5180,14 @@ mod tests
 				assert_eq!(
 					func.signature.generics[2].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						path: Path::simple(vec!["Debug".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
 				assert_eq!(
 					func.signature.generics[2].bounds[1],
 					WhereBound::Path {
-						path: Path::simple(vec!["Send".to_string()], Default::default()),
+						path: Path::simple(vec!["Send".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5213,7 +5214,7 @@ mod tests
 				assert_eq!(
 					t.generics[0].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5223,7 +5224,7 @@ mod tests
 				assert_eq!(
 					t.generics[1].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Debug".to_string()], Default::default()),
+						path: Path::simple(vec!["Debug".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5266,14 +5267,14 @@ mod tests
 				assert_eq!(
 					i.generics[0].bounds[0],
 					WhereBound::Path {
-						path: Path::simple(vec!["Clone".to_string()], Default::default()),
+						path: Path::simple(vec!["Clone".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
 				assert_eq!(
 					i.generics[0].bounds[1],
 					WhereBound::Path {
-						path: Path::simple(vec!["Send".to_string()], Default::default()),
+						path: Path::simple(vec!["Send".to_string()], Span::default()),
 						args: Vec::new()
 					}
 				);
@@ -5318,7 +5319,7 @@ mod tests
 					WhereBound::Path {
 						path: Path::simple(
 							vec!["std".to_string(), "clone".to_string(), "Clone".to_string()],
-							Default::default()
+							Span::default()
 						),
 						args: Vec::new()
 					}
@@ -5328,7 +5329,7 @@ mod tests
 					WhereBound::Path {
 						path: Path::simple(
 							vec!["std".to_string(), "fmt".to_string(), "Debug".to_string()],
-							Default::default()
+							Span::default()
 						),
 						args: Vec::new()
 					}
@@ -5448,7 +5449,7 @@ mod tests
 	#[test]
 	fn test_parse_realistic_generic_function()
 	{
-		let input = r#"
+		let input = r"
 			fn process<T: Clone + Debug, E: Error>(
 				items: Vec<T>,
 				handler: impl Fn(T) -> Result<(), E>
@@ -5457,7 +5458,7 @@ mod tests
 					handler(item);
 				}
 			}
-		"#;
+		";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5465,12 +5466,12 @@ mod tests
 	#[test]
 	fn test_parse_trait_with_method_using_bounds()
 	{
-		let input = r#"
+		let input = r"
 			trait Container<T: Clone> {
 				fn add(&mut self, item: T);
 				fn get(&self, index: usize) -> Option<T>;
 			}
-		"#;
+		";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5478,13 +5479,13 @@ mod tests
 	#[test]
 	fn test_parse_impl_for_generic_with_bounds()
 	{
-		let input = r#"
+		let input = r"
 			impl<T: Clone + PartialEq> MyVec<T> {
 				fn contains(&self, item: T) -> bool {
 					false
 				}
 			}
-		"#;
+		";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -5807,7 +5808,7 @@ mod tests
 	#[test]
 	fn test_directive_mixed_identifier_and_named()
 	{
-		let result = parse_directive(r#"@plugin(logger, level = 2)"#);
+		let result = parse_directive(r"@plugin(logger, level = 2)");
 		assert!(result.is_ok());
 		let directive = result.unwrap();
 
@@ -6034,7 +6035,7 @@ mod tests
 	#[test]
 	fn test_directive_test_case()
 	{
-		let result = parse_directive(r#"@test_case(input = 42, expected = 84)"#);
+		let result = parse_directive(r"@test_case(input = 42, expected = 84)");
 		assert!(result.is_ok());
 		let directive = result.unwrap();
 
@@ -6129,14 +6130,14 @@ mod tests
 	#[test]
 	fn test_parse_loop_break_with_switch()
 	{
-		let input = r#"{
+		let input = r"{
 			loop {
 				break switch x {
 					1 => 10,
 					_ => 0,
 				};
 			}
-		}"#;
+		}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -6704,7 +6705,7 @@ mod tests
 						} => {
 							assert_eq!(inner_fields.len(), 2);
 
-							assert!(inner_fields[0].0.starts_with("y"));
+							assert!(inner_fields[0].0.starts_with('y'));
 							assert!(matches!(&inner_fields[0].1, Pattern::Tuple { .. }));
 
 							assert_eq!(inner_fields[1].0, "z");
@@ -6745,12 +6746,12 @@ mod tests
 	#[test]
 	fn test_parse_struct_pattern_in_switch()
 	{
-		let input = r#"{
+		let input = r"{
 		switch val {
 			S {a: i64, d -> (b: i64, c: i64) } => a,
 			_ => 0,
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
 
@@ -6761,7 +6762,7 @@ mod tests
 					Pattern::Struct { fields, .. } => {
 						assert_eq!(fields.len(), 2);
 						assert_eq!(fields[0].0, "a");
-						assert!(fields[1].0.starts_with("d"));
+						assert!(fields[1].0.starts_with('d'));
 						assert!(matches!(&fields[1].1, Pattern::Tuple { .. }));
 					}
 					_ => panic!("Expected Struct pattern"),
@@ -6785,7 +6786,7 @@ mod tests
 				Expr::IfVar { pattern, .. } => match pattern {
 					Pattern::Struct { fields, .. } => {
 						assert_eq!(fields.len(), 2);
-						assert!(fields[1].0.starts_with("d"));
+						assert!(fields[1].0.starts_with('d'));
 					}
 					_ => panic!("Expected Struct pattern"),
 				},
@@ -6808,7 +6809,7 @@ mod tests
 				Pattern::Struct { fields, .. } => {
 					assert_eq!(fields.len(), 2);
 
-					assert!(fields[1].0.starts_with("b"));
+					assert!(fields[1].0.starts_with('b'));
 					match &fields[1].1 {
 						Pattern::Variant { path, args, .. } => {
 							assert_eq!(path.segments.len(), 1);
@@ -6911,13 +6912,13 @@ mod tests
 	#[test]
 	fn test_parse_struct_pattern_real_world_example()
 	{
-		let input = r#"{
+		let input = r"{
 		var Response {
 			status: i32,
 			method -> (method: String, path: String),
 			body -> Body {content: String, encoding: String},
 		} = parse_response();
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok(), "Failed to parse: {:?}", result.err());
 
@@ -7217,11 +7218,11 @@ mod tests
 	#[test]
 	fn test_parse_impl_generic_method()
 	{
-		let input = r#"
+		let input = r"
 		impl Container {
 			fn convert<U>(&self) -> U where U: From<i32> {}
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7349,12 +7350,12 @@ mod tests
 	#[test]
 	fn test_parse_generic_in_switch()
 	{
-		let input = r#"{
+		let input = r"{
 		switch opt {
 			Some(val: Vec<i32>) => val,
 			None => default(),
 		}
-	}"#;
+	}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7414,7 +7415,7 @@ mod tests
 	#[test]
 	fn test_parse_vec_like_implementation()
 	{
-		let input = r#"
+		let input = r"
 		struct Vec<T> {
 			data: T*,
 			len: usize,
@@ -7426,7 +7427,7 @@ mod tests
 			fn push(&mut self, item: T) {}
 			fn pop(&mut self) -> Option<T> {}
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7434,7 +7435,7 @@ mod tests
 	#[test]
 	fn test_parse_option_like_variant()
 	{
-		let input = r#"
+		let input = r"
 		variant Option<T> {
 			Some(T),
 			None,
@@ -7444,7 +7445,7 @@ mod tests
 			fn is_some(&self) -> bool {}
 			fn unwrap(self) -> T {}
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7452,12 +7453,12 @@ mod tests
 	#[test]
 	fn test_parse_result_like_variant()
 	{
-		let input = r#"
+		let input = r"
 		variant Result<T, E> {
 			Ok(T),
 			Err(E),
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7465,11 +7466,11 @@ mod tests
 	#[test]
 	fn test_parse_hashmap_like_struct()
 	{
-		let input = r#"
+		let input = r"
 		struct HashMap<K, V> where K: Hash + Eq {
 			buckets: Vec<Vec<(K, V)>>,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7477,7 +7478,7 @@ mod tests
 	#[test]
 	fn test_parse_generic_builder_pattern()
 	{
-		let input = r#"
+		let input = r"
 		struct Builder<T> {
 			value: T,
 		}
@@ -7486,7 +7487,7 @@ mod tests
 			fn new(value: T) -> Self {}
 			fn build(self) -> T {}
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7603,11 +7604,11 @@ mod tests
 	#[test]
 	fn test_parse_generic_type_in_module()
 	{
-		let input = r#"
+		let input = r"
 		module collections {
 			struct Vec<T> { data: T* }
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7635,14 +7636,14 @@ mod tests
 	#[test]
 	fn test_parse_phantom_data_pattern()
 	{
-		let input = r#"
+		let input = r"
 		struct PhantomData<T> {}
 		
 		struct Wrapper<T> {
 			phantom: PhantomData<T>,
 			data: i32,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7691,7 +7692,7 @@ mod tests
 	#[test]
 	fn test_parse_multiple_impls_same_type_different_generics()
 	{
-		let input = r#"
+		let input = r"
 		impl Container<i32> {
 			fn specialized() {}
 		}
@@ -7699,7 +7700,7 @@ mod tests
 		impl<T> Container<T> {
 			fn generic() {}
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7975,12 +7976,12 @@ mod tests
 	#[test]
 	fn test_parse_switch_block_arm_with_comma()
 	{
-		let input = r#"{
+		let input = r"{
 			switch x {
 				1 => { println(1); },
 				2 => { println(2); },
 			}
-		}"#;
+		}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7988,11 +7989,11 @@ mod tests
 	#[test]
 	fn test_parse_switch_block_arm_without_comma()
 	{
-		let input = r#"{
+		let input = r"{
 			switch x {
 				1 => { println(1); }
 			}
-		}"#;
+		}";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -8646,10 +8647,10 @@ mod tests
 	#[test]
 	fn test_parse_single_line_doc_comment()
 	{
-		let input = r#"
+		let input = r"
 		/// This is a doc comment
 		fn foo() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8666,12 +8667,12 @@ mod tests
 	#[test]
 	fn test_parse_multiple_line_doc_comments()
 	{
-		let input = r#"
+		let input = r"
 		/// First line of documentation
 		/// Second line of documentation
 		/// Third line of documentation
 		fn bar() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8692,10 +8693,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_struct()
 	{
-		let input = r#"
+		let input = r"
 		/// A point in 2D space
 		struct Point { x: i32, y: i32 }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8712,14 +8713,14 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_struct_field()
 	{
-		let input = r#"
+		let input = r"
 		struct Point {
 			/// The x coordinate
 			x: i32,
 			/// The y coordinate
 			y: i32,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8737,10 +8738,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_enum()
 	{
-		let input = r#"
+		let input = r"
 		/// Color enumeration
 		enum Color { Red = 0, Green = 1, Blue = 2 }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8756,7 +8757,7 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_enum_variant()
 	{
-		let input = r#"
+		let input = r"
 		enum Color {
 			/// Red color
 			Red = 0,
@@ -8765,7 +8766,7 @@ mod tests
 			/// Blue color
 			Blue = 2,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8785,10 +8786,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_variant()
 	{
-		let input = r#"
+		let input = r"
 		/// Optional value type
 		variant Option<T> { Some(T), None }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8804,14 +8805,14 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_variant_member()
 	{
-		let input = r#"
+		let input = r"
 		variant Option<T> {
 			/// Contains a value
 			Some(T),
 			/// No value present
 			None,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8843,10 +8844,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_trait()
 	{
-		let input = r#"
+		let input = r"
 		/// Trait for cloneable types
 		trait Clone { fn clone(&self) -> Self; }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8862,10 +8863,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_impl()
 	{
-		let input = r#"
+		let input = r"
 		/// Implementation of Clone for Point
 		impl Clone for Point { fn clone(&self) -> Self {} }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8881,10 +8882,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_type_alias()
 	{
-		let input = r#"
+		let input = r"
 		/// Integer type alias
 		type Int = i32;
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8900,10 +8901,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_module()
 	{
-		let input = r#"
+		let input = r"
 		/// Standard library module
 		module std { fn foo() {} }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8919,10 +8920,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_union()
 	{
-		let input = r#"
+		let input = r"
 		/// A union type for data storage
 		union Data { int_val: i32, float_val: f64 }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8938,14 +8939,14 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_union_field()
 	{
-		let input = r#"
+		let input = r"
 		union Data {
 			/// Integer value
 			int_val: i32,
 			/// Float value
 			float_val: f64,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8963,10 +8964,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_on_const_variable()
 	{
-		let input = r#"
+		let input = r"
 		/// Maximum buffer size
 		const MAX_SIZE: i32 = 1024;
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -8982,7 +8983,7 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_multiline_formatted()
 	{
-		let input = r#"
+		let input = r"
 		/// This is a complex documentation comment
 		/// that spans multiple lines and contains
 		/// various formatting elements:
@@ -8990,7 +8991,7 @@ mod tests
 		/// - Code examples
 		/// - Parameter descriptions
 		fn complex_function() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9009,10 +9010,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_empty()
 	{
-		let input = r#"
+		let input = r"
 		///
 		fn foo() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9065,10 +9066,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_span()
 	{
-		let input = r#"
+		let input = r"
 		/// Documentation
 		fn foo() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9086,7 +9087,7 @@ mod tests
 	#[test]
 	fn test_parse_multiple_items_with_docs()
 	{
-		let input = r#"
+		let input = r"
 		/// First function
 		fn first() {}
 		
@@ -9095,7 +9096,7 @@ mod tests
 		
 		/// A struct
 		struct MyStruct { x: i32 }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9129,12 +9130,12 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_consecutive_newlines()
 	{
-		let input = r#"
+		let input = r"
 		/// Line 1
 		///
 		/// Line 3 (with blank line above)
 		fn foo() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9152,7 +9153,7 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_with_markdown()
 	{
-		let input = r#"
+		let input = r"
 		/// # Header
 		/// 
 		/// This is **bold** and *italic*
@@ -9161,7 +9162,7 @@ mod tests
 		/// code block
 		/// ```
 		fn documented() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9182,7 +9183,7 @@ mod tests
 	{
 		let mut input = String::from("/// ");
 		for i in 0..100 {
-			input.push_str(&format!("Line {} ", i));
+			write!(input, "Line {} ", i).unwrap();
 		}
 		input.push_str("\nfn foo() {}");
 
@@ -9203,14 +9204,14 @@ mod tests
 	#[test]
 	fn test_parse_struct_field_doc_without_trailing_comma()
 	{
-		let input = r#"
+		let input = r"
 		struct Point {
 			/// X coordinate
 			x: i32,
 			/// Y coordinate  
 			y: i32
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9226,10 +9227,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_display()
 	{
-		let input = r#"
+		let input = r"
 		/// This is documentation
 		fn foo() {}
-	"#;
+	";
 		let program = parse_program_from_str(input).unwrap();
 		let output = format!("{}", program);
 		// The display implementation should preserve the docs
@@ -9239,10 +9240,10 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_mixed_with_modifiers()
 	{
-		let input = r#"
+		let input = r"
 		/// Public function
 		pub fn foo() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9258,11 +9259,11 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_with_directives()
 	{
-		let input = r#"
+		let input = r"
 		/// Inline function
 		@inline
 		fn fast() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9283,12 +9284,12 @@ mod tests
 	#[test]
 	fn test_parse_doc_comment_unicode()
 	{
-		let input = r#"
+		let input = r"
 		/// 功能说明: 这是一个函数
 		/// Função: Esta é uma função
 		/// Функция: Это функция
 		fn unicode_docs() {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9307,14 +9308,14 @@ mod tests
 	#[test]
 	fn test_parse_struct_default_field_with_doc()
 	{
-		let input = r#"
+		let input = r"
 		struct Config {
 			/// Timeout in seconds
 			timeout: i32 = 30,
 			/// Number of retries
 			retries: i32 = 3,
 		}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9332,10 +9333,10 @@ mod tests
 	#[test]
 	fn test_parse_generic_with_doc()
 	{
-		let input = r#"
+		let input = r"
 		/// Generic container
 		struct Container<T> { value: T }
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -9351,10 +9352,10 @@ mod tests
 	#[test]
 	fn test_parse_heap_function_with_doc()
 	{
-		let input = r#"
+		let input = r"
 		/// Allocates memory
 		fn! allocate(size: usize) -> u8* {}
-	"#;
+	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();

@@ -130,7 +130,7 @@ mod module_tests
 	{
 		let e = ModuleError {
 			logical_path: vec!["foo".to_string(), "bar".to_string()],
-			span: Default::default(),
+			span: Span::default(),
 			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::FileNotFound(PathBuf::from("/a/b/bar.leaf")),
 		};
@@ -145,7 +145,7 @@ mod module_tests
 	{
 		let e = ModuleError {
 			logical_path: vec!["my_mod".to_string()],
-			span: Default::default(),
+			span: Span::default(),
 			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::IoError("permission denied".to_string()),
 		};
@@ -159,7 +159,7 @@ mod module_tests
 	{
 		let e = ModuleError {
 			logical_path: vec!["a".to_string()],
-			span: Default::default(),
+			span: Span::default(),
 			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::Cycle(vec![
 				vec!["a".to_string(), "b".to_string()],
@@ -178,7 +178,7 @@ mod module_tests
 	{
 		let e = ModuleError {
 			logical_path: vec!["x".to_string()],
-			span: Default::default(),
+			span: Span::default(),
 			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::IoError("oops".to_string()),
 		};

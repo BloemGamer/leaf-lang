@@ -1346,8 +1346,6 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_variant_with_nested_patterns()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		let pattern = Pattern::Variant {
 			path: Path::simple(vec!["Some".into()], Span::default()),
 			args: vec![Pattern::Tuple {
@@ -1363,7 +1361,7 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
+		let result = Desugarer::desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1379,8 +1377,6 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_or_with_variants()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		let pattern = Pattern::Or {
 			patterns: vec![
 				Pattern::Variant {
@@ -1400,7 +1396,7 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
+		let result = Desugarer::desugar_pattern(pattern).inspect_err(|e| eprintln!("{e}"));
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3153,7 +3149,7 @@ mod tests
 			Err(e) => {
 				// Verify error message mentions the duplicate
 				let error_str = format!("{}", e);
-				assert!(error_str.contains("T"), "Error should mention type parameter T");
+				assert!(error_str.contains('T'), "Error should mention type parameter T");
 				assert!(error_str.contains("bounds"), "Error should mention bounds");
 			}
 			_ => panic!("Expected DesugarError"),
@@ -3189,7 +3185,7 @@ mod tests
 		match result {
 			Err(e) => {
 				let error_str = format!("{}", e);
-				assert!(error_str.contains("T"), "Error should mention T");
+				assert!(error_str.contains('T'), "Error should mention T");
 			}
 			_ => panic!("Expected DesugarError"),
 		}
@@ -3636,14 +3632,12 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_literal()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		let pattern = Pattern::Literal {
 			value: Literal::Int(42),
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern);
+		let result = Desugarer::desugar_pattern(pattern);
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3658,8 +3652,6 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_range()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		let pattern = Pattern::Range(RangeExpr {
 			start: Some(Box::new(int_lit(1))),
 			end: Some(Box::new(int_lit(10))),
@@ -3667,7 +3659,7 @@ mod tests
 			span: Span::default(),
 		});
 
-		let result = desugarer.desugar_pattern(pattern);
+		let result = Desugarer::desugar_pattern(pattern);
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3679,15 +3671,13 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_single_tuple_unwraps()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		// Single element tuple should unwrap to just the element
 		let pattern = Pattern::Tuple {
 			patterns: vec![typed_ident_pattern("x", "i32")],
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern);
+		let result = Desugarer::desugar_pattern(pattern);
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3699,15 +3689,13 @@ mod tests
 	#[test]
 	fn test_desugar_pattern_single_or_unwraps()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		// Single pattern in Or should unwrap
 		let pattern = Pattern::Or {
 			patterns: vec![typed_ident_pattern("x", "i32")],
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern);
+		let result = Desugarer::desugar_pattern(pattern);
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3719,8 +3707,6 @@ mod tests
 	#[test]
 	fn test_expand_or_in_struct_pattern()
 	{
-		let mut desugarer = Desugarer::new(SourceIndex::new(0));
-
 		// struct Point { x: (A | B), y: i32 }
 		let pattern = Pattern::Struct {
 			path: Path::simple(vec!["Point".into()], Span::default()),
@@ -3749,7 +3735,7 @@ mod tests
 			span: Span::default(),
 		};
 
-		let result = desugarer.desugar_pattern(pattern);
+		let result = Desugarer::desugar_pattern(pattern);
 		assert!(result.is_ok());
 
 		// Should expand to: Point { x: A, y } | Point { x: B, y }
@@ -4393,8 +4379,8 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_empty()
 	{
-		let desugarer = Desugarer::new(SourceIndex::new(0));
-		let result = desugarer.cartesian_product_patterns(Vec::new());
+		// let desugarer = Desugarer::new(SourceIndex::new(0));
+		let result = Desugarer::cartesian_product_patterns(Vec::new());
 		assert_eq!(result.len(), 1);
 		assert_eq!(result[0].len(), 0);
 	}
@@ -4402,10 +4388,10 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_single()
 	{
-		let desugarer = Desugarer::new(SourceIndex::new(0));
+		// let desugarer = Desugarer::new(SourceIndex::new(0));
 		let lists = vec![vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")]];
 
-		let result = desugarer.cartesian_product_patterns(lists);
+		let result = Desugarer::cartesian_product_patterns(lists);
 		assert_eq!(result.len(), 2);
 		assert_eq!(result[0].len(), 1);
 		assert_eq!(result[1].len(), 1);
@@ -4414,13 +4400,13 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_multiple()
 	{
-		let desugarer = Desugarer::new(SourceIndex::new(0));
+		// let desugarer = Desugarer::new(SourceIndex::new(0));
 		let lists = vec![
 			vec![typed_ident_pattern("a", "i32"), typed_ident_pattern("b", "i32")],
 			vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
 		];
 
-		let result = desugarer.cartesian_product_patterns(lists);
+		let result = Desugarer::cartesian_product_patterns(lists);
 		// 2 x 2 = 4 combinations
 		assert_eq!(result.len(), 4);
 		for combo in result {

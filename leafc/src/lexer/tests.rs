@@ -61,7 +61,7 @@ mod tests
 				TokenKind::IntLiteral(0),
 				TokenKind::IntLiteral(42),
 				TokenKind::IntLiteral(123),
-				TokenKind::IntLiteral(1000000),
+				TokenKind::IntLiteral(1_000_000),
 				TokenKind::Eof,
 			]
 		);
@@ -76,7 +76,7 @@ mod tests
 			vec![
 				TokenKind::IntLiteral(0),
 				TokenKind::IntLiteral(255),
-				TokenKind::IntLiteral(0xDEADBEEF),
+				TokenKind::IntLiteral(0xDEAD_BEEF),
 				TokenKind::IntLiteral(0x123),
 				TokenKind::Eof,
 			]
@@ -92,7 +92,7 @@ mod tests
 			vec![
 				TokenKind::IntLiteral(0),
 				TokenKind::IntLiteral(0b1010),
-				TokenKind::IntLiteral(0b11110000),
+				TokenKind::IntLiteral(0b1111_0000),
 				TokenKind::Eof,
 			]
 		);
@@ -138,7 +138,7 @@ mod tests
 			vec![
 				TokenKind::StringLiteral("hello".to_string()),
 				TokenKind::StringLiteral("world".to_string()),
-				TokenKind::StringLiteral("".to_string()),
+				TokenKind::StringLiteral(String::new()),
 				TokenKind::StringLiteral("with spaces".to_string()),
 				TokenKind::Eof,
 			]
@@ -567,8 +567,8 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::Directive(Directive::Custom("".to_string())),
-				TokenKind::Macro("".to_string()),
+				TokenKind::Directive(Directive::Custom(String::new())),
+				TokenKind::Macro(String::new()),
 				TokenKind::Invalid,
 			]
 		);

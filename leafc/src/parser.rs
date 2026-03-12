@@ -2573,7 +2573,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			return token;
 		};
 		match tok.check_reserved() {
-			Ok(_) => return Ok(tok),
+			Ok(()) => return Ok(tok),
 			Err(e) => {
 				return Err(ParseError {
 					span: tok.span(),
@@ -2598,7 +2598,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		self.last_span = tok.span;
 		match tok.check_reserved() {
-			Ok(_) => return Ok(tok),
+			Ok(()) => return Ok(tok),
 			Err(e) => {
 				return Err(ParseError {
 					span: tok.span(),
@@ -2638,9 +2638,8 @@ impl<'s, 'c> Parser<'s, 'c>
 		if self.at(kind)? {
 			self.next()?;
 			return Ok(true);
-		} else {
-			return Ok(false);
 		}
+		return Ok(false);
 	}
 
 	fn consume_greater_than(&mut self) -> Result<bool, ParseError>
@@ -2672,15 +2671,14 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		if &tok.kind == expected {
 			return self.next();
-		} else {
-			let err_tok: Token = tok.clone();
-			return Err(ParseError::unexpected_token(
-				err_tok.span,
-				Expected::Token(expected.clone()),
-				err_tok.kind,
-				self.source_index,
-			));
 		}
+		let err_tok: Token = tok.clone();
+		return Err(ParseError::unexpected_token(
+			err_tok.span,
+			Expected::Token(expected.clone()),
+			err_tok.kind,
+			self.source_index,
+		));
 	}
 
 	/// Parse a complete program.
@@ -2817,11 +2815,10 @@ impl<'s, 'c> Parser<'s, 'c>
 						self.lexer = checkpoint;
 						self.last_span = checkpoint_span;
 						return Ok(DeclKind::Function);
-					} else {
-						self.lexer = checkpoint;
-						self.last_span = checkpoint_span;
-						return Ok(DeclKind::Variable);
 					}
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::Variable);
 				}
 				TokenKind::Directive(_) => {
 					self.next()?;
@@ -3325,13 +3322,13 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 					self.expect(&TokenKind::RightParen)?;
 					return Ok(TypeCore::Tuple(types));
-				} else {
-					self.expect(&TokenKind::RightParen)?;
-					let ty: Type = types.into_iter().next().expect(
-						"this should already be cought in the code before, because of `vec![self.parse_type()?]",
-					);
-					return Ok(*ty.core);
 				}
+				self.expect(&TokenKind::RightParen)?;
+				let ty: Type = types
+					.into_iter()
+					.next()
+					.expect("this should already be cought in the code before, because of `vec![self.parse_type()?]");
+				return Ok(*ty.core);
 			}
 			TokenKind::LeftBracket => {
 				self.next()?; // [
@@ -4174,18 +4171,16 @@ impl<'s, 'c> Parser<'s, 'c>
 							has_rest,
 							span: span.merge(&self.last_span),
 						});
-					} else {
-						return Ok(Expr::Identifier {
-							path,
-							span: span.merge(&self.last_span),
-						});
 					}
-				} else {
 					return Ok(Expr::Identifier {
 						path,
 						span: span.merge(&self.last_span),
 					});
 				}
+				return Ok(Expr::Identifier {
+					path,
+					span: span.merge(&self.last_span),
+				});
 			}
 
 			TokenKind::LeftParen => {
@@ -4313,7 +4308,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			TokenKind::Loop => {
 				let loop_stmt: Stmt = self.parse_loop()?;
-				return Ok(self.stmt_loop_to_expr(loop_stmt));
+				return Ok(Self::stmt_loop_to_expr(loop_stmt));
 			}
 
 			TokenKind::Label(label) => {
@@ -4328,15 +4323,14 @@ impl<'s, 'c> Parser<'s, 'c>
 						body: Box::new(body),
 						span: span.merge(&self.last_span),
 					});
-				} else {
-					let tok: Token = self.next()?;
-					return Err(ParseError::unexpected_item(
-						tok.span,
-						"Expected a loop, only a loop can have a label and return a value",
-						tok.kind,
-						self.source_index,
-					));
 				}
+				let tok: Token = self.next()?;
+				return Err(ParseError::unexpected_item(
+					tok.span,
+					"Expected a loop, only a loop can have a label and return a value",
+					tok.kind,
+					self.source_index,
+				));
 			}
 
 			_ => {
@@ -4409,7 +4403,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 	}
 
-	fn stmt_loop_to_expr(&self, stmt: Stmt) -> Expr
+	fn stmt_loop_to_expr(stmt: Stmt) -> Expr
 	{
 		match stmt {
 			Stmt::Loop { label, body, span } => {
@@ -4436,9 +4430,8 @@ impl<'s, 'c> Parser<'s, 'c>
 
 			self.lexer = checkpoint;
 			return Ok(is_struct_field);
-		} else {
-			return Ok(false);
 		}
+		return Ok(false);
 	}
 
 	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError>
@@ -4612,12 +4605,11 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		if patterns.len() == 1 {
 			return Ok(patterns.into_iter().next().expect("len == 1, so should not error"));
-		} else {
-			return Ok(Pattern::Or {
-				patterns,
-				span: span.merge(&self.last_span),
-			});
 		}
+		return Ok(Pattern::Or {
+			patterns,
+			span: span.merge(&self.last_span),
+		});
 	}
 
 	fn parse_pattern_no_or(&mut self) -> Result<Pattern, ParseError>
@@ -4830,13 +4822,12 @@ impl<'s, 'c> Parser<'s, 'c>
 						span: span.merge(&self.last_span),
 						mutable,
 					});
-				} else {
-					return Ok(Pattern::Variant {
-						path,
-						args: Vec::new(),
-						span: span.merge(&self.last_span),
-					});
 				}
+				return Ok(Pattern::Variant {
+					path,
+					args: Vec::new(),
+					span: span.merge(&self.last_span),
+				});
 			}
 
 			TokenKind::LeftParen => {
@@ -4875,12 +4866,11 @@ impl<'s, 'c> Parser<'s, 'c>
 						patterns,
 						span: span.merge(&self.last_span),
 					});
-				} else {
-					self.expect(&TokenKind::RightParen)?;
-					return Ok(patterns.into_iter().next().expect(
-						"this should already be cought in the code before, because of `vec![self.parse_pattern()?]",
-					));
 				}
+				self.expect(&TokenKind::RightParen)?;
+				return Ok(patterns.into_iter().next().expect(
+					"this should already be cought in the code before, because of `vec![self.parse_pattern()?]",
+				));
 			}
 
 			TokenKind::IntLiteral(n) => {
@@ -4905,12 +4895,11 @@ impl<'s, 'c> Parser<'s, 'c>
 						inclusive,
 						span: span.merge(&self.last_span),
 					}));
-				} else {
-					return Ok(Pattern::Literal {
-						value: Literal::Int(*n),
-						span: tok.span(),
-					});
 				}
+				return Ok(Pattern::Literal {
+					value: Literal::Int(*n),
+					span: tok.span(),
+				});
 			}
 
 			TokenKind::True => {
@@ -5111,12 +5100,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					}
 
 					if self.at(&TokenKind::RightBrace)? {
-						tail_expr = Some(Box::new(self.stmt_loop_to_expr(loop_stmt)));
+						tail_expr = Some(Box::new(Self::stmt_loop_to_expr(loop_stmt)));
 						break;
-					} else {
-						self.consume(&TokenKind::Semicolon)?;
-						stmts.push(loop_stmt);
 					}
+					self.consume(&TokenKind::Semicolon)?;
+					stmts.push(loop_stmt);
 				}
 
 				TokenKind::If => {
@@ -5233,7 +5221,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							stmts.push(Stmt::Block(*block));
 						}
 					} else {
-						let needs_semi: bool = self.expr_needs_semicolon(&expr);
+						let needs_semi: bool = Self::expr_needs_semicolon(&expr);
 
 						if needs_semi {
 							if self.consume(&TokenKind::Semicolon)? {
@@ -5267,7 +5255,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		});
 	}
 
-	const fn expr_needs_semicolon(&self, expr: &Expr) -> bool
+	const fn expr_needs_semicolon(expr: &Expr) -> bool
 	{
 		return !matches!(
 			expr,
@@ -5393,17 +5381,16 @@ impl<'s, 'c> Parser<'s, 'c>
 				body,
 				span: span.merge(&self.last_span),
 			});
-		} else {
-			let cond = self.parse_expr_no_struct()?;
-			let body = self.parse_block()?;
-
-			return Ok(Stmt::While {
-				label: None,
-				cond,
-				body,
-				span: span.merge(&self.last_span),
-			});
 		}
+		let cond: Expr = self.parse_expr_no_struct()?;
+		let body: Block = self.parse_block()?;
+
+		return Ok(Stmt::While {
+			label: None,
+			cond,
+			body,
+			span: span.merge(&self.last_span),
+		});
 	}
 
 	fn parse_for(&mut self) -> Result<Stmt, ParseError>
@@ -6297,9 +6284,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		loop {
-			let name = if let TokenKind::Identifier(name) = self.next()?.kind {
-				name
-			} else {
+			let TokenKind::Identifier(name) = self.next()?.kind else {
 				let tok: Token = self.peek()?.clone();
 				return Err(ParseError::unexpected_token(
 					tok.span,
@@ -6668,9 +6653,8 @@ impl<'s, 'c> Parser<'s, 'c>
 				content: combined_content,
 				span: start.merge(&end_span),
 			}));
-		} else {
-			return Ok(None);
 		}
+		return Ok(None);
 	}
 }
 
@@ -7247,9 +7231,8 @@ impl fmt::Display for Expr
 				UnaryOp::Addr { mutable } => {
 					if *mutable {
 						return write!(f, "&mut {}", expr);
-					} else {
-						return write!(f, "&{}", expr);
 					}
+					return write!(f, "&{}", expr);
 				}
 			},
 			Expr::Binary { op, lhs, rhs, .. } => return write!(f, "({} {} {})", lhs, op, rhs),
@@ -8242,6 +8225,7 @@ impl fmt::Display for GenericArg
 	}
 }
 
+#[allow(clippy::ref_option)]
 fn write_docs(f: &mut fmt::Formatter<'_>, w: &IndentWriter, docs: &Option<DocsComment>) -> fmt::Result
 {
 	if let Some(doc) = docs {

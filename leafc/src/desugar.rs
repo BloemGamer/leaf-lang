@@ -421,7 +421,7 @@ impl Desugarer
 		let mut new_generics: Vec<GenericParam> = Vec::new();
 
 		for param in &mut func_sig.params {
-			if let Some(new_generic) = self.desugar_impl_trait_in_param(param, &mut impl_trait_counter)? {
+			if let Some(new_generic) = Self::desugar_impl_trait_in_param(param, &mut impl_trait_counter)? {
 				new_generics.push(new_generic);
 			}
 		}
@@ -430,7 +430,7 @@ impl Desugarer
 		func_sig.generics = new_generics;
 
 		if let Some(ret_ty) = &mut func_sig.return_type
-			&& let Some(new_generic) = self.desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)?
+			&& let Some(new_generic) = Self::desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)?
 		{
 			func_sig.generics.push(new_generic);
 		}
@@ -542,15 +542,11 @@ impl Desugarer
 		return Ok(func_sig);
 	}
 
-	fn desugar_impl_trait_in_param(
-		&self,
-		param: &mut Param,
-		counter: &mut usize,
-	) -> Result<Option<GenericParam>, DesugarError>
+	fn desugar_impl_trait_in_param(param: &mut Param, counter: &mut usize)
+	-> Result<Option<GenericParam>, DesugarError>
 	{
-		let generic_param = self.desugar_impl_trait_in_type(&mut param.ty, counter)?;
+		let generic_param = Self::desugar_impl_trait_in_type(&mut param.ty, counter)?;
 
-		// Update the type in the pattern to match param.ty
 		if let Pattern::TypedIdentifier { ty, .. } = &mut param.pattern {
 			*ty = param.ty.clone();
 		}
@@ -558,11 +554,7 @@ impl Desugarer
 		return Ok(generic_param);
 	}
 
-	fn desugar_impl_trait_in_type(
-		&self,
-		ty: &mut Type,
-		counter: &mut usize,
-	) -> Result<Option<GenericParam>, DesugarError>
+	fn desugar_impl_trait_in_type(ty: &mut Type, counter: &mut usize) -> Result<Option<GenericParam>, DesugarError>
 	{
 		match ty.core.as_mut() {
 			TypeCore::ImplTrait { bounds } => {
@@ -596,7 +588,7 @@ impl Desugarer
 					core: inner.clone(),
 					span: ty.span,
 				};
-				let result: Option<GenericParam> = self.desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter)?;
 				*inner = inner_ty.core;
 				return Ok(result);
 			}
@@ -605,19 +597,19 @@ impl Desugarer
 					core: inner.clone(),
 					span: ty.span,
 				};
-				let result: Option<GenericParam> = self.desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter)?;
 				*inner = inner_ty.core;
 				return Ok(result);
 			}
 			TypeCore::Tuple(types) => {
 				for tuple_ty in types.iter_mut() {
-					self.desugar_impl_trait_in_type(tuple_ty, counter)?;
+					Self::desugar_impl_trait_in_type(tuple_ty, counter)?;
 				}
 				return Ok(None);
 			}
 			TypeCore::Base { generics, .. } => {
 				for gen_ty in generics.iter_mut() {
-					self.desugar_impl_trait_in_type(gen_ty, counter)?;
+					Self::desugar_impl_trait_in_type(gen_ty, counter)?;
 				}
 				return Ok(None);
 			}
@@ -1020,7 +1012,7 @@ impl Desugarer
 		let actual_label: Ident = self.push_loop(label);
 		let desugared_body: Block = self.desugar_block(body)?;
 
-		let desugared_pattern: Pattern = self.desugar_pattern(pattern)?;
+		let desugared_pattern: Pattern = Self::desugar_pattern(pattern)?;
 
 		let item_type: Type = extract_type_from_pattern(&desugared_pattern).unwrap_or_else(|| {
 			return Type {
@@ -1188,7 +1180,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
 		};
@@ -1275,7 +1267,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_body),
 			span: pattern_span,
 		};
@@ -1425,7 +1417,7 @@ impl Desugarer
 		}
 
 		var.init = var.init.map(|init| return self.desugar_expr(init)).transpose()?;
-		var.pattern = self.desugar_pattern(var.pattern)?;
+		var.pattern = Self::desugar_pattern(var.pattern)?;
 		return Ok(var);
 	}
 
@@ -1621,7 +1613,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: self.desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
 		};
@@ -1686,7 +1678,7 @@ impl Desugarer
 				if !generics.is_empty()
 					&& let Some(last_segment) = constructor_path.segments.last_mut()
 				{
-					last_segment.generics = generics.clone();
+					last_segment.generics.clone_from(generics);
 				}
 
 				constructor_path.segments.push(PathSegment {
@@ -1746,12 +1738,11 @@ impl Desugarer
 						count: size_expr.clone(),
 						span,
 					}));
-				} else {
-					return Ok(Expr::Array(ArrayLiteral::List {
-						elements: Vec::new(),
-						span,
-					}));
 				}
+				return Ok(Expr::Array(ArrayLiteral::List {
+					elements: Vec::new(),
+					span,
+				}));
 			}
 
 			TypeCore::Tuple(types) => {
@@ -1801,7 +1792,7 @@ impl Desugarer
 	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> Result<SwitchArm, DesugarError>
 	{
 		return Ok(SwitchArm {
-			pattern: self.desugar_pattern(arm.pattern)?,
+			pattern: Self::desugar_pattern(arm.pattern)?,
 			body: match arm.body {
 				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)?),
 				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)?),
@@ -1811,9 +1802,9 @@ impl Desugarer
 	}
 
 	#[allow(clippy::result_large_err)]
-	fn desugar_pattern(&mut self, pattern: Pattern) -> Result<Pattern, DesugarError>
+	fn desugar_pattern(pattern: Pattern) -> Result<Pattern, DesugarError>
 	{
-		let expanded: Vec<Pattern> = self.expand_or_patterns(pattern);
+		let expanded: Vec<Pattern> = Self::expand_or_patterns(pattern);
 
 		let pattern: Pattern = if expanded.len() > 1 {
 			let span: Span = expanded[0].span();
@@ -1851,7 +1842,7 @@ impl Desugarer
 				path,
 				args: args
 					.into_iter()
-					.map(|p| return self.desugar_pattern(p))
+					.map(|p| return Self::desugar_pattern(p))
 					.collect::<Result<Vec<_>, _>>()?,
 				span,
 			},
@@ -1859,7 +1850,7 @@ impl Desugarer
 			Pattern::Tuple { patterns, span } => {
 				let desugared: Vec<Pattern> = patterns
 					.into_iter()
-					.map(|p| return self.desugar_pattern(p))
+					.map(|p| return Self::desugar_pattern(p))
 					.collect::<Result<Vec<_>, _>>()?;
 
 				if desugared.len() == 1 {
@@ -1882,7 +1873,7 @@ impl Desugarer
 				fields: fields
 					.into_iter()
 					.map(|(name, pat)| -> Result<(String, Pattern), DesugarError> {
-						return Ok((name, self.desugar_pattern(pat)?));
+						return Ok((name, Self::desugar_pattern(pat)?));
 					})
 					.collect::<Result<Vec<_>, _>>()?,
 				span,
@@ -1894,7 +1885,7 @@ impl Desugarer
 			Pattern::Or { patterns, span } => {
 				let flattened: Vec<Pattern> = patterns
 					.into_iter()
-					.map(|p| return self.desugar_pattern(p))
+					.map(|p| return Self::desugar_pattern(p))
 					.collect::<Result<Vec<_>, _>>()?;
 
 				if flattened.len() == 1 {
@@ -2172,24 +2163,23 @@ impl Desugarer
 		return Ok(statements);
 	}
 
-	fn expand_or_patterns(&self, pattern: Pattern) -> Vec<Pattern>
+	fn expand_or_patterns(pattern: Pattern) -> Vec<Pattern>
 	{
 		match pattern {
 			Pattern::Or { patterns, .. } => {
 				return patterns
 					.into_iter()
-					.flat_map(|p| return self.expand_or_patterns(p))
+					.flat_map(|p| return Self::expand_or_patterns(p))
 					.collect();
 			}
 
 			Pattern::Variant { path, args, span } => {
 				let expanded_args: Vec<Vec<Pattern>> = args
 					.into_iter()
-					.map(|arg| return self.expand_or_patterns(arg))
+					.map(|arg| return Self::expand_or_patterns(arg))
 					.collect();
 
-				return self
-					.cartesian_product_patterns(expanded_args)
+				return Self::cartesian_product_patterns(expanded_args)
 					.into_iter()
 					.map(|args| {
 						return Pattern::Variant {
@@ -2204,11 +2194,10 @@ impl Desugarer
 			Pattern::Tuple { patterns, span } => {
 				let expanded: Vec<Vec<Pattern>> = patterns
 					.into_iter()
-					.map(|p| return self.expand_or_patterns(p))
+					.map(|p| return Self::expand_or_patterns(p))
 					.collect();
 
-				return self
-					.cartesian_product_patterns(expanded)
+				return Self::cartesian_product_patterns(expanded)
 					.into_iter()
 					.map(|patterns| return Pattern::Tuple { patterns, span })
 					.collect();
@@ -2220,13 +2209,13 @@ impl Desugarer
 				span,
 				has_rest,
 			} => {
-				let field_names: Vec<_> = fields.iter().map(|(name, _)| return name.clone()).collect();
+				let field_names: Vec<Ident> = fields.iter().map(|(name, _)| return name.clone()).collect();
 				let field_patterns: Vec<Vec<Pattern>> = fields
 					.into_iter()
-					.map(|(_, pat)| return self.expand_or_patterns(pat))
+					.map(|(_, pat)| return Self::expand_or_patterns(pat))
 					.collect();
 
-				let expanded_field_sets = self.cartesian_product_patterns(field_patterns);
+				let expanded_field_sets: Vec<Vec<Pattern>> = Self::cartesian_product_patterns(field_patterns);
 
 				return expanded_field_sets
 					.into_iter()
@@ -2251,7 +2240,7 @@ impl Desugarer
 		}
 	}
 
-	fn cartesian_product_patterns(&self, lists: Vec<Vec<Pattern>>) -> Vec<Vec<Pattern>>
+	fn cartesian_product_patterns(lists: Vec<Vec<Pattern>>) -> Vec<Vec<Pattern>>
 	{
 		if lists.is_empty() {
 			return vec![vec![]];

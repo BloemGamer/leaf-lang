@@ -605,7 +605,7 @@ pub enum Directive
 	Custom(String),
 }
 
-impl<'source, 'config> Iterator for Lexer<'source, 'config>
+impl Iterator for Lexer<'_, '_>
 {
 	type Item = Token;
 
@@ -844,9 +844,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		if is_doc {
 			return TokenKind::DocsComment(comment);
-		} else {
-			return TokenKind::LineComment(comment);
 		}
+		return TokenKind::LineComment(comment);
 	}
 
 	fn lex_block_comment(&mut self) -> TokenKind
@@ -870,9 +869,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		if is_doc {
 			return TokenKind::DocsComment(comment);
-		} else {
-			return TokenKind::BlockComment(comment);
 		}
+		return TokenKind::BlockComment(comment);
 	}
 
 	fn lex_string_literal(&mut self) -> TokenKind
@@ -937,9 +935,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 					self.line = line_backup;
 					self.column = col_backup;
 					return self.lex_char_literal();
-				} else {
-					return TokenKind::Label(label_name);
 				}
+				return TokenKind::Label(label_name);
 			}
 			_ => {
 				self.position = pos_backup;
@@ -968,12 +965,10 @@ impl<'source, 'config> Lexer<'source, 'config>
 			self.advance(); // closing '\''
 			if let Some(c) = ch {
 				return TokenKind::CharLiteral(c);
-			} else {
-				return TokenKind::Invalid;
 			}
-		} else {
 			return TokenKind::Invalid;
 		}
+		return TokenKind::Invalid;
 	}
 
 	fn lex_escape_sequence(&mut self) -> Option<char>
@@ -1009,9 +1004,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 				if let Ok(value) = u8::from_str_radix(&hex_str, 16) {
 					return Some(value as char);
-				} else {
-					return None;
 				}
+				return None;
 			}
 			'u' => {
 				self.advance();
@@ -1045,9 +1039,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 				if let Ok(value) = u32::from_str_radix(&hex_str, 16) {
 					return char::from_u32(value);
-				} else {
-					return None;
 				}
+				return None;
 			}
 			_ => return None,
 		};
@@ -1132,14 +1125,12 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 			if let Ok(val) = num_str.parse::<f64>() {
 				return TokenKind::FloatLiteral(val);
-			} else {
-				return TokenKind::Invalid;
 			}
-		} else {
-			match num_str.parse::<i64>() {
-				Ok(val) => return TokenKind::IntLiteral(val),
-				Err(_) => return TokenKind::Invalid,
-			}
+			return TokenKind::Invalid;
+		}
+		match num_str.parse::<i64>() {
+			Ok(val) => return TokenKind::IntLiteral(val),
+			Err(_) => return TokenKind::Invalid,
 		}
 	}
 
@@ -1234,9 +1225,8 @@ impl<'source, 'config> Lexer<'source, 'config>
 	{
 		if let Some(ch) = self.current_char {
 			return self.source[self.position + ch.len_utf8()..].chars().next();
-		} else {
-			return None;
 		}
+		return None;
 	}
 }
 
@@ -1275,11 +1265,10 @@ impl Token
 	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
 	{
 		let source: &str = &source_map.get(source_index).src;
-		let line_start = source[..self.span.start].rfind('\n').map(|i| return i + 1).unwrap_or(0);
+		let line_start = source[..self.span.start].rfind('\n').map_or(0, |i| return i + 1);
 		let line_end = source[self.span.start..]
 			.find('\n')
-			.map(|i| return self.span.start + i)
-			.unwrap_or(source.len());
+			.map_or(source.len(), |i| return self.span.start + i);
 		let line_text = &source[line_start..line_end];
 
 		// Preserve tabs and spaces to maintain alignment
@@ -1334,11 +1323,10 @@ impl Span
 	#[allow(unused)]
 	pub fn format_error(&self, source: &str, message: &str) -> String
 	{
-		let line_start = source[..self.start].rfind('\n').map(|i| return i + 1).unwrap_or(0);
+		let line_start = source[..self.start].rfind('\n').map_or(0, |i| return i + 1);
 		let line_end = source[self.start..]
 			.find('\n')
-			.map(|i| return self.start + i)
-			.unwrap_or(source.len());
+			.map_or(source.len(), |i| return self.start + i);
 		let line_text = &source[line_start..line_end];
 
 		// Preserve tabs and spaces to maintain alignment

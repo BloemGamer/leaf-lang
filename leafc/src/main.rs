@@ -35,6 +35,7 @@
 #![warn(clippy::useless_conversion)]
 #![warn(clippy::while_let_loop)]
 #![warn(clippy::zero_prefixed_literal)]
+#![warn(clippy::suspicious)]
 // Error Handling
 #![warn(clippy::fallible_impl_from)]
 #![warn(clippy::from_over_into)]
@@ -98,6 +99,7 @@
 #![warn(clippy::missing_safety_doc)]
 // Warning Collections
 #![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
 // Cargo
 // #![warn(clippy::cargo)]
 // #![warn(clippy::cargo_common_metadata)]
@@ -107,6 +109,8 @@
 #![allow(clippy::use_self)]
 #![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
 #![allow(clippy::self_named_module_files)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::uninlined_format_args)]
 // #![allow(dead_code)]
 
 // #![warn(clippy::todo)]
@@ -202,6 +206,7 @@ impl CompileDiagnostic for CompileError
 	}
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args
