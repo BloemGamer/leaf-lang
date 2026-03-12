@@ -9,6 +9,7 @@ use crate::{
 	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 };
+use leaf_proc::Spanned;
 
 /// Recursive descent parser for the programming language.
 ///
@@ -86,34 +87,18 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 /// throughout the AST.
 pub type Ident = String;
 
-impl Spanned for Token
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Represents a complete program or compilation unit as a sequence of
 /// top-level declarations.
 ///
 /// # Fields
 /// * `items` - List of top-level declarations (functions, structs, traits, etc.)
 /// * `span` - Source location of the entire program
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq, Spanned)]
 pub struct TopLevelBlock
 {
 	pub items: Vec<TopLevelDecl>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for TopLevelBlock
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// The root node of the Abstract Syntax Tree.
@@ -237,7 +222,7 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 /// * `Module` - Module declaration
 /// * `Impl` - Implementation block
 /// * `Directive` - Compiler directive
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum TopLevelDecl
 {
 	Function(FunctionDecl),
@@ -251,26 +236,6 @@ pub enum TopLevelDecl
 	Module(ModuleDecl),
 	Impl(ImplDecl),
 	Directive(DirectiveNode),
-}
-
-impl Spanned for TopLevelDecl
-{
-	fn span(&self) -> Span
-	{
-		return match self {
-			TopLevelDecl::Function(f) => f.span(),
-			TopLevelDecl::VariableDecl(v) => v.span(),
-			TopLevelDecl::Struct(s) => s.span(),
-			TopLevelDecl::Union(u) => u.span(),
-			TopLevelDecl::Enum(e) => e.span(),
-			TopLevelDecl::Variant(v) => v.span(),
-			TopLevelDecl::TypeAlias(t) => t.span(),
-			TopLevelDecl::Trait(t) => t.span(),
-			TopLevelDecl::Module(n) => n.span(),
-			TopLevelDecl::Impl(i) => i.span(),
-			TopLevelDecl::Directive(d) => d.span(),
-		};
-	}
 }
 
 /// Internal enum for distinguishing declaration kinds during parsing.
@@ -412,21 +377,13 @@ pub enum DirectiveParam
 /// * `directive` - The directive itself
 /// * `body` - Optional block content associated with the directive
 /// * `span` - Source location of the directive
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct DirectiveNode
 {
 	pub directive: Directive,
 	pub body: Option<BlockContent>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for DirectiveNode
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Qualified path representing a sequence of identifiers separated by `::`.
@@ -447,7 +404,7 @@ impl Spanned for DirectiveNode
 /// * `glob` - If the last element is `*`, just used for the `@use` statement
 /// * `global` - If the path starts with `::`, means no module, so ignore all the `@use` statements
 /// * `span` - Source location information for error reporting and debugging
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Spanned)]
 pub struct Path
 {
 	pub segments: Vec<PathSegment>,
@@ -456,14 +413,6 @@ pub struct Path
 	#[allow(dead_code)]
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for Path
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// A single segment in a path, optionally with generic arguments
@@ -565,7 +514,7 @@ impl Path
 /// * `body` - Optional function body (None for prototypes)
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the function
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct FunctionDecl
 {
 	pub signature: FunctionSignature,
@@ -574,14 +523,6 @@ pub struct FunctionDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for FunctionDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Function signature.
@@ -597,7 +538,7 @@ impl Spanned for FunctionDecl
 /// * `where_clause` - Generic constraints
 /// * `heap_func` - Whether this is a heap-allocated function (`fn!`)
 /// * `span` - Source location of the signature
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct FunctionSignature
 {
 	pub modifiers: Vec<Modifier>,
@@ -612,14 +553,6 @@ pub struct FunctionSignature
 	pub span: Span,
 }
 
-impl Spanned for FunctionSignature
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Generic parameter with optional trait bounds.
 ///
 /// Represents a generic type parameter that can optionally have trait bounds
@@ -629,7 +562,7 @@ impl Spanned for FunctionSignature
 /// * `name` - The name of the generic
 /// * `bounds` - A vec of all the bounds of the generic
 /// * `span` - Source location of the parameter
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct GenericParam
 {
 	pub name: Ident,
@@ -658,14 +591,6 @@ impl GenericParam
 	}
 }
 
-impl Spanned for GenericParam
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Function parameter.
 ///
 /// Represents a single parameter in a function signature.
@@ -674,7 +599,7 @@ impl Spanned for GenericParam
 /// * `ty` - Parameter type
 /// * `pattern` - Pattern for destructuring (can be identifier, tuple, etc.)
 /// * `span` - Source location of the parameter
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct Param
 {
 	pub ty: Type,
@@ -682,14 +607,6 @@ pub struct Param
 	pub variadic: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for Param
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Type expression.
@@ -700,20 +617,12 @@ impl Spanned for Param
 /// * `modifiers` - Type modifiers (const, volatile, etc.)
 /// * `core` - The core type expression
 /// * `span` - Source location of the type
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct Type
 {
 	pub core: Box<TypeCore>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for Type
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Core type expressions.
@@ -776,7 +685,7 @@ pub enum TypeCore
 /// * `end` - Optional end of range
 /// * `inclusive` - Whether the range is inclusive (`..=`) or exclusive (`..`)
 /// * `span` - Source location of the range
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct RangeExpr
 {
 	pub start: Option<Box<Expr>>,
@@ -784,14 +693,6 @@ pub struct RangeExpr
 	pub inclusive: bool,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for RangeExpr
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Expression node.
@@ -820,7 +721,7 @@ impl Spanned for RangeExpr
 /// * `IfVar` - Pattern matching conditional expression
 /// * `Loop` - Infinite loop expression
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum Expr
 {
 	Identifier
@@ -956,36 +857,6 @@ pub enum Expr
 	},
 }
 
-impl Spanned for Expr
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		return match self {
-			Expr::Identifier { span, .. } => *span,
-			Expr::Literal { span, .. } => *span,
-			Expr::Default { span, .. } => *span,
-			Expr::Unary { span, .. } => *span,
-			Expr::Binary { span, .. } => *span,
-			Expr::Cast { span, .. } => *span,
-			Expr::Call { span, .. } => *span,
-			Expr::Field { span, .. } => *span,
-			Expr::Index { span, .. } => *span,
-			Expr::Range(RangeExpr { span, .. }) => *span,
-			Expr::Tuple { span, .. } => *span,
-			Expr::Array(ArrayLiteral::List { span, .. }) => *span,
-			Expr::Array(ArrayLiteral::Repeat { span, .. }) => *span,
-			Expr::StructInit { span, .. } => *span,
-			Expr::Block(block) => block.span(),
-			Expr::UnsafeBlock(block) => block.span(),
-			Expr::Switch { span, .. } => *span,
-			Expr::If { span, .. } => *span,
-			Expr::IfVar { span, .. } => *span,
-			Expr::Loop { span, .. } => *span,
-		};
-	}
-}
-
 /// Type of function call
 ///
 /// # Variants
@@ -1082,7 +953,7 @@ pub enum Literal
 /// # Variants
 /// * `List` - Explicit element list: `[1, 2, 3]`
 /// * `Repeat` - Repeated value: `[0; 10]`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum ArrayLiteral
 {
 	List
@@ -1098,18 +969,6 @@ pub enum ArrayLiteral
 		#[ignored(PartialEq)]
 		span: Span,
 	},
-}
-
-impl Spanned for ArrayLiteral
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		return match self {
-			ArrayLiteral::List { span, .. } => *span,
-			ArrayLiteral::Repeat { span, .. } => *span,
-		};
-	}
 }
 
 /// Unary operator types.
@@ -1257,7 +1116,7 @@ pub enum AssignOp
 /// * `comp_const` - Whether this is a compile-time constant (`const` vs `var`)
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the declaration
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct VariableDecl
 {
 	pub pattern: Pattern,
@@ -1268,14 +1127,6 @@ pub struct VariableDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for VariableDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Statement types.
@@ -1299,7 +1150,7 @@ impl Spanned for VariableDecl
 /// * `Unsafe` - Unsafe block
 /// * `Block` - Block statement
 /// * `Directive` - Directive statement
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum Stmt
 {
 	VariableDecl(VariableDecl),
@@ -1407,32 +1258,6 @@ pub enum Stmt
 	Directive(DirectiveNode),
 }
 
-impl Spanned for Stmt
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		return match self {
-			Stmt::VariableDecl(VariableDecl { span, .. }) => *span,
-			Stmt::Assignment { span, .. } => *span,
-			Stmt::Return { span, .. } => *span,
-			Stmt::Expr(expr) => expr.span(),
-			Stmt::Break { span, .. } => *span,
-			Stmt::Continue { span, .. } => *span,
-			Stmt::If { span, .. } => *span,
-			Stmt::IfVar { span, .. } => *span,
-			Stmt::While { span, .. } => *span,
-			Stmt::Loop { span, .. } => *span,
-			Stmt::WhileVarLoop { span, .. } => *span,
-			Stmt::For { span, .. } => *span,
-			Stmt::Delete { span, .. } => *span,
-			Stmt::Unsafe(block) => block.span(),
-			Stmt::Block(block) => block.span(),
-			Stmt::Directive(DirectiveNode { span, .. }) => *span,
-		};
-	}
-}
-
 impl Stmt
 {
 	fn set_label(&mut self, label: String)
@@ -1457,21 +1282,13 @@ impl Stmt
 /// * `stmts` - List of statements in the block
 /// * `tail_expr` - Optional final expression (the block's value)
 /// * `span` - Source location of the block
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct Block
 {
 	pub stmts: Vec<Stmt>,
 	pub tail_expr: Option<Box<Expr>>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for Block
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Block content types.
@@ -1496,21 +1313,13 @@ pub enum BlockContent
 /// * `pattern` - Pattern to match against
 /// * `body` - Code to execute if pattern matches
 /// * `span` - Source location of the arm
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct SwitchArm
 {
 	pub pattern: Pattern,
 	pub body: SwitchBody,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for SwitchArm
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Switch arm body types.
@@ -1520,23 +1329,12 @@ impl Spanned for SwitchArm
 /// # Variants
 /// * `Expr` - Single expression (requires comma)
 /// * `Block` - Block of statements
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 #[allow(clippy::large_enum_variant)]
 pub enum SwitchBody
 {
 	Expr(Expr),
 	Block(Block),
-}
-
-impl Spanned for SwitchBody
-{
-	fn span(&self) -> Span
-	{
-		return match self {
-			SwitchBody::Expr(expr) => expr.span(),
-			SwitchBody::Block(Block { span, .. }) => *span,
-		};
-	}
 }
 
 /// Pattern matching patterns.
@@ -1552,7 +1350,7 @@ impl Spanned for SwitchBody
 /// * `Struct` - Struct pattern with field matching
 /// * `Range` - Range pattern
 /// * `Or` - Or pattern: `pat1 | pat2`
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum Pattern
 {
 	Wildcard
@@ -1607,24 +1405,6 @@ pub enum Pattern
 	},
 }
 
-impl Spanned for Pattern
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		return match self {
-			Pattern::Wildcard { span, .. } => *span,
-			Pattern::Literal { span, .. } => *span,
-			Pattern::TypedIdentifier { span, .. } => *span,
-			Pattern::Variant { span, .. } => *span,
-			Pattern::Tuple { span, .. } => *span,
-			Pattern::Struct { span, .. } => *span,
-			Pattern::Range(RangeExpr { span, .. }) => *span,
-			Pattern::Or { span, .. } => *span,
-		};
-	}
-}
-
 /// Structure type declaration.
 ///
 /// Represents a struct with named fields.
@@ -1635,7 +1415,7 @@ impl Spanned for Pattern
 /// * `fields` - List of (`type`, `name`, `Option<default_value>`) tuples for fields
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the struct
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct StructDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1649,14 +1429,6 @@ pub struct StructDecl
 	pub span: Span,
 }
 
-impl Spanned for StructDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Union type declaration.
 ///
 /// Represents a union with named fields.
@@ -1667,7 +1439,7 @@ impl Spanned for StructDecl
 /// * `fields` - List of (type, name) tuples for fields
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the union
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct UnionDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1681,14 +1453,6 @@ pub struct UnionDecl
 	pub span: Span,
 }
 
-impl Spanned for UnionDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Enumeration declaration.
 ///
 /// Represents an enum where variants are integer constants.
@@ -1699,7 +1463,7 @@ impl Spanned for UnionDecl
 /// * `variants` - List of (`name`, `Option<value>`) tuples
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the enum
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct EnumDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1713,14 +1477,6 @@ pub struct EnumDecl
 	pub span: Span,
 }
 
-impl Spanned for EnumDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Tagged union (Rust-style enum) declaration.
 ///
 /// Represents an enum where variants can carry data.
@@ -1731,7 +1487,7 @@ impl Spanned for EnumDecl
 /// * `variants` - List of (`Option<type>`, `name`, `Option<value>`) tuples for variants
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the variant
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct VariantDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1743,14 +1499,6 @@ pub struct VariantDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for VariantDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Trait declaration.
@@ -1765,7 +1513,7 @@ impl Spanned for VariantDecl
 /// * `items` - Associated items (functions, types, constants)
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the trait
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct TraitDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1779,14 +1527,6 @@ pub struct TraitDecl
 	pub span: Span,
 }
 
-impl Spanned for TraitDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Trait item types.
 ///
 /// Items that can appear in a trait definition.
@@ -1796,25 +1536,12 @@ impl Spanned for TraitDecl
 /// * `TypeAlias` - Associated type
 /// * `Const` - Associated constant
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum TraitItem
 {
 	Function(FunctionDecl),
 	TypeAlias(TypeAliasDecl),
 	Const(VariableDecl),
-}
-
-impl Spanned for TraitItem
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		match self {
-			TraitItem::Function(FunctionDecl { span, .. }) => return *span,
-			TraitItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
-			TraitItem::Const(VariableDecl { span, .. }) => return *span,
-		}
-	}
 }
 
 /// Implementation block declaration.
@@ -1831,7 +1558,7 @@ impl Spanned for TraitItem
 /// * `body` - Implementation items
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the impl
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct ImplDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -1846,14 +1573,6 @@ pub struct ImplDecl
 	pub span: Span,
 }
 
-impl Spanned for ImplDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// Implementation target type.
 ///
 /// Specifies what type an implementation applies to.
@@ -1862,21 +1581,13 @@ impl Spanned for ImplDecl
 /// * `path` - Type path
 /// * `generics` - Generic arguments
 /// * `span` - Source location of the target
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct ImplTarget
 {
 	pub path: Path,
 	pub generics: Vec<Type>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for ImplTarget
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Implementation block item types.
@@ -1888,25 +1599,12 @@ impl Spanned for ImplTarget
 /// * `TypeAlias` - Associated type definition
 /// * `Const` - Associated constant definition
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum ImplItem
 {
 	Function(FunctionDecl),
 	TypeAlias(TypeAliasDecl),
 	Const(VariableDecl),
-}
-
-impl Spanned for ImplItem
-{
-	fn span(&self) -> Span
-	{
-		#[allow(clippy::match_same_arms)]
-		match self {
-			ImplItem::Function(FunctionDecl { span, .. }) => return *span,
-			ImplItem::TypeAlias(TypeAliasDecl { span, .. }) => return *span,
-			ImplItem::Const(VariableDecl { span, .. }) => return *span,
-		}
-	}
 }
 
 /// Generic type constraint (where clause).
@@ -1918,7 +1616,7 @@ impl Spanned for ImplItem
 /// * `bounds` - List of trait bounds
 /// * `type_args` - Type arguments for the constraint
 /// * `span` - Source location of the constraint
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct WhereConstraint
 {
 	pub ty: Path,
@@ -1926,14 +1624,6 @@ pub struct WhereConstraint
 	pub type_args: Vec<Type>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for WhereConstraint
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Trait bound in a where clause or generic parameter.
@@ -2342,7 +2032,7 @@ impl std::error::Error for ParseError {}
 /// * `ty` - Type being aliased
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the type alias
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct TypeAliasDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -2353,14 +2043,6 @@ pub struct TypeAliasDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for TypeAliasDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// Module declaration.
@@ -2374,7 +2056,7 @@ impl Spanned for TypeAliasDecl
 /// * `kind` - The module kind, Inline or External
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location of the module
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct ModuleDecl
 {
 	pub modifiers: Vec<Modifier>,
@@ -2396,14 +2078,6 @@ pub enum ModuleKind
 {
 	Inline(TopLevelBlock),
 	External,
-}
-
-impl Spanned for ModuleDecl
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2429,20 +2103,12 @@ impl Restrictions
 /// * `content` - The docs comment
 /// * `span` - Source location of the docs comment
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct DocsComment
 {
 	pub content: String,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for DocsComment
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 /// A field in a struct declaration
@@ -2454,7 +2120,7 @@ impl Spanned for DocsComment
 /// * `modifiers` - Visibility and other modifiers
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct StructField
 {
 	pub ty: Type,
@@ -2467,14 +2133,6 @@ pub struct StructField
 	pub span: Span,
 }
 
-impl Spanned for StructField
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// A field in a union declaration
 ///
 /// # Fields
@@ -2483,7 +2141,7 @@ impl Spanned for StructField
 /// * `modifiers` - Visibility and other modifiers
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct UnionField
 {
 	pub ty: Type,
@@ -2495,14 +2153,6 @@ pub struct UnionField
 	pub span: Span,
 }
 
-impl Spanned for UnionField
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// A variant in an enum declaration
 ///
 /// # Fields
@@ -2510,7 +2160,7 @@ impl Spanned for UnionField
 /// * `value` - Optional falue of the field `Member = 0`
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct EnumVariant
 {
 	pub name: Ident,
@@ -2521,14 +2171,6 @@ pub struct EnumVariant
 	pub span: Span,
 }
 
-impl Spanned for EnumVariant
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
-
 /// A member in a variant declaration
 ///
 /// # Fields
@@ -2537,7 +2179,7 @@ impl Spanned for EnumVariant
 /// * `value` - Optinal value `Member = 0`
 /// * `docs` - Optional docs comments, mostly for lsp and library exports
 /// * `span` - Source location information of the field
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct VariantMember
 {
 	pub ty: Option<Type>,
@@ -2547,14 +2189,6 @@ pub struct VariantMember
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-}
-
-impl Spanned for VariantMember
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
 }
 
 impl<'s, 'c> Parser<'s, 'c>

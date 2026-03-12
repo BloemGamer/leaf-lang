@@ -114,9 +114,16 @@
 use proc_macro::TokenStream;
 
 mod gen_lex;
+mod spanned;
 
 #[proc_macro_attribute]
 pub fn generate_lexer(attr: TokenStream, item: TokenStream) -> TokenStream
 {
 	return gen_lex::generate_lexer(attr, item);
+}
+
+#[proc_macro_derive(Spanned)]
+pub fn derive_spanned(input: TokenStream) -> TokenStream
+{
+	return spanned::derive_spanned(input);
 }

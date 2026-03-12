@@ -2,7 +2,7 @@ mod tests;
 
 use std::path;
 
-use leaf_proc::generate_lexer;
+use leaf_proc::{Spanned, generate_lexer};
 
 use crate::Config;
 use crate::source_map::{SourceIndex, SourceMap};
@@ -99,7 +99,7 @@ pub struct Lexer<'source, 'config>
 ///     }
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct Token
 {
 	pub kind: TokenKind,
