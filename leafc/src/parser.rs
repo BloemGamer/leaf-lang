@@ -289,6 +289,7 @@ pub enum Modifier
 {
 	Mut, // only used for the parse modifier function and should not be seed anywere else, if it's anywere else it should return an error
 	Pub,
+	Export,
 	Unsafe,
 	Inline,
 	Const, // for variables this one is not used, for functions it is
@@ -303,15 +304,16 @@ impl PartialOrd for Modifier
 		const fn rank(m: &Modifier) -> u8
 		{
 			// ordering:
-			// @directive pub const unsafe inline volatile mut
+			// @directive pub export const unsafe inline volatile mut
 			return match m {
 				Modifier::Directive(_) => 0,
 				Modifier::Pub => 1,
-				Modifier::Const => 2,
-				Modifier::Unsafe => 3,
-				Modifier::Inline => 4,
-				Modifier::Volatile => 5,
-				Modifier::Mut => 6,
+				Modifier::Export => 2,
+				Modifier::Const => 3,
+				Modifier::Unsafe => 4,
+				Modifier::Inline => 5,
+				Modifier::Volatile => 6,
+				Modifier::Mut => 7,
 			};
 		}
 
@@ -319,12 +321,13 @@ impl PartialOrd for Modifier
 	}
 }
 
-fn get_visibility(modifiers: &Vec<Modifier>) -> Visibility
+pub fn get_visibility(modifiers: &Vec<Modifier>) -> Visibility
 {
 	for m in modifiers {
 		match m {
 			Modifier::Directive(_) => {}
 			Modifier::Pub => return Visibility::Public,
+			Modifier::Export => return Visibility::Export,
 			Modifier::Mut | Modifier::Unsafe | Modifier::Inline | Modifier::Const | Modifier::Volatile => {
 				return Visibility::Private;
 			}
@@ -2479,6 +2482,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			match self.peek_kind()? {
 				TokenKind::Pub
+				| TokenKind::Export
 				| TokenKind::Unsafe
 				| TokenKind::Inline
 				| TokenKind::Volatile
@@ -2525,6 +2529,7 @@ impl<'s, 'c> Parser<'s, 'c>
 								break;
 							}
 							TokenKind::Pub
+							| TokenKind::Export
 							| TokenKind::Unsafe
 							| TokenKind::Inline
 							| TokenKind::Volatile
@@ -5422,6 +5427,10 @@ impl<'s, 'c> Parser<'s, 'c>
 					ret.push(Modifier::Pub);
 					self.next()?;
 				}
+				TokenKind::Export => {
+					ret.push(Modifier::Export);
+					self.next()?;
+				}
 				TokenKind::Unsafe => {
 					ret.push(Modifier::Unsafe);
 					self.next()?;
@@ -5449,6 +5458,18 @@ impl<'s, 'c> Parser<'s, 'c>
 		if !ret.is_sorted() {
 			todo!("return ordering error")
 		}
+		for r in ret.windows(2) {
+			if matches!(r[0], Modifier::Directive(_)) {
+				continue;
+			}
+			if r[0] == r[1] {
+				todo!("return error of 2 the same modifiers")
+			}
+			if r[0] == Modifier::Pub && r[1] == Modifier::Export {
+				todo!("return error of 2 differen visibility tokens")
+			}
+		}
+
 		return Ok(ret);
 	}
 
@@ -6462,6 +6483,7 @@ impl fmt::Display for Modifier
 	{
 		match self {
 			Modifier::Pub => return write!(f, "pub"),
+			Modifier::Export => return write!(f, "export"),
 			Modifier::Unsafe => return write!(f, "unsafe"),
 			Modifier::Inline => return write!(f, "inline"),
 			Modifier::Const => return write!(f, "const"),

@@ -357,6 +357,8 @@ pub enum TokenKind
 	/// Public visibility: `pub`
 	#[keyword("pub")]
 	Pub,
+	#[keyword("export")]
+	Export,
 	/// Mutable binding: `mut`
 	#[keyword("mut")]
 	Mut,

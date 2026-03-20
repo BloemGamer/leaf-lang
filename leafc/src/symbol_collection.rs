@@ -11,7 +11,7 @@ use crate::{
 	parser::{
 		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
 		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, NodeId, Path, Pattern, RangeExpr, Stmt, StructDecl,
-		SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl, get_visibility,
 	},
 	source_map::SourceIndex,
 };
@@ -370,6 +370,7 @@ impl LocalSymbolTable
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility
 {
+	Export,
 	Public,
 	Private,
 }
@@ -820,7 +821,7 @@ impl Collector
 				comp_const: sig.modifiers.iter().any(|m| matches!(m, Modifier::Const)),
 			},
 			sig.span(),
-			get_visability(&func.signature.modifiers),
+			get_visibility(&func.signature.modifiers),
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(
@@ -923,7 +924,7 @@ impl Collector
 				},
 			},
 			*span,
-			get_visability(modifiers),
+			get_visibility(modifiers),
 		)?;
 
 		if let Some(init) = &var.init {
@@ -942,7 +943,7 @@ impl Collector
 			path.segments[0].name.clone(),
 			SymbolKind::Struct,
 			s.span(),
-			get_visability(&s.modifiers),
+			get_visibility(&s.modifiers),
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span(), None);
@@ -954,7 +955,7 @@ impl Collector
 					f.name.clone(),
 					SymbolKind::Field,
 					f.span(),
-					get_visability(&f.modifiers),
+					get_visibility(&f.modifiers),
 				)?;
 			}
 			return Ok(());
@@ -972,7 +973,7 @@ impl Collector
 			path.segments[0].name.clone(),
 			SymbolKind::Union,
 			u.span(),
-			get_visability(&u.modifiers),
+			get_visibility(&u.modifiers),
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span(), None);
@@ -984,7 +985,7 @@ impl Collector
 					f.name.clone(),
 					SymbolKind::Field,
 					f.span(),
-					get_visability(&f.modifiers),
+					get_visibility(&f.modifiers),
 				)?;
 			}
 			return Ok(());
@@ -998,7 +999,7 @@ impl Collector
 		let path: &Path = &e.name;
 		self.validate_simple_path(path, "enum")?;
 
-		let visibility: Visibility = get_visability(&e.modifiers);
+		let visibility: Visibility = get_visibility(&e.modifiers);
 		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span(), None);
@@ -1019,7 +1020,7 @@ impl Collector
 		let path: &Path = &v.name;
 		self.validate_simple_path(path, "variant")?;
 
-		let visibility: Visibility = get_visability(&v.modifiers);
+		let visibility: Visibility = get_visibility(&v.modifiers);
 		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span(), None);
@@ -1044,7 +1045,7 @@ impl Collector
 			path.segments[0].name.clone(),
 			SymbolKind::TypeAlias,
 			path.span(),
-			get_visability(&t.modifiers),
+			get_visibility(&t.modifiers),
 		)?;
 
 		return Ok(());
@@ -1059,7 +1060,7 @@ impl Collector
 			path.segments[0].name.clone(),
 			SymbolKind::Trait,
 			path.span(),
-			get_visability(&t.modifiers),
+			get_visibility(&t.modifiers),
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::TraitBody, t.span(), None);
@@ -1098,7 +1099,7 @@ impl Collector
 			path.segments[0].name.clone(),
 			SymbolKind::Module,
 			path.span(),
-			get_visability(&m.modifiers),
+			get_visibility(&m.modifiers),
 		)?;
 
 		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span(), None);
@@ -1449,7 +1450,7 @@ impl Collector
 						},
 					},
 					*span,
-					get_visability(modifiers),
+					get_visibility(modifiers),
 				)?;
 			}
 
@@ -1571,14 +1572,6 @@ pub fn collect_symbols(
 	collector.table.scopes[collector.table.root.0].span = program.span();
 	collector.collect_program(program)?;
 	return Ok(collector.table);
-}
-
-fn get_visability(mods: &[Modifier]) -> Visibility
-{
-	if mods.iter().any(|m| matches!(m, Modifier::Pub)) {
-		return Visibility::Public;
-	}
-	return Visibility::Private;
 }
 
 pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)]) -> GlobalSymbolTable

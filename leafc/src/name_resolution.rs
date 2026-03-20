@@ -1395,7 +1395,8 @@ impl<'a> Resolver<'a>
 							.iter()
 							.find(|&&id| {
 								let s = self.global.symbol(id);
-								return s.name == name && s.visibility == Visibility::Public;
+								return s.name == name
+									&& matches!(s.visibility, Visibility::Public | Visibility::Export);
 							})
 							.copied()
 					{
@@ -1433,7 +1434,7 @@ impl<'a> Resolver<'a>
 				.iter()
 				.find(|&&id| {
 					let sym = self.global.symbol(id);
-					return sym.name == name && sym.visibility == Visibility::Public;
+					return sym.name == name && matches!(sym.visibility, Visibility::Public | Visibility::Export);
 				})
 				.copied();
 		}
@@ -1460,7 +1461,7 @@ impl<'a> Resolver<'a>
 			.iter()
 			.find(|&&id| {
 				let sym = self.global.symbol(id);
-				return sym.name == name && sym.visibility == Visibility::Public;
+				return sym.name == name && matches!(sym.visibility, Visibility::Public | Visibility::Export);
 			})
 			.copied()
 		{
@@ -1482,7 +1483,7 @@ impl<'a> Resolver<'a>
 			else {
 				continue;
 			};
-			if *visibility != Visibility::Public {
+			if !matches!(*visibility, Visibility::Public | Visibility::Export) {
 				continue;
 			}
 
@@ -1532,7 +1533,8 @@ impl<'a> Resolver<'a>
 							.iter()
 							.find(|&&id| {
 								let sym = self.global.symbol(id);
-								return sym.name == name && sym.visibility == Visibility::Public;
+								return sym.name == name
+									&& matches!(sym.visibility, Visibility::Public | Visibility::Export);
 							})
 							.copied()
 					{
@@ -1593,8 +1595,10 @@ impl<'a> Resolver<'a>
 		let name: &String = target.last()?;
 		for &root in self.global.module_roots.values() {
 			if let Some(sym_id) = self.find_sym_in_global_scope(root, name)
-				&& self.global.symbol(sym_id).visibility == Visibility::Public
-			{
+				&& matches!(
+					self.global.symbol(sym_id).visibility,
+					Visibility::Public | Visibility::Export
+				) {
 				return Some(sym_id);
 			}
 		}
