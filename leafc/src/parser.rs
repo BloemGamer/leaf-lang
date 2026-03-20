@@ -8,6 +8,7 @@ use crate::{
 	CompileDiagnostic, CompileError, Config,
 	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
+	symbol_collection::Visibility,
 };
 use leaf_proc::Spanned;
 
@@ -42,6 +43,7 @@ pub struct Parser<'source, 'config>
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
 	buffered_token: Option<Token>,
+	node_id_counter: u32,
 }
 
 impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
@@ -77,6 +79,7 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
+			node_id_counter: 0,
 		};
 	}
 }
@@ -86,6 +89,14 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 /// Represents variable names, function names, type names, and other identifiers
 /// throughout the AST.
 pub type Ident = String;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(pub u32);
+
+impl NodeId
+{
+	pub const DUMMY: NodeId = NodeId(u32::MAX);
+}
 
 /// Represents a complete program or compilation unit as a sequence of
 /// top-level declarations.
@@ -112,6 +123,7 @@ pub struct AST
 {
 	pub top_level_block: TopLevelBlock,
 	pub source_index: SourceIndex,
+	pub next_node_id: u32,
 }
 
 impl Spanned for AST
@@ -307,6 +319,20 @@ impl PartialOrd for Modifier
 	}
 }
 
+fn get_visibility(modifiers: &Vec<Modifier>) -> Visibility
+{
+	for m in modifiers {
+		match m {
+			Modifier::Directive(_) => {}
+			Modifier::Pub => return Visibility::Public,
+			Modifier::Mut | Modifier::Unsafe | Modifier::Inline | Modifier::Const | Modifier::Volatile => {
+				return Visibility::Private;
+			}
+		}
+	}
+	return Visibility::Private;
+}
+
 /// Compiler directive types.
 ///
 /// Represents directives that provide instructions to the compiler,
@@ -324,11 +350,15 @@ pub enum Directive
 {
 	Import
 	{
-		modifers: Vec<Modifier>, import: String
+		modifers: Vec<Modifier>,
+		import: String,
+		visibility: Visibility,
 	},
 	Use
 	{
-		modifers: Vec<Modifier>, use_path: Path
+		modifers: Vec<Modifier>,
+		use_path: Path,
+		visibility: Visibility,
 	},
 	Custom
 	{
@@ -591,6 +621,7 @@ impl GenericParam
 	}
 }
 
+// TODO: add docs
 /// Function parameter.
 ///
 /// Represents a single parameter in a function signature.
@@ -1289,6 +1320,7 @@ pub struct Block
 	pub tail_expr: Option<Box<Expr>>,
 	#[ignored(PartialEq)]
 	pub span: Span,
+	pub id: NodeId,
 }
 
 /// Block content types.
@@ -1320,6 +1352,7 @@ pub struct SwitchArm
 	pub body: SwitchBody,
 	#[ignored(PartialEq)]
 	pub span: Span,
+	pub id: NodeId,
 }
 
 /// Switch arm body types.
@@ -1571,6 +1604,7 @@ pub struct ImplDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
+	pub id: NodeId,
 }
 
 /// Implementation target type.
@@ -2315,6 +2349,13 @@ impl<'s, 'c> Parser<'s, 'c>
 		));
 	}
 
+	const fn next_node_id(&mut self) -> NodeId
+	{
+		let id: NodeId = NodeId(self.node_id_counter);
+		self.node_id_counter += 1;
+		return id;
+	}
+
 	/// Parse a complete program.
 	///
 	/// Entry point for parsing a source file. Parses all top-level declarations
@@ -2340,6 +2381,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(AST {
 			top_level_block,
 			source_index: self.source_index,
+			next_node_id: self.node_id_counter,
 		});
 	}
 
@@ -2658,6 +2700,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		return match direct {
 			lexer::Directive::Use => Ok(Directive::Use {
+				visibility: get_visibility(&modifiers),
 				modifers: modifiers,
 				use_path: self.get_path_with_glob()?,
 			}),
@@ -2665,6 +2708,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				let incl: Token = self.next()?;
 				let ret = match &incl.kind {
 					TokenKind::StringLiteral(str) => Directive::Import {
+						visibility: get_visibility(&modifiers),
 						modifers: modifiers,
 						import: str.clone(),
 					},
@@ -4213,6 +4257,7 @@ impl<'s, 'c> Parser<'s, 'c>
 					stmts: vec![stmt],
 					tail_expr: None,
 					span: span.merge(&self.last_span),
+					id: self.next_node_id(),
 				})
 			} else {
 				let expr: Expr = self.parse_expr()?;
@@ -4225,6 +4270,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			pattern,
 			body,
 			span: span.merge(&self.last_span),
+			id: self.next_node_id(),
 		});
 	}
 
@@ -4886,6 +4932,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			stmts,
 			tail_expr,
 			span: span.merge(&self.last_span),
+			id: self.next_node_id(),
 		});
 	}
 
@@ -5847,6 +5894,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			body,
 			docs,
 			span: span.merge(&self.last_span),
+			id: self.next_node_id(),
 		});
 	}
 
@@ -6328,7 +6376,7 @@ pub fn extract_type_from_pattern(pattern: &Pattern) -> Option<Type>
 
 use std::fmt;
 
-struct IndentWriter
+pub struct IndentWriter
 {
 	indent_level: usize,
 	indent_str: &'static str,
@@ -6336,7 +6384,7 @@ struct IndentWriter
 
 impl IndentWriter
 {
-	const fn new() -> Self
+	pub const fn new() -> Self
 	{
 		return Self {
 			indent_level: 0,
@@ -6344,18 +6392,18 @@ impl IndentWriter
 		};
 	}
 
-	const fn indent(&mut self)
+	pub const fn indent(&mut self)
 	{
 		self.indent_level += 1;
 	}
 
-	fn dedent(&mut self)
+	pub fn dedent(&mut self)
 	{
 		debug_assert!(self.indent_level > 0);
 		self.indent_level -= 1;
 	}
 
-	fn write_indent(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	pub fn write_indent(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		for _ in 0..self.indent_level {
 			write!(f, "{}", self.indent_str)?;
@@ -6385,7 +6433,7 @@ impl fmt::Display for TopLevelBlock
 	}
 }
 
-fn write_top_level_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, decl: &TopLevelDecl) -> fmt::Result
+pub fn write_top_level_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, decl: &TopLevelDecl) -> fmt::Result
 {
 	match decl {
 		TopLevelDecl::Function(func) => return write_function_decl(f, w, func),
@@ -6484,13 +6532,21 @@ impl std::fmt::Display for Directive
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		match self {
-			Directive::Import { modifers, import } => {
+			Directive::Import {
+				modifers,
+				import,
+				visibility: _,
+			} => {
 				for m in modifers {
 					write!(f, "{} ", m)?;
 				}
 				return write!(f, "@import \"{}\"", import);
 			}
-			Directive::Use { modifers, use_path } => {
+			Directive::Use {
+				modifers,
+				use_path,
+				visibility: _,
+			} => {
 				for m in modifers {
 					write!(f, "{} ", m)?;
 				}
@@ -6551,7 +6607,7 @@ impl fmt::Display for DirectiveParam
 	}
 }
 
-fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &FunctionDecl) -> fmt::Result
+pub fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &FunctionDecl) -> fmt::Result
 {
 	write_docs(f, w, &func.docs)?;
 	write_function_signature(f, w, &func.signature)?;
@@ -6566,7 +6622,11 @@ fn write_function_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &
 	return Ok(());
 }
 
-fn write_function_signature(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, sig: &FunctionSignature) -> fmt::Result
+pub fn write_function_signature(
+	f: &mut fmt::Formatter<'_>,
+	_w: &mut IndentWriter,
+	sig: &FunctionSignature,
+) -> fmt::Result
 {
 	for modifier in &sig.modifiers {
 		write!(f, "{} ", modifier)?;
@@ -6730,7 +6790,7 @@ impl fmt::Display for TypeCore
 	}
 }
 
-fn write_variable_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, var: &VariableDecl) -> fmt::Result
+pub fn write_variable_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, var: &VariableDecl) -> fmt::Result
 {
 	if var.comp_const {
 		write!(f, "const ")?;
@@ -7010,7 +7070,7 @@ impl fmt::Display for Expr
 	}
 }
 
-fn write_switch(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[SwitchArm]) -> fmt::Result
+pub fn write_switch(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr, arms: &[SwitchArm]) -> fmt::Result
 {
 	write!(f, "switch ")?;
 	write_expr(f, w, expr)?;
@@ -7124,7 +7184,7 @@ impl fmt::Display for RangeExpr
 	}
 }
 
-fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) -> fmt::Result
+pub fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) -> fmt::Result
 {
 	writeln!(f, "{{")?;
 	w.indent();
@@ -7145,7 +7205,7 @@ fn write_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: &Block) 
 	return write!(f, "}}");
 }
 
-fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> fmt::Result
+pub fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> fmt::Result
 {
 	match expr {
 		Expr::Switch {
@@ -7181,7 +7241,7 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 			else_branch,
 			..
 		} => {
-			write!(f, "if {} = ", pattern)?;
+			write!(f, "if var {} = ", pattern)?;
 
 			write_expr(f, w, expr)?;
 			write!(f, " ")?;
@@ -7203,13 +7263,13 @@ fn write_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, expr: &Expr) -> 
 	}
 }
 
-fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
+pub fn write_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
 {
 	w.write_indent(f)?;
 	return write_stmt_no_indent(f, w, stmt);
 }
 
-fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
+pub fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &Stmt) -> fmt::Result
 {
 	match stmt {
 		Stmt::VariableDecl(var) => {
@@ -7381,7 +7441,7 @@ impl fmt::Display for AssignOp
 	}
 }
 
-fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &StructDecl) -> fmt::Result
+pub fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &StructDecl) -> fmt::Result
 {
 	write_docs(f, w, &s.docs)?;
 	for modifier in &s.modifiers {
@@ -7428,7 +7488,7 @@ fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &Struc
 	return write!(f, "}}");
 }
 
-fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionDecl) -> fmt::Result
+pub fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionDecl) -> fmt::Result
 {
 	write_docs(f, w, &u.docs)?;
 	for modifier in &u.modifiers {
@@ -7471,7 +7531,7 @@ fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &UnionD
 	return write!(f, "}}");
 }
 
-fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDecl) -> fmt::Result
+pub fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDecl) -> fmt::Result
 {
 	write_docs(f, w, &e.docs)?;
 	for modifier in &e.modifiers {
@@ -7519,7 +7579,7 @@ fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &EnumDec
 	return write!(f, "}}");
 }
 
-fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &VariantDecl) -> fmt::Result
+pub fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &VariantDecl) -> fmt::Result
 {
 	write_docs(f, w, &v.docs)?;
 	for modifier in &v.modifiers {
@@ -7570,7 +7630,7 @@ fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &Vari
 	return write!(f, "}}");
 }
 
-fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &TypeAliasDecl) -> fmt::Result
+pub fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &TypeAliasDecl) -> fmt::Result
 {
 	write_docs(f, w, &t.docs)?;
 	for modifier in &t.modifiers {
@@ -7593,7 +7653,7 @@ fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &TypeA
 	return write!(f, " = {}", t.ty);
 }
 
-fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &ModuleDecl) -> fmt::Result
+pub fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &ModuleDecl) -> fmt::Result
 {
 	write_docs(f, w, &n.docs)?;
 	for modifier in &n.modifiers {
@@ -7623,7 +7683,7 @@ fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &Modul
 	return Ok(());
 }
 
-fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result
+pub fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitDecl) -> fmt::Result
 {
 	write_docs(f, w, &t.docs)?;
 	for modifier in &t.modifiers {
@@ -7667,7 +7727,7 @@ fn write_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &TraitD
 	return write!(f, "}}");
 }
 
-fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &TraitItem) -> fmt::Result
+pub fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &TraitItem) -> fmt::Result
 {
 	match item {
 		TraitItem::Function(func) => {
@@ -7684,7 +7744,7 @@ fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &Tra
 	}
 }
 
-fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDecl) -> fmt::Result
+pub fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDecl) -> fmt::Result
 {
 	write_docs(f, w, &i.docs)?;
 	for modifier in &i.modifiers {
@@ -7735,7 +7795,7 @@ fn write_impl_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, i: &ImplDec
 	return write!(f, "}}");
 }
 
-fn write_impl_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &ImplItem) -> fmt::Result
+pub fn write_impl_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &ImplItem) -> fmt::Result
 {
 	match item {
 		ImplItem::Function(func) => return write_function_decl(f, w, func),
@@ -7860,7 +7920,7 @@ impl fmt::Display for GenericArg
 }
 
 #[allow(clippy::ref_option)]
-fn write_docs(f: &mut fmt::Formatter<'_>, w: &IndentWriter, docs: &Option<DocsComment>) -> fmt::Result
+pub fn write_docs(f: &mut fmt::Formatter<'_>, w: &IndentWriter, docs: &Option<DocsComment>) -> fmt::Result
 {
 	if let Some(doc) = docs {
 		for line in doc.content.lines() {

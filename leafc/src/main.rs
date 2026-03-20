@@ -127,7 +127,7 @@ use self::{
 	name_resolution::{NameResolutionError, ResolvedModule},
 	parser::{AST, ParseError, Parser},
 	source_map::{SourceIndex, SourceMap},
-	symbol_collection::{SymbolCollectionError, SymbolTable},
+	symbol_collection::{GlobalSymbolTable, LocalSymbolTable, SymbolCollectionError},
 };
 
 mod desugar;
@@ -256,7 +256,6 @@ fn run(
 		logical_path: Vec::new(),
 		file_path: filename.into(),
 		declared_at_span: Span {
-			// just a default value, because the main is not really a module file
 			start: 0,
 			end: 0,
 			start_line: 0,
@@ -264,10 +263,12 @@ fn run(
 			end_line: 0,
 			end_col: 0,
 		},
-		declared_at_source: SourceIndex::new(0), // just a default value (should be itself, but no guarantees), because the main is not really a module file
+		declared_at_source: SourceIndex::new(0),
 	}]);
 	let mut visited: HashSet<Vec<String>> = HashSet::new();
-	let mut modules: Vec<(Vec<String>, DesugaredAST, SymbolTable)> = Vec::new();
+
+	// Phase 1: parse, desugar, and collect local symbols for each module
+	let mut pending_modules: Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)> = Vec::new();
 
 	while let Some(pm) = queue.pop_front() {
 		if args.modules {
@@ -276,6 +277,7 @@ fn run(
 		if !visited.insert(pm.logical_path.clone()) {
 			continue;
 		}
+
 		let source: String = fs::read_to_string(&pm.file_path).map_err(|e| {
 			let kind: ModuleErrorKind = if e.kind() == std::io::ErrorKind::NotFound {
 				ModuleErrorKind::FileNotFound(pm.file_path.clone())
@@ -298,6 +300,7 @@ fn run(
 				lexer.clone().collect::<Vec<_>>()
 			);
 		}
+
 		let ast: AST = Parser::from(lexer).try_into()?;
 		if args.parsed {
 			println!(
@@ -306,7 +309,9 @@ fn run(
 				ast
 			);
 		}
+
 		queue.extend(modules::collect_pending(&ast, &pm.file_path, &pm.logical_path));
+
 		let desugared: DesugaredAST = ast.try_into()?;
 		if args.desugared {
 			println!(
@@ -315,35 +320,50 @@ fn run(
 				desugared
 			);
 		}
-		let symbols: SymbolTable = symbol_collection::collect_symbols(&desugared, desugared.source_index)?;
+
+		// Pass logical_path so the local table knows which module it belongs to
+		let local_symbols: LocalSymbolTable =
+			symbol_collection::collect_symbols(&desugared, pm.logical_path.clone(), desugared.source_index)?;
 		if args.symbols {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{:#?}",
 				pm.logical_path.join("::"),
-				symbols
+				local_symbols
 			);
 		}
-		modules.push((pm.logical_path, desugared, symbols));
+
+		pending_modules.push((pm.logical_path, desugared, local_symbols));
 	}
 
+	// Phase 2: merge all local symbol tables into one globally consistent table.
+	// After this point, every SymbolId and ScopeId is valid across all modules.
+	let global_symbols: GlobalSymbolTable = symbol_collection::merge_symbol_tables(&pending_modules);
+
+	if args.symbols {
+		println!(
+			"-------------------------------------------------------\n(global symbols) =>\n{:#?}",
+			global_symbols
+		);
+	}
+
+	// Phase 3: name resolution — each module resolved against the global table.
+	// The ASTs and their logical paths are all we need now; local tables are done.
+	// let ast_modules: Vec<(Vec<String>, DesugaredAST)> = pending_modules
+	// 	.into_iter()
+	// 	.map(|(path, desugared, _local)| (path, desugared))
+	// 	.collect();
+
 	let mut resolved_modules: Vec<ResolvedModule> = Vec::new();
-	for (path, desugared, symbols) in &modules {
-		let resolved = name_resolution::resolve_names(path, desugared, symbols, &modules)?;
+	for (path, desugared, symbols) in &pending_modules {
+		let resolved: ResolvedModule =
+			name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules)?;
 		resolved_modules.push(resolved);
 	}
-	if args.name_resolution {
+
+	if args.name_resolution || args.all_false() {
 		for ResolvedModule { path, ast, symbols: _ } in &resolved_modules {
 			println!(
-				"-------------------------------------------------------\n::{} =>\n{:#?}",
-				path.join("::"),
-				ast
-			);
-		}
-	}
-	if args.all_false() {
-		for ResolvedModule { path, ast, symbols: _ } in &resolved_modules {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{:#?}",
+				"-------------------------------------------------------\n::{} =>\n{}",
 				path.join("::"),
 				ast
 			);

@@ -1,4 +1,8 @@
-use std::fmt;
+mod tests;
+
+use std::{collections::HashMap, fmt};
+
+use ignorable::PartialEq;
 
 use crate::{
 	CompileDiagnostic, CompileError,
@@ -6,8 +10,8 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
-		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
-		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, NodeId, Path, Pattern, RangeExpr, Stmt, StructDecl,
+		SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };
@@ -130,11 +134,12 @@ pub enum SymbolKind
 /// }
 /// ```
 #[allow(unused)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Symbol
 {
 	pub name: Ident,
 	pub kind: SymbolKind,
+	#[ignored(PartialEq)]
 	pub def_span: Span,
 	pub scope: ScopeId,
 	pub introduced_scope: Option<ScopeId>,
@@ -223,7 +228,7 @@ pub enum ScopeKind
 ///     println!("Parent scope: {:?}", parent.kind);
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(unused)]
 pub struct Scope
 {
@@ -231,7 +236,9 @@ pub struct Scope
 	pub parent: Option<ScopeId>,
 	pub symbols: Vec<SymbolId>,
 	pub children: Vec<ScopeId>,
+	#[ignored(PartialEq)]
 	pub span: Span,
+	pub node_id: Option<NodeId>,
 }
 
 /// The complete symbol table for a program.
@@ -262,15 +269,40 @@ pub struct Scope
 ///     println!("Top-level symbol: {}", symbol.name);
 /// }
 /// ```
-#[derive(Debug, Clone)]
-pub struct SymbolTable
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalSymbolTable
 {
 	pub scopes: Vec<Scope>,
 	pub symbols: Vec<Symbol>,
 	pub root: ScopeId,
+	pub module_path: Vec<String>,
+	pub node_scope_map: HashMap<NodeId, ScopeId>,
 }
 
-impl SymbolTable
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalSymbolTable
+{
+	pub scopes: Vec<Scope>,
+	pub symbols: Vec<Symbol>,
+	pub root: ScopeId,
+	pub module_roots: HashMap<Vec<String>, ScopeId>,
+	pub node_scope_map: HashMap<NodeId, ScopeId>,
+}
+
+impl GlobalSymbolTable
+{
+	pub fn scope(&self, id: ScopeId) -> &Scope
+	{
+		return &self.scopes[id.0];
+	}
+
+	pub fn symbol(&self, id: SymbolId) -> &Symbol
+	{
+		return &self.symbols[id.0];
+	}
+}
+
+impl LocalSymbolTable
 {
 	/// Gets a reference to a scope by its ID.
 	///
@@ -549,7 +581,7 @@ impl std::error::Error for SymbolCollectionError {}
 
 struct Collector
 {
-	table: SymbolTable,
+	table: LocalSymbolTable,
 	current_scope: ScopeId,
 	source_index: SourceIndex,
 }
@@ -564,23 +596,26 @@ impl Collector
 			symbols: Vec::new(),
 			children: Vec::new(),
 			span: Span::default(),
+			node_id: None,
 		};
 
 		return Self {
-			table: SymbolTable {
+			table: LocalSymbolTable {
 				scopes: vec![root],
 				symbols: Vec::new(),
 				root: ScopeId(0),
+				module_path: Vec::new(),
+				node_scope_map: HashMap::new(),
 			},
 			current_scope: ScopeId(0),
 			source_index,
 		};
 	}
 
-	fn alloc_scope(&mut self, kind: ScopeKind, span: Span) -> ScopeId
+	fn alloc_scope(&mut self, kind: ScopeKind, span: Span, node_id: Option<NodeId>) -> ScopeId
 	{
-		let id = ScopeId(self.table.scopes.len());
-		let parent = self.current_scope;
+		let id: ScopeId = ScopeId(self.table.scopes.len());
+		let parent: ScopeId = self.current_scope;
 
 		self.table.scopes.push(Scope {
 			kind,
@@ -588,15 +623,21 @@ impl Collector
 			symbols: Vec::new(),
 			children: Vec::new(),
 			span,
+			node_id,
 		});
 		self.table.scopes[parent.0].children.push(id);
+
+		if let Some(nid) = node_id {
+			self.table.node_scope_map.insert(nid, id);
+		}
+
 		return id;
 	}
 
 	#[allow(unused)]
 	fn alloc_scope_under(&mut self, parent: ScopeId, kind: ScopeKind, span: Span) -> ScopeId
 	{
-		let id = ScopeId(self.table.scopes.len());
+		let id: ScopeId = ScopeId(self.table.scopes.len());
 
 		self.table.scopes.push(Scope {
 			kind,
@@ -604,6 +645,7 @@ impl Collector
 			symbols: Vec::new(),
 			children: Vec::new(),
 			span,
+			node_id: None,
 		});
 		self.table.scopes[parent.0].children.push(id);
 		return id;
@@ -742,6 +784,9 @@ impl Collector
 		for item in &block.stmts {
 			self.collect_stmt(item)?;
 		}
+		if let Some(expr) = &block.tail_expr {
+			self.collect_expr(expr)?;
+		}
 		return Ok(());
 	}
 
@@ -778,7 +823,11 @@ impl Collector
 			get_visability(&func.signature.modifiers),
 		)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::FunctionBody, func.span());
+		let body_scope: ScopeId = self.alloc_scope(
+			ScopeKind::FunctionBody,
+			func.span(),
+			func.body.as_ref().map(|b| return b.id),
+		);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -877,6 +926,10 @@ impl Collector
 			get_visability(modifiers),
 		)?;
 
+		if let Some(init) = &var.init {
+			self.collect_expr(init)?;
+		}
+
 		return Ok(());
 	}
 
@@ -892,7 +945,7 @@ impl Collector
 			get_visability(&s.modifiers),
 		)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::StructFields, s.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -922,7 +975,7 @@ impl Collector
 			get_visability(&u.modifiers),
 		)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::UnionFields, u.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -948,7 +1001,7 @@ impl Collector
 		let visibility: Visibility = get_visability(&e.modifiers);
 		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::EnumVariants, e.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -969,7 +1022,7 @@ impl Collector
 		let visibility: Visibility = get_visability(&v.modifiers);
 		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::VariantMembers, v.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -1009,7 +1062,7 @@ impl Collector
 			get_visability(&t.modifiers),
 		)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::TraitBody, t.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::TraitBody, t.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -1048,7 +1101,7 @@ impl Collector
 			get_visability(&m.modifiers),
 		)?;
 
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ModuleInline, m.span(), None);
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
@@ -1064,7 +1117,7 @@ impl Collector
 
 	fn collect_impl_decl(&mut self, i: &ImplDecl) -> Result<(), SymbolCollectionError>
 	{
-		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ImplBody, i.span());
+		let body_scope: ScopeId = self.alloc_scope(ScopeKind::ImplBody, i.span(), Some(i.id));
 
 		self.in_scope(body_scope, |c| {
 			for generic in &i.generics {
@@ -1110,7 +1163,7 @@ impl Collector
 				};
 				self.define(label.clone(), SymbolKind::Label, *span, Visibility::Private)?;
 
-				let body_scope = self.alloc_scope(ScopeKind::LoopBody, *span);
+				let body_scope: ScopeId = self.alloc_scope(ScopeKind::LoopBody, *span, None);
 
 				self.in_scope(body_scope, |c| {
 					for item in &body.stmts {
@@ -1124,7 +1177,7 @@ impl Collector
 				})?;
 			}
 			Stmt::Block(block) | Stmt::Unsafe(block) => {
-				let body_scope = self.alloc_scope(ScopeKind::Block, block.span());
+				let body_scope: ScopeId = self.alloc_scope(ScopeKind::Block, block.span(), Some(block.id));
 				self.in_scope(body_scope, |c| {
 					for item in &block.stmts {
 						c.collect_stmt(item)?;
@@ -1169,7 +1222,7 @@ impl Collector
 			} => {
 				self.collect_expr(cond)?;
 
-				let then_scope: ScopeId = self.alloc_scope(ScopeKind::IfThen, then_block.span());
+				let then_scope: ScopeId = self.alloc_scope(ScopeKind::IfThen, then_block.span(), Some(then_block.id));
 				self.in_scope(then_scope, |c| {
 					for item in &then_block.stmts {
 						c.collect_stmt(item)?;
@@ -1181,7 +1234,11 @@ impl Collector
 				})?;
 
 				if let Some(el) = else_branch {
-					let else_scope: ScopeId = self.alloc_scope(ScopeKind::ElseBlock, el.span());
+					let else_scope = self.alloc_scope(
+						ScopeKind::ElseBlock,
+						el.span(),
+						if let Stmt::Block(b) = &**el { Some(b.id) } else { None },
+					);
 					match &**el {
 						Stmt::Block(block) => {
 							self.in_scope(else_scope, |c| {
@@ -1271,7 +1328,7 @@ impl Collector
 			}
 
 			Expr::Block(block) | Expr::UnsafeBlock(block) => {
-				let block_scope = self.alloc_scope(ScopeKind::Block, block.span());
+				let block_scope: ScopeId = self.alloc_scope(ScopeKind::Block, block.span(), Some(block.id));
 				self.in_scope(block_scope, |c| {
 					for stmt in &block.stmts {
 						c.collect_stmt(stmt)?;
@@ -1287,7 +1344,7 @@ impl Collector
 				self.collect_expr(expr)?;
 
 				for arm in arms {
-					let arm_scope = self.alloc_scope(ScopeKind::SwitchArm, arm.span());
+					let arm_scope: ScopeId = self.alloc_scope(ScopeKind::SwitchArm, arm.span(), Some(arm.id));
 					self.in_scope(arm_scope, |c| {
 						c.collect_pattern_bindings(&arm.pattern)?;
 
@@ -1315,7 +1372,7 @@ impl Collector
 			} => {
 				self.collect_expr(cond)?;
 
-				let then_scope = self.alloc_scope(ScopeKind::IfThen, then_block.span());
+				let then_scope: ScopeId = self.alloc_scope(ScopeKind::IfThen, then_block.span(), Some(then_block.id));
 				self.in_scope(then_scope, |c| {
 					for stmt in &then_block.stmts {
 						c.collect_stmt(stmt)?;
@@ -1327,37 +1384,21 @@ impl Collector
 				})?;
 
 				if let Some(else_expr) = else_branch {
-					let else_scope = self.alloc_scope(ScopeKind::ElseBlock, else_expr.span());
+					let else_scope: ScopeId = self.alloc_scope(
+						ScopeKind::ElseBlock,
+						else_expr.span(),
+						if let Expr::Block(b) = &**else_expr {
+							Some(b.id)
+						} else {
+							None
+						},
+					);
 					self.in_scope(else_scope, |c| return c.collect_expr(else_expr))?;
 				}
 			}
 
-			Expr::IfVar {
-				pattern,
-				expr,
-				then_block,
-				else_branch,
-				..
-			} => {
-				self.collect_expr(expr)?;
-
-				let then_scope = self.alloc_scope(ScopeKind::IfThen, then_block.span());
-				self.in_scope(then_scope, |c| {
-					c.collect_pattern_bindings(pattern)?;
-
-					for stmt in &then_block.stmts {
-						c.collect_stmt(stmt)?;
-					}
-					if let Some(tail) = &then_block.tail_expr {
-						c.collect_expr(tail)?;
-					}
-					return Ok(());
-				})?;
-
-				if let Some(else_expr) = else_branch {
-					let else_scope = self.alloc_scope(ScopeKind::ElseBlock, else_expr.span());
-					self.in_scope(else_scope, |c| return c.collect_expr(else_expr))?;
-				}
+			Expr::IfVar { .. } => {
+				unreachable!("the desugarer should have fixed this");
 			}
 
 			Expr::Loop { label, body, span } => {
@@ -1367,7 +1408,7 @@ impl Collector
 
 				self.define(label_str.clone(), SymbolKind::Label, *span, Visibility::Private)?;
 
-				let loop_scope = self.alloc_scope(ScopeKind::LoopBody, body.span());
+				let loop_scope: ScopeId = self.alloc_scope(ScopeKind::LoopBody, body.span(), Some(body.id));
 				self.in_scope(loop_scope, |c| {
 					for stmt in &body.stmts {
 						c.collect_stmt(stmt)?;
@@ -1519,10 +1560,14 @@ impl Collector
 ///     println!("Symbol {}: {} ({:?})", i, symbol.name, symbol.kind);
 /// }
 /// ```
-pub fn collect_symbols(program: &DesugaredAST, source_index: SourceIndex)
--> Result<SymbolTable, SymbolCollectionError>
+pub fn collect_symbols(
+	program: &DesugaredAST,
+	module_path: Vec<String>,
+	source_index: SourceIndex,
+) -> Result<LocalSymbolTable, SymbolCollectionError>
 {
 	let mut collector: Collector = Collector::new(source_index);
+	collector.table.module_path = module_path;
 	collector.table.scopes[collector.table.root.0].span = program.span();
 	collector.collect_program(program)?;
 	return Ok(collector.table);
@@ -1534,4 +1579,122 @@ fn get_visability(mods: &[Modifier]) -> Visibility
 		return Visibility::Public;
 	}
 	return Visibility::Private;
+}
+
+pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)]) -> GlobalSymbolTable
+{
+	let mut sym_offsets: Vec<usize> = vec![0];
+	let mut scope_offsets: Vec<usize> = vec![0];
+	for (_, _, table) in modules {
+		sym_offsets.push(sym_offsets.last().expect("") + table.symbols.len());
+		scope_offsets.push(scope_offsets.last().expect("") + table.scopes.len());
+	}
+
+	let total_syms: usize = *sym_offsets.last().expect("");
+	let total_scopes: usize = *scope_offsets.last().expect("");
+
+	let mut global_syms: Vec<Symbol> = Vec::with_capacity(total_syms);
+	let mut global_scopes: Vec<Scope> = Vec::with_capacity(total_scopes + 1);
+
+	for (i, (_, _, table)) in modules.iter().enumerate() {
+		let sym_off: usize = sym_offsets[i];
+		let scope_off: usize = scope_offsets[i];
+
+		for sym in &table.symbols {
+			global_syms.push(Symbol {
+				scope: ScopeId(sym.scope.0 + scope_off),
+				introduced_scope: sym.introduced_scope.map(|s| return ScopeId(s.0 + scope_off)),
+				..sym.clone()
+			});
+		}
+
+		for scope in &table.scopes {
+			global_scopes.push(Scope {
+				parent: scope.parent.map(|p| return ScopeId(p.0 + scope_off)),
+				symbols: scope.symbols.iter().map(|s| return SymbolId(s.0 + sym_off)).collect(),
+				children: scope.children.iter().map(|c| return ScopeId(c.0 + scope_off)).collect(),
+				..scope.clone()
+			});
+		}
+	}
+
+	let global_root: ScopeId = ScopeId(total_scopes);
+	let mut root_scope: Scope = Scope {
+		kind: ScopeKind::ModuleInline,
+		parent: None,
+		symbols: Vec::new(),
+		children: Vec::new(),
+		span: Span::default(),
+		node_id: None,
+	};
+
+	let mut module_roots: HashMap<Vec<String>, ScopeId> = HashMap::new();
+	for (i, (_, _, table)) in modules.iter().enumerate() {
+		let rebased_root = ScopeId(table.root.0 + scope_offsets[i]);
+		global_scopes[rebased_root.0].parent = Some(global_root);
+		root_scope.children.push(rebased_root);
+		module_roots.insert(table.module_path.clone(), rebased_root);
+	}
+
+	global_scopes.push(root_scope);
+
+	for (i, (_, _, table)) in modules.iter().enumerate() {
+		let scope_off: usize = scope_offsets[i];
+		let sym_off: usize = sym_offsets[i];
+
+		for (local_sym_idx, sym) in table.symbols.iter().enumerate() {
+			if !matches!(sym.kind, SymbolKind::Module) {
+				continue;
+			}
+			let global_sym_id: SymbolId = SymbolId(local_sym_idx + sym_off);
+			for (path, &root) in &module_roots {
+				if path.last().map(String::as_str) == Some(sym.name.as_str()) {
+					let rebased: Option<ScopeId> = sym.introduced_scope.map(|s| return ScopeId(s.0 + scope_off));
+					if rebased == Some(root) || !global_scopes[root.0].symbols.is_empty() {
+						global_syms[global_sym_id.0].introduced_scope = Some(root);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	let global_node_scope_map: HashMap<NodeId, ScopeId> = modules
+		.iter()
+		.enumerate()
+		.flat_map(|(i, (_, _, table))| {
+			let scope_off = scope_offsets[i];
+			return table
+				.node_scope_map
+				.iter()
+				.map(move |(&node_id, &scope_id)| return (node_id, ScopeId(scope_id.0 + scope_off)));
+		})
+		.collect();
+
+	for sym in &mut global_syms {
+		if !matches!(sym.kind, SymbolKind::Module) {
+			continue;
+		}
+		let needs_patch: bool = sym
+			.introduced_scope
+			.map_or_else(|| return true, |sc| return global_scopes[sc.0].symbols.is_empty());
+		if needs_patch {
+			for (path, &root) in &module_roots {
+				if path.last().map(String::as_str) == Some(sym.name.as_str())
+					&& !global_scopes[root.0].symbols.is_empty()
+				{
+					sym.introduced_scope = Some(root);
+					break;
+				}
+			}
+		}
+	}
+
+	return GlobalSymbolTable {
+		scopes: global_scopes,
+		symbols: global_syms,
+		root: global_root,
+		module_roots,
+		node_scope_map: global_node_scope_map,
+	};
 }

@@ -8,12 +8,12 @@ mod tests
 		parser::Parser,
 		source_map::SourceIndex,
 		symbol_collection::{
-			Mutability, ScopeKind, Symbol, SymbolCollectionError, SymbolId, SymbolKind, SymbolTable, Visibility,
+			LocalSymbolTable, Mutability, ScopeKind, Symbol, SymbolCollectionError, SymbolId, SymbolKind, Visibility,
 			collect_symbols,
 		},
 	};
 
-	fn parse_and_collect(source: &str) -> Result<SymbolTable, SymbolCollectionError>
+	fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, SymbolCollectionError>
 	{
 		let config = Config::default();
 		let source_index = SourceIndex::new(0);
@@ -24,10 +24,10 @@ mod tests
 		let desugared = desugar::desugar_program(program).unwrap();
 		println!("{}", desugared);
 
-		return collect_symbols(&desugared, source_index);
+		return collect_symbols(&desugared, Vec::new(), source_index);
 	}
 
-	fn find_symbol_by_name<'a>(table: &'a SymbolTable, name: &str) -> Option<(SymbolId, &'a Symbol)>
+	fn find_symbol_by_name<'a>(table: &'a LocalSymbolTable, name: &str) -> Option<(SymbolId, &'a Symbol)>
 	{
 		for (idx, symbol) in table.symbols.iter().enumerate() {
 			if symbol.name == name {
@@ -40,11 +40,11 @@ mod tests
 	#[test]
 	fn test_simple_function()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -57,11 +57,11 @@ mod tests
 	#[test]
 	fn test_public_function()
 	{
-		let source = r#"
+		let source = r"
 			pub fn test() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, test_symbol) = find_symbol_by_name(&table, "test").expect("test function not found");
@@ -71,11 +71,11 @@ mod tests
 	#[test]
 	fn test_const_function()
 	{
-		let source = r#"
+		let source = r"
 			const fn compute() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, compute_symbol) = find_symbol_by_name(&table, "compute").expect("compute function not found");
@@ -85,11 +85,11 @@ mod tests
 	#[test]
 	fn test_function_parameters()
 	{
-		let source = r#"
+		let source = r"
 			fn add(x: i32, y: i32) {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -120,11 +120,11 @@ mod tests
 	#[test]
 	fn test_mutable_parameter()
 	{
-		let source = r#"
+		let source = r"
 			fn modify(mut x: i32) {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		println!("{:#?}", table);
@@ -141,11 +141,11 @@ mod tests
 	#[test]
 	fn test_generic_parameters()
 	{
-		let source = r#"
+		let source = r"
 			fn generic<T, U>() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -159,11 +159,11 @@ mod tests
 	#[test]
 	fn test_heap_generics()
 	{
-		let source = r#"
+		let source = r"
 			fn!<IO, Alloc> heap_func() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -178,12 +178,12 @@ mod tests
 	#[test]
 	fn test_variable_declaration()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				var x: i32 = 5;
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, x_symbol) = find_symbol_by_name(&table, "x").expect("x variable not found");
@@ -198,12 +198,12 @@ mod tests
 	#[test]
 	fn test_mutable_variable()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				var mut x: i32 = 5;
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, x_symbol) = find_symbol_by_name(&table, "x").expect("x variable not found");
@@ -218,9 +218,9 @@ mod tests
 	#[test]
 	fn test_const_variable()
 	{
-		let source = r#"
+		let source = r"
 			const PI: f64 = 3.14159;
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, pi_symbol) = find_symbol_by_name(&table, "PI").expect("PI constant not found");
@@ -235,12 +235,12 @@ mod tests
 	#[test]
 	fn test_struct_declaration()
 	{
-		let source = r#"
+		let source = r"
 			struct Point {
 				x: i32,
 				y: i32,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -257,12 +257,12 @@ mod tests
 	#[test]
 	fn test_public_struct_fields()
 	{
-		let source = r#"
+		let source = r"
 			pub struct Point {
 				pub x: i32,
 				y: i32,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -279,12 +279,12 @@ mod tests
 	#[test]
 	fn test_union_declaration()
 	{
-		let source = r#"
+		let source = r"
 			union Data {
 				i: i32,
 				f: f32,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -301,13 +301,13 @@ mod tests
 	#[test]
 	fn test_enum_declaration()
 	{
-		let source = r#"
+		let source = r"
 			enum Color {
 				Red,
 				Green,
 				Blue,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -326,12 +326,12 @@ mod tests
 	#[test]
 	fn test_variant_declaration()
 	{
-		let source = r#"
+		let source = r"
 			variant Option {
 				Some(i32),
 				None,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -348,9 +348,9 @@ mod tests
 	#[test]
 	fn test_type_alias()
 	{
-		let source = r#"
+		let source = r"
 			type Integer = i32;
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, int_symbol) = find_symbol_by_name(&table, "Integer").expect("Integer alias not found");
@@ -360,11 +360,11 @@ mod tests
 	#[test]
 	fn test_trait_declaration()
 	{
-		let source = r#"
+		let source = r"
 			trait Display {
 				fn show();
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -378,11 +378,11 @@ mod tests
 	#[test]
 	fn test_trait_with_generics()
 	{
-		let source = r#"
+		let source = r"
 			trait Container<T> {
 				fn get() -> T;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -396,13 +396,13 @@ mod tests
 	#[test]
 	fn test_module_declaration()
 	{
-		let source = r#"
+		let source = r"
 			module utils {
 				fn helper() {
 					return;
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -416,7 +416,7 @@ mod tests
 	#[test]
 	fn test_impl_block()
 	{
-		let source = r#"
+		let source = r"
 			struct Point {
 				x: i32,
 				y: i32,
@@ -427,7 +427,7 @@ mod tests
 					return Point { x -> 0, y -> 0 };
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, new_symbol) = find_symbol_by_name(&table, "new").expect("new method not found");
@@ -437,7 +437,7 @@ mod tests
 	#[test]
 	fn test_impl_with_generics()
 	{
-		let source = r#"
+		let source = r"
 			struct Container<T> {
 				value: T,
 			}
@@ -447,7 +447,7 @@ mod tests
 					return value;
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, t_symbol) = find_symbol_by_name(&table, "T").expect("T generic not found");
@@ -457,7 +457,7 @@ mod tests
 	#[test]
 	fn test_nested_blocks()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				var x: i32 = 1;
 				{
@@ -468,7 +468,7 @@ mod tests
 				}
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -485,14 +485,14 @@ mod tests
 	#[test]
 	fn test_loop_with_label()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				loop {
 					break;
 				}
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -504,7 +504,7 @@ mod tests
 	#[test]
 	fn test_if_statement_scopes()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				if true {
 					var x: i32 = 1;
@@ -513,7 +513,7 @@ mod tests
 				}
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -533,7 +533,7 @@ mod tests
 	#[test]
 	fn test_switch_arm_scopes()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				var value: i32 = 0;
 				switch value {
@@ -547,7 +547,7 @@ mod tests
 				}
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -566,7 +566,7 @@ mod tests
 	#[test]
 	fn test_duplicate_definition_error()
 	{
-		let source = r#"
+		let source = r"
 			fn test() {
 				return;
 			}
@@ -574,7 +574,7 @@ mod tests
 			fn test() {
 				return;
 			}
-		"#;
+		";
 
 		let result = parse_and_collect(source);
 		assert!(result.is_err());
@@ -590,11 +590,11 @@ mod tests
 	#[test]
 	fn test_duplicate_parameter_error()
 	{
-		let source = r#"
+		let source = r"
 			fn test(x: i32, x: i32) {
 				return;
 			}
-		"#;
+		";
 
 		let result = parse_and_collect(source);
 		assert!(result.is_err());
@@ -603,12 +603,12 @@ mod tests
 	#[test]
 	fn test_duplicate_field_error()
 	{
-		let source = r#"
+		let source = r"
 			struct Point {
 				x: i32,
 				x: i32,
 			}
-		"#;
+		";
 
 		let result = parse_and_collect(source);
 		assert!(result.is_err());
@@ -617,7 +617,7 @@ mod tests
 	#[test]
 	fn test_labels_dont_conflict_with_variables()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				var x: i32 = 0;
 				loop {
@@ -625,7 +625,7 @@ mod tests
 				}
 				return;
 			}
-		"#;
+		";
 
 		// This should succeed - labels are in a separate namespace
 		let table = parse_and_collect(source).unwrap();
@@ -641,7 +641,7 @@ mod tests
 	#[test]
 	fn test_scope_hierarchy()
 	{
-		let source = r#"
+		let source = r"
 			fn outer() {
 				var x: i32 = 1;
 				{
@@ -649,7 +649,7 @@ mod tests
 				}
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -667,11 +667,11 @@ mod tests
 	#[test]
 	fn test_root_scope()
 	{
-		let source = r#"
+		let source = r"
 			fn main() {
 				return;
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -683,7 +683,7 @@ mod tests
 	#[test]
 	fn test_multiple_modules()
 	{
-		let source = r#"
+		let source = r"
 			module math {
 				fn add() {
 					return;
@@ -695,7 +695,7 @@ mod tests
 					return;
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -712,12 +712,12 @@ mod tests
 	#[test]
 	fn test_visibility_propagation()
 	{
-		let source = r#"
+		let source = r"
 			pub enum Color {
 				Red,
 				Green,
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -731,7 +731,7 @@ mod tests
 	#[test]
 	fn test_impl_trait()
 	{
-		let source = r#"
+		let source = r"
 			trait Show {
 				fn display();
 			}
@@ -745,7 +745,7 @@ mod tests
 					return;
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
@@ -762,7 +762,7 @@ mod tests
 	#[test]
 	fn test_complex_nesting()
 	{
-		let source = r#"
+		let source = r"
 			module outer {
 				pub struct Data {
 					value: i32,
@@ -778,7 +778,7 @@ mod tests
 					}
 				}
 			}
-		"#;
+		";
 
 		let table = parse_and_collect(source).unwrap();
 
