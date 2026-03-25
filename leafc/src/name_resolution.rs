@@ -842,7 +842,7 @@ pub enum NameResolutionErrorKind
 	},
 	ShadowedVariable
 	{
-		name: String
+		name: String, first_definition: Span
 	},
 	PrivateSymbol
 	{
@@ -874,8 +874,14 @@ impl fmt::Display for NameResolutionError
 						.join("::")
 				);
 			}
-			NameResolutionErrorKind::ShadowedVariable { name } => {
-				return write!(f, "variable `{}` shadows an existing binding in the same scope", name);
+			NameResolutionErrorKind::ShadowedVariable { name, first_definition } => {
+				return write!(
+					f,
+					"variable `{}` shadows an existing binding in the same scope, first at {:?}, again at {:?}",
+					name,
+					first_definition,
+					self.span()
+				);
 			}
 			NameResolutionErrorKind::PrivateSymbol { path } => {
 				return write!(
@@ -918,12 +924,20 @@ impl CompileDiagnostic for NameResolutionError
 {
 	fn fmt_with_source(&self, f: &mut impl fmt::Write, sm: &crate::source_map::SourceMap) -> fmt::Result
 	{
-		return write!(
-			f,
-			"{}",
-			self.span
-				.format_error(&sm.get(self.source_index).src, &format!("{}", self))
-		);
+		return match self.kind {
+			NameResolutionErrorKind::ShadowedVariable { first_definition, .. } => write!(
+				f,
+				"{}\n\n{}",
+				first_definition.format_error(&sm.get(self.source_index).src, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(&sm.get(self.source_index).src, "\nAgain at:\n")
+			),
+			_ => write!(
+				f,
+				"{}",
+				self.span
+					.format_error(&sm.get(self.source_index).src, &format!("{}", self))
+			),
+		};
 	}
 }
 
@@ -2687,20 +2701,23 @@ impl<'a> Resolver<'a>
 
 		let mut check_scope: ScopeId = self.current_scope;
 		loop {
-			let count: usize = self
+			let count: Vec<&SymbolId> = self
 				.symbols
 				.scope(check_scope)
 				.symbols
 				.iter()
 				.filter(|&&id| return self.symbols.symbol(id).name == name_str)
-				.count();
+				.collect();
 
 			let threshold: usize = if check_scope == self.current_scope { 2 } else { 1 };
 
-			if count >= threshold {
+			if count.len() >= threshold {
 				return Err(NameResolutionError {
 					span: var_span,
-					kind: NameResolutionErrorKind::ShadowedVariable { name: name_str },
+					kind: NameResolutionErrorKind::ShadowedVariable {
+						name: name_str,
+						first_definition: self.global.symbol(*count[threshold - 1]).def_span,
+					},
 					source_index: self.source_index,
 				});
 			}

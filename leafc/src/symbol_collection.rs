@@ -463,12 +463,20 @@ impl CompileDiagnostic for SymbolCollectionError
 {
 	fn fmt_with_source(&self, f: &mut impl fmt::Write, sm: &crate::source_map::SourceMap) -> fmt::Result
 	{
-		return write!(
-			f,
-			"{}",
-			self.span
-				.format_error(&sm.get(self.source_index).src, &format!("{self}"))
-		);
+		return match self.kind {
+			SymbolCollectionErrorKind::DuplicateDefinition { first_definition, .. } => write!(
+				f,
+				"{}\n\n{}",
+				first_definition.format_error(&sm.get(self.source_index).src, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(&sm.get(self.source_index).src, "\nAgain at:\n")
+			),
+			_ => write!(
+				f,
+				"{}",
+				self.span
+					.format_error(&sm.get(self.source_index).src, &format!("{}", self))
+			),
+		};
 	}
 }
 
