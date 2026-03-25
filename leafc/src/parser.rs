@@ -4103,7 +4103,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn lookahead_for_struct_field(&mut self) -> Result<bool, ParseError>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
-			let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
+			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // identifier
 
 			let is_struct_field: bool = self.at(&TokenKind::Arrow)?
@@ -4111,7 +4111,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				|| self.at(&TokenKind::RightBrace)?
 				|| self.at(&TokenKind::DotDot)?;
 
-			self.lexer = checkpoint;
+			self.load_checkpoint(checkpoint);
 			return Ok(is_struct_field);
 		}
 		return Ok(false);
@@ -4793,9 +4793,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::If => {
-					let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone(); // TODO
-					let checkpoint_span: Span = self.last_span;
-					let checkpoint_buffered: Option<Token> = self.buffered_token.clone();
+					let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
 
 					self.next()?; // if
 
@@ -4833,9 +4831,7 @@ impl<'s, 'c> Parser<'s, 'c>
 							stmts.push(if_var_stmt);
 						}
 					} else {
-						self.lexer = checkpoint;
-						self.last_span = checkpoint_span;
-						self.buffered_token = checkpoint_buffered;
+						self.load_checkpoint(checkpoint);
 
 						let if_stmt: Stmt = self.parse_if()?;
 
