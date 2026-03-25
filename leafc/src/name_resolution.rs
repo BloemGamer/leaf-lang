@@ -1074,7 +1074,7 @@ impl<'a> Resolver<'a>
 			return Ok(ResolvedPathResult::Full(current_sym_id));
 		}
 
-		if let Some((sym_id, full_consumed, mut current_module_path)) =
+		if let Some((sym_id, full_consumed, current_module_path)) =
 			self.resolve_first_via_use(first_name, span, path)?
 		{
 			if full_consumed || segments.len() == 1 {
@@ -1095,11 +1095,25 @@ impl<'a> Resolver<'a>
 
 			let mut cur_sym: SymbolId = sym_id;
 			let mut cur_scope: ScopeId = search_scope;
+			let mut abs_path: Vec<String> = current_module_path.unwrap_or_else(|| {
+				return self
+					.global
+					.module_roots
+					.iter()
+					.find_map(|(p, &root)| {
+						return if self.find_introduced_scope(sym_id) == Some(root) {
+							Some(p.clone())
+						} else {
+							None
+						};
+					})
+					.unwrap_or_else(|| vec![self.global.symbol(sym_id).name.clone()]);
+			});
 
 			for seg in &segments[1..] {
 				let name: &String = &seg.name;
 
-				let maybe_sym: Option<SymbolId> = self.find_sym_in_global_scope(search_scope, name);
+				let maybe_sym: Option<SymbolId> = self.find_sym_in_global_scope(cur_scope, name);
 
 				let Some(next_sym_id) = maybe_sym else {
 					let current_sym = self.global.symbol(cur_sym);
@@ -1128,38 +1142,16 @@ impl<'a> Resolver<'a>
 					});
 				}
 
-				if let Some(ref mut mp) = current_module_path {
-					mp.push(name.clone());
-					if let Some(&next_scope) = self.global.module_roots.get(mp.as_slice()) {
-						cur_scope = next_scope;
-					} else if let Some(sc) = self.find_introduced_scope(next_sym_id)
-						&& !self.global.scope(sc).symbols.is_empty()
-					{
-						cur_scope = sc;
-					}
+				abs_path.push(name.clone());
+				cur_scope = if let Some(&mod_root) = self.global.module_roots.get(abs_path.as_slice()) {
+					mod_root
+				} else if let Some(sc) = self.find_introduced_scope(next_sym_id)
+					&& !self.global.scope(sc).symbols.is_empty()
+				{
+					sc
 				} else {
-					let advanced: Option<ScopeId> = self
-						.find_introduced_scope(next_sym_id)
-						.and_then(|sc| {
-							return if self.global.scope(sc).symbols.is_empty() {
-								None
-							} else {
-								Some(sc)
-							};
-						})
-						.or_else(|| {
-							return self.global.module_roots.iter().find_map(|(path, &root)| {
-								return if path.last().map(String::as_str) == Some(name.as_str()) {
-									Some(root)
-								} else {
-									None
-								};
-							});
-						});
-					if let Some(sc) = advanced {
-						cur_scope = sc;
-					}
-				}
+					cur_scope
+				};
 
 				cur_sym = next_sym_id;
 			}
