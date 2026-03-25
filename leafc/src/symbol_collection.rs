@@ -847,7 +847,7 @@ impl Collector
 					"If the calltype is regular, there should not be any heap_generics",
 				);
 			} else {
-				for ge in &["IO", "Alloc"] {
+				for ge in parser::ALLOWED_HEAP_GENERICS {
 					// TODO: maybe extract this one to a global variable, but not for now
 					c.define(
 						ge.to_string(),

@@ -2228,6 +2228,8 @@ pub struct VariantMember
 	pub span: Span,
 }
 
+pub const ALLOWED_HEAP_GENERICS: [&str; 2] = ["IO", "Alloc"];
+
 impl<'s, 'c> Parser<'s, 'c>
 {
 	fn peek(&mut self) -> Result<&Token, ParseError>
@@ -5139,7 +5141,11 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 
 		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan)? {
-			self.get_generics()? // TODO: add a validator here
+			let generic_pars: Vec<GenericParam> = self.get_generics()?;
+			generic_pars
+				.iter()
+				.all(|v| return ALLOWED_HEAP_GENERICS.iter().any(|&n| return v.name == n));
+			generic_pars
 		} else {
 			Vec::new()
 		};
