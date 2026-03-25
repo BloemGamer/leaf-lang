@@ -16,8 +16,8 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, AssignOp, BinaryOp, CallType, DirectiveNode, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
-		Literal, ModuleDecl, ModuleKind, NodeId, Path, RangeExpr, StructDecl, TopLevelDecl, TraitDecl, TypeAliasDecl,
-		TypeCore, UnaryOp, UnionDecl, VariableDecl, WhereBound, WhereConstraint,
+		Literal, ModuleDecl, ModuleKind, NodeId, Path, PathSegment, RangeExpr, StructDecl, TopLevelDecl, TraitDecl,
+		TypeAliasDecl, TypeCore, UnaryOp, UnionDecl, VariableDecl, WhereBound, WhereConstraint,
 	},
 	source_map::SourceIndex,
 	symbol_collection::{
@@ -258,7 +258,13 @@ pub enum ResolvedExpr
 	AssocPath
 	{
 		base: ResolvedPath,
-		member: String,
+		member: PathSegment,
+		#[ignored(PartialEq)]
+		span: Span,
+	},
+	AssocSelf
+	{
+		member: PathSegment,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -2137,6 +2143,24 @@ impl<'a> Resolver<'a>
 		return Ok(match expr {
 			Expr::Identifier { path, span } => self.resolve_path_full(path, *span).map_or_else(
 				|_| {
+					if matches!(
+						path,
+						Path {
+							segments,
+							glob: false,
+							global: false,
+							span: _
+						} if matches!(
+							&segments[0],
+							PathSegment { name, generics, span: _ }
+								if name == "Self" && generics.is_empty()
+						)
+					) {
+						return ResolvedExpr::AssocSelf {
+							member: path.segments[1].clone(),
+							span: path.span(),
+						};
+					}
 					return ResolvedExpr::UnresolvedIdentifier {
 						path: path.clone(),
 						span: *span,
@@ -4068,6 +4092,10 @@ pub fn write_resolved_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, exp
 		ResolvedExpr::Literal { value, .. } => return write!(f, "{}", value),
 		ResolvedExpr::AssocPath { base, member, .. } => {
 			write!(f, "{}", base)?;
+			return write!(f, "::{}", member);
+		}
+		ResolvedExpr::AssocSelf { member, .. } => {
+			write!(f, "Self")?;
 			return write!(f, "::{}", member);
 		}
 		ResolvedExpr::Default { heap_call, .. } => {

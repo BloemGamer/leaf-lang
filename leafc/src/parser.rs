@@ -6551,6 +6551,26 @@ impl std::fmt::Display for Path
 	}
 }
 
+impl std::fmt::Display for PathSegment
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}", self.name)?;
+
+		if !self.generics.is_empty() {
+			write!(f, "::<")?;
+			for (i, g) in self.generics.iter().enumerate() {
+				if i > 0 {
+					write!(f, ", ")?;
+				}
+				write!(f, "{}", g)?;
+			}
+			write!(f, ">")?;
+		}
+		return Ok(());
+	}
+}
+
 impl std::fmt::Display for Directive
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
