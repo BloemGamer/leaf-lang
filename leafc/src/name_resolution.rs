@@ -259,6 +259,7 @@ pub enum ResolvedExpr
 	{
 		base: ResolvedPath,
 		member: String,
+		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Literal
