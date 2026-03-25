@@ -480,8 +480,47 @@ pub enum ResolvedStmt
 	},
 	Unsafe(ResolvedBlock),
 	Block(ResolvedBlock),
-	/// TODO
-	Directive(DirectiveNode),
+	Directive(ResolvedDirectiveNode),
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, Spanned, PartialEq)]
+pub struct ResolvedDirectiveNode
+{
+	pub directive: ResolvedDirective,
+	/// for now will always be `None`
+	pub body: Option<ResolvedBlock>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolvedDirective
+{
+	Import
+	{
+		import: String, visibility: Visibility
+	},
+	Use
+	{
+		use_path: Path, visibility: Visibility
+	},
+	Custom
+	{
+		name: String,
+		params: Vec<parser::DirectiveParam>,
+	},
+	ValidateStructPattern
+	{
+		struct_path: ResolvedPath,
+		pattern_fields: Vec<String>,
+		has_rest: bool,
+	},
+	ValidateType
+	{
+		ty: ResolvedType, expr: ResolvedExpr
+	},
 }
 
 #[allow(unused)]
@@ -2375,7 +2414,7 @@ impl<'a> Resolver<'a>
 				span: *span,
 			},
 
-			Stmt::Directive(d) => ResolvedStmt::Directive(d.clone()),
+			Stmt::Directive(d) => ResolvedStmt::Directive(self.resolve_directive_node(d)?),
 
 			Stmt::If {
 				cond,
@@ -2443,6 +2482,55 @@ impl<'a> Resolver<'a>
 
 			Stmt::Unsafe(block) => ResolvedStmt::Unsafe(self.resolve_scoped_block(block)?),
 			Stmt::Block(block) => ResolvedStmt::Block(self.resolve_scoped_block(block)?),
+		});
+	}
+
+	fn resolve_directive_node(
+		&mut self,
+		node: &parser::DirectiveNode,
+	) -> Result<ResolvedDirectiveNode, NameResolutionError>
+	{
+		if node.body.is_some() {
+			unimplemented!("directive bodies are not yet supported in name resolution");
+		}
+
+		let directive = match &node.directive {
+			parser::Directive::Import { import, visibility, .. } => ResolvedDirective::Import {
+				import: import.clone(),
+				visibility: *visibility,
+			},
+			parser::Directive::Use {
+				use_path, visibility, ..
+			} => ResolvedDirective::Use {
+				use_path: use_path.clone(),
+				visibility: *visibility,
+			},
+			parser::Directive::Custom { name, params } => ResolvedDirective::Custom {
+				name: name.clone(),
+				params: params.clone(),
+			},
+			parser::Directive::ValidateStructPattern {
+				struct_path,
+				pattern_fields,
+				has_rest,
+			} => {
+				let rp = self.resolve_path_full(struct_path, struct_path.span())?;
+				ResolvedDirective::ValidateStructPattern {
+					struct_path: rp,
+					pattern_fields: pattern_fields.clone(),
+					has_rest: *has_rest,
+				}
+			}
+			parser::Directive::ValidateType { ty, expr } => ResolvedDirective::ValidateType {
+				ty: self.resolve_type(ty)?,
+				expr: self.resolve_expr(expr)?,
+			},
+		};
+
+		return Ok(ResolvedDirectiveNode {
+			directive,
+			body: None,
+			span: node.span,
 		});
 	}
 
@@ -4162,4 +4250,30 @@ fn write_resolved_where_clause(f: &mut fmt::Formatter<'_>, clause: &[ResolvedWhe
 		}
 	}
 	return Ok(());
+}
+
+impl fmt::Display for ResolvedDirectiveNode
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return write!(f, "{}", self.directive);
+	}
+}
+
+impl fmt::Display for ResolvedDirective
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match self {
+			ResolvedDirective::Import { import, .. } => write!(f, "@import \"{}\"", import),
+			ResolvedDirective::Use { use_path, .. } => write!(f, "@use {}", use_path),
+			ResolvedDirective::Custom { name, .. } => write!(f, "@{}", name),
+			ResolvedDirective::ValidateStructPattern { struct_path, .. } => {
+				write!(f, "@validate_struct_pattern {}", struct_path)
+			}
+			ResolvedDirective::ValidateType { ty, expr, .. } => {
+				write!(f, "@validate_type({}, {})", ty, expr)
+			}
+		};
+	}
 }
