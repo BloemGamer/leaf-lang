@@ -839,6 +839,10 @@ pub enum NameResolutionErrorKind
 	{
 		path: Path
 	},
+	ShadowedVariable
+	{
+		name: String
+	},
 	PrivateSymbol
 	{
 		path: Path
@@ -868,6 +872,9 @@ impl fmt::Display for NameResolutionError
 						.collect::<Vec<_>>()
 						.join("::")
 				);
+			}
+			NameResolutionErrorKind::ShadowedVariable { name } => {
+				return write!(f, "variable `{}` shadows an existing binding in the same scope", name);
 			}
 			NameResolutionErrorKind::PrivateSymbol { path } => {
 				return write!(
@@ -2676,6 +2683,32 @@ impl<'a> Resolver<'a>
 			),
 			_ => unreachable!("desugarer guarantees TypedIdentifier"),
 		};
+
+		let mut check_scope: ScopeId = self.current_scope;
+		loop {
+			let count: usize = self
+				.symbols
+				.scope(check_scope)
+				.symbols
+				.iter()
+				.filter(|&&id| return self.symbols.symbol(id).name == name_str)
+				.count();
+
+			let threshold: usize = if check_scope == self.current_scope { 2 } else { 1 };
+
+			if count >= threshold {
+				return Err(NameResolutionError {
+					span: var_span,
+					kind: NameResolutionErrorKind::ShadowedVariable { name: name_str },
+					source_index: self.source_index,
+				});
+			}
+
+			match self.symbols.scope(check_scope).parent {
+				Some(parent) => check_scope = parent,
+				None => break,
+			}
+		}
 
 		let ty: ResolvedType = match &var.pattern {
 			parser::Pattern::TypedIdentifier { ty, .. } => self.resolve_type(ty)?,

@@ -718,6 +718,32 @@ mod tests
 		}
 	}
 
+	#[test]
+	fn error_on_shadow()
+	{
+		let src = r"
+            fn main() {
+                var a: i64();
+				{
+					var a: i32();
+				}
+            }
+        ";
+		match parse_and_resolve(src, &[]) {
+			Err(CompileError::NameResolutionError(e)) => {
+				assert!(
+					matches!(e.kind, NameResolutionErrorKind::ShadowedVariable { .. }),
+					"expected ShadowedVarialbe, got {:?}",
+					e.kind
+				);
+			}
+			Ok(_) => {
+				panic!("expected ShadowedVarialbe, got no error")
+			}
+			Err(other) => panic!("unexpected error: {:?}", other),
+		}
+	}
+
 	// -------------------------------------------------------------------------
 	// ResolvedPath display / round-trip smoke test
 	// -------------------------------------------------------------------------
