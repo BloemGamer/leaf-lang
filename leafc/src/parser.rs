@@ -624,7 +624,6 @@ impl GenericParam
 	}
 }
 
-// TODO: add docs
 /// Function parameter.
 ///
 /// Represents a single parameter in a function signature.
@@ -632,6 +631,7 @@ impl GenericParam
 /// # Fields
 /// * `ty` - Parameter type
 /// * `pattern` - Pattern for destructuring (can be identifier, tuple, etc.)
+/// * `variadic` - Variadic param (`...`)
 /// * `span` - Source location of the parameter
 #[derive(Debug, Clone, PartialEq, Spanned)]
 pub struct Param
