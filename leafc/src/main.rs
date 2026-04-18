@@ -128,6 +128,7 @@ use self::{
 	parser::{AST, ParseError, Parser},
 	source_map::{SourceIndex, SourceMap},
 	symbol_collection::{GlobalSymbolTable, LocalSymbolTable, SymbolCollectionError},
+	type_analysis::{TypeError, TypedModule},
 };
 
 mod desugar;
@@ -136,6 +137,7 @@ mod modules;
 mod name_resolution;
 mod parser;
 mod symbol_collection;
+mod type_analysis;
 
 mod source_map;
 
@@ -163,6 +165,7 @@ pub enum CompileError
 	ModuleError(ModuleError),
 	SymbolCollectionError(SymbolCollectionError),
 	NameResolutionError(NameResolutionError),
+	TypeError(TypeError),
 }
 
 impl std::fmt::Display for CompileError
@@ -185,6 +188,9 @@ impl std::fmt::Display for CompileError
 			CompileError::NameResolutionError(error) => {
 				write!(f, "{}", error)
 			}
+			CompileError::TypeError(error) => {
+				write!(f, "{}", error)
+			}
 		};
 	}
 }
@@ -202,6 +208,7 @@ impl CompileDiagnostic for CompileError
 			CompileError::ModuleError(err) => err.fmt_with_source(f, sm),
 			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
 			CompileError::NameResolutionError(err) => err.fmt_with_source(f, sm),
+			CompileError::TypeError(err) => err.fmt_with_source(f, sm),
 		};
 	}
 }
@@ -223,6 +230,8 @@ struct Args
 	symbols: bool,
 	#[arg(short, long)]
 	name_resolution: bool,
+	#[arg(short, long)]
+	types: bool,
 }
 
 impl Args
@@ -360,8 +369,24 @@ fn run(
 		resolved_modules.push(resolved);
 	}
 
-	if args.name_resolution || args.all_false() {
-		for ResolvedModule { path, ast, symbols: _ } in &resolved_modules {
+	if args.name_resolution {
+		for ResolvedModule { ast, path, symbols: _ } in &resolved_modules {
+			println!(
+				"-------------------------------------------------------\n::{} =>\n{}",
+				path.join("::"),
+				ast
+			);
+		}
+	}
+
+	let mut typed_modules: Vec<type_analysis::TypedModule> = Vec::new();
+	for resolved in &resolved_modules {
+		let typed = type_analysis::check_types(resolved, &global_symbols)?;
+		typed_modules.push(typed);
+	}
+
+	if args.types || args.all_false() {
+		for TypedModule { ast, path } in &typed_modules {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",
 				path.join("::"),

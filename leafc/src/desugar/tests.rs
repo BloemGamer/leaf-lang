@@ -21,7 +21,10 @@ mod tests
 	fn int_lit(value: i64) -> Expr
 	{
 		return Expr::Literal {
-			value: Literal::Int(value),
+			value: Literal::Int {
+				value,
+				span: Span::default(),
+			},
 			span: Span::default(),
 		};
 	}
@@ -30,7 +33,10 @@ mod tests
 	fn bool_lit(value: bool) -> Expr
 	{
 		return Expr::Literal {
-			value: Literal::Bool(value),
+			value: Literal::Bool {
+				value,
+				span: Span::default(),
+			},
 			span: Span::default(),
 		};
 	}
@@ -539,7 +545,10 @@ mod tests
 								ty: None,
 							},
 							Pattern::Literal {
-								value: Literal::Int(5),
+								value: Literal::Int {
+									value: 5,
+									span: Span::default(),
+								},
 								span: Span::default(),
 							},
 						],
@@ -611,7 +620,7 @@ mod tests
 						assert!(matches!(
 							&tuple_patterns[1],
 							Pattern::Literal {
-								value: Literal::Int(5),
+								value: Literal::Int { value: 5, .. },
 								..
 							}
 						));
@@ -2264,7 +2273,10 @@ mod tests
 				mutable: false,
 			},
 			init: Some(Expr::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int {
+					value: 42,
+					span: Span::default(),
+				},
 				span: Span::default(),
 			}),
 			comp_const: false,
@@ -2279,7 +2291,7 @@ mod tests
 		// Should keep the existing initializer
 		match output.init.unwrap() {
 			Expr::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int { value: 42, .. },
 				..
 			} => (),
 			_ => panic!("Expected original initializer to be preserved"),
@@ -2454,7 +2466,7 @@ mod tests
 		// Should keep original initializer
 		match output.init.unwrap() {
 			Expr::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int { value: 42, .. },
 				..
 			} => (),
 			_ => panic!("Expected original initializer"),
@@ -3698,7 +3710,10 @@ mod tests
 	fn test_desugar_pattern_literal()
 	{
 		let pattern = Pattern::Literal {
-			value: Literal::Int(42),
+			value: Literal::Int {
+				value: 42,
+				span: Span::default(),
+			},
 			span: Span::default(),
 		};
 
@@ -3707,7 +3722,7 @@ mod tests
 
 		match result.unwrap() {
 			Pattern::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int { value: 42, .. },
 				..
 			} => (),
 			_ => panic!("Expected literal pattern to be unchanged"),
@@ -4699,7 +4714,7 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int(5),
+						value: Literal::Int { value: 5, .. },
 						..
 					}
 				));
@@ -5015,7 +5030,7 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int(3),
+						value: Literal::Int { value: 3, .. },
 						..
 					}
 				));
@@ -5225,7 +5240,7 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int(3),
+						value: Literal::Int { value: 3, .. },
 						..
 					}
 				));
@@ -5240,7 +5255,7 @@ mod tests
 						assert!(matches!(
 							*inner_count,
 							Expr::Literal {
-								value: Literal::Int(2),
+								value: Literal::Int { value: 2, .. },
 								..
 							}
 						));

@@ -15,7 +15,7 @@ use crate::{
 	desugar::DesugaredAST,
 	lexer::{Span, Spanned},
 	parser::{
-		self, AssignOp, BinaryOp, CallType, DirectiveNode, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
+		self, AssignOp, AssocTypeDecl, BinaryOp, CallType, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
 		Literal, ModuleDecl, ModuleKind, NodeId, Path, PathSegment, RangeExpr, StructDecl, TopLevelDecl, TraitDecl,
 		TypeAliasDecl, TypeCore, UnaryOp, UnionDecl, VariableDecl, WhereBound, WhereConstraint,
 	},
@@ -594,7 +594,7 @@ pub enum ResolvedTopLevelDecl
 	Trait(ResolvedTraitDecl),
 	Module(ResolvedModuleDecl),
 	Impl(ResolvedImplDecl),
-	Directive(DirectiveNode),
+	Directive(ResolvedDirectiveNode),
 }
 
 #[allow(unused)]
@@ -758,10 +758,26 @@ pub struct ResolvedTypeAliasDecl
 
 #[allow(unused)]
 #[derive(Debug, Clone, Spanned, PartialEq)]
+pub struct ResolvedAssocTypeDecl
+{
+	pub resolved_name: SymbolId,
+	pub name: String,
+	pub modifiers: Vec<parser::Modifier>,
+	pub generics: Vec<parser::GenericParam>,
+	pub ty: Option<ResolvedType>,
+	#[ignored(PartialEq)]
+	pub docs: Option<parser::DocsComment>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, Spanned, PartialEq)]
 pub enum ResolvedTraitItem
 {
 	Function(ResolvedFunctionDecl),
 	TypeAlias(ResolvedTypeAliasDecl),
+	AssocType(ResolvedAssocTypeDecl),
 	Const(ResolvedVariableDecl),
 }
 
@@ -801,6 +817,7 @@ pub enum ResolvedImplItem
 {
 	Function(ResolvedFunctionDecl),
 	TypeAlias(ResolvedTypeAliasDecl),
+	AssocType(ResolvedAssocTypeDecl),
 	Const(ResolvedVariableDecl),
 }
 
@@ -1873,7 +1890,7 @@ impl<'a> Resolver<'a>
 			TopLevelDecl::Trait(t) => ResolvedTopLevelDecl::Trait(self.resolve_trait_decl(t)?),
 			TopLevelDecl::Module(m) => ResolvedTopLevelDecl::Module(self.resolve_module_decl(m)?),
 			TopLevelDecl::Impl(i) => ResolvedTopLevelDecl::Impl(self.resolve_impl_decl(i)?),
-			TopLevelDecl::Directive(d) => ResolvedTopLevelDecl::Directive(d.clone()),
+			TopLevelDecl::Directive(d) => ResolvedTopLevelDecl::Directive(self.resolve_directive_node(d)?),
 		});
 	}
 
@@ -3025,6 +3042,37 @@ impl<'a> Resolver<'a>
 		});
 	}
 
+	fn resolve_assoc_type_decl(&mut self, t: &AssocTypeDecl) -> Result<ResolvedAssocTypeDecl, NameResolutionError>
+	{
+		let name_str: &str = t.name.segments[0].name.as_str();
+		let resolved_name: SymbolId = self
+			.find_in_scope_chain(self.current_scope, name_str)
+			.ok_or_else(|| {
+				return NameResolutionError {
+					span: t.name.span(),
+					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
+					source_index: self.source_index,
+				};
+			})?
+			.0;
+
+		let ty: Option<ResolvedType> = if let Some(pty) = &t.ty {
+			Some(self.resolve_type(pty)?)
+		} else {
+			None
+		};
+
+		return Ok(ResolvedAssocTypeDecl {
+			resolved_name,
+			name: name_str.to_owned(),
+			modifiers: t.modifiers.clone(),
+			generics: t.generics.clone(),
+			ty,
+			docs: t.docs.clone(),
+			span: t.span(),
+		});
+	}
+
 	fn resolve_trait_decl(&mut self, t: &TraitDecl) -> Result<ResolvedTraitDecl, NameResolutionError>
 	{
 		let name_str: &str = t.name.segments[0].name.as_str();
@@ -3058,6 +3106,9 @@ impl<'a> Resolver<'a>
 				}
 				parser::TraitItem::TypeAlias(ta) => {
 					return self.resolve_type_alias_decl(ta).map(ResolvedTraitItem::TypeAlias);
+				}
+				parser::TraitItem::AssocType(ta) => {
+					return self.resolve_assoc_type_decl(ta).map(ResolvedTraitItem::AssocType);
 				}
 				parser::TraitItem::Const(var) => return self.resolve_variable_decl(var).map(ResolvedTraitItem::Const),
 			})
@@ -3143,6 +3194,9 @@ impl<'a> Resolver<'a>
 				parser::ImplItem::Function(f) => return self.resolve_function_decl(f).map(ResolvedImplItem::Function),
 				parser::ImplItem::TypeAlias(ta) => {
 					return self.resolve_type_alias_decl(ta).map(ResolvedImplItem::TypeAlias);
+				}
+				parser::ImplItem::AssocType(ta) => {
+					return self.resolve_assoc_type_decl(ta).map(ResolvedImplItem::AssocType);
 				}
 				parser::ImplItem::Const(var) => return self.resolve_variable_decl(var).map(ResolvedImplItem::Const),
 			})
@@ -3792,6 +3846,24 @@ pub fn write_resolved_type_alias_decl(
 	return write!(f, " = {}", t.ty);
 }
 
+pub fn write_resolved_assoc_type_decl(
+	f: &mut fmt::Formatter<'_>,
+	w: &IndentWriter,
+	t: &ResolvedAssocTypeDecl,
+) -> fmt::Result
+{
+	write_docs(f, w, &t.docs)?;
+	for m in &t.modifiers {
+		write!(f, "{} ", m)?;
+	}
+	write!(f, "type {}", t.name)?;
+	write_generic_params(f, &t.generics)?;
+	if let Some(ty) = &t.ty {
+		write!(f, " = {}", ty)?;
+	};
+	return Ok(());
+}
+
 pub fn write_resolved_trait_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, t: &ResolvedTraitDecl)
 -> fmt::Result
 {
@@ -3832,6 +3904,10 @@ pub fn write_resolved_trait_item(
 		ResolvedTraitItem::Function(func) => return write_resolved_function_decl(f, w, func),
 		ResolvedTraitItem::TypeAlias(ta) => {
 			write_resolved_type_alias_decl(f, w, ta)?;
+			return write!(f, ";");
+		}
+		ResolvedTraitItem::AssocType(ta) => {
+			write_resolved_assoc_type_decl(f, w, ta)?;
 			return write!(f, ";");
 		}
 		ResolvedTraitItem::Const(var) => {
@@ -3905,6 +3981,10 @@ pub fn write_resolved_impl_item(
 		ResolvedImplItem::Function(func) => return write_resolved_function_decl(f, w, func),
 		ResolvedImplItem::TypeAlias(ta) => {
 			write_resolved_type_alias_decl(f, w, ta)?;
+			return write!(f, ";");
+		}
+		ResolvedImplItem::AssocType(ta) => {
+			write_resolved_assoc_type_decl(f, w, ta)?;
 			return write!(f, ";");
 		}
 		ResolvedImplItem::Const(var) => {

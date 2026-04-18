@@ -660,6 +660,7 @@ impl Desugarer
 				return Ok(match item {
 					ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)?),
 					ImplItem::TypeAlias(t) => ImplItem::TypeAlias(t),
+					ImplItem::AssocType(t) => ImplItem::AssocType(t),
 					ImplItem::Const(c) => ImplItem::Const(self.desugar_variable_decl(c)?),
 				});
 			})
@@ -744,6 +745,7 @@ impl Desugarer
 						TraitItem::Function(self.desugar_function(func)?)
 					}
 					TraitItem::TypeAlias(t) => TraitItem::TypeAlias(t),
+					TraitItem::AssocType(t) => TraitItem::AssocType(t),
 					TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)?),
 				});
 			})

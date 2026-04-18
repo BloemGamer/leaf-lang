@@ -66,7 +66,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int { value: 42, .. },
 				..
 			} => (),
 			_ => panic!("Expected Int literal"),
@@ -80,7 +80,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Float(f),
+				value: Literal::Float { value: f, .. },
 				..
 			} if (f - 3.16).abs() < 0.001 => (),
 			_ => panic!("Expected Float literal"),
@@ -94,7 +94,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Bool(true),
+				value: Literal::Bool { value: true, .. },
 				..
 			} => (),
 			_ => panic!("Expected Bool(true) literal"),
@@ -108,7 +108,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Bool(false),
+				value: Literal::Bool { value: false, .. },
 				..
 			} => (),
 			_ => panic!("Expected Bool(false) literal"),
@@ -122,7 +122,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::String(s),
+				value: Literal::String { value: s, .. },
 				..
 			} if s == "hello world" => (),
 			_ => panic!("Expected String literal"),
@@ -136,7 +136,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Char('a'),
+				value: Literal::Char { value: 'a', .. },
 				..
 			} => (),
 			_ => panic!("Expected Char literal"),
@@ -255,7 +255,8 @@ mod tests
 			} => {
 				match *lhs {
 					Expr::Literal {
-						value: Literal::Int(1), ..
+						value: Literal::Int { value: 1, .. },
+						..
 					} => (),
 					_ => panic!("Expected lhs to be 1"),
 				}
@@ -427,7 +428,7 @@ mod tests
 				}
 				match *expr {
 					Expr::Literal {
-						value: Literal::Int(42),
+						value: Literal::Int { value: 42, .. },
 						..
 					} => (),
 					_ => panic!("Expected 42 literal"),
@@ -1062,7 +1063,8 @@ mod tests
 				}
 				match *index {
 					Expr::Literal {
-						value: Literal::Int(0), ..
+						value: Literal::Int { value: 0, .. },
+						..
 					} => (),
 					_ => panic!("Expected 0 index"),
 				}
@@ -1113,7 +1115,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Int(42),
+				value: Literal::Int { value: 42, .. },
 				..
 			} => (),
 			_ => panic!("Expected parenthesized expression to unwrap"),
@@ -1153,14 +1155,15 @@ mod tests
 			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
 				match *count {
 					Expr::Literal {
-						value: Literal::Int(10),
+						value: Literal::Int { value: 10, .. },
 						..
 					} => (),
 					_ => panic!("Expected count of 10"),
 				}
 				match *value {
 					Expr::Literal {
-						value: Literal::Int(0), ..
+						value: Literal::Int { value: 0, .. },
+						..
 					} => (),
 					_ => panic!("Expected count of 0"),
 				}
@@ -3695,7 +3698,7 @@ mod tests
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::Literal {
-				value: Literal::Char('x'),
+				value: Literal::Char { value: 'x', .. },
 				..
 			} => (),
 			_ => panic!("Expected char literal"),
@@ -5530,7 +5533,7 @@ mod tests
 			assert_eq!(params.len(), 1);
 			assert!(matches!(
 				&params[0],
-				DirectiveParam::Literal(Literal::String(s)) if s == "hello"
+				DirectiveParam::Literal(Literal::String{value:s, ..}) if s == "hello"
 			));
 		} else {
 			panic!("Expected Custom directive");
@@ -5547,7 +5550,10 @@ mod tests
 		if let Directive::Custom { name, params } = directive.directive {
 			assert_eq!(name, "version");
 			assert_eq!(params.len(), 1);
-			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Int(42))));
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::Int { value: 42, .. })
+			));
 		} else {
 			panic!("Expected Custom directive");
 		}
@@ -5565,7 +5571,7 @@ mod tests
 			assert_eq!(params.len(), 1);
 			assert!(matches!(
 				&params[0],
-				DirectiveParam::Literal(Literal::Float(f)) if (*f - 3.16).abs() < 0.001
+				DirectiveParam::Literal(Literal::Float{value:f, ..}) if (*f - 3.16).abs() < 0.001
 			));
 		} else {
 			panic!("Expected Custom directive");
@@ -5582,7 +5588,10 @@ mod tests
 		if let Directive::Custom { name, params } = directive.directive {
 			assert_eq!(name, "delimiter");
 			assert_eq!(params.len(), 1);
-			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Char('|'))));
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::Char { value: '|', .. })
+			));
 		} else {
 			panic!("Expected Custom directive");
 		}
@@ -5598,7 +5607,10 @@ mod tests
 		if let Directive::Custom { name, params } = directive.directive {
 			assert_eq!(name, "enabled");
 			assert_eq!(params.len(), 1);
-			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Bool(true))));
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::Bool { value: true, .. })
+			));
 		} else {
 			panic!("Expected Custom directive");
 		}
@@ -5614,7 +5626,10 @@ mod tests
 		if let Directive::Custom { name, params } = directive.directive {
 			assert_eq!(name, "disabled");
 			assert_eq!(params.len(), 1);
-			assert!(matches!(&params[0], DirectiveParam::Literal(Literal::Bool(false))));
+			assert!(matches!(
+				&params[0],
+				DirectiveParam::Literal(Literal::Bool { value: false, .. })
+			));
 		} else {
 			panic!("Expected Custom directive");
 		}
@@ -5679,7 +5694,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "name");
-				assert!(matches!(arg, Literal::String(s) if s == "mylib"));
+				assert!(matches!(arg, Literal::String{value:s, ..} if s == "mylib"));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5701,7 +5716,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "level");
-				assert!(matches!(arg, Literal::Int(3)));
+				assert!(matches!(arg, Literal::Int { value: 3, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5723,7 +5738,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "enabled");
-				assert!(matches!(arg, Literal::Bool(true)));
+				assert!(matches!(arg, Literal::Bool { value: true, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5745,7 +5760,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "value");
-				if let Literal::Float(f) = arg {
+				if let Literal::Float { value: f, span: _ } = arg {
 					assert!((*f - 0.5).abs() < 0.001);
 				} else {
 					panic!("Expected Float literal");
@@ -5771,7 +5786,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "char");
-				assert!(matches!(arg, Literal::Char(',')));
+				assert!(matches!(arg, Literal::Char { value: ',', .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5794,7 +5809,7 @@ mod tests
 			assert_eq!(params.len(), 2);
 			assert!(matches!(
 				&params[0],
-				DirectiveParam::Literal(Literal::String(s)) if s == "path/to/file"
+				DirectiveParam::Literal(Literal::String{value:s, ..}) if s == "path/to/file"
 			));
 			assert!(matches!(
 				&params[1],
@@ -5822,7 +5837,7 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[1] {
 				assert_eq!(param_name, "level");
-				assert!(matches!(arg, Literal::Int(2)));
+				assert!(matches!(arg, Literal::Int { value: 2, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5844,21 +5859,21 @@ mod tests
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[0] {
 				assert_eq!(param_name, "host");
-				assert!(matches!(arg, Literal::String(s) if s == "localhost"));
+				assert!(matches!(arg, Literal::String{value:s, ..} if s == "localhost"));
 			} else {
 				panic!("Expected Named parameter");
 			}
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[1] {
 				assert_eq!(param_name, "port");
-				assert!(matches!(arg, Literal::Int(5432)));
+				assert!(matches!(arg, Literal::Int { value: 5432, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[2] {
 				assert_eq!(param_name, "debug");
-				assert!(matches!(arg, Literal::Bool(true)));
+				assert!(matches!(arg, Literal::Bool { value: true, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -5880,21 +5895,24 @@ mod tests
 
 			assert!(matches!(
 				&params[0],
-				DirectiveParam::Literal(Literal::String(s)) if s == "0.0.0.0"
+				DirectiveParam::Literal(Literal::String{value:s, ..}) if s == "0.0.0.0"
 			));
 
-			assert!(matches!(&params[1], DirectiveParam::Literal(Literal::Int(8080))));
+			assert!(matches!(
+				&params[1],
+				DirectiveParam::Literal(Literal::Int { value: 8080, .. })
+			));
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[2] {
 				assert_eq!(param_name, "workers");
-				assert!(matches!(arg, Literal::Int(4)));
+				assert!(matches!(arg, Literal::Int { value: 4, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
 
 			if let DirectiveParam::Named { name: param_name, arg } = &params[3] {
 				assert_eq!(param_name, "ssl");
-				assert!(matches!(arg, Literal::Bool(false)));
+				assert!(matches!(arg, Literal::Bool { value: false, .. }));
 			} else {
 				panic!("Expected Named parameter");
 			}
@@ -8264,7 +8282,7 @@ mod tests
 		assert!(result.is_ok());
 		let directive = result.unwrap();
 		if let Directive::Custom { params, .. } = directive.directive {
-			if let DirectiveParam::Literal(Literal::Float(f)) = &params[0] {
+			if let DirectiveParam::Literal(Literal::Float { value: f, .. }) = &params[0] {
 				assert!((*f + 3.24).abs() < 0.001);
 			} else {
 				panic!("Expected negative float");

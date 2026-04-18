@@ -99,6 +99,7 @@ pub enum SymbolKind
 	VariantMember,
 	EnumVariant,
 	TypeAlias,
+	AssocType,
 	GenericParam,
 	Trait,
 	Module,
@@ -1059,6 +1060,21 @@ impl Collector
 		return Ok(());
 	}
 
+	fn collect_assoc_type_decl(&mut self, t: &parser::AssocTypeDecl) -> Result<(), SymbolCollectionError>
+	{
+		let path: &Path = &t.name;
+		self.validate_simple_path(path, "type")?;
+
+		self.define(
+			path.segments[0].name.clone(),
+			SymbolKind::AssocType,
+			path.span(),
+			get_visibility(&t.modifiers),
+		)?;
+
+		return Ok(());
+	}
+
 	fn collect_trait_decl(&mut self, t: &TraitDecl) -> Result<(), SymbolCollectionError>
 	{
 		let path: &Path = &t.name;
@@ -1087,6 +1103,7 @@ impl Collector
 			for item in &t.items {
 				match item {
 					TraitItem::TypeAlias(ty) => c.collect_type_alias_decl(ty),
+					TraitItem::AssocType(ty) => c.collect_assoc_type_decl(ty),
 					TraitItem::Function(func) => c.collect_function_decl(func),
 					TraitItem::Const(var) => c.collect_variable_decl(var),
 				}?;
@@ -1141,6 +1158,7 @@ impl Collector
 			for item in &i.body {
 				match item {
 					ImplItem::TypeAlias(ty) => c.collect_type_alias_decl(ty),
+					ImplItem::AssocType(ty) => c.collect_assoc_type_decl(ty),
 					ImplItem::Function(func) => c.collect_function_decl(func),
 					ImplItem::Const(var) => c.collect_variable_decl(var),
 				}?;

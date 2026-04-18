@@ -6,7 +6,7 @@ use ignorable::PartialEq;
 
 use crate::{
 	CompileDiagnostic, CompileError, Config,
-	lexer::{self, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
+	lexer::{self, IntBase, IntType, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
@@ -265,6 +265,7 @@ enum DeclKind
 	Trait,
 	Impl,
 	TypeAlias,
+	AssocType,
 	Module,
 	Variable,
 	Directive,
@@ -970,14 +971,34 @@ impl CallType
 /// * `Bool` - Boolean literal
 /// * `String` - String literal
 /// * `Char` - Character literal
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Spanned)]
 pub enum Literal
 {
-	Int(i64),
-	Float(f64),
-	Bool(bool),
-	String(String),
-	Char(char),
+	Int
+	{
+		value: String,
+		base: IntBase,
+		ty: Option<IntType>,
+		span: Span,
+	},
+	Float
+	{
+		value: String,
+		bits: Option<u16>,
+		span: Span,
+	},
+	Bool
+	{
+		value: bool, span: Span
+	},
+	String
+	{
+		value: String, span: Span
+	},
+	Char
+	{
+		value: char, span: Span
+	},
 }
 
 /// Array literal types.
@@ -1578,6 +1599,7 @@ pub enum TraitItem
 	Function(FunctionDecl),
 	TypeAlias(TypeAliasDecl),
 	Const(VariableDecl),
+	AssocType(AssocTypeDecl),
 }
 
 /// Implementation block declaration.
@@ -1642,6 +1664,7 @@ pub enum ImplItem
 	Function(FunctionDecl),
 	TypeAlias(TypeAliasDecl),
 	Const(VariableDecl),
+	AssocType(AssocTypeDecl),
 }
 
 /// Generic type constraint (where clause).
@@ -2082,6 +2105,29 @@ pub struct TypeAliasDecl
 	pub span: Span,
 }
 
+/// Assoc type declaration.
+///
+/// Represents a type alias like `assoc Int = i32;`.
+///
+/// # Fields
+/// * `modifiers` - Visibility and other modifiers
+/// * `name` - Alias name (can be qualified path)
+/// * `ty` - Type being aliased
+/// * `docs` - Optional docs comments, mostly for lsp and library exports
+/// * `span` - Source location of the type alias
+#[derive(Debug, Clone, PartialEq, Spanned)]
+pub struct AssocTypeDecl
+{
+	pub modifiers: Vec<Modifier>,
+	pub name: Path,
+	pub generics: Vec<GenericParam>,
+	pub ty: Option<Type>,
+	#[ignored(PartialEq)]
+	pub docs: Option<DocsComment>,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
 /// Module declaration.
 ///
 /// Represents a module containing top-level declarations.
@@ -2471,6 +2517,9 @@ impl<'s, 'c> Parser<'s, 'c>
 				let variant_decl: VariantDecl = self.parse_variant()?;
 				TopLevelDecl::Variant(variant_decl)
 			}
+			DeclKind::AssocType => {
+				todo!("make error or something")
+			}
 		};
 
 		return Ok(ret);
@@ -2568,6 +2617,11 @@ impl<'s, 'c> Parser<'s, 'c>
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::TypeAlias);
+				}
+				TokenKind::Assoc => {
+					self.lexer = checkpoint;
+					self.last_span = checkpoint_span;
+					return Ok(DeclKind::AssocType);
 				}
 				TokenKind::Variant => {
 					self.lexer = checkpoint;
@@ -2743,169 +2797,200 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, ParseError>
 	{
-		if !self.consume(&TokenKind::LeftParen)? {
-			return Ok(Vec::new());
-		}
-		let mut params: Vec<DirectiveParam> = Vec::new();
-		loop {
-			if self.at(&TokenKind::RightParen)? {
-				break;
-			}
-
-			let is_negative: bool = self.consume(&TokenKind::Minus)?;
-
-			let tok_span: Span = self.peek()?.span();
-			let tok_kind: TokenKind = self.peek_kind()?.clone();
-
-			let tok: Token = self.next()?;
-
-			let arg: DirectiveParam = match tok.kind {
-				TokenKind::StringLiteral(s) => {
-					if is_negative {
-						return Err(ParseError::invalid_pattern(
-							tok_span,
-							"A string can't be negative",
-							self.source_index,
-						));
-					}
-					DirectiveParam::Literal(Literal::String(s))
-				}
-				TokenKind::IntLiteral(i) => {
-					let value = if is_negative { -i } else { i };
-					DirectiveParam::Literal(Literal::Int(value))
-				}
-				TokenKind::FloatLiteral(f) => {
-					let value = if is_negative { -f } else { f };
-					DirectiveParam::Literal(Literal::Float(value))
-				}
-				TokenKind::CharLiteral(c) => {
-					if is_negative {
-						return Err(ParseError::invalid_pattern(
-							tok_span,
-							"A character can't be negative",
-							self.source_index,
-						));
-					}
-					DirectiveParam::Literal(Literal::Char(c))
-				}
-				TokenKind::True => {
-					if is_negative {
-						return Err(ParseError::invalid_pattern(
-							tok_span,
-							"A bool can't be negative",
-							self.source_index,
-						));
-					}
-					DirectiveParam::Literal(Literal::Bool(true))
-				}
-				TokenKind::False => {
-					if is_negative {
-						return Err(ParseError::invalid_pattern(
-							tok_span,
-							"A bool can't be negative",
-							self.source_index,
-						));
-					}
-					DirectiveParam::Literal(Literal::Bool(false))
-				}
-				TokenKind::Identifier(ident) => {
-					if is_negative {
-						return Err(ParseError::invalid_pattern(
-							tok_span,
-							"An identifier can't be negative",
-							self.source_index,
-						));
-					}
-
-					match self.peek_kind()? {
-						TokenKind::Equals => {
-							self.next()?; // =
-
-							let value_is_negative = self.consume(&TokenKind::Minus)?;
-
-							let token_span = self.peek()?.span();
-							let token = self.next()?;
-
-							let lit: Literal = match token.kind {
-								TokenKind::StringLiteral(s) => {
-									if value_is_negative {
-										return Err(ParseError::invalid_pattern(
-											token_span,
-											"Cannot negate a string literal",
-											self.source_index,
-										));
-									}
-									Literal::String(s)
-								}
-								TokenKind::IntLiteral(i) => {
-									let value = if value_is_negative { -i } else { i };
-									Literal::Int(value)
-								}
-								TokenKind::FloatLiteral(f) => {
-									let value = if value_is_negative { -f } else { f };
-									Literal::Float(value)
-								}
-								TokenKind::CharLiteral(c) => {
-									if value_is_negative {
-										return Err(ParseError::invalid_pattern(
-											token_span,
-											"Cannot negate a character literal",
-											self.source_index,
-										));
-									}
-									Literal::Char(c)
-								}
-								TokenKind::True => {
-									if value_is_negative {
-										return Err(ParseError::invalid_pattern(
-											token_span,
-											"Cannot negate a boolean literal",
-											self.source_index,
-										));
-									}
-									Literal::Bool(true)
-								}
-								TokenKind::False => {
-									if value_is_negative {
-										return Err(ParseError::invalid_pattern(
-											token_span,
-											"Cannot negate a boolean literal",
-											self.source_index,
-										));
-									}
-									Literal::Bool(false)
-								}
-								_ => {
-									return Err(ParseError::invalid_pattern(
-										token_span,
-										format!("Expected an identifier or a literal, got {:?}", tok_kind),
-										self.source_index,
-									));
-								}
-							};
-							DirectiveParam::Named { name: ident, arg: lit }
-						}
-						_ => DirectiveParam::Identifier(ident),
-					}
-				}
-				_ => {
-					return Err(ParseError::invalid_pattern(
-						tok_span,
-						format!("Expected an identifier or a literal, got {:?}", tok_kind),
-						self.source_index,
-					));
-				}
-			};
-			params.push(arg);
-			if self.at(&TokenKind::RightParen)? {
-				break;
-			}
-			if !self.consume(&TokenKind::Comma)? {
-				break;
-			}
-		}
-		self.expect(&TokenKind::RightParen)?;
-		return Ok(params);
+		unimplemented!("don't know what to do for this yet");
+		// if !self.consume(&TokenKind::LeftParen)? {
+		// 	return Ok(Vec::new());
+		// }
+		// let mut params: Vec<DirectiveParam> = Vec::new();
+		// loop {
+		// 	if self.at(&TokenKind::RightParen)? {
+		// 		break;
+		// 	}
+		//
+		// 	let is_negative: bool = self.consume(&TokenKind::Minus)?;
+		//
+		// 	let tok_span: Span = self.peek()?.span();
+		// 	let tok_kind: TokenKind = self.peek_kind()?.clone();
+		//
+		// 	let tok: Token = self.next()?;
+		//
+		// 	let arg: DirectiveParam = match tok.kind {
+		// 		TokenKind::StringLiteral(s) => {
+		// 			if is_negative {
+		// 				return Err(ParseError::invalid_pattern(
+		// 					tok_span,
+		// 					"A string can't be negative",
+		// 					self.source_index,
+		// 				));
+		// 			}
+		// 			DirectiveParam::Literal(Literal::String {
+		// 				value: s,
+		// 				span: tok_span,
+		// 			})
+		// 		}
+		// 		TokenKind::IntLiteral(i) => {
+		// 			let value: i64 = if is_negative { -i } else { i };
+		// 			DirectiveParam::Literal(Literal::Int { value, span: tok_span })
+		// 		}
+		// 		TokenKind::FloatLiteral(f) => {
+		// 			let value: f64 = if is_negative { -f } else { f };
+		// 			DirectiveParam::Literal(Literal::Float { value, span: tok_span })
+		// 		}
+		// 		TokenKind::CharLiteral(c) => {
+		// 			if is_negative {
+		// 				return Err(ParseError::invalid_pattern(
+		// 					tok_span,
+		// 					"A character can't be negative",
+		// 					self.source_index,
+		// 				));
+		// 			}
+		// 			DirectiveParam::Literal(Literal::Char {
+		// 				value: c,
+		// 				span: tok_span,
+		// 			})
+		// 		}
+		// 		TokenKind::True => {
+		// 			if is_negative {
+		// 				return Err(ParseError::invalid_pattern(
+		// 					tok_span,
+		// 					"A bool can't be negative",
+		// 					self.source_index,
+		// 				));
+		// 			}
+		// 			DirectiveParam::Literal(Literal::Bool {
+		// 				value: true,
+		// 				span: tok_span,
+		// 			})
+		// 		}
+		// 		TokenKind::False => {
+		// 			if is_negative {
+		// 				return Err(ParseError::invalid_pattern(
+		// 					tok_span,
+		// 					"A bool can't be negative",
+		// 					self.source_index,
+		// 				));
+		// 			}
+		// 			DirectiveParam::Literal(Literal::Bool {
+		// 				value: false,
+		// 				span: tok_span,
+		// 			})
+		// 		}
+		// 		TokenKind::Identifier(ident) => {
+		// 			if is_negative {
+		// 				return Err(ParseError::invalid_pattern(
+		// 					tok_span,
+		// 					"An identifier can't be negative",
+		// 					self.source_index,
+		// 				));
+		// 			}
+		//
+		// 			match self.peek_kind()? {
+		// 				TokenKind::Equals => {
+		// 					self.next()?; // =
+		//
+		// 					let value_is_negative = self.consume(&TokenKind::Minus)?;
+		//
+		// 					let token_span = self.peek()?.span();
+		// 					let token = self.next()?;
+		//
+		// 					let lit: Literal = match token.kind {
+		// 						TokenKind::StringLiteral(s) => {
+		// 							if value_is_negative {
+		// 								return Err(ParseError::invalid_pattern(
+		// 									token_span,
+		// 									"Cannot negate a string literal",
+		// 									self.source_index,
+		// 								));
+		// 							}
+		// 							Literal::String {
+		// 								value: s,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						TokenKind::IntLiteral(i) => {
+		// 							let value: i64 = if value_is_negative { -i } else { i };
+		// 							Literal::Int {
+		// 								value,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						TokenKind::FloatLiteral(f) => {
+		// 							let value: f64 = if value_is_negative { -f } else { f };
+		// 							Literal::Float {
+		// 								value,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						TokenKind::CharLiteral(c) => {
+		// 							if value_is_negative {
+		// 								return Err(ParseError::invalid_pattern(
+		// 									token_span,
+		// 									"Cannot negate a character literal",
+		// 									self.source_index,
+		// 								));
+		// 							}
+		// 							Literal::Char {
+		// 								value: c,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						TokenKind::True => {
+		// 							if value_is_negative {
+		// 								return Err(ParseError::invalid_pattern(
+		// 									token_span,
+		// 									"Cannot negate a boolean literal",
+		// 									self.source_index,
+		// 								));
+		// 							}
+		// 							Literal::Bool {
+		// 								value: true,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						TokenKind::False => {
+		// 							if value_is_negative {
+		// 								return Err(ParseError::invalid_pattern(
+		// 									token_span,
+		// 									"Cannot negate a boolean literal",
+		// 									self.source_index,
+		// 								));
+		// 							}
+		// 							Literal::Bool {
+		// 								value: false,
+		// 								span: token_span,
+		// 							}
+		// 						}
+		// 						_ => {
+		// 							return Err(ParseError::invalid_pattern(
+		// 								token_span,
+		// 								format!("Expected an identifier or a literal, got {:?}", tok_kind),
+		// 								self.source_index,
+		// 							));
+		// 						}
+		// 					};
+		// 					DirectiveParam::Named { name: ident, arg: lit }
+		// 				}
+		// 				_ => DirectiveParam::Identifier(ident),
+		// 			}
+		// 		}
+		// 		_ => {
+		// 			return Err(ParseError::invalid_pattern(
+		// 				tok_span,
+		// 				format!("Expected an identifier or a literal, got {:?}", tok_kind),
+		// 				self.source_index,
+		// 			));
+		// 		}
+		// 	};
+		// 	params.push(arg);
+		// 	if self.at(&TokenKind::RightParen)? {
+		// 		break;
+		// 	}
+		// 	if !self.consume(&TokenKind::Comma)? {
+		// 		break;
+		// 	}
+		// }
+		// self.expect(&TokenKind::RightParen)?;
+		// return Ok(params);
 	}
 
 	fn parse_var_decl(&mut self) -> Result<VariableDecl, ParseError>
@@ -3714,45 +3799,54 @@ impl<'s, 'c> Parser<'s, 'c>
 		let span: Span = tok.span();
 
 		match &tok.kind {
-			TokenKind::IntLiteral(n) => {
+			TokenKind::IntLiteral { value, base, ty } => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::Int(*n),
+					value: Literal::Int {
+						value: value.clone(),
+						base: *base,
+						ty: *ty,
+						span,
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
-			TokenKind::FloatLiteral(f) => {
+			TokenKind::FloatLiteral { value, bits } => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::Float(*f),
+					value: Literal::Float {
+						value: value.clone(),
+						bits: *bits,
+						span,
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::StringLiteral(s) => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::String(s.clone()),
+					value: Literal::String { value: s.clone(), span },
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::CharLiteral(c) => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::Char(*c),
+					value: Literal::Char { value: *c, span },
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::True => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::Bool(true),
+					value: Literal::Bool { value: true, span },
 					span: span.merge(&self.last_span),
 				});
 			}
 			TokenKind::False => {
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::Bool(false),
+					value: Literal::Bool { value: false, span },
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4560,7 +4654,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				));
 			}
 
-			TokenKind::IntLiteral(n) => {
+			TokenKind::IntLiteral { value, base, ty } => {
 				self.next()?;
 
 				if self.at(&TokenKind::DotDot)? || self.at(&TokenKind::DotDotEquals)? {
@@ -4575,7 +4669,12 @@ impl<'s, 'c> Parser<'s, 'c>
 
 					return Ok(Pattern::Range(RangeExpr {
 						start: Some(Box::new(Expr::Literal {
-							value: Literal::Int(*n),
+							value: Literal::Int {
+								value: value.clone(),
+								base: *base,
+								ty: *ty,
+								span: tok.span(),
+							},
 							span: tok.span(),
 						})),
 						end,
@@ -4584,7 +4683,12 @@ impl<'s, 'c> Parser<'s, 'c>
 					}));
 				}
 				return Ok(Pattern::Literal {
-					value: Literal::Int(*n),
+					value: Literal::Int {
+						value: value.clone(),
+						base: *base,
+						ty: *ty,
+						span: tok.span(),
+					},
 					span: tok.span(),
 				});
 			}
@@ -4599,7 +4703,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
-					value: Literal::Bool(true),
+					value: Literal::Bool {
+						value: true,
+						span: span.merge(&self.last_span),
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4614,7 +4721,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
-					value: Literal::Bool(false),
+					value: Literal::Bool {
+						value: false,
+						span: span.merge(&self.last_span),
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4629,7 +4739,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
-					value: Literal::String(s.clone()),
+					value: Literal::String {
+						value: s.clone(),
+						span: span.merge(&self.last_span),
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4644,7 +4757,10 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 				self.next()?;
 				return Ok(Pattern::Literal {
-					value: Literal::Char(*c),
+					value: Literal::Char {
+						value: *c,
+						span: span.merge(&self.last_span),
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -6096,9 +6212,14 @@ impl<'s, 'c> Parser<'s, 'c>
 				ImplItem::TypeAlias(type_alias)
 			}
 			DeclKind::Variable => {
-				let var_decl = self.parse_var_decl()?;
+				let var_decl: VariableDecl = self.parse_var_decl()?;
 				self.expect(&TokenKind::Semicolon)?;
 				ImplItem::Const(var_decl)
+			}
+			DeclKind::AssocType => {
+				let assoc_type: AssocTypeDecl = self.parse_assoc_type()?;
+				self.expect(&TokenKind::Semicolon)?;
+				ImplItem::AssocType(assoc_type)
 			}
 			_ => {
 				let tok = self.peek()?.clone();
@@ -6179,6 +6300,37 @@ impl<'s, 'c> Parser<'s, 'c>
 		let ty: Type = self.parse_type()?;
 
 		return Ok(TypeAliasDecl {
+			modifiers,
+			name,
+			generics,
+			ty,
+			docs,
+			span: span.merge(&self.last_span),
+		});
+	}
+
+	fn parse_assoc_type(&mut self) -> Result<AssocTypeDecl, ParseError>
+	{
+		let docs: Option<DocsComment> = self.parse_docs()?;
+		let span: Span = self.peek()?.span;
+		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
+		self.expect(&TokenKind::Assoc)?;
+
+		let name: Path = self.get_path()?;
+
+		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
+			self.get_generics()?
+		} else {
+			Vec::new()
+		};
+
+		let ty = if self.consume(&TokenKind::Equals)? {
+			Some(self.parse_type()?)
+		} else {
+			None
+		};
+
+		return Ok(AssocTypeDecl {
 			modifiers,
 			name,
 			generics,
@@ -6297,7 +6449,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 		let node: TraitItem = match decl_kind {
 			DeclKind::Function => {
-				let func = self.parse_function_decl()?;
+				let func: FunctionDecl = self.parse_function_decl()?;
 
 				TraitItem::Function(func)
 			}
@@ -6305,6 +6457,11 @@ impl<'s, 'c> Parser<'s, 'c>
 				let type_alias: TypeAliasDecl = self.parse_type_alias()?;
 				self.expect(&TokenKind::Semicolon)?;
 				TraitItem::TypeAlias(type_alias)
+			}
+			DeclKind::AssocType => {
+				let assoc_type: AssocTypeDecl = self.parse_assoc_type()?;
+				self.expect(&TokenKind::Semicolon)?;
+				TraitItem::AssocType(assoc_type)
 			}
 			DeclKind::Variable => {
 				let var_decl: VariableDecl = self.parse_var_decl()?;
@@ -7146,11 +7303,28 @@ impl fmt::Display for Literal
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match self {
-			Literal::Int(n) => return write!(f, "{}", n),
-			Literal::Float(fl) => return write!(f, "{}", fl),
-			Literal::Bool(b) => return write!(f, "{}", b),
-			Literal::String(s) => return write!(f, "{:?}", s),
-			Literal::Char(c) => return write!(f, "{:?}", c),
+			Literal::Int {
+				value,
+				base,
+				ty,
+				span: _,
+			} => {
+				write!(f, "{}{}", base, value)?;
+				if let Some(t) = ty {
+					write!(f, "{}", t)?;
+				}
+				return Ok(());
+			}
+			Literal::Float { value, bits, span: _ } => {
+				write!(f, "{}", value)?;
+				if let Some(b) = bits {
+					write!(f, "{}", b)?;
+				}
+				return Ok(());
+			}
+			Literal::Bool { value: b, span: _ } => return write!(f, "{}", b),
+			Literal::String { value: s, span: _ } => return write!(f, "{:?}", s),
+			Literal::Char { value: c, span: _ } => return write!(f, "{:?}", c),
 		}
 	}
 }
@@ -7697,6 +7871,32 @@ pub fn write_type_alias_decl(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &T
 	return write!(f, " = {}", t.ty);
 }
 
+pub fn write_type_assoc_type(f: &mut fmt::Formatter<'_>, w: &IndentWriter, t: &AssocTypeDecl) -> fmt::Result
+{
+	write_docs(f, w, &t.docs)?;
+	for modifier in &t.modifiers {
+		write!(f, "{} ", modifier)?;
+	}
+
+	write!(f, "type {}", t.name)?;
+
+	if !t.generics.is_empty() {
+		write!(f, "<")?;
+		for (i, generic) in t.generics.iter().enumerate() {
+			if i > 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", generic)?;
+		}
+		write!(f, ">")?;
+	}
+
+	if let Some(ty) = &t.ty {
+		write!(f, " = {}", ty)?;
+	}
+	return Ok(());
+}
+
 pub fn write_module_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, n: &ModuleDecl) -> fmt::Result
 {
 	write_docs(f, w, &n.docs)?;
@@ -7785,6 +7985,10 @@ pub fn write_trait_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: 
 			write_variable_decl(f, w, var)?;
 			return write!(f, ";");
 		}
+		TraitItem::AssocType(ty) => {
+			write_type_assoc_type(f, w, ty)?;
+			return write!(f, ";");
+		}
 	}
 }
 
@@ -7849,6 +8053,10 @@ pub fn write_impl_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &
 		}
 		ImplItem::Const(var) => {
 			write_variable_decl(f, w, var)?;
+			return write!(f, ";");
+		}
+		ImplItem::AssocType(ty) => {
+			write_type_assoc_type(f, w, ty)?;
 			return write!(f, ";");
 		}
 	}

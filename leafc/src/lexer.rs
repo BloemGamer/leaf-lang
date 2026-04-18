@@ -231,6 +231,54 @@ impl Span
 	}
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IntBase
+{
+	Binary,
+	Octal,
+	Decimal,
+	Hexadecimal,
+}
+
+impl std::fmt::Display for IntBase
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return match self {
+			IntBase::Binary => write!(f, "0b"),
+			IntBase::Octal => write!(f, "0o"),
+			IntBase::Decimal => Ok(()),
+			IntBase::Hexadecimal => write!(f, "0x"),
+		};
+	}
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IntSign
+{
+	Signed,
+	Unsigned,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct IntType
+{
+	pub bits: u16,
+	pub sign: IntSign,
+}
+
+impl std::fmt::Display for IntType
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		match self.sign {
+			IntSign::Signed => write!(f, "i")?,
+			IntSign::Unsigned => write!(f, "u")?,
+		}
+		return Ok(());
+	}
+}
+
 /// The semantic type and value of a token.
 ///
 /// This enum represents all possible token types that can be produced by the lexer,
@@ -251,9 +299,17 @@ pub enum TokenKind
 {
 	// ===== Literals =====
 	/// Integer literal: `42`, `-10`, `0xFF`
-	IntLiteral(i64),
+	IntLiteral
+	{
+		value: String,
+		base: IntBase,
+		ty: Option<IntType>,
+	},
 	/// Floating point literal: `3.14`, `-0.5`, `1e10`
-	FloatLiteral(f64),
+	FloatLiteral
+	{
+		value: String, bits: Option<u16>
+	},
 	/// Character literal: `'a'`, `'\n'`, `'\0'`
 	CharLiteral(char),
 	/// String literal: `"hello"`, `"world\n"`
@@ -352,6 +408,8 @@ pub enum TokenKind
 	/// Type alias: `type`
 	#[keyword("type")]
 	Type,
+	#[keyword("assoc")]
+	Assoc,
 
 	// ===== Keywords - Modifiers =====
 	/// Public visibility: `pub`
@@ -1054,12 +1112,70 @@ impl<'source, 'config> Lexer<'source, 'config>
 		return Some(escaped);
 	}
 
-	fn read_radix_number(&mut self, radix: u32, is_valid_digit: impl Fn(char) -> bool) -> TokenKind
+	fn read_int_suffix(&mut self) -> Option<IntType>
 	{
-		let mut num_str: String = String::new();
+		let sign: IntSign = match self.current_char {
+			Some('u') => {
+				self.advance();
+				IntSign::Unsigned
+			}
+			Some('i') => {
+				self.advance();
+				IntSign::Signed
+			}
+			_ => return None,
+		};
+
+		let mut digits: String = String::new();
 
 		while let Some(ch) = self.current_char {
-			if is_valid_digit(ch) || ch == '_' {
+			if ch.is_ascii_digit() {
+				digits.push(ch);
+				self.advance();
+			} else {
+				break;
+			}
+		}
+
+		if digits.is_empty() {
+			return None;
+		}
+
+		let bits: u16 = digits.parse::<u16>().ok()?;
+
+		Some(IntType { bits, sign })
+	}
+
+	fn read_float_suffix(&mut self) -> Option<u16>
+	{
+		if self.current_char != Some('f') {
+			return None;
+		}
+
+		self.advance();
+
+		let mut digits: String = String::new();
+
+		while let Some(ch) = self.current_char {
+			if ch.is_ascii_digit() {
+				digits.push(ch);
+				self.advance();
+			} else {
+				break;
+			}
+		}
+
+		digits.parse::<u16>().ok()
+	}
+
+	fn read_radix_number<F>(&mut self, radix: u32, valid: F) -> TokenKind
+	where
+		F: Fn(char) -> bool,
+	{
+		let mut num_str = String::new();
+
+		while let Some(ch) = self.current_char {
+			if valid(ch) || ch == '_' {
 				if ch != '_' {
 					num_str.push(ch);
 				}
@@ -1069,9 +1185,18 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		return i64::from_str_radix(&num_str, radix)
-			.map(TokenKind::IntLiteral)
-			.unwrap_or(TokenKind::Invalid);
+		let base = match radix {
+			2 => IntBase::Binary,
+			8 => IntBase::Octal,
+			16 => IntBase::Hexadecimal,
+			_ => IntBase::Decimal,
+		};
+
+		TokenKind::IntLiteral {
+			value: num_str,
+			base,
+			ty: self.read_int_suffix(),
+		}
 	}
 
 	fn lex_number(&mut self) -> TokenKind
@@ -1083,17 +1208,17 @@ impl<'source, 'config> Lexer<'source, 'config>
 				Some('x') => {
 					self.advance(); // 0
 					self.advance(); // x
-					return self.read_radix_number(16, |c| return c.is_ascii_hexdigit());
+					return self.read_radix_number(16, |c| c.is_ascii_hexdigit());
 				}
 				Some('b') => {
 					self.advance(); // 0
 					self.advance(); // b
-					return self.read_radix_number(2, |c| return c == '0' || c == '1');
+					return self.read_radix_number(2, |c| c == '0' || c == '1');
 				}
 				Some('o') => {
 					self.advance(); // 0
 					self.advance(); // o
-					return self.read_radix_number(8, |c| return ('0'..='7').contains(&c));
+					return self.read_radix_number(8, |c| ('0'..='7').contains(&c));
 				}
 				_ => {}
 			}
@@ -1110,7 +1235,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		if self.current_char == Some('.') && self.peek().is_some_and(|c| return c.is_ascii_digit()) {
+		if self.current_char == Some('.') && self.peek().is_some_and(|c| c.is_ascii_digit()) {
 			num_str.push('.');
 			self.advance(); // .
 
@@ -1125,14 +1250,16 @@ impl<'source, 'config> Lexer<'source, 'config>
 				}
 			}
 
-			if let Ok(val) = num_str.parse::<f64>() {
-				return TokenKind::FloatLiteral(val);
-			}
-			return TokenKind::Invalid;
+			return TokenKind::FloatLiteral {
+				value: num_str,
+				bits: self.read_float_suffix(),
+			};
 		}
-		match num_str.parse::<i64>() {
-			Ok(val) => return TokenKind::IntLiteral(val),
-			Err(_) => return TokenKind::Invalid,
+
+		TokenKind::IntLiteral {
+			value: num_str,
+			base: IntBase::Decimal,
+			ty: self.read_int_suffix(),
 		}
 	}
 
