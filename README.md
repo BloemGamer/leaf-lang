@@ -87,10 +87,10 @@ Each stage transforms the program into a simpler or more constrained form.
 - [x] **Symbol Collection**
 	- Scope creation
 	- Symbol tables
-- [ ] **Name Resolution**
+- [x] **Name Resolution** (DesugaredAST -> ResolvedAST)
 	- Identifier binding
 	- Shadowing rules
-- [ ] **Type Analysis**
+- [ ] **Type Analysis** (ResolvedAST -> TypedAST)
 	- Type checking
 - [ ] **Basic ownership validation**
 	- Checking ownerships
