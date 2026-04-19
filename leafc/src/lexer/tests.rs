@@ -58,10 +58,26 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::IntLiteral(0),
-				TokenKind::IntLiteral(42),
-				TokenKind::IntLiteral(123),
-				TokenKind::IntLiteral(1_000_000),
+				TokenKind::IntLiteral {
+					value: 0.to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: 42.to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: 123.to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: 1_000_000.to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -74,10 +90,26 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::IntLiteral(0),
-				TokenKind::IntLiteral(255),
-				TokenKind::IntLiteral(0xDEAD_BEEF),
-				TokenKind::IntLiteral(0x123),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Hexadecimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "FF".to_string(),
+					base: IntBase::Hexadecimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "DEADBEEF".to_string(),
+					base: IntBase::Hexadecimal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "123".to_string(),
+					base: IntBase::Hexadecimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -90,9 +122,21 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::IntLiteral(0),
-				TokenKind::IntLiteral(0b1010),
-				TokenKind::IntLiteral(0b1111_0000),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Binary,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "1010".to_string(),
+					base: IntBase::Binary,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "11110000".to_string(),
+					base: IntBase::Binary,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -105,9 +149,21 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::IntLiteral(0),
-				TokenKind::IntLiteral(0o777),
-				TokenKind::IntLiteral(0o123),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Octal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "777".to_string(),
+					base: IntBase::Octal,
+					ty: None
+				},
+				TokenKind::IntLiteral {
+					value: "123".to_string(),
+					base: IntBase::Octal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -120,10 +176,22 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::FloatLiteral(3.12),
-				TokenKind::FloatLiteral(0.5),
-				TokenKind::FloatLiteral(123.456),
-				TokenKind::FloatLiteral(1000.50),
+				TokenKind::FloatLiteral {
+					value: "3.12".to_string(),
+					bits: None
+				},
+				TokenKind::FloatLiteral {
+					value: "0.5".to_string(),
+					bits: None
+				},
+				TokenKind::FloatLiteral {
+					value: "123.456".to_string(),
+					bits: None
+				},
+				TokenKind::FloatLiteral {
+					value: "1000.50".to_string(),
+					bits: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -443,7 +511,11 @@ mod tests
 			kinds,
 			vec![
 				// TokenKind::LineComment(" this is a comment".to_string()),
-				TokenKind::IntLiteral(42),
+				TokenKind::IntLiteral {
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -457,7 +529,11 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::DocsComment(" this is a doc comment".to_string()),
-				TokenKind::IntLiteral(42),
+				TokenKind::IntLiteral {
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -471,7 +547,11 @@ mod tests
 			kinds,
 			vec![
 				// TokenKind::BlockComment(" block comment ".to_string()),
-				TokenKind::IntLiteral(42),
+				TokenKind::IntLiteral {
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -485,7 +565,11 @@ mod tests
 			kinds,
 			vec![
 				TokenKind::DocsComment(" doc block comment ".to_string()),
-				TokenKind::IntLiteral(42),
+				TokenKind::IntLiteral {
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -499,7 +583,11 @@ mod tests
 			kinds,
 			vec![
 				// TokenKind::BlockComment(" line1\nline2\nline3 ".to_string()),
-				TokenKind::IntLiteral(42),
+				TokenKind::IntLiteral {
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -680,7 +768,11 @@ mod tests
 				TokenKind::If,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::GreaterThan,
-				TokenKind::IntLiteral(0),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::LeftBrace,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::RightBrace,
@@ -704,9 +796,17 @@ mod tests
 				TokenKind::For,
 				TokenKind::Identifier("i".to_string()),
 				TokenKind::In,
-				TokenKind::IntLiteral(0),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::DotDot,
-				TokenKind::IntLiteral(10),
+				TokenKind::IntLiteral {
+					value: "10".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::LeftBrace,
 				TokenKind::RightBrace,
 				TokenKind::Eof,
@@ -724,7 +824,11 @@ mod tests
 				TokenKind::Switch,
 				TokenKind::Identifier("x".to_string()),
 				TokenKind::LeftBrace,
-				TokenKind::IntLiteral(0),
+				TokenKind::IntLiteral {
+					value: "0".to_string(),
+					base: IntBase::Decimal,
+					ty: None
+				},
 				TokenKind::FatArrow,
 				TokenKind::True,
 				TokenKind::Comma,

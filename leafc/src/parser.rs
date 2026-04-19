@@ -391,7 +391,7 @@ pub enum Directive
 /// * `Named { name: String, arg: Literal }` - A named parameter with a literal value.
 /// * `Identifier(String)` - A standalone identifier parameter.
 /// * `Literal(Literal)` - A literal value parameter.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DirectiveParam
 {
 	Named
@@ -971,7 +971,7 @@ impl CallType
 /// * `Bool` - Boolean literal
 /// * `String` - String literal
 /// * `Char` - Character literal
-#[derive(Debug, Clone, PartialEq, Spanned)]
+#[derive(Debug, Clone, PartialEq, Eq, Spanned)]
 pub enum Literal
 {
 	Int

@@ -99,7 +99,7 @@ pub struct Lexer<'source, 'config>
 ///     }
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq, Spanned)]
+#[derive(Debug, Clone, PartialEq, Eq, Spanned)]
 pub struct Token
 {
 	pub kind: TokenKind,
@@ -293,7 +293,7 @@ impl std::fmt::Display for IntType
 /// - **Punctuation**: Semicolons, colons, commas, dots, arrows, etc.
 /// - **Special**: Macros, directives, comments
 /// - **End/Error**: EOF and invalid tokens
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[generate_lexer]
 pub enum TokenKind
 {
@@ -1143,7 +1143,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		let bits: u16 = digits.parse::<u16>().ok()?;
 
-		Some(IntType { bits, sign })
+		return Some(IntType { bits, sign })
 	}
 
 	fn read_float_suffix(&mut self) -> Option<u16>
@@ -1165,7 +1165,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		digits.parse::<u16>().ok()
+		return digits.parse::<u16>().ok()
 	}
 
 	fn read_radix_number<F>(&mut self, radix: u32, valid: F) -> TokenKind
@@ -1192,7 +1192,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			_ => IntBase::Decimal,
 		};
 
-		TokenKind::IntLiteral {
+		return TokenKind::IntLiteral {
 			value: num_str,
 			base,
 			ty: self.read_int_suffix(),
@@ -1208,17 +1208,17 @@ impl<'source, 'config> Lexer<'source, 'config>
 				Some('x') => {
 					self.advance(); // 0
 					self.advance(); // x
-					return self.read_radix_number(16, |c| c.is_ascii_hexdigit());
+					return self.read_radix_number(16, |c| return c.is_ascii_hexdigit());
 				}
 				Some('b') => {
 					self.advance(); // 0
 					self.advance(); // b
-					return self.read_radix_number(2, |c| c == '0' || c == '1');
+					return self.read_radix_number(2, |c| return c == '0' || c == '1');
 				}
 				Some('o') => {
 					self.advance(); // 0
 					self.advance(); // o
-					return self.read_radix_number(8, |c| ('0'..='7').contains(&c));
+					return self.read_radix_number(8, |c| return ('0'..='7').contains(&c));
 				}
 				_ => {}
 			}
@@ -1235,7 +1235,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		if self.current_char == Some('.') && self.peek().is_some_and(|c| c.is_ascii_digit()) {
+		if self.current_char == Some('.') && self.peek().is_some_and(|c| return c.is_ascii_digit()) {
 			num_str.push('.');
 			self.advance(); // .
 
@@ -1256,7 +1256,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			};
 		}
 
-		TokenKind::IntLiteral {
+		return TokenKind::IntLiteral {
 			value: num_str,
 			base: IntBase::Decimal,
 			ty: self.read_int_suffix(),

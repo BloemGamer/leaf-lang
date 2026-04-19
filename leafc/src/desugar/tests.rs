@@ -3,6 +3,7 @@
 mod tests
 {
 	use crate::desugar::*;
+	use crate::lexer::IntBase;
 	use crate::parser::{
 		AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericParam, ImplTarget, Literal, Param, Path, StructDecl,
 		TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
@@ -22,7 +23,9 @@ mod tests
 	{
 		return Expr::Literal {
 			value: Literal::Int {
-				value,
+				value: value.to_string(),
+				base: crate::lexer::IntBase::Decimal,
+				ty: None,
 				span: Span::default(),
 			},
 			span: Span::default(),
@@ -546,7 +549,9 @@ mod tests
 							},
 							Pattern::Literal {
 								value: Literal::Int {
-									value: 5,
+									value: "5".to_string(),
+									base: IntBase::Decimal,
+									ty: None,
 									span: Span::default(),
 								},
 								span: Span::default(),
@@ -620,9 +625,9 @@ mod tests
 						assert!(matches!(
 							&tuple_patterns[1],
 							Pattern::Literal {
-								value: Literal::Int { value: 5, .. },
+								value: Literal::Int { value, .. },
 								..
-							}
+							} if value == "5"
 						));
 					}
 					_ => panic!("Expected second pattern to be a Tuple"),
@@ -2274,7 +2279,9 @@ mod tests
 			},
 			init: Some(Expr::Literal {
 				value: Literal::Int {
-					value: 42,
+					value: "42".to_string(),
+					base: IntBase::Decimal,
+					ty: None,
 					span: Span::default(),
 				},
 				span: Span::default(),
@@ -2291,9 +2298,9 @@ mod tests
 		// Should keep the existing initializer
 		match output.init.unwrap() {
 			Expr::Literal {
-				value: Literal::Int { value: 42, .. },
+				value: Literal::Int { value, .. },
 				..
-			} => (),
+			} if value == "42" => (),
 			_ => panic!("Expected original initializer to be preserved"),
 		}
 	}
@@ -2466,9 +2473,9 @@ mod tests
 		// Should keep original initializer
 		match output.init.unwrap() {
 			Expr::Literal {
-				value: Literal::Int { value: 42, .. },
+				value: Literal::Int { value, .. },
 				..
-			} => (),
+			} if value == "42" => (),
 			_ => panic!("Expected original initializer"),
 		}
 	}
@@ -3711,7 +3718,9 @@ mod tests
 	{
 		let pattern = Pattern::Literal {
 			value: Literal::Int {
-				value: 42,
+				value: "42".to_string(),
+				base: IntBase::Decimal,
+				ty: None,
 				span: Span::default(),
 			},
 			span: Span::default(),
@@ -3722,9 +3731,9 @@ mod tests
 
 		match result.unwrap() {
 			Pattern::Literal {
-				value: Literal::Int { value: 42, .. },
+				value: Literal::Int { value, .. },
 				..
-			} => (),
+			} if value == "42" => (),
 			_ => panic!("Expected literal pattern to be unchanged"),
 		}
 	}
@@ -4714,9 +4723,9 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int { value: 5, .. },
+						value: Literal::Int { value, .. },
 						..
-					}
+					} if value == "5"
 				));
 			}
 			other => panic!("Expected array repeat expression, got {:?}", other),
@@ -5030,9 +5039,9 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int { value: 3, .. },
+						value: Literal::Int { value, .. },
 						..
-					}
+					} if value == "3"
 				));
 			}
 			other => panic!("Expected array repeat, got {:?}", other),
@@ -5240,9 +5249,9 @@ mod tests
 				assert!(matches!(
 					*count,
 					Expr::Literal {
-						value: Literal::Int { value: 3, .. },
+						value: Literal::Int { value, .. },
 						..
-					}
+					} if value == "3"
 				));
 
 				// Value should be inner array [Point::create(); 2]
@@ -5255,9 +5264,9 @@ mod tests
 						assert!(matches!(
 							*inner_count,
 							Expr::Literal {
-								value: Literal::Int { value: 2, .. },
+								value: Literal::Int { value, .. },
 								..
-							}
+							} if value == "2"
 						));
 						assert!(matches!(*inner_value, Expr::Call { .. }));
 					}
