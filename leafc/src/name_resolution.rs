@@ -437,44 +437,9 @@ pub enum ResolvedStmt
 		#[ignored(PartialEq)]
 		span: Span,
 	},
-	IfVar
-	{
-		pattern: ResolvedPattern,
-		expr: ResolvedExpr,
-		then_block: ResolvedBlock,
-		else_branch: Option<Box<ResolvedStmt>>,
-		#[ignored(PartialEq)]
-		span: Span,
-	},
-	While
-	{
-		label: Option<String>,
-		cond: ResolvedExpr,
-		body: ResolvedBlock,
-		#[ignored(PartialEq)]
-		span: Span,
-	},
 	Loop
 	{
 		label: Option<String>,
-		body: ResolvedBlock,
-		#[ignored(PartialEq)]
-		span: Span,
-	},
-	WhileVarLoop
-	{
-		label: Option<String>,
-		pattern: ResolvedPattern,
-		expr: ResolvedExpr,
-		body: ResolvedBlock,
-		#[ignored(PartialEq)]
-		span: Span,
-	},
-	For
-	{
-		label: Option<String>,
-		pattern: ResolvedPattern,
-		iter: ResolvedExpr,
 		body: ResolvedBlock,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -3860,7 +3825,7 @@ pub fn write_resolved_assoc_type_decl(
 	write_generic_params(f, &t.generics)?;
 	if let Some(ty) = &t.ty {
 		write!(f, " = {}", ty)?;
-	};
+	}
 	return Ok(());
 }
 
@@ -4081,67 +4046,11 @@ pub fn write_resolved_stmt_no_indent(
 			}
 			return Ok(());
 		}
-		ResolvedStmt::IfVar {
-			pattern,
-			expr,
-			then_block,
-			else_branch,
-			..
-		} => {
-			write!(f, "if var {} = ", pattern)?;
-			write_resolved_expr(f, w, expr)?;
-			write!(f, " ")?;
-			write_resolved_block(f, w, then_block)?;
-			if let Some(else_stmt) = else_branch {
-				write!(f, " else ")?;
-				write_resolved_stmt_no_indent(f, w, else_stmt)?;
-			}
-			return Ok(());
-		}
-		ResolvedStmt::While { label, cond, body, .. } => {
-			if let Some(lbl) = label {
-				write!(f, "'{}: ", lbl)?;
-			}
-			write!(f, "while ")?;
-			write_resolved_expr(f, w, cond)?;
-			write!(f, " ")?;
-			return write_resolved_block(f, w, body);
-		}
 		ResolvedStmt::Loop { label, body, .. } => {
 			if let Some(lbl) = label {
 				write!(f, "'{}: ", lbl)?;
 			}
 			write!(f, "loop ")?;
-			return write_resolved_block(f, w, body);
-		}
-		ResolvedStmt::WhileVarLoop {
-			label,
-			pattern,
-			expr,
-			body,
-			..
-		} => {
-			if let Some(lbl) = label {
-				write!(f, "'{}: ", lbl)?;
-			}
-			write!(f, "while var {} = ", pattern)?;
-			write_resolved_expr(f, w, expr)?;
-			write!(f, " ")?;
-			return write_resolved_block(f, w, body);
-		}
-		ResolvedStmt::For {
-			label,
-			pattern,
-			iter,
-			body,
-			..
-		} => {
-			if let Some(lbl) = label {
-				write!(f, "'{}: ", lbl)?;
-			}
-			write!(f, "for {} in ", pattern)?;
-			write_resolved_expr(f, w, iter)?;
-			write!(f, " ")?;
 			return write_resolved_block(f, w, body);
 		}
 		ResolvedStmt::Delete { expr, .. } => {
