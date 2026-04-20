@@ -16,7 +16,7 @@ use crate::{
 	lexer::{Span, Spanned},
 	parser::{
 		self, AssignOp, AssocTypeDecl, BinaryOp, CallType, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
-		Literal, ModuleDecl, ModuleKind, NodeId, Path, PathSegment, RangeExpr, StructDecl, TopLevelDecl, TraitDecl,
+		Literal, ModuleDecl, ModuleKind, Path, PathSegment, RangeExpr, StructDecl, TopLevelDecl, TraitDecl,
 		TypeAliasDecl, TypeCore, UnaryOp, UnionDecl, VariableDecl, WhereBound, WhereConstraint,
 	},
 	source_map::SourceIndex,
@@ -937,6 +937,7 @@ struct Resolver<'a>
 	current_scope: ScopeId,
 	use_imports: Vec<UseImport>,
 	source_index: SourceIndex,
+	anon_scope_idx: usize,
 }
 
 #[allow(unused)]
@@ -972,6 +973,7 @@ impl<'a> Resolver<'a>
 			current_scope: symbols.root,
 			use_imports: Vec::new(),
 			source_index,
+			anon_scope_idx: 0,
 		};
 	}
 
@@ -1034,9 +1036,11 @@ impl<'a> Resolver<'a>
 		}
 	}
 
-	fn scope_for_node(&self, node_id: NodeId) -> Option<ScopeId>
+	fn next_anon_scope(&mut self) -> Option<ScopeId>
 	{
-		return self.symbols.node_scope_map.get(&node_id).copied();
+		let idx = self.anon_scope_idx;
+		self.anon_scope_idx += 1;
+		self.symbols.anon_scopes.get(idx).copied()
 	}
 
 	fn resolve_path(&self, path: &Path, span: Span) -> Result<ResolvedPathResult, NameResolutionError>
@@ -2284,7 +2288,7 @@ impl<'a> Resolver<'a>
 				let rexpr: ResolvedExpr = self.resolve_expr(expr)?;
 				let mut rarms: Vec<ResolvedSwitchArm> = Vec::new();
 				for arm in arms {
-					let arm_scope: Option<ScopeId> = self.scope_for_node(arm.id);
+					let arm_scope: Option<ScopeId> = self.next_anon_scope();
 					let prev: ScopeId = self.current_scope;
 					if let Some(sc) = arm_scope {
 						self.current_scope = sc;
@@ -2318,7 +2322,7 @@ impl<'a> Resolver<'a>
 				span,
 			} => {
 				let rcond: ResolvedExpr = self.resolve_expr(cond)?;
-				let then_scope: Option<ScopeId> = self.scope_for_node(then_block.id);
+				let then_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = then_scope {
 					self.current_scope = sc;
@@ -2328,7 +2332,7 @@ impl<'a> Resolver<'a>
 
 				let relse: Option<Box<ResolvedExpr>> = if let Some(e) = else_branch {
 					let else_scope = match e.as_ref() {
-						Expr::Block(b) | Expr::UnsafeBlock(b) => self.scope_for_node(b.id),
+						Expr::Block(b) | Expr::UnsafeBlock(b) => self.next_anon_scope(),
 						_ => None,
 					};
 					let prev: ScopeId = self.current_scope;
@@ -2354,7 +2358,7 @@ impl<'a> Resolver<'a>
 			}
 
 			Expr::Loop { label, body, span } => {
-				let loop_scope: Option<ScopeId> = self.scope_for_node(body.id);
+				let loop_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = loop_scope {
 					self.current_scope = sc;
@@ -2391,7 +2395,7 @@ impl<'a> Resolver<'a>
 	fn resolve_scoped_block(&mut self, block: &parser::Block) -> Result<ResolvedBlock, NameResolutionError>
 	{
 		let prev: ScopeId = self.current_scope;
-		let found = self.scope_for_node(block.id);
+		let found = self.next_anon_scope();
 		if let Some(sc) = found {
 			self.current_scope = sc;
 		}
@@ -2452,7 +2456,7 @@ impl<'a> Resolver<'a>
 			} => {
 				let rcond: ResolvedExpr = self.resolve_expr(cond)?;
 
-				let then_scope: Option<ScopeId> = self.scope_for_node(then_block.id);
+				let then_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = then_scope {
 					self.current_scope = sc;
@@ -2462,7 +2466,7 @@ impl<'a> Resolver<'a>
 
 				let relse: Option<Box<ResolvedStmt>> = if let Some(el) = else_branch {
 					let else_scope: Option<ScopeId> = match &**el {
-						Stmt::Block(b) => self.scope_for_node(b.id),
+						Stmt::Block(b) => self.next_anon_scope(),
 						_ => None,
 					};
 					let prev: ScopeId = self.current_scope;
@@ -2489,7 +2493,7 @@ impl<'a> Resolver<'a>
 			}
 
 			Stmt::Loop { label, body, span } => {
-				let loop_scope: Option<ScopeId> = self.scope_for_node(body.id);
+				let loop_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = loop_scope {
 					self.current_scope = sc;
@@ -3140,7 +3144,7 @@ impl<'a> Resolver<'a>
 			.map(|tp| return self.resolve_path_full(&tp.path, tp.span()))
 			.transpose()?;
 
-		let body_scope: Option<ScopeId> = self.scope_for_node(i.id);
+		let body_scope: Option<ScopeId> = self.next_anon_scope();
 		let prev: ScopeId = self.current_scope;
 		if let Some(sc) = body_scope {
 			self.current_scope = sc;

@@ -90,14 +90,6 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 /// throughout the AST.
 pub type Ident = String;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct NodeId(pub u32);
-
-impl NodeId
-{
-	pub const DUMMY: NodeId = NodeId(u32::MAX);
-}
-
 /// Represents a complete program or compilation unit as a sequence of
 /// top-level declarations.
 ///
@@ -1344,7 +1336,6 @@ pub struct Block
 	pub tail_expr: Option<Box<Expr>>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-	pub id: NodeId,
 }
 
 /// Block content types.
@@ -1376,7 +1367,6 @@ pub struct SwitchArm
 	pub body: SwitchBody,
 	#[ignored(PartialEq)]
 	pub span: Span,
-	pub id: NodeId,
 }
 
 /// Switch arm body types.
@@ -1629,7 +1619,6 @@ pub struct ImplDecl
 	pub docs: Option<DocsComment>,
 	#[ignored(PartialEq)]
 	pub span: Span,
-	pub id: NodeId,
 }
 
 /// Implementation target type.
@@ -2398,13 +2387,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			err_tok.kind,
 			self.source_index,
 		));
-	}
-
-	const fn next_node_id(&mut self) -> NodeId
-	{
-		let id: NodeId = NodeId(self.node_id_counter);
-		self.node_id_counter += 1;
-		return id;
 	}
 
 	/// Parse a complete program.
@@ -4358,7 +4340,6 @@ impl<'s, 'c> Parser<'s, 'c>
 					stmts: vec![stmt],
 					tail_expr: None,
 					span: span.merge(&self.last_span),
-					id: self.next_node_id(),
 				})
 			} else {
 				let expr: Expr = self.parse_expr()?;
@@ -4371,7 +4352,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			pattern,
 			body,
 			span: span.merge(&self.last_span),
-			id: self.next_node_id(),
 		});
 	}
 
@@ -5051,7 +5031,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			stmts,
 			tail_expr,
 			span: span.merge(&self.last_span),
-			id: self.next_node_id(),
 		});
 	}
 
@@ -6033,7 +6012,6 @@ impl<'s, 'c> Parser<'s, 'c>
 			body,
 			docs,
 			span: span.merge(&self.last_span),
-			id: self.next_node_id(),
 		});
 	}
 

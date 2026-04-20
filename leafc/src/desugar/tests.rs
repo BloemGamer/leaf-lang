@@ -87,13 +87,11 @@ mod tests
 		let input = Stmt::If {
 			cond: bool_lit(true),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
 			else_branch: Some(Box::new(Stmt::Block(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -165,7 +163,6 @@ mod tests
 			pattern: typed_ident_pattern("x", "i32"),
 			expr: int_lit(42),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -198,7 +195,6 @@ mod tests
 			pattern: typed_ident_pattern("x", "i32"),
 			expr: ident("some_value"),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -268,7 +264,6 @@ mod tests
 			},
 			expr: ident("x"),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -290,7 +285,6 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let arm = SwitchArm {
-			id: NodeId(0),
 			pattern: Pattern::Or {
 				patterns: vec![
 					Pattern::Variant {
@@ -310,7 +304,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: SwitchBody::Block(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -338,7 +331,6 @@ mod tests
 			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -369,7 +361,6 @@ mod tests
 			pattern: typed_ident_pattern("x", "i32"),
 			expr: ident("value"),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::IfVar {
 					pattern: Pattern::Wildcard {
 						span: Span::default(),
@@ -377,7 +368,6 @@ mod tests
 					},
 					expr: ident("y"),
 					then_block: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -429,7 +419,6 @@ mod tests
 			},
 			iter: ident("iter"),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -461,7 +450,6 @@ mod tests
 			call_type: CallType::Regular,
 			named_generics: Vec::new(),
 			args: vec![Expr::Block(Box::new(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::VariableDecl(VariableDecl {
 					pattern: typed_ident_pattern("x", "i32"),
 					init: Some(ident("y")),
@@ -530,7 +518,6 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 		let arm = SwitchArm {
-			id: NodeId(0),
 			pattern: Pattern::Tuple {
 				patterns: vec![
 					Pattern::Variant {
@@ -563,7 +550,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: SwitchBody::Block(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -686,13 +672,11 @@ mod tests
 						span: Span::default(),
 					},
 					body: Some(Block {
-						id: NodeId(0),
 						stmts: vec![Stmt::For {
 							label: None,
 							pattern: simple_for_pattern("i"),
 							iter: ident("items"),
 							body: Block {
-								id: NodeId(0),
 								stmts: Vec::new(),
 								tail_expr: None,
 								span: Span::default(),
@@ -733,7 +717,6 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
-			id: NodeId(0),
 			modifiers: Vec::new(),
 			generics: Vec::new(),
 			target: ImplTarget {
@@ -756,7 +739,6 @@ mod tests
 					span: Span::default(),
 				},
 				body: Some(Block {
-					id: NodeId(0),
 					stmts: vec![Stmt::WhileVarLoop {
 						label: None,
 						pattern: Pattern::Wildcard {
@@ -765,7 +747,6 @@ mod tests
 						},
 						expr: ident("x"),
 						body: Block {
-							id: NodeId(0),
 							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
@@ -811,13 +792,11 @@ mod tests
 					span: Span::default(),
 				},
 				body: Some(Block {
-					id: NodeId(0),
 					stmts: vec![Stmt::For {
 						label: None,
 						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
-							id: NodeId(0),
 							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
@@ -849,7 +828,6 @@ mod tests
 			value: Some(Expr::Binary {
 				op: BinaryOp::Add,
 				lhs: Box::new(Expr::Block(Box::new(Block {
-					id: NodeId(0),
 					stmts: Vec::new(),
 					tail_expr: Some(Box::new(int_lit(1))),
 					span: Span::default(),
@@ -908,13 +886,11 @@ mod tests
 		let stmt = Stmt::If {
 			cond: bool_lit(true),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::For {
 					label: None,
 					pattern: simple_for_pattern("x"),
 					iter: ident("items"),
 					body: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -961,7 +937,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -995,7 +970,6 @@ mod tests
 		let stmt = Stmt::Loop {
 			label: None,
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::IfVar {
 					pattern: Pattern::Wildcard {
 						span: Span::default(),
@@ -1003,7 +977,6 @@ mod tests
 					},
 					expr: ident("x"),
 					then_block: Block {
-						id: NodeId(0),
 						stmts: vec![Stmt::Break {
 							label: None,
 							value: None,
@@ -1041,13 +1014,11 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let stmt = Stmt::Unsafe(Block {
-			id: NodeId(0),
 			stmts: vec![Stmt::For {
 				label: None,
 				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
-					id: NodeId(0),
 					stmts: Vec::new(),
 					tail_expr: None,
 					span: Span::default(),
@@ -1081,7 +1052,6 @@ mod tests
 			call_type: CallType::Regular,
 			named_generics: Vec::new(),
 			args: vec![Expr::Block(Box::new(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(1))),
 				span: Span::default(),
@@ -1113,7 +1083,6 @@ mod tests
 				(
 					"x".into(),
 					Expr::Block(Box::new(Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: Some(Box::new(int_lit(1))),
 						span: Span::default(),
@@ -1146,19 +1115,16 @@ mod tests
 		let expr = Expr::Switch {
 			expr: Box::new(ident("x")),
 			arms: vec![SwitchArm {
-				id: NodeId(0),
 				pattern: Pattern::Wildcard {
 					span: Span::default(),
 					ty: None,
 				},
 				body: SwitchBody::Block(Block {
-					id: NodeId(0),
 					stmts: vec![Stmt::For {
 						label: None,
 						pattern: simple_for_pattern("i"),
 						iter: ident("items"),
 						body: Block {
-							id: NodeId(0),
 							stmts: Vec::new(),
 							tail_expr: None,
 							span: Span::default(),
@@ -1313,7 +1279,6 @@ mod tests
 			elements: vec![
 				int_lit(1),
 				Expr::Block(Box::new(Block {
-					id: NodeId(0),
 					stmts: Vec::new(),
 					tail_expr: Some(Box::new(int_lit(2))),
 					span: Span::default(),
@@ -1463,14 +1428,12 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let block = Block {
-			id: NodeId(0),
 			stmts: vec![
 				Stmt::For {
 					label: None,
 					pattern: simple_for_pattern("i"),
 					iter: ident("range1"),
 					body: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -1482,7 +1445,6 @@ mod tests
 					pattern: simple_for_pattern("j"),
 					iter: ident("range2"),
 					body: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -1567,7 +1529,6 @@ mod tests
 			},
 			expr: ident("point"),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -1611,7 +1572,6 @@ mod tests
 			},
 			expr: ident("result"),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -1641,7 +1601,6 @@ mod tests
 			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -1674,7 +1633,6 @@ mod tests
 		let stmt = Stmt::Loop {
 			label: None,
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Break {
 					label: None,
 					value: Some(int_lit(42)),
@@ -1710,7 +1668,6 @@ mod tests
 		let stmt = Stmt::Loop {
 			label: Some("outer".into()),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Continue {
 					label: Some("outer".into()),
 					span: Span::default(),
@@ -1745,13 +1702,11 @@ mod tests
 		let expr = Expr::If {
 			cond: Box::new(bool_lit(true)),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(1))),
 				span: Span::default(),
 			},
 			else_branch: Some(Box::new(Expr::Block(Box::new(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: Some(Box::new(int_lit(2))),
 				span: Span::default(),
@@ -1782,7 +1737,6 @@ mod tests
 			},
 			expr: Box::new(ident("opt")),
 			then_block: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: Some(Box::new(ident("x"))),
 				span: Span::default(),
@@ -1812,7 +1766,6 @@ mod tests
 		let expr = Expr::Loop {
 			label: Some("outer".into()),
 			body: Box::new(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Break {
 					label: Some("outer".into()),
 					value: Some(int_lit(42)),
@@ -1843,13 +1796,11 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let expr = Expr::UnsafeBlock(Box::new(Block {
-			id: NodeId(0),
 			stmts: vec![Stmt::For {
 				label: None,
 				pattern: simple_for_pattern("i"),
 				iter: ident("range"),
 				body: Block {
-					id: NodeId(0),
 					stmts: Vec::new(),
 					tail_expr: None,
 					span: Span::default(),
@@ -1882,7 +1833,6 @@ mod tests
 			label: None,
 			cond: bool_lit(true),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Continue {
 					label: None,
 					span: Span::default(),
@@ -1925,7 +1875,6 @@ mod tests
 		let stmt = Stmt::Loop {
 			label: Some("my_loop".into()),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Break {
 					label: None,
 					value: None,
@@ -1963,11 +1912,9 @@ mod tests
 		let stmt = Stmt::Loop {
 			label: Some("outer".into()),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Loop {
 					label: None,
 					body: Block {
-						id: NodeId(0),
 						stmts: vec![Stmt::Break {
 							label: Some("outer".into()),
 							value: None,
@@ -2017,7 +1964,6 @@ mod tests
 			pattern: simple_for_pattern("x"),
 			iter: ident("iter"),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Break {
 					label: None,
 					value: None,
@@ -2061,7 +2007,6 @@ mod tests
 			},
 			expr: ident("x"),
 			body: Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Continue {
 					label: None,
 					span: Span::default(),
@@ -2100,7 +2045,6 @@ mod tests
 		let expr = Expr::Loop {
 			label: None,
 			body: Box::new(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Break {
 					label: None,
 					value: Some(int_lit(42)),
@@ -2147,11 +2091,9 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Loop {
 					label: None,
 					body: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -2178,11 +2120,9 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::Loop {
 					label: None,
 					body: Block {
-						id: NodeId(0),
 						stmts: Vec::new(),
 						tail_expr: None,
 						span: Span::default(),
@@ -2560,7 +2500,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: vec![Stmt::VariableDecl(VariableDecl {
 					pattern: Pattern::TypedIdentifier {
 						path: Path::simple(vec!["local".to_string()], Span::default()),
@@ -2976,7 +2915,6 @@ mod tests
 				span: Span::default(),
 			}),
 			body: Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -3523,7 +3461,6 @@ mod tests
 
 		// impl<T: Clone> MyTrait for MyType<T> { }
 		let impl_decl = ImplDecl {
-			id: NodeId(0),
 			modifiers: Vec::new(),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
 			target: ImplTarget {
@@ -3564,7 +3501,6 @@ mod tests
 		// impl<T: Clone> MyType<T> where T: Send { }
 		// ERROR: T has bounds in generic list and appears in where clause
 		let impl_decl = ImplDecl {
-			id: NodeId(0),
 			modifiers: Vec::new(),
 			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
 			target: ImplTarget {
@@ -3653,7 +3589,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: Some(Box::new(ident("x"))),
 				span: Span::default(),
@@ -4010,7 +3945,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -4057,7 +3991,6 @@ mod tests
 				span: Span::default(),
 			},
 			body: Some(Block {
-				id: NodeId(0),
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
@@ -4257,7 +4190,6 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
-			id: NodeId(0),
 			modifiers: Vec::new(),
 			generics: Vec::new(),
 			target: ImplTarget {
@@ -4289,7 +4221,6 @@ mod tests
 		let mut desugarer = Desugarer::new(SourceIndex::new(0));
 
 		let impl_decl = ImplDecl {
-			id: NodeId(0),
 			modifiers: Vec::new(),
 			generics: Vec::new(),
 			target: ImplTarget {

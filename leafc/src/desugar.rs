@@ -6,7 +6,7 @@ use crate::{
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
 		FunctionDecl, FunctionSignature, GenericArg, GenericParam, Ident, ImplDecl, ImplItem, ModuleDecl, ModuleKind,
-		NodeId, Param, Path, PathSegment, Pattern, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl,
+		Param, Path, PathSegment, Pattern, RangeExpr, Stmt, SwitchArm, SwitchBody, TopLevelBlock, TopLevelDecl,
 		TraitDecl, TraitItem, Type, TypeCore, VariableDecl, WhereBound, WhereConstraint, extract_type_from_pattern,
 	},
 	source_map::SourceIndex,
@@ -313,13 +313,6 @@ impl Desugarer
 	fn current_loop(&self) -> Option<&String>
 	{
 		return self.loop_stack.last();
-	}
-
-	const fn next_node_id(&mut self) -> NodeId
-	{
-		let id: NodeId = NodeId(self.node_id_counter);
-		self.node_id_counter += 1;
-		return id;
 	}
 
 	#[allow(clippy::result_large_err)]
@@ -813,7 +806,6 @@ impl Desugarer
 			stmts,
 			tail_expr,
 			span: block.span,
-			id: block.id,
 		});
 	}
 
@@ -906,7 +898,6 @@ impl Desugarer
 						stmts,
 						tail_expr: None,
 						span,
-						id: self.next_node_id(),
 					})
 				} else {
 					Stmt::VariableDecl(self.desugar_variable_decl(var)?)
@@ -970,7 +961,6 @@ impl Desugarer
 						stmts,
 						tail_expr: None,
 						span,
-						id: self.next_node_id(),
 					})
 				} else {
 					Stmt::Assignment {
@@ -1117,7 +1107,6 @@ impl Desugarer
 			},
 			body: SwitchBody::Block(desugared_body),
 			span,
-			id: self.next_node_id(),
 		};
 
 		let some_false_arm: SwitchArm = SwitchArm {
@@ -1136,10 +1125,8 @@ impl Desugarer
 				}],
 				tail_expr: None,
 				span: pattern_span,
-				id: self.next_node_id(),
 			}),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let none_arm: SwitchArm = SwitchArm {
@@ -1156,10 +1143,8 @@ impl Desugarer
 				}],
 				tail_expr: None,
 				span: pattern_span,
-				id: self.next_node_id(),
 			}),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let switch_expr: Expr = Expr::Switch {
@@ -1174,7 +1159,6 @@ impl Desugarer
 				stmts: vec![Stmt::Expr(switch_expr)],
 				tail_expr: None,
 				span,
-				id: self.next_node_id(),
 			},
 			span,
 		};
@@ -1185,7 +1169,6 @@ impl Desugarer
 			stmts: vec![iter_decl, loop_stmt],
 			tail_expr: None,
 			span,
-			id: self.next_node_id(),
 		}));
 	}
 
@@ -1231,10 +1214,8 @@ impl Desugarer
 			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
-		let else_arm_id: NodeId = self.next_node_id();
 		let else_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard {
 				span: pattern_span,
@@ -1246,7 +1227,6 @@ impl Desugarer
 						stmts: vec![],
 						tail_expr: None,
 						span: pattern_span,
-						id: else_arm_id,
 					}));
 				},
 				|else_stmt| {
@@ -1255,12 +1235,10 @@ impl Desugarer
 						stmts: vec![self.desugar_stmt(*else_stmt)?],
 						tail_expr: None,
 						span: stmt_span,
-						id: else_arm_id,
 					}));
 				},
 			)?,
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let switch_expr: Expr = Expr::Switch {
@@ -1276,7 +1254,6 @@ impl Desugarer
 			stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 			tail_expr: None,
 			span,
-			id: self.next_node_id(),
 		}));
 	}
 
@@ -1324,7 +1301,6 @@ impl Desugarer
 			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_body),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let break_arm: SwitchArm = SwitchArm {
@@ -1340,10 +1316,8 @@ impl Desugarer
 				}],
 				tail_expr: None,
 				span: pattern_span,
-				id: self.next_node_id(),
 			}),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let switch_expr: Expr = Expr::Switch {
@@ -1361,7 +1335,6 @@ impl Desugarer
 				stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 				tail_expr: None,
 				span,
-				id: self.next_node_id(),
 			},
 			span,
 		};
@@ -1402,7 +1375,6 @@ impl Desugarer
 				}],
 				tail_expr: None,
 				span: cond_span,
-				id: self.next_node_id(),
 			},
 			else_branch: None,
 			span: cond_span,
@@ -1417,7 +1389,6 @@ impl Desugarer
 				stmts: loop_body_stmts,
 				tail_expr: desugared_body.tail_expr,
 				span,
-				id: self.next_node_id(),
 			},
 			span,
 		};
@@ -1676,10 +1647,8 @@ impl Desugarer
 			pattern: Self::desugar_pattern(pattern)?,
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
-		let else_arm_id: NodeId = self.next_node_id();
 		let else_arm: SwitchArm = SwitchArm {
 			pattern: Pattern::Wildcard {
 				span: pattern_span,
@@ -1691,7 +1660,6 @@ impl Desugarer
 						stmts: vec![],
 						tail_expr: None,
 						span: pattern_span,
-						id: else_arm_id,
 					}));
 				},
 				|else_expr| {
@@ -1705,14 +1673,12 @@ impl Desugarer
 								stmts: vec![],
 								tail_expr: Some(Box::new(other_expr)),
 								span: other_span,
-								id: else_arm_id,
 							})
 						}
 					});
 				},
 			)?,
 			span: pattern_span,
-			id: self.next_node_id(),
 		};
 
 		let switch_expr: Expr = Expr::Switch {
@@ -1728,7 +1694,6 @@ impl Desugarer
 			stmts: vec![temp_decl],
 			tail_expr: Some(Box::new(switch_expr)),
 			span,
-			id: self.next_node_id(),
 		})));
 	}
 
@@ -1864,7 +1829,6 @@ impl Desugarer
 				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)?),
 			},
 			span: arm.span,
-			id: arm.id,
 		});
 	}
 
