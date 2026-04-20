@@ -191,9 +191,9 @@ impl Span
 	///
 	/// # Returns
 	/// An error of type `E` constructed from the span and formatted message
-	pub fn make_error<E: ErrorFromSpan>(self, source: &str, message: &str) -> E
+	pub fn make_error<E: ErrorFromSpan>(self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> E
 	{
-		return E::from_span(self, self.format_error(source, message));
+		return E::from_span(self, self.format_error(source_index, source_map, message));
 	}
 }
 
@@ -272,8 +272,8 @@ impl std::fmt::Display for IntType
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		match self.sign {
-			IntSign::Signed => write!(f, "i")?,
-			IntSign::Unsigned => write!(f, "u")?,
+			IntSign::Signed => write!(f, "i{}", self.bits)?,
+			IntSign::Unsigned => write!(f, "u{}", self.bits)?,
 		}
 		return Ok(());
 	}
@@ -1143,7 +1143,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 		let bits: u16 = digits.parse::<u16>().ok()?;
 
-		return Some(IntType { bits, sign })
+		return Some(IntType { bits, sign });
 	}
 
 	fn read_float_suffix(&mut self) -> Option<u16>
@@ -1165,7 +1165,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			}
 		}
 
-		return digits.parse::<u16>().ok()
+		return digits.parse::<u16>().ok();
 	}
 
 	fn read_radix_number<F>(&mut self, radix: u32, valid: F) -> TokenKind
@@ -1196,7 +1196,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			value: num_str,
 			base,
 			ty: self.read_int_suffix(),
-		}
+		};
 	}
 
 	fn lex_number(&mut self) -> TokenKind
@@ -1260,7 +1260,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 			value: num_str,
 			base: IntBase::Decimal,
 			ty: self.read_int_suffix(),
-		}
+		};
 	}
 
 	fn lex_identifier_or_keyword(&mut self) -> TokenKind
@@ -1393,7 +1393,9 @@ impl Token
 	#[allow(unused)]
 	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
 	{
-		let source: &str = &source_map.get(source_index).src;
+		let file = source_map.get(source_index);
+		let source: &str = &file.src;
+		let filename = &file.path;
 		let line_start = source[..self.span.start].rfind('\n').map_or(0, |i| return i + 1);
 		let line_end = source[self.span.start..]
 			.find('\n')
@@ -1410,7 +1412,8 @@ impl Token
 		let caret_length = (self.span.end - self.span.start).max(1);
 
 		return format!(
-			"Error at {}:{}: {}\n  | {}\n  | {}{}",
+			"Error at {} -> {}:{}: {}\n  | {}\n  | {}{}",
+			filename.display(),
 			self.span.start_line,
 			self.span.start_col,
 			message,
@@ -1450,8 +1453,12 @@ impl Span
 	/// //   |                     ^
 	/// ```
 	#[allow(unused)]
-	pub fn format_error(&self, source: &str, message: &str) -> String
+	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
 	{
+		let file = source_map.get(source_index);
+		let source: &str = &file.src;
+		let filename = &file.path;
+
 		let line_start = source[..self.start].rfind('\n').map_or(0, |i| return i + 1);
 		let line_end = source[self.start..]
 			.find('\n')
@@ -1468,7 +1475,8 @@ impl Span
 		let caret_length = (self.end - self.start).max(1);
 
 		return format!(
-			"Error at {}:{}: {}\n  | {}\n  | {}{}",
+			"Error at {} -> {}:{}: {}\n  | {}\n  | {}{}",
+			filename.display(),
 			self.start_line,
 			self.start_col,
 			message,

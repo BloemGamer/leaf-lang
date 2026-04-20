@@ -69,7 +69,7 @@ impl crate::CompileDiagnostic for ModuleError
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &SourceMap) -> std::fmt::Result
 	{
 		let msg = self.to_string();
-		return write!(f, "{}", self.span.format_error(&sm.get(self.source_index).src, &msg));
+		return write!(f, "{}", self.span.format_error(self.source_index, sm, &msg));
 	}
 }
 

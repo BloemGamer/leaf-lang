@@ -56,7 +56,6 @@ struct Desugarer
 	tmp_counter: usize,
 	source_index: SourceIndex,
 	loop_stack: Vec<String>,
-	node_id_counter: u32,
 }
 
 /// Types of errors that can occur during desugaring.
@@ -256,8 +255,7 @@ impl CompileDiagnostic for DesugarError
 		return write!(
 			f,
 			"{}",
-			self.span
-				.format_error(&sm.get(self.source_index).src, &format!("{self}"))
+			self.span.format_error(self.source_index, sm, &format!("{self}"))
 		);
 	}
 }
@@ -271,17 +269,6 @@ impl Desugarer
 			tmp_counter: 0,
 			source_index,
 			loop_stack: Vec::new(),
-			node_id_counter: 0,
-		};
-	}
-
-	const fn new_with_id(source_index: SourceIndex, id: u32) -> Self
-	{
-		return Desugarer {
-			tmp_counter: 0,
-			source_index,
-			loop_stack: Vec::new(),
-			node_id_counter: id,
 		};
 	}
 
@@ -2502,6 +2489,6 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 /// ```
 pub fn desugar_program(program: AST) -> Result<DesugaredAST, DesugarError>
 {
-	let mut desugarer: Desugarer = Desugarer::new_with_id(program.source_index, program.next_node_id);
+	let mut desugarer: Desugarer = Desugarer::new(program.source_index);
 	return desugarer.desugar_program(program);
 }

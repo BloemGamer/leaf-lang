@@ -43,7 +43,6 @@ pub struct Parser<'source, 'config>
 	lexer: Peekable<Lexer<'source, 'config>>,
 	last_span: Span,
 	buffered_token: Option<Token>,
-	node_id_counter: u32,
 }
 
 impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
@@ -79,7 +78,6 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
-			node_id_counter: 0,
 		};
 	}
 }
@@ -115,7 +113,6 @@ pub struct AST
 {
 	pub top_level_block: TopLevelBlock,
 	pub source_index: SourceIndex,
-	pub next_node_id: u32,
 }
 
 impl Spanned for AST
@@ -2038,8 +2035,7 @@ impl CompileDiagnostic for ParseError
 		return write!(
 			f,
 			"{}",
-			self.span
-				.format_error(&sm.get(self.source_index).src, &format!("{self}"))
+			self.span.format_error(self.source_index, sm, &format!("{self}"))
 		);
 	}
 }
@@ -2414,7 +2410,6 @@ impl<'s, 'c> Parser<'s, 'c>
 		return Ok(AST {
 			top_level_block,
 			source_index: self.source_index,
-			next_node_id: self.node_id_counter,
 		});
 	}
 
@@ -2777,6 +2772,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		};
 	}
 
+	#[allow(clippy::needless_pass_by_ref_mut)]
 	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, ParseError>
 	{
 		unimplemented!("don't know what to do for this yet");
@@ -7644,7 +7640,7 @@ pub fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &S
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "struct {}", s.name)?;
+	write!(f, "struct {}", s.name)?;
 	if !s.generics.is_empty() {
 		write!(f, "<")?;
 		for (i, generic) in s.generics.iter().enumerate() {
@@ -7657,7 +7653,7 @@ pub fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &S
 	}
 
 	if !s.where_clause.is_empty() {
-		write!(f, " where ")?;
+		write!(f, "\nwhere ")?;
 		for (i, constraint) in s.where_clause.iter().enumerate() {
 			if i > 0 {
 				write!(f, ", ")?;
@@ -7666,7 +7662,7 @@ pub fn write_struct_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, s: &S
 		}
 	}
 
-	write!(f, " {{")?;
+	writeln!(f, " {{")?;
 	w.indent();
 
 	for field in &s.fields {
@@ -7691,7 +7687,7 @@ pub fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &Un
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "union {}", u.name)?;
+	write!(f, "union {}", u.name)?;
 	if !u.generics.is_empty() {
 		write!(f, "<")?;
 		for (i, generic) in u.generics.iter().enumerate() {
@@ -7704,7 +7700,7 @@ pub fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &Un
 	}
 
 	if !u.where_clause.is_empty() {
-		write!(f, " where ")?;
+		write!(f, "\nwhere ")?;
 		for (i, constraint) in u.where_clause.iter().enumerate() {
 			if i > 0 {
 				write!(f, ", ")?;
@@ -7712,8 +7708,8 @@ pub fn write_union_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, u: &Un
 			write!(f, "{}", constraint)?;
 		}
 	}
+	writeln!(f, " {{")?;
 
-	write!(f, " {{")?;
 	w.indent();
 
 	for field in &u.fields {
@@ -7734,7 +7730,7 @@ pub fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &Enu
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "enum {}", e.name)?;
+	write!(f, "enum {}", e.name)?;
 	if !e.generics.is_empty() {
 		write!(f, "<")?;
 		for (i, generic) in e.generics.iter().enumerate() {
@@ -7747,7 +7743,7 @@ pub fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &Enu
 	}
 
 	if !e.where_clause.is_empty() {
-		write!(f, " where ")?;
+		write!(f, "\nwhere ")?;
 		for (i, constraint) in e.where_clause.iter().enumerate() {
 			if i > 0 {
 				write!(f, ", ")?;
@@ -7756,7 +7752,7 @@ pub fn write_enum_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, e: &Enu
 		}
 	}
 
-	write!(f, " {{")?;
+	writeln!(f, " {{")?;
 	w.indent();
 
 	for variant in &e.variants {
@@ -7782,7 +7778,7 @@ pub fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &
 		write!(f, "{} ", modifier)?;
 	}
 
-	writeln!(f, "variant {}", v.name)?;
+	write!(f, "variant {}", v.name)?;
 	if !v.generics.is_empty() {
 		write!(f, "<")?;
 		for (i, generic) in v.generics.iter().enumerate() {
@@ -7795,7 +7791,7 @@ pub fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &
 	}
 
 	if !v.where_clause.is_empty() {
-		write!(f, " where ")?;
+		write!(f, "\nwhere\n")?;
 		for (i, constraint) in v.where_clause.iter().enumerate() {
 			if i > 0 {
 				write!(f, ", ")?;
@@ -7804,7 +7800,7 @@ pub fn write_variant_decl(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, v: &
 		}
 	}
 
-	write!(f, " {{")?;
+	writeln!(f, " {{")?;
 	w.indent();
 
 	for member in &v.variants {

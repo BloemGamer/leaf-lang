@@ -474,14 +474,13 @@ impl CompileDiagnostic for SymbolCollectionError
 			SymbolCollectionErrorKind::DuplicateDefinition { first_definition, .. } => write!(
 				f,
 				"{}\n\n{}",
-				first_definition.format_error(&sm.get(self.source_index).src, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(&sm.get(self.source_index).src, "\nAgain at:\n")
+				first_definition.format_error(self.source_index, sm, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(self.source_index, sm, "\nAgain at:\n")
 			),
 			_ => write!(
 				f,
 				"{}",
-				self.span
-					.format_error(&sm.get(self.source_index).src, &format!("{}", self))
+				self.span.format_error(self.source_index, sm, &format!("{self}"))
 			),
 		};
 	}
