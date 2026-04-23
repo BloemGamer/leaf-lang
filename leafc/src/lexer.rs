@@ -1,3 +1,4 @@
+pub mod expander;
 mod tests;
 
 use std::path;
@@ -5,9 +6,18 @@ use std::path;
 use leaf_proc::{Spanned, generate_lexer};
 
 use crate::Config;
+use crate::parser::ParseError;
 use crate::source_map::{SourceIndex, SourceMap};
 
-impl<'source, 'config> Lexer<'source, 'config>
+pub trait LexerTrait<'source, 'config>: Iterator<Item = Result<Token, ParseError>> + Clone
+{
+	fn into_parts(self) -> (&'config Config, SourceIndex, Self);
+	fn read_eof_returned(&self) -> bool;
+	fn set_eof_returned(&mut self, eof_returned: bool);
+	fn next_token(&mut self) -> Result<Token, ParseError>;
+}
+
+impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 {
 	/// Consumes the lexer and extracts its configuration reference.
 	///
@@ -31,11 +41,103 @@ impl<'source, 'config> Lexer<'source, 'config>
 	/// let (config_ref, idx, lexer) = lexer.into_parts();
 	/// // Now config_ref, idx, and lexer can be used independently
 	/// ```
-	pub const fn into_parts(self) -> (&'config Config, SourceIndex, Lexer<'source, 'config>)
+	fn into_parts(self) -> (&'config Config, SourceIndex, Lexer<'source, 'config>)
 	{
 		let config: &'config Config = self.config;
 		let source_index: SourceIndex = self.source_index;
 		return (config, source_index, self);
+	}
+
+	fn read_eof_returned(&self) -> bool
+	{
+		return self.eof_returned;
+	}
+
+	fn set_eof_returned(&mut self, eof_returned: bool)
+	{
+		self.eof_returned = eof_returned;
+	}
+
+	/// Retrieves the next token from the source code.
+	///
+	/// This is the main interface for the parser to consume tokens. It skips
+	/// whitespace and returns the next meaningful token with its position information.
+	///
+	/// # Returns
+	/// The next `Token` from the source, including its kind and span information.
+	/// Returns a token with `TokenKind::Eof` when the end of the source is reached.
+	///
+	/// # Example
+	/// ```no_run
+	/// # use crate::{Config, SourceIndex};
+	/// # use crate::lexer::Lexer;
+	/// # let config = Config::default();
+	/// # let source_index = SourceIndex(0);
+	/// let mut lexer = Lexer::new(&config, "x + 42", source_index);
+	/// let token = lexer.next_token(); // Returns Identifier("x")
+	/// let token = lexer.next_token(); // Returns Plus
+	/// let token = lexer.next_token(); // Returns IntLiteral(42)
+	/// ```
+	#[allow(unused)]
+	fn next_token(&mut self) -> Result<Token, ParseError>
+	{
+		self.skip_whitespace();
+
+		let start: usize = self.position;
+		let start_line: usize = self.line;
+		let start_col: usize = self.column;
+
+		let Some(ch) = self.current_char else {
+			return Ok(Token {
+				kind: TokenKind::Eof,
+				span: Span {
+					start,
+					end: start,
+					start_line,
+					start_col,
+					end_line: start_line,
+					end_col: start_col,
+				},
+			});
+		};
+
+		let kind: TokenKind = match ch {
+			// Special case: / needs comment handling
+			'/' => self.lex_slash_or_comment(),
+
+			// Literals
+			'"' => self.lex_string_literal(),
+			'\'' => self.lex_char_or_label(),
+			'0'..='9' => self.lex_number(),
+
+			// Identifiers and keywords
+			'a'..='z' | 'A'..='Z' | '_' => self.lex_identifier_or_keyword(),
+
+			// Directives
+			'@' => self.lex_directive(),
+
+			// Macros
+			'$' => self.lex_macro(),
+
+			// All operators and simple tokens - handled by generated lex_char
+			_ => self.lex_char(ch),
+		};
+
+		let end = self.position;
+		let end_line = self.line;
+		let end_col = self.column;
+
+		return Ok(Token {
+			kind,
+			span: Span {
+				start,
+				end,
+				start_line,
+				start_col,
+				end_line,
+				end_col,
+			},
+		});
 	}
 }
 
@@ -667,24 +769,30 @@ pub enum Directive
 
 impl Iterator for Lexer<'_, '_>
 {
-	type Item = Token;
+	type Item = Result<Token, ParseError>;
 
 	fn next(&mut self) -> Option<Self::Item>
 	{
-		let mut token: Token = self.next_token();
+		let mut token: Token = match self.next_token() {
+			err @ Err(_) => return Some(err),
+			Ok(t) => t,
+		};
 		while matches!(token.kind, TokenKind::LineComment(_) | TokenKind::BlockComment(_)) {
-			token = self.next_token();
+			token = match self.next_token() {
+				err @ Err(_) => return Some(err),
+				Ok(t) => t,
+			};
 		}
 
 		return if matches!(token.kind, TokenKind::Eof | TokenKind::Invalid) {
-			if self.eof_returned {
+			if self.read_eof_returned() {
 				None
 			} else {
-				self.eof_returned = true;
-				Some(token)
+				self.set_eof_returned(true);
+				Some(Ok(token))
 			}
 		} else {
-			Some(token)
+			Some(Ok(token))
 		};
 	}
 }
@@ -779,88 +887,6 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 		lexer.current_char = lexer.source.chars().next();
 		return lexer;
-	}
-
-	/// Retrieves the next token from the source code.
-	///
-	/// This is the main interface for the parser to consume tokens. It skips
-	/// whitespace and returns the next meaningful token with its position information.
-	///
-	/// # Returns
-	/// The next `Token` from the source, including its kind and span information.
-	/// Returns a token with `TokenKind::Eof` when the end of the source is reached.
-	///
-	/// # Example
-	/// ```no_run
-	/// # use crate::{Config, SourceIndex};
-	/// # use crate::lexer::Lexer;
-	/// # let config = Config::default();
-	/// # let source_index = SourceIndex(0);
-	/// let mut lexer = Lexer::new(&config, "x + 42", source_index);
-	/// let token = lexer.next_token(); // Returns Identifier("x")
-	/// let token = lexer.next_token(); // Returns Plus
-	/// let token = lexer.next_token(); // Returns IntLiteral(42)
-	/// ```
-	#[allow(unused)]
-	pub fn next_token(&mut self) -> Token
-	{
-		self.skip_whitespace();
-
-		let start: usize = self.position;
-		let start_line: usize = self.line;
-		let start_col: usize = self.column;
-
-		let Some(ch) = self.current_char else {
-			return Token {
-				kind: TokenKind::Eof,
-				span: Span {
-					start,
-					end: start,
-					start_line,
-					start_col,
-					end_line: start_line,
-					end_col: start_col,
-				},
-			};
-		};
-
-		let kind: TokenKind = match ch {
-			// Special case: / needs comment handling
-			'/' => self.lex_slash_or_comment(),
-
-			// Literals
-			'"' => self.lex_string_literal(),
-			'\'' => self.lex_char_or_label(),
-			'0'..='9' => self.lex_number(),
-
-			// Identifiers and keywords
-			'a'..='z' | 'A'..='Z' | '_' => self.lex_identifier_or_keyword(),
-
-			// Directives
-			'@' => self.lex_directive(),
-
-			// Macros
-			'$' => self.lex_macro(),
-
-			// All operators and simple tokens - handled by generated lex_char
-			_ => self.lex_char(ch),
-		};
-
-		let end = self.position;
-		let end_line = self.line;
-		let end_col = self.column;
-
-		return Token {
-			kind,
-			span: Span {
-				start,
-				end,
-				start_line,
-				start_col,
-				end_line,
-				end_col,
-			},
-		};
 	}
 
 	fn lex_slash_or_comment(&mut self) -> TokenKind
@@ -1359,6 +1385,21 @@ impl<'source, 'config> Lexer<'source, 'config>
 	}
 }
 
+const RESET: &str = "\x1b[0m";
+const BOLD: &str = "\x1b[1m";
+
+const RED: &str = "\x1b[31m";
+const BLUE: &str = "\x1b[34m";
+const CYAN: &str = "\x1b[36m";
+
+#[allow(unused)]
+const DIM: &str = "\x1b[2m";
+
+fn use_color() -> bool
+{
+	return std::env::var("NO_COLOR").is_err();
+}
+
 impl Token
 {
 	/// Formats an error message with source code context.
@@ -1460,29 +1501,76 @@ impl Span
 		let filename = &file.path;
 
 		let line_start = source[..self.start].rfind('\n').map_or(0, |i| return i + 1);
+
 		let line_end = source[self.start..]
 			.find('\n')
 			.map_or(source.len(), |i| return self.start + i);
+
 		let line_text = &source[line_start..line_end];
 
-		// Preserve tabs and spaces to maintain alignment
 		let prefix = &source[line_start..self.start];
 		let caret_indent: String = prefix
 			.chars()
-			.map(|c| if c == '\t' { return '\t' } else { return ' ' })
+			.map(|c| return if c == '\t' { '\t' } else { ' ' })
 			.collect();
 
 		let caret_length = (self.end - self.start).max(1);
 
-		return format!(
-			"Error at {} -> {}:{}: {}\n  | {}\n  | {}{}",
+		let color = use_color();
+
+		// Helper closures
+		let red = |s: &str| {
+			return if color {
+				format!("{RED}{BOLD}{s}{RESET}")
+			} else {
+				s.to_string()
+			};
+		};
+		let blue = |s: &str| {
+			return if color {
+				format!("{BLUE}{s}{RESET}")
+			} else {
+				s.to_string()
+			};
+		};
+		let cyan = |s: &str| {
+			return if color {
+				format!("{CYAN}{s}{RESET}")
+			} else {
+				s.to_string()
+			};
+		};
+		let bold = |s: &str| {
+			return if color {
+				format!("{BOLD}{s}{RESET}")
+			} else {
+				s.to_string()
+			};
+		};
+
+		let error_label = red("error");
+		let location = cyan(&format!(
+			"{}:{}:{}",
 			filename.display(),
 			self.start_line,
-			self.start_col,
-			message,
+			self.start_col
+		));
+		let gutter = blue("|");
+
+		let caret = red(&"^".repeat(caret_length));
+
+		return format!(
+			"{error_label}: {}\n  --> {}\n   {} \n{:>3} {} {}\n   {} {}{} {}\n",
+			bold(message),
+			location,
+			gutter,
+			self.start_line,
+			gutter,
 			line_text,
+			gutter,
 			caret_indent,
-			"^".repeat(caret_length)
+			caret,
+			bold(message),
 		);
 	}
 }

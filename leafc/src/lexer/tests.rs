@@ -10,7 +10,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_1", &mut source_map);
-		return lexer.map(|t| return t.kind).collect();
+		return lexer.map(|t| return t.unwrap().kind).collect();
 	}
 
 	/// Helper function to extract tokens from source
@@ -19,7 +19,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, source, "test_file_2", &mut source_map);
-		return lexer.collect();
+		return lexer.collect::<Result<_, _>>().unwrap();
 	}
 
 	// ===== Basic Token Tests =====

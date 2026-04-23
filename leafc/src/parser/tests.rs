@@ -3,6 +3,7 @@
 mod tests
 {
 	use crate::lexer::Lexer;
+	use crate::lexer::expander::ExpandedLexer;
 	use crate::source_map::SourceMap;
 	use crate::{CompileDiagnostic, parser::*};
 	use crate::{CompileError, Config};
@@ -14,7 +15,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "expr", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_expr()
 			.map_err(CompileError::ParseError)
@@ -26,7 +27,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "program", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_top_level_block()
 			.map_err(CompileError::ParseError)
@@ -38,19 +39,20 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "block", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_block()
 			.map_err(CompileError::ParseError)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
+	#[allow(unused)]
 	fn parse_directive(input: &str) -> Result<DirectiveNode, CompileError>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "directive", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_directive_node()
 			.map_err(|e| return CompileError::ParseError(e))
@@ -1275,7 +1277,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32", "test_file_4", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1290,7 +1292,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Vec<i32>", "test_file_5", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1310,7 +1312,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&i32", "test_file_6", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1325,7 +1327,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&mut i32", "test_file_7", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1340,7 +1342,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32*", "test_file_8", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1355,7 +1357,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "[i32; 10]", "test_file_9", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -1790,7 +1792,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{if true { 1 }}", "test_file_10", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1802,7 +1804,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer =
 			Lexer::new_add_to_source_map(&config, "{if true { 1 } else { 2 };}", "test_file_11", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1813,7 +1815,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{ while true { break; } }", "test_file_12", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1825,7 +1827,7 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer =
 			Lexer::new_add_to_source_map(&config, "{ for i: i64 in 0..10 { } }", "test_file_13", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1836,7 +1838,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{ return 42; }", "test_file_14", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1847,7 +1849,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{ break; }", "test_file_15", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1858,7 +1860,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{ continue; }", "test_file_16", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1869,7 +1871,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "{ x = 5; }", "test_file_17", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1883,7 +1885,7 @@ mod tests
 			let config = Config::default();
 			let mut source_map = SourceMap::default();
 			let lexer = Lexer::new_add_to_source_map(&config, &input, "test_file_18", &mut source_map);
-			let mut parser = Parser::from(lexer);
+			let mut parser = Parser::from(ExpandedLexer::new(lexer));
 			let result = parser.parse_block();
 			assert!(result.is_ok(), "Failed to parse compound assignment: {}", op);
 		}
@@ -1934,7 +1936,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "123", "test_file_19", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_err());
 	}
@@ -1950,7 +1952,7 @@ mod tests
 			"test_file_20",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 		let block = result.unwrap();
@@ -1969,7 +1971,7 @@ mod tests
 			"test_file_21",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1983,7 +1985,7 @@ mod tests
 			"{ if var Some(x: i32) = opt1 { x } else if var Some(y: i32) = opt2 { y } else { 0 }; }",
 			SourceIndex::new(0),
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -1999,7 +2001,7 @@ mod tests
 			"test_file_22",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2015,7 +2017,7 @@ mod tests
 			"test_file_23",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2031,7 +2033,7 @@ mod tests
 			"test_file_24",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2049,7 +2051,7 @@ mod tests
 			"test_file_25",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 		let block = result.unwrap();
@@ -2070,7 +2072,7 @@ mod tests
 			"test_file_26",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2088,7 +2090,7 @@ mod tests
 			"test_file_27",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2104,7 +2106,7 @@ mod tests
 			"test_file_28",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2120,7 +2122,7 @@ mod tests
 			"test_file_29",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2134,7 +2136,7 @@ mod tests
 			"{ if var Some(Point { x -> a: i32, t -> b: i32 }) = opt { a } }",
 			SourceIndex::new(0),
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2150,7 +2152,7 @@ mod tests
 			"test_file_30",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2166,7 +2168,7 @@ mod tests
 			"test_file_31",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2377,7 +2379,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32**", "test_file_32", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2395,7 +2397,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "[i32*; 10]", "test_file_33", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2413,7 +2415,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32[10]*", "test_file_34", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -2424,7 +2426,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "(i32,)", "test_file_35", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2439,7 +2441,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "()", "test_file_36", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2454,7 +2456,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Vec<Vec<i32>>", "test_file_37", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2474,7 +2476,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Map<String, i32>", "test_file_38", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2491,7 +2493,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "std::vec::Vec<i32>", "test_file_39", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -2514,7 +2516,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&(i32, i32)", "test_file_40", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -2532,7 +2534,7 @@ mod tests
 			"test_file_41",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2548,7 +2550,7 @@ mod tests
 			"test_file_42",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2564,7 +2566,7 @@ mod tests
 			"test_file_43",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2580,7 +2582,7 @@ mod tests
 			"test_file_44",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2596,7 +2598,7 @@ mod tests
 			"test_file_45",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2612,7 +2614,7 @@ mod tests
 			"test_file_46",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2628,7 +2630,7 @@ mod tests
 			"test_file_47",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2644,7 +2646,7 @@ mod tests
 			"test_file_48",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -2660,7 +2662,7 @@ mod tests
 			"test_file_49",
 			&mut source_map,
 		);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_block();
 		assert!(result.is_ok());
 	}
@@ -3287,7 +3289,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Vec<Vec<i32>>", "test_file_50", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -3298,7 +3300,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Box<Vec<Option<i32>>>", "test_file_51", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -4104,7 +4106,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "test_file_52", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_err());
 	}
@@ -4269,7 +4271,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Map<Vec<i32>, Vec<i32>>", "test_file_55", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -4306,7 +4308,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "impl Clone", "test_file_56", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -4330,7 +4332,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "impl Clone + Debug", "test_file_57", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -4355,7 +4357,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "&impl Clone", "test_file_58", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -6110,7 +6112,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "mut i32", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
@@ -6172,7 +6174,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "i32[]", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -6183,7 +6185,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Box<Vec<Option<Result<i32>>>>", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -7850,7 +7852,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "mut Vec<i32>", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -7861,7 +7863,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "mut i32*", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -8242,7 +8244,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "[&i32; 10]", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}
@@ -8483,7 +8485,7 @@ mod tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, "Foo<Bar<i32>>", "test", &mut source_map);
-		let mut parser = Parser::from(lexer);
+		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 	}

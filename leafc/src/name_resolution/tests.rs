@@ -7,7 +7,7 @@ mod tests
 	use crate::{
 		CompileDiagnostic, CompileError, Config,
 		desugar::DesugaredAST,
-		lexer::{Lexer, token_macro::ExpandedLexer},
+		lexer::{Lexer, expander::ExpandedLexer},
 		name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
 		parser::{AST, Parser},
 		source_map::SourceMap,

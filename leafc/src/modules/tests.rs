@@ -2,6 +2,7 @@
 mod module_tests
 {
 	use crate::lexer::Lexer;
+	use crate::lexer::expander::ExpandedLexer;
 	use crate::modules::*;
 	use crate::parser::*;
 	use crate::source_map::SourceMap;
@@ -13,7 +14,7 @@ mod module_tests
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "test", &mut source_map);
-		let parser = Parser::from(lexer);
+		let parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser.try_into().expect("failed to parse AST");
 	}
 

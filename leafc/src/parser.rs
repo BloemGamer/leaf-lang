@@ -1,12 +1,12 @@
 mod tests;
 
-use std::{cmp::Ordering, convert::TryFrom, iter::Peekable};
+use std::{cmp::Ordering, convert::TryFrom, iter::Peekable, marker::PhantomData};
 
 use ignorable::PartialEq;
 
 use crate::{
 	CompileDiagnostic, CompileError, Config,
-	lexer::{self, IntBase, IntType, Lexer, ReservedError, Span, Spanned, Token, TokenKind},
+	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
@@ -34,18 +34,22 @@ use leaf_proc::Spanned;
 /// let program = parser.parse_program().unwrap();
 /// ```
 #[derive(Debug, Clone)]
-pub struct Parser<'source, 'config>
+pub struct Parser<'source, 'config, T>
+where
+	T: LexerTrait<'source, 'config>,
 {
-	#[allow(unused)]
-	config: &'config Config,
-	#[allow(unused)]
+	_config: &'config Config,
 	source_index: SourceIndex,
-	lexer: Peekable<Lexer<'source, 'config>>,
+	lexer: Peekable<T>,
 	last_span: Span,
 	buffered_token: Option<Token>,
+
+	_marker: PhantomData<&'source ()>,
 }
 
-impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
+impl<'s, 'c, T> From<T> for Parser<'s, 'c, T>
+where
+	T: LexerTrait<'s, 'c>,
 {
 	/// Creates a parser from a lexer.
 	///
@@ -69,15 +73,16 @@ impl<'s, 'c> From<Lexer<'s, 'c>> for Parser<'s, 'c>
 	/// let lexer = Lexer::new(&config, source, source_index);
 	/// let mut parser = Parser::from(lexer);
 	/// ```
-	fn from(lexer: Lexer<'s, 'c>) -> Self
+	fn from(lexer: T) -> Self
 	{
 		let (config, source_index, lex) = lexer.into_parts();
 		return Self {
-			config,
+			_config: config,
 			source_index,
 			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
+			_marker: PhantomData,
 		};
 	}
 }
@@ -123,7 +128,9 @@ impl Spanned for AST
 	}
 }
 
-impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
+impl<'s, 'c, T> TryFrom<Parser<'s, 'c, T>> for AST
+where
+	T: LexerTrait<'s, 'c>,
 {
 	type Error = ParseError;
 
@@ -158,7 +165,7 @@ impl<'s, 'c> TryFrom<Parser<'s, 'c>> for AST
 	/// # Ok(())
 	/// # }
 	/// ```
-	fn try_from(mut parser: Parser<'s, 'c>) -> Result<Self, Self::Error>
+	fn try_from(mut parser: Parser<'s, 'c, T>) -> Result<Self, Self::Error>
 	{
 		return parser.parse_program();
 	}
@@ -200,7 +207,7 @@ impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
 	/// ```
 	fn try_from(lexer: Lexer<'s, 'c>) -> Result<Self, Self::Error>
 	{
-		let mut parser: Parser<'_, '_> = Parser::from(lexer);
+		let mut parser: Parser<'_, '_, _> = Parser::from(lexer);
 
 		return parser.parse_top_level_block();
 	}
@@ -879,6 +886,243 @@ pub enum Expr
 		#[ignored(PartialEq)]
 		span: Span,
 	},
+}
+
+#[derive(Clone, Debug)]
+pub enum ExprEnum
+{
+	Int(i128),
+	Bool(bool),
+	#[allow(unused)]
+	String(String),
+}
+
+fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, ParseError>
+{
+	let Literal::Int { value, base, ty, span } = lit else {
+		unreachable!("Called `read_radix_number` with a not `Literal::Int`: {:?}", lit);
+	};
+	if !ty.is_some() {
+		return Err(ParseError {
+			span: *span,
+			source_index,
+			kind: ParseErrorKind::CompileExprError {
+				reason: "typed integers for comptime expressions is not allowed".to_string(),
+			},
+			context: Vec::new(),
+		});
+	}
+
+	return i128::from_str_radix(
+		value,
+		match base {
+			IntBase::Binary => 2,
+			IntBase::Octal => 8,
+			IntBase::Decimal => 10,
+			IntBase::Hexadecimal => 16,
+		},
+	)
+	.map_err(|err| -> ParseError {
+		match err.kind() {
+			std::num::IntErrorKind::PosOverflow => {
+				return ParseError {
+					span: *span,
+					source_index,
+					kind: ParseErrorKind::CompileExprError {
+						reason: "IntergetOverflow".to_string(),
+					},
+					context: Vec::new(),
+				};
+			}
+			std::num::IntErrorKind::NegOverflow => {
+				return ParseError {
+					span: *span,
+					source_index,
+					kind: ParseErrorKind::CompileExprError {
+						reason: "IntergetUnderflow".to_string(),
+					},
+					context: Vec::new(),
+				};
+			}
+			_ => unreachable!("somthing went wrong during parsing the number"),
+		}
+	});
+}
+
+impl Expr
+{
+	pub fn comp_time_check(&self, config: &Config, source_index: SourceIndex) -> Result<bool, ParseError>
+	{
+		match self.eval(config, source_index)? {
+			ExprEnum::Bool(b) => return Ok(b),
+			_ => {
+				return Err(ParseError {
+					span: self.span(),
+					source_index,
+					kind: ParseErrorKind::NoCompileExpr {
+						reason: "Compile-time expression must evaluate to a boolean".to_string(),
+					},
+					context: Vec::new(),
+				});
+			}
+		}
+	}
+
+	fn eval(&self, config: &Config, source_index: SourceIndex) -> Result<ExprEnum, ParseError>
+	{
+		match self {
+			Expr::Literal { value, span: _, .. } => {
+				return Ok(match value {
+					lit @ Literal::Int { .. } => ExprEnum::Int(read_radix_number(lit, source_index)?),
+					Literal::Float { span, .. } | Literal::Char { value: _, span } => {
+						return Err(type_err(*span, source_index));
+					}
+					Literal::Bool { value, span: _ } => ExprEnum::Bool(*value),
+					Literal::String { value, span: _ } => ExprEnum::String(value.clone()),
+				});
+			}
+
+			Expr::Identifier { path, span } => {
+				if path.has_generics() || path.glob || path.global {
+					return Err(type_err(*span, source_index));
+				}
+				if matches!(&path.segments[0], PathSegment { name, generics, span, } if name == "cfg" && generics.is_empty())
+				{
+					let p = Path {
+						segments: path.segments[1..].into(),
+						glob: false,
+						global: false,
+						span: path.span,
+					};
+					return config.lookup(&p).map_err(|err| {
+						return ParseError {
+							span: *span,
+							source_index,
+							kind: ParseErrorKind::CompileExprError { reason: err },
+							context: Vec::new(),
+						};
+					});
+				}
+				return Err(type_err(*span, source_index));
+			}
+
+			Expr::Unary { op, expr, span } => {
+				let v = expr.eval(config, source_index)?;
+
+				match (op, v) {
+					(UnaryOp::Neg, ExprEnum::Int(i)) => return Ok(ExprEnum::Int(-i)),
+					(UnaryOp::Not, ExprEnum::Bool(b)) => return Ok(ExprEnum::Bool(!b)),
+
+					_ => {
+						return Err(ParseError {
+							span: *span,
+							source_index,
+							kind: ParseErrorKind::NoCompileExpr {
+								reason: "Invalid unary operation for given type".to_string(),
+							},
+							context: Vec::new(),
+						});
+					}
+				}
+			}
+
+			Expr::Binary { op, lhs, rhs, span } => {
+				match op {
+					BinaryOp::LogicalAnd => {
+						let l = lhs.eval(config, source_index)?;
+						match l {
+							ExprEnum::Bool(false) => return Ok(ExprEnum::Bool(false)),
+							ExprEnum::Bool(true) => {
+								let r = rhs.eval(config, source_index)?;
+								return match r {
+									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
+									_ => Err(type_err(*span, source_index)),
+								};
+							}
+							_ => return Err(type_err(*span, source_index)),
+						}
+					}
+
+					BinaryOp::LogicalOr => {
+						let l = lhs.eval(config, source_index)?;
+						match l {
+							ExprEnum::Bool(true) => return Ok(ExprEnum::Bool(true)),
+							ExprEnum::Bool(false) => {
+								let r = rhs.eval(config, source_index)?;
+								return match r {
+									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
+									_ => Err(type_err(*span, source_index)),
+								};
+							}
+							_ => return Err(type_err(*span, source_index)),
+						}
+					}
+
+					_ => {}
+				}
+
+				let l = lhs.eval(config, source_index)?;
+				let r = rhs.eval(config, source_index)?;
+
+				match (op, l, r) {
+					(BinaryOp::Add, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a + b)),
+					(BinaryOp::Sub, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a - b)),
+					(BinaryOp::Mul, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a * b)),
+					(BinaryOp::Div, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a / b)),
+					(BinaryOp::Mod, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a % b)),
+
+					(BinaryOp::Eq, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a == b)),
+					(BinaryOp::Ne, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a != b)),
+					(BinaryOp::Lt, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a < b)),
+					(BinaryOp::Gt, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a > b)),
+					(BinaryOp::Le, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a <= b)),
+					(BinaryOp::Ge, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Bool(a >= b)),
+
+					(BinaryOp::Eq, ExprEnum::Bool(a), ExprEnum::Bool(b)) => return Ok(ExprEnum::Bool(a == b)),
+					(BinaryOp::Ne, ExprEnum::Bool(a), ExprEnum::Bool(b)) => return Ok(ExprEnum::Bool(a != b)),
+
+					(BinaryOp::Eq, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a == b)),
+					(BinaryOp::Ne, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a != b)),
+
+					_ => return Err(type_err(*span, source_index)),
+				}
+			}
+
+			Expr::Default { span, .. } => {
+				return Err(ParseError {
+					span: *span,
+					source_index,
+					kind: ParseErrorKind::NoCompileExpr {
+						reason: "Can't use `default()` in an `@if` block".to_string(),
+					},
+					context: Vec::new(),
+				});
+			}
+
+			_ => {
+				return Err(ParseError {
+					span: self.span(),
+					source_index,
+					kind: ParseErrorKind::NoCompileExpr {
+						reason: "Expression not allowed in compile-time condition".to_string(),
+					},
+					context: Vec::new(),
+				});
+			}
+		}
+	}
+}
+
+fn type_err(span: Span, source_index: SourceIndex) -> ParseError
+{
+	return ParseError {
+		span,
+		source_index,
+		kind: ParseErrorKind::NoCompileExpr {
+			reason: "Type mismatch in compile-time expression".to_string(),
+		},
+		context: Vec::new(),
+	};
 }
 
 /// Type of function call
@@ -1783,6 +2027,14 @@ pub enum ParseErrorKind
 	{
 		message: String,
 	},
+	NoCompileExpr
+	{
+		reason: String,
+	},
+	CompileExprError
+	{
+		reason: String,
+	},
 	ReservedToken(ReservedError),
 }
 
@@ -2009,6 +2261,12 @@ impl std::fmt::Display for ParseError
 			}
 			ParseErrorKind::Generic { message } => {
 				write!(f, "{}", message)?;
+			}
+			ParseErrorKind::CompileExprError { reason } => {
+				write!(f, "compile time expr error: {}", reason)?;
+			}
+			ParseErrorKind::NoCompileExpr { reason } => {
+				write!(f, "no compile time expr: {}", reason)?;
 			}
 		}
 
@@ -2261,7 +2519,9 @@ pub struct VariantMember
 
 pub const ALLOWED_HEAP_GENERICS: [&str; 2] = ["IO", "Alloc"];
 
-impl<'s, 'c> Parser<'s, 'c>
+impl<'s, 'c, T> Parser<'s, 'c, T>
+where
+	T: LexerTrait<'s, 'c>,
 {
 	fn peek(&mut self) -> Result<&Token, ParseError>
 	{
@@ -2269,9 +2529,15 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(token);
 		}
 
-		let token: Result<&Token, ParseError> = self.lexer.peek().ok_or_else(|| {
-			return ParseError::unexpected_eof(self.last_span, self.source_index);
-		});
+		let token: Result<&Token, ParseError> = self
+			.lexer
+			.peek()
+			.map(|x| return x.as_ref())
+			.transpose()
+			.map_err(|err| return err.clone())?
+			.ok_or_else(|| {
+				return ParseError::unexpected_eof(self.last_span, self.source_index);
+			});
 
 		let Ok(tok) = token else {
 			return token;
@@ -2296,7 +2562,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			return Ok(tok);
 		}
 
-		let tok: Token = self.lexer.next().ok_or_else(|| {
+		let tok: Token = self.lexer.next().transpose()?.ok_or_else(|| {
 			return ParseError::unexpected_eof(self.last_span, self.source_index);
 		})?;
 
@@ -2314,12 +2580,12 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 	}
 
-	fn make_checkpoint(&self) -> (Peekable<Lexer<'s, 'c>>, Span, Option<Token>)
+	fn make_checkpoint(&self) -> (Peekable<T>, Span, Option<Token>)
 	{
 		return (self.lexer.clone(), self.last_span, self.buffered_token.clone());
 	}
 
-	fn load_checkpoint(&mut self, checkpoint: (Peekable<Lexer<'s, 'c>>, Span, Option<Token>))
+	fn load_checkpoint(&mut self, checkpoint: (Peekable<T>, Span, Option<Token>))
 	{
 		let (lexer, last_span, buffered_token) = checkpoint;
 		self.lexer = lexer;
@@ -2504,7 +2770,7 @@ impl<'s, 'c> Parser<'s, 'c>
 
 	fn peek_declaration_kind(&mut self) -> Result<DeclKind, ParseError>
 	{
-		let checkpoint: Peekable<Lexer<'s, 'c>> = self.lexer.clone();
+		let checkpoint: Peekable<T> = self.lexer.clone();
 		let checkpoint_span: Span = self.last_span;
 
 		loop {
@@ -3141,7 +3407,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
-				let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+				let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 				self.next()?; // ::
 
 				if self.peek()?.kind == TokenKind::LessThan {
@@ -3164,7 +3430,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				break;
 			}
 
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // ::
 
 			if !matches!(self.peek()?.kind, TokenKind::Identifier(_)) {
@@ -3218,7 +3484,7 @@ impl<'s, 'c> Parser<'s, 'c>
 			};
 
 			let generics: Vec<Type> = if self.peek()?.kind == TokenKind::DoubleColon {
-				let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+				let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 				self.next()?; // ::
 
 				if self.peek()?.kind == TokenKind::LessThan {
@@ -3241,7 +3507,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				break;
 			}
 
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // ::
 
 			if !matches!(self.peek()?.kind, TokenKind::Identifier(_)) {
@@ -3251,7 +3517,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		let glob: bool = if self.peek()?.kind == TokenKind::DoubleColon {
-			let checkpoint = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // ::
 			if self.at(&TokenKind::Star)? {
 				self.next()?; // *
@@ -3339,7 +3605,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		return self.parse_expr_with_restrictions(Restrictions::NONE);
 	}
 
-	fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
+	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NO_STRUCT_LITERAL);
 	}
@@ -3640,7 +3906,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	{
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // (
 
 			if let Ok(ty) = self.parse_type()
@@ -4177,7 +4443,7 @@ impl<'s, 'c> Parser<'s, 'c>
 	fn lookahead_for_struct_field(&mut self) -> Result<bool, ParseError>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 			self.next()?; // identifier
 
 			let is_struct_field: bool = self.at(&TokenKind::Arrow)?
@@ -4887,7 +5153,7 @@ impl<'s, 'c> Parser<'s, 'c>
 				}
 
 				TokenKind::If => {
-					let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+					let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 
 					self.next()?; // if
 
@@ -5312,7 +5578,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		loop {
 			let loop_span: Span = self.peek()?.span();
 
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 
 			let mut modifiers: Vec<Modifier> = self.parse_modifiers()?;
 			let mutable: bool = modifiers.pop_if(|m| return *m == Modifier::Mut).is_some();
@@ -6130,7 +6396,7 @@ impl<'s, 'c> Parser<'s, 'c>
 		}
 
 		loop {
-			let checkpoint: (Peekable<Lexer<'_, '_>>, Span, Option<Token>) = self.make_checkpoint();
+			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
 
 			if let Ok(TokenKind::Identifier(name)) = self.peek_kind().cloned() {
 				self.next()?; // identifier
@@ -7493,7 +7759,7 @@ pub fn write_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, st
 			}
 			_ => {
 				write_expr(f, w, expr)?;
-				return write!(f, ";",);
+				return write!(f, ";");
 			}
 		},
 		Stmt::Break { label, value, .. } => {
