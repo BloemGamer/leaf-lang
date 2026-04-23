@@ -30,8 +30,6 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScopeId(pub usize);
 
-/// A stable identifier assigned by the symbol collector to a scope.
-/// Replaces parser-assigned NodeIds for the purpose of AST→scope lookup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScopeNodeId(pub usize);
 
@@ -1713,8 +1711,8 @@ pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTab
 		.iter()
 		.enumerate()
 		.flat_map(|(i, (_, _, table))| {
-			let scope_off = scope_offsets[i];
-			let node_id_off = node_id_offsets[i];
+			let scope_off: usize = scope_offsets[i];
+			let node_id_off: usize = node_id_offsets[i];
 			return table.scope_node_map.iter().map(move |(&nid, &sid)| {
 				return (ScopeNodeId(nid.0 + node_id_off), ScopeId(sid.0 + scope_off));
 			});

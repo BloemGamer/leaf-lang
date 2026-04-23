@@ -916,8 +916,8 @@ impl CompileDiagnostic for NameResolutionError
 			NameResolutionErrorKind::ShadowedVariable { first_definition, .. } => write!(
 				f,
 				"{}\n\n{}",
-				first_definition.format_error(self.source_index, &sm, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(self.source_index, &sm, "\nAgain at:\n")
+				first_definition.format_error(self.source_index, sm, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(self.source_index, sm, "\nAgain at:\n")
 			),
 			_ => write!(
 				f,
@@ -937,6 +937,7 @@ struct Resolver<'a>
 	use_imports: Vec<UseImport>,
 	source_index: SourceIndex,
 	anon_scope_idx: usize,
+	scope_offset: usize,
 }
 
 #[allow(unused)]
@@ -959,31 +960,34 @@ enum Bool
 impl<'a> Resolver<'a>
 {
 	const fn new(
+		// was `const fn`
 		global: &'a GlobalSymbolTable,
 		modules: &'a [(Vec<String>, DesugaredAST, LocalSymbolTable)],
 		symbols: &'a LocalSymbolTable,
 		source_index: SourceIndex,
+		scope_offset: usize, // ← NEW
 	) -> Self
 	{
 		return Self {
 			global,
 			modules,
 			symbols,
-			current_scope: symbols.root,
+			current_scope: ScopeId(symbols.root.0 + scope_offset), // ← global ID
 			use_imports: Vec::new(),
 			source_index,
 			anon_scope_idx: 0,
+			scope_offset,
 		};
 	}
 
 	fn find_in_scope(&self, scope_id: ScopeId, name: &str) -> Option<SymbolId>
 	{
 		return self
-			.symbols
+			.global
 			.scope(scope_id)
 			.symbols
 			.iter()
-			.find(|&&id| return self.symbols.symbol(id).name == name)
+			.find(|&&id| return self.global.symbol(id).name == name)
 			.copied();
 	}
 
@@ -991,34 +995,22 @@ impl<'a> Resolver<'a>
 	{
 		let mut scope_id: ScopeId = start;
 		loop {
-			let scope: &Scope = self.symbols.scope(scope_id);
+			let scope: &Scope = self.global.scope(scope_id);
 			for &sym_id in &scope.symbols {
-				if self.symbols.symbol(sym_id).name == name {
+				if self.global.symbol(sym_id).name == name {
 					return Some((sym_id, scope_id));
 				}
 			}
 			match scope.parent {
 				Some(parent) => scope_id = parent,
-				None => {
-					return self
-						.global
-						.scope(self.global.root)
-						.symbols
-						.iter()
-						.find(|&&id| return self.global.symbol(id).name == name)
-						.map(|&id| return (id, self.global.root));
-				}
+				None => return None,
 			}
 		}
 	}
 
 	fn find_introduced_scope(&self, sym_id: SymbolId) -> Option<ScopeId>
 	{
-		if sym_id.0 < self.symbols.symbols.len()
-			&& let s @ Some(_) = self.symbols.symbol(sym_id).introduced_scope
-		{
-			return s;
-		}
+		// Always use the global table; sym_id is now always a global ID.
 		return self.global.symbol(sym_id).introduced_scope;
 	}
 
@@ -1037,9 +1029,13 @@ impl<'a> Resolver<'a>
 
 	fn next_anon_scope(&mut self) -> Option<ScopeId>
 	{
-		let idx = self.anon_scope_idx;
+		let idx: usize = self.anon_scope_idx;
 		self.anon_scope_idx += 1;
-		self.symbols.anon_scopes.get(idx).copied()
+		return self
+			.symbols
+			.anon_scopes
+			.get(idx)
+			.map(|&local| return ScopeId(local.0 + self.scope_offset)); // ← convert to global
 	}
 
 	fn resolve_path(&self, path: &Path, span: Span) -> Result<ResolvedPathResult, NameResolutionError>
@@ -2331,7 +2327,7 @@ impl<'a> Resolver<'a>
 
 				let relse: Option<Box<ResolvedExpr>> = if let Some(e) = else_branch {
 					let else_scope = match e.as_ref() {
-						Expr::Block(b) | Expr::UnsafeBlock(b) => self.next_anon_scope(),
+						Expr::Block(_b) | Expr::UnsafeBlock(_b) => self.next_anon_scope(),
 						_ => None,
 					};
 					let prev: ScopeId = self.current_scope;
@@ -2465,7 +2461,7 @@ impl<'a> Resolver<'a>
 
 				let relse: Option<Box<ResolvedStmt>> = if let Some(el) = else_branch {
 					let else_scope: Option<ScopeId> = match &**el {
-						Stmt::Block(b) => self.next_anon_scope(),
+						Stmt::Block(_b) => self.next_anon_scope(),
 						_ => None,
 					};
 					let prev: ScopeId = self.current_scope;
@@ -2710,12 +2706,13 @@ impl<'a> Resolver<'a>
 
 		let mut check_scope: ScopeId = self.current_scope;
 		loop {
-			let count: Vec<&SymbolId> = self
-				.symbols
+			let count: Vec<SymbolId> = self
+				.global
 				.scope(check_scope)
 				.symbols
 				.iter()
-				.filter(|&&id| return self.symbols.symbol(id).name == name_str)
+				.filter(|&&id| return self.global.symbol(id).name == name_str)
+				.copied()
 				.collect();
 
 			let threshold: usize = if check_scope == self.current_scope { 2 } else { 1 };
@@ -2725,13 +2722,13 @@ impl<'a> Resolver<'a>
 					span: var_span,
 					kind: NameResolutionErrorKind::ShadowedVariable {
 						name: name_str,
-						first_definition: self.global.symbol(*count[threshold - 1]).def_span,
+						first_definition: self.global.symbol(count[threshold - 1]).def_span,
 					},
 					source_index: self.source_index,
 				});
 			}
 
-			match self.symbols.scope(check_scope).parent {
+			match self.global.scope(check_scope).parent {
 				Some(parent) => check_scope = parent,
 				None => break,
 			}
@@ -3193,7 +3190,12 @@ pub fn resolve_names(
 	modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)],
 ) -> Result<ResolvedModule, CompileError>
 {
-	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, ast.source_index);
+	// The global scope ID for this module's root tells us the offset that
+	// merge_symbol_tables applied to every local ScopeId.
+	// symbols.root is always ScopeId(0), so offset = global_root.0.
+	let scope_offset: usize = global.module_roots.get(logical_path).copied().map_or(0, |s| return s.0);
+
+	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, ast.source_index, scope_offset);
 
 	let resolved_block: ResolvedTopLevelBlock = resolver
 		.resolve_top_level_block(&ast.top_level_block)

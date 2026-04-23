@@ -7,7 +7,7 @@ mod tests
 	use crate::{
 		CompileDiagnostic, CompileError, Config,
 		desugar::DesugaredAST,
-		lexer::Lexer,
+		lexer::{Lexer, token_macro::ExpandedLexer},
 		name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
 		parser::{AST, Parser},
 		source_map::SourceMap,
@@ -95,7 +95,7 @@ mod tests
 				)),
 				source_map,
 			);
-			let ast: AST = Parser::from(lexer).try_into()?;
+			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).try_into()?;
 			let desugared: DesugaredAST = ast.try_into()?;
 			println!("{}", desugared);
 			let local = symbol_collection::collect_symbols(&desugared, logical.clone(), desugared.source_index)?;
