@@ -5,10 +5,7 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable, marker::PhantomData};
 use ignorable::PartialEq;
 
 use crate::{
-	diagnostics::{CompileDiagnostic, CompileError}, Config,
-	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind},
-	source_map::SourceIndex,
-	symbol_collection::Visibility,
+	Config, diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity}, lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind}, source_map::SourceIndex, symbol_collection::Visibility
 };
 use leaf_proc::Spanned;
 
@@ -910,6 +907,7 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 				reason: "typed integers for comptime expressions is not allowed".to_string(),
 			},
 			context: Vec::new(),
+			severity: Severity::Error
 		});
 	}
 
@@ -932,6 +930,7 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 						reason: "IntergetOverflow".to_string(),
 					},
 					context: Vec::new(),
+					severity: Severity::Error
 				};
 			}
 			std::num::IntErrorKind::NegOverflow => {
@@ -942,6 +941,7 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 						reason: "IntergetUnderflow".to_string(),
 					},
 					context: Vec::new(),
+					severity: Severity::Error
 				};
 			}
 			_ => unreachable!("somthing went wrong during parsing the number"),
@@ -963,6 +963,7 @@ impl Expr
 						reason: "Compile-time expression must evaluate to a boolean".to_string(),
 					},
 					context: Vec::new(),
+					severity: Severity::Error
 				});
 			}
 		}
@@ -1000,6 +1001,7 @@ impl Expr
 							source_index,
 							kind: ParseErrorKind::CompileExprError { reason: err },
 							context: Vec::new(),
+							severity: Severity::Error
 						};
 					});
 				}
@@ -1021,6 +1023,7 @@ impl Expr
 								reason: "Invalid unary operation for given type".to_string(),
 							},
 							context: Vec::new(),
+							severity: Severity::Error
 						});
 					}
 				}
@@ -1096,6 +1099,7 @@ impl Expr
 						reason: "Can't use `default()` in an `@if` block".to_string(),
 					},
 					context: Vec::new(),
+					severity: Severity::Error
 				});
 			}
 
@@ -1107,6 +1111,7 @@ impl Expr
 						reason: "Expression not allowed in compile-time condition".to_string(),
 					},
 					context: Vec::new(),
+					severity: Severity::Error
 				});
 			}
 		}
@@ -1122,6 +1127,7 @@ fn type_err(span: Span, source_index: SourceIndex) -> ParseError
 			reason: "Type mismatch in compile-time expression".to_string(),
 		},
 		context: Vec::new(),
+		severity: Severity::Error
 	};
 }
 
@@ -2076,14 +2082,15 @@ pub enum Expected
 /// * `kind` - The kind of parse error
 /// * `context` - Stack of parsing contexts (e.g., "while parsing function declaration")
 /// * `source_index` - Index into the source map
-#[derive(Debug, Clone, Spanned)]
-pub struct ParseError
-{
-	pub span: Span,
-	pub kind: ParseErrorKind,
-	pub context: Vec<String>,
-	pub source_index: SourceIndex,
-}
+// #[derive(Debug, Clone, Spanned)]
+pub type ParseError = Diagnostic<ParseErrorKind>;
+// pub struct ParseError
+// {
+// 	pub span: Span,
+// 	pub kind: ParseErrorKind,
+// 	pub context: Vec<String>,
+// 	pub source_index: SourceIndex,
+// }
 
 impl ParseError
 {
@@ -2100,6 +2107,7 @@ impl ParseError
 			kind,
 			context: Vec::new(),
 			source_index,
+			severity: Severity::Error
 		};
 	}
 
@@ -2557,6 +2565,7 @@ where
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
+					severity: Severity::Error
 				});
 			}
 		}
@@ -2582,6 +2591,7 @@ where
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
 					source_index: self.source_index,
+					severity: Severity::Error
 				});
 			}
 		}
@@ -3404,6 +3414,7 @@ where
 					},
 					context: Vec::new(),
 					source_index: self.source_index,
+					severity: Severity::Error
 				});
 			}
 		}
