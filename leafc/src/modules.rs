@@ -3,9 +3,9 @@ mod tests;
 use std::path::{self, PathBuf};
 
 use crate::{
-	CompileError,
+	diagnostics::{CompileDiagnostic, CompileError},
 	lexer::Span,
-	parser::{AST, ModuleKind, TopLevelBlock, TopLevelDecl},
+	parser::{ModuleKind, TopLevelBlock, TopLevelDecl, AST},
 	source_map::{SourceIndex, SourceMap},
 };
 
@@ -64,7 +64,7 @@ impl From<ModuleError> for CompileError
 	}
 }
 
-impl crate::CompileDiagnostic for ModuleError
+impl CompileDiagnostic for ModuleError
 {
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &SourceMap) -> std::fmt::Result
 	{

@@ -120,15 +120,17 @@ use std::{
 	fs, path,
 };
 
+use crate::diagnostics::{CompileDiagnostic, CompileError};
+
 use self::{
-	desugar::{DesugarError, DesugaredAST},
-	lexer::{Lexer, Span, expander::ExpandedLexer},
+	desugar::DesugaredAST,
+	lexer::{expander::ExpandedLexer, Lexer, Span},
 	modules::{ModuleError, ModuleErrorKind},
-	name_resolution::{NameResolutionError, ResolvedModule},
-	parser::{AST, ExprEnum, ParseError, Parser, Path},
+	name_resolution::ResolvedModule,
+	parser::{ExprEnum, Parser, Path, AST},
 	source_map::{SourceIndex, SourceMap},
-	symbol_collection::{GlobalSymbolTable, LocalSymbolTable, SymbolCollectionError},
-	type_analysis::{TypeError, TypedModule},
+	symbol_collection::{GlobalSymbolTable, LocalSymbolTable},
+	type_analysis::TypedModule,
 };
 
 mod desugar;
@@ -139,6 +141,7 @@ mod parser;
 mod symbol_collection;
 mod type_analysis;
 
+mod diagnostics;
 mod source_map;
 
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
@@ -288,75 +291,6 @@ impl Config
 			"arch" => ExprEnum::String(self.arch.to_string()),
 			_ => return Err(format!("`{path}` is not a valid `cfg` path")),
 		});
-	}
-}
-
-pub trait CompileDiagnostic
-{
-	#[allow(clippy::missing_errors_doc)]
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result;
-	#[allow(clippy::missing_errors_doc)]
-	fn to_string_with_source(&self, sm: &crate::source_map::SourceMap) -> Result<String, std::fmt::Error>
-	{
-		let mut out: String = String::new();
-		self.fmt_with_source(&mut out, sm)?;
-		return Ok(out);
-	}
-}
-
-#[derive(Debug, Clone)]
-pub enum CompileError
-{
-	ParseError(ParseError),
-	DesugarError(DesugarError),
-	ModuleError(ModuleError),
-	SymbolCollectionError(SymbolCollectionError),
-	NameResolutionError(NameResolutionError),
-	TypeError(TypeError),
-}
-
-impl std::fmt::Display for CompileError
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-	{
-		return match self {
-			CompileError::ParseError(error) => {
-				write!(f, "{}", error)
-			}
-			CompileError::DesugarError(error) => {
-				write!(f, "{}", error)
-			}
-			CompileError::ModuleError(error) => {
-				write!(f, "{}", error)
-			}
-			CompileError::SymbolCollectionError(error) => {
-				write!(f, "{}", error)
-			}
-			CompileError::NameResolutionError(error) => {
-				write!(f, "{}", error)
-			}
-			CompileError::TypeError(error) => {
-				write!(f, "{}", error)
-			}
-		};
-	}
-}
-
-impl std::error::Error for CompileError {}
-
-impl CompileDiagnostic for CompileError
-{
-	#[allow(clippy::missing_errors_doc)]
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
-	{
-		return match self {
-			CompileError::ParseError(err) => err.fmt_with_source(f, sm),
-			CompileError::DesugarError(err) => err.fmt_with_source(f, sm),
-			CompileError::ModuleError(err) => err.fmt_with_source(f, sm),
-			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
-			CompileError::NameResolutionError(err) => err.fmt_with_source(f, sm),
-			CompileError::TypeError(err) => err.fmt_with_source(f, sm),
-		};
 	}
 }
 

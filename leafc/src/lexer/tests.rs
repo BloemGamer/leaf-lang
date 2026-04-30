@@ -482,7 +482,7 @@ mod tests
 	#[test]
 	fn test_punctuation()
 	{
-		let kinds = lex_kinds("; : :: , . .. ... ? # \\");
+		let kinds = lex_kinds("; : :: , . .. ... ? \\");
 		assert_eq!(
 			kinds,
 			vec![
@@ -494,7 +494,6 @@ mod tests
 				TokenKind::DotDot,
 				TokenKind::Ellipsis,
 				TokenKind::QuestionMark,
-				TokenKind::Hash,
 				TokenKind::Backslash,
 				TokenKind::Eof,
 			]

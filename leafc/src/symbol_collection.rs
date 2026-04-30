@@ -5,13 +5,13 @@ use std::{collections::HashMap, fmt};
 use ignorable::PartialEq;
 
 use crate::{
-	CompileDiagnostic, CompileError,
 	desugar::DesugaredAST,
+	diagnostics::{CompileDiagnostic, CompileError},
 	lexer::{Span, Spanned},
 	parser::{
-		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
-		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
-		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl, get_visibility,
+		self, get_visibility, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl,
+		FunctionSignature, Ident, ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt,
+		StructDecl, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
 	},
 	source_map::SourceIndex,
 };

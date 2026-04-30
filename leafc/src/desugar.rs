@@ -1,7 +1,7 @@
 mod tests;
 
 use crate::{
-	CompileDiagnostic, CompileError,
+diagnostics::{	CompileDiagnostic, CompileError},
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
