@@ -22,6 +22,7 @@ impl std::fmt::Display for Optimization
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[allow(unused)]
 pub enum Architecture
 {
 	/// 64-bit -> intel windows/linux
@@ -60,25 +61,37 @@ impl Default for Architecture
 {
 	fn default() -> Self
 	{
-		return if cfg!(target_arch = "x86_64") {
-			Architecture::X86_64
-		} else if cfg!(target_arch = "x86") {
-			Architecture::X86
-		} else if cfg!(target_arch = "aarch64") {
-			Architecture::Aarch64
-		} else if cfg!(target_arch = "arm") {
-			Architecture::Arm
-		} else if cfg!(target_arch = "riscv64") {
-			Architecture::RiscV64
-		} else if cfg!(target_arch = "riscv32") {
-			Architecture::RiscV32
-		} else {
-			Architecture::Unknown
-		};
+		#[cfg(target_arch = "x86_64")]
+		{
+			return Architecture::X86_64;
+		}
+		#[cfg(target_arch = "x86")]
+		{
+			return Architecture::X86;
+		}
+		#[cfg(target_arch = "aarch64")]
+		{
+			return Architecture::Aarch64;
+		}
+		#[cfg(target_arch = "arm")]
+		{
+			return Architecture::Arm;
+		}
+		#[cfg(target_arch = "riscv64")]
+		{
+			return Architecture::RiscV64;
+		}
+		#[cfg(target_arch = "riscv32")]
+		{
+			return Architecture::RiscV32;
+		}
+		#[allow(unreachable_code)]
+		return Architecture::Unknown;
 	}
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[allow(unused)]
 pub enum OperatingSystem
 {
 	Linux,
@@ -104,15 +117,20 @@ impl Default for OperatingSystem
 {
 	fn default() -> Self
 	{
-		return if cfg!(target_os = "linux") {
-			OperatingSystem::Linux
-		} else if cfg!(target_os = "windows") {
-			OperatingSystem::Windows
-		} else if cfg!(target_os = "macos") {
-			OperatingSystem::MacOS
-		} else {
-			OperatingSystem::Unknown
-		};
+		#[cfg(target_os = "linux")]
+		{
+			return OperatingSystem::Linux;
+		}
+		#[cfg(target_os = "windows")]
+		{
+			return OperatingSystem::Windows;
+		}
+		#[cfg(target_os = "macos")]
+		{
+			return OperatingSystem::MacOS;
+		}
+		#[allow(unreachable_code)]
+		return OperatingSystem::Unknown;
 	}
 }
 
