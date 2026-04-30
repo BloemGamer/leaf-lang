@@ -3,7 +3,7 @@ use crate::{
 	symbol_collection::SymbolCollectionError, type_analysis::TypeError,
 };
 
-pub trait CompileDiagnostic
+pub trait CompileDiagnostic: std::fmt::Display + std::fmt::Debug
 {
 	#[allow(clippy::missing_errors_doc)]
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result;
@@ -69,5 +69,41 @@ impl CompileDiagnostic for CompileError
 			CompileError::NameResolutionError(err) => err.fmt_with_source(f, sm),
 			CompileError::TypeError(err) => err.fmt_with_source(f, sm),
 		};
+	}
+}
+
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub enum CompileWarning {
+	// TODO: add warnings for each module
+}
+
+impl std::fmt::Display for CompileWarning
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		match self {
+			_ => {
+				todo!(
+					"implement this one if `CompileWarning` is not empy, CompileWarning is empyt: {}",
+					std::mem::size_of::<Self>() == 0
+				)
+			}
+		}
+	}
+}
+
+impl CompileDiagnostic for CompileWarning
+{
+	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	{
+		match self {
+			_ => {
+				todo!(
+					"implement this one if `CompileWarning` is not empy, CompileWarning is empyt: {}",
+					std::mem::size_of::<Self>() == 0
+				)
+			}
+		}
 	}
 }
