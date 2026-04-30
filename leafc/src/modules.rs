@@ -18,7 +18,6 @@ pub struct PendingModule
 	pub logical_path: Vec<String>,
 	pub file_path: PathBuf,
 	pub declared_at_span: Span,
-	pub declared_at_source: SourceIndex,
 }
 
 #[derive(Debug, Clone, Spanned)]
@@ -26,7 +25,6 @@ pub struct ModuleError
 {
 	pub logical_path: Vec<String>,
 	pub span: Span,
-	pub source_index: SourceIndex,
 	pub kind: ModuleErrorKind,
 }
 
@@ -71,7 +69,7 @@ impl CompileDiagnostic for ModuleError
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &SourceMap) -> std::fmt::Result
 	{
 		let msg = self.to_string();
-		return write!(f, "{}", self.span.format_error(self.source_index, sm, &msg));
+		return write!(f, "{}", self.span.format_error(self.span.source_index, sm, &msg));
 	}
 }
 
@@ -116,7 +114,6 @@ fn collect_from_block(
 						file_path: resolve_file(&file_segments, declaring_file),
 						logical_path: full_path,
 						declared_at_span: module_decl.span,
-						declared_at_source: declaring_source,
 					});
 				}
 				ModuleKind::Inline(body) => {

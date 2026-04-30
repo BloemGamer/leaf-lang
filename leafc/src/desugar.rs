@@ -126,11 +126,10 @@ impl DesugarError
 	///
 	/// # Returns
 	/// A new `DesugarError` with no context
-	pub const fn new(span: Span, kind: DesugarErrorKind, source_index: SourceIndex) -> Self
+	pub const fn new(span: Span, kind: DesugarErrorKind) -> Self
 	{
 		return Self {
 			span,
-			source_index,
 			kind,
 			context: Vec::new(),
 			severity: Severity::Error
@@ -168,12 +167,11 @@ impl DesugarError
 	///
 	/// # Returns
 	/// A new error indicating an invalid constructor type
-	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			DesugarErrorKind::InvalidConstructorType { reason: reason.into() },
-			source_index,
 		);
 	}
 
@@ -186,12 +184,11 @@ impl DesugarError
 	///
 	/// # Returns
 	/// A new error indicating an invalid pattern
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			DesugarErrorKind::InvalidPattern { reason: reason.into() },
-			source_index,
 		);
 	}
 
@@ -204,14 +201,13 @@ impl DesugarError
 	///
 	/// # Returns
 	/// A new generic desugaring error
-	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn generic(span: Span, message: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			DesugarErrorKind::Generic {
 				message: message.into(),
 			},
-			source_index,
 		);
 	}
 }
@@ -259,7 +255,7 @@ impl CompileDiagnostic for DesugarError
 		return write!(
 			f,
 			"{}",
-			self.span.format_error(self.source_index, sm, &format!("{self}"))
+			self.span.format_error(self.span.source_index, sm, &format!("{self}"))
 		);
 	}
 }
@@ -473,7 +469,6 @@ impl Desugarer
 								Move all bounds for `{}` to the where clause instead.",
 							type_param, type_param
 						),
-						self.source_index,
 					));
 				}
 
@@ -485,7 +480,6 @@ impl Desugarer
 								Move all bounds for `{}` to the where clause instead.",
 							type_param, type_param
 						),
-						self.source_index,
 					));
 				}
 			}
@@ -681,7 +675,6 @@ impl Desugarer
 								 Move all bounds for `{}` to the where clause instead.",
 							type_param, type_param
 						),
-						self.source_index,
 					));
 				}
 			}
@@ -768,7 +761,6 @@ impl Desugarer
 							return DesugarError::generic(
 								span,
 								"complex pattern requires initializer",
-								self.source_index,
 							);
 						})?;
 
@@ -880,7 +872,7 @@ impl Desugarer
 					let span: Span = var.span;
 					let comp_const: bool = var.comp_const;
 					let init: Expr = var.init.ok_or_else(|| {
-						return DesugarError::generic(span, "complex pattern requires initializer", self.source_index);
+						return DesugarError::generic(span, "complex pattern requires initializer");
 					})?;
 
 					let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
@@ -1725,7 +1717,6 @@ impl Desugarer
 				return Err(DesugarError::invalid_constructor_type(
 					span,
 					"cannot call constructor on reference types - references must point to existing values",
-					self.source_index,
 				));
 			}
 
@@ -1733,7 +1724,6 @@ impl Desugarer
 				return Err(DesugarError::invalid_constructor_type(
 					span,
 					"cannot call constructor on pointer types - pointers must point to existing values",
-					self.source_index,
 				));
 			}
 
@@ -1785,7 +1775,6 @@ impl Desugarer
 				return Err(DesugarError::invalid_constructor_type(
 					span,
 					"cannot call constructor on 'impl Trait' types - they must be concrete types",
-					self.source_index,
 				));
 			}
 		}
@@ -1989,7 +1978,7 @@ impl Desugarer
 		let span: Span = var.span;
 		let comp_const: bool = var.comp_const;
 		let init: Expr = var.init.ok_or_else(|| {
-			return DesugarError::generic(span, "complex pattern requires initializer", self.source_index);
+			return DesugarError::generic(span, "complex pattern requires initializer");
 		})?;
 
 		let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
@@ -2042,7 +2031,7 @@ impl Desugarer
 		}
 
 		let temp_type: Type = extract_type_from_pattern(&pattern).ok_or_else(|| {
-			return DesugarError::generic(pattern.span(), "cannot extract type from pattern", self.source_index);
+			return DesugarError::generic(pattern.span(), "cannot extract type from pattern");
 		})?;
 
 		let temp: String = self.gen_temp("pattern");
@@ -2169,7 +2158,6 @@ impl Desugarer
 				return Err(DesugarError::generic(
 					span,
 					"variant patterns in var bindings not yet supported - use switch instead",
-					self.source_index,
 				));
 			}
 
@@ -2177,7 +2165,6 @@ impl Desugarer
 				return Err(DesugarError::generic(
 					span,
 					"unsupported pattern type in var binding",
-					self.source_index,
 				));
 			}
 		}

@@ -894,7 +894,7 @@ pub enum ExprEnum
 	String(String),
 }
 
-fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, ParseError>
+fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 {
 	let Literal::Int { value, base, ty, span } = lit else {
 		unreachable!("Called `read_radix_number` with a not `Literal::Int`: {:?}", lit);
@@ -902,7 +902,6 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 	if !ty.is_some() {
 		return Err(ParseError {
 			span: *span,
-			source_index,
 			kind: ParseErrorKind::CompileExprError {
 				reason: "typed integers for comptime expressions is not allowed".to_string(),
 			},
@@ -925,7 +924,6 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 			std::num::IntErrorKind::PosOverflow => {
 				return ParseError {
 					span: *span,
-					source_index,
 					kind: ParseErrorKind::CompileExprError {
 						reason: "IntergetOverflow".to_string(),
 					},
@@ -936,7 +934,6 @@ fn read_radix_number(lit: &Literal, source_index: SourceIndex) -> Result<i128, P
 			std::num::IntErrorKind::NegOverflow => {
 				return ParseError {
 					span: *span,
-					source_index,
 					kind: ParseErrorKind::CompileExprError {
 						reason: "IntergetUnderflow".to_string(),
 					},
@@ -958,7 +955,6 @@ impl Expr
 			_ => {
 				return Err(ParseError {
 					span: self.span(),
-					source_index,
 					kind: ParseErrorKind::NoCompileExpr {
 						reason: "Compile-time expression must evaluate to a boolean".to_string(),
 					},
@@ -974,9 +970,9 @@ impl Expr
 		match self {
 			Expr::Literal { value, span: _, .. } => {
 				return Ok(match value {
-					lit @ Literal::Int { .. } => ExprEnum::Int(read_radix_number(lit, source_index)?),
+					lit @ Literal::Int { .. } => ExprEnum::Int(read_radix_number(lit)?),
 					Literal::Float { span, .. } | Literal::Char { value: _, span } => {
-						return Err(type_err(*span, source_index));
+						return Err(type_err(*span));
 					}
 					Literal::Bool { value, span: _ } => ExprEnum::Bool(*value),
 					Literal::String { value, span: _ } => ExprEnum::String(value.clone()),
@@ -985,7 +981,7 @@ impl Expr
 
 			Expr::Identifier { path, span } => {
 				if path.has_generics() || path.glob || path.global {
-					return Err(type_err(*span, source_index));
+					return Err(type_err(*span));
 				}
 				if matches!(&path.segments[0], PathSegment { name, generics, span, } if name == "cfg" && generics.is_empty())
 				{
@@ -998,14 +994,13 @@ impl Expr
 					return config.lookup(&p).map_err(|err| {
 						return ParseError {
 							span: *span,
-							source_index,
 							kind: ParseErrorKind::CompileExprError { reason: err },
 							context: Vec::new(),
 							severity: Severity::Error
 						};
 					});
 				}
-				return Err(type_err(*span, source_index));
+				return Err(type_err(*span));
 			}
 
 			Expr::Unary { op, expr, span } => {
@@ -1018,7 +1013,6 @@ impl Expr
 					_ => {
 						return Err(ParseError {
 							span: *span,
-							source_index,
 							kind: ParseErrorKind::NoCompileExpr {
 								reason: "Invalid unary operation for given type".to_string(),
 							},
@@ -1039,10 +1033,10 @@ impl Expr
 								let r = rhs.eval(config, source_index)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
-									_ => Err(type_err(*span, source_index)),
+									_ => Err(type_err(*span)),
 								};
 							}
-							_ => return Err(type_err(*span, source_index)),
+							_ => return Err(type_err(*span)),
 						}
 					}
 
@@ -1054,10 +1048,10 @@ impl Expr
 								let r = rhs.eval(config, source_index)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
-									_ => Err(type_err(*span, source_index)),
+									_ => Err(type_err(*span)),
 								};
 							}
-							_ => return Err(type_err(*span, source_index)),
+							_ => return Err(type_err(*span)),
 						}
 					}
 
@@ -1087,14 +1081,13 @@ impl Expr
 					(BinaryOp::Eq, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a == b)),
 					(BinaryOp::Ne, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a != b)),
 
-					_ => return Err(type_err(*span, source_index)),
+					_ => return Err(type_err(*span)),
 				}
 			}
 
 			Expr::Default { span, .. } => {
 				return Err(ParseError {
 					span: *span,
-					source_index,
 					kind: ParseErrorKind::NoCompileExpr {
 						reason: "Can't use `default()` in an `@if` block".to_string(),
 					},
@@ -1106,7 +1099,6 @@ impl Expr
 			_ => {
 				return Err(ParseError {
 					span: self.span(),
-					source_index,
 					kind: ParseErrorKind::NoCompileExpr {
 						reason: "Expression not allowed in compile-time condition".to_string(),
 					},
@@ -1118,11 +1110,10 @@ impl Expr
 	}
 }
 
-fn type_err(span: Span, source_index: SourceIndex) -> ParseError
+fn type_err(span: Span) -> ParseError
 {
 	return ParseError {
 		span,
-		source_index,
 		kind: ParseErrorKind::NoCompileExpr {
 			reason: "Type mismatch in compile-time expression".to_string(),
 		},
@@ -2100,13 +2091,12 @@ impl ParseError
 	/// * `span` - Source location of the error
 	/// * `kind` - The kind of parse error
 	/// * `source_index` - Index into the source map
-	pub const fn new(span: Span, kind: ParseErrorKind, source_index: SourceIndex) -> Self
+	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
 	{
 		return Self {
 			span,
 			kind,
 			context: Vec::new(),
-			source_index,
 			severity: Severity::Error
 		};
 	}
@@ -2131,9 +2121,9 @@ impl ParseError
 	/// * `expected` - What was expected
 	/// * `found` - What was actually found
 	/// * `source_index` - Index into the source map
-	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind, source_index: SourceIndex) -> Self
+	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found }, source_index);
+		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
 	}
 
 	/// Creates an unexpected EOF error.
@@ -2141,9 +2131,9 @@ impl ParseError
 	/// # Arguments
 	/// * `span` - Source location
 	/// * `source_index` - Index into the source map
-	pub const fn unexpected_eof(span: Span, source_index: SourceIndex) -> Self
+	pub const fn unexpected_eof(span: Span) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedEof, source_index);
+		return Self::new(span, ParseErrorKind::UnexpectedEof);
 	}
 
 	/// Creates an invalid pattern error.
@@ -2152,12 +2142,11 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `reason` - Why the pattern is invalid
 	/// * `source_index` - Index into the source map
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			ParseErrorKind::InvalidPattern { reason: reason.into() },
-			source_index,
 		);
 	}
 
@@ -2167,9 +2156,9 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `delimiter` - The unbalanced delimiter character
 	/// * `source_index` - Index into the source map
-	pub const fn unbalanced_delimiter(span: Span, delimiter: char, source_index: SourceIndex) -> Self
+	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
 	{
-		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter }, source_index);
+		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
 	}
 
 	/// Creates an invalid type error.
@@ -2178,12 +2167,11 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `reason` - Why the type is invalid
 	/// * `source_index` - Index into the source map
-	pub fn invalid_type(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			ParseErrorKind::InvalidType { reason: reason.into() },
-			source_index,
 		);
 	}
 
@@ -2193,12 +2181,11 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `reason` - Why the declaration is invalid
 	/// * `source_index` - Index into the source map
-	pub fn invalid_declaration(span: Span, reason: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			ParseErrorKind::InvalidDeclaration { reason: reason.into() },
-			source_index,
 		);
 	}
 
@@ -2209,7 +2196,7 @@ impl ParseError
 	/// * `context` - Parsing context where item was unexpected
 	/// * `found` - The unexpected token
 	/// * `source_index` - Index into the source map
-	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind, source_index: SourceIndex)
+	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind)
 	-> Self
 	{
 		return Self::new(
@@ -2218,7 +2205,6 @@ impl ParseError
 				context: context.into(),
 				found,
 			},
-			source_index,
 		);
 	}
 
@@ -2228,14 +2214,13 @@ impl ParseError
 	/// * `span` - Source location
 	/// * `message` - Error message
 	/// * `source_index` - Index into the source map
-	pub fn generic(span: Span, message: impl Into<String>, source_index: SourceIndex) -> Self
+	pub fn generic(span: Span, message: impl Into<String>) -> Self
 	{
 		return Self::new(
 			span,
 			ParseErrorKind::Generic {
 				message: message.into(),
 			},
-			source_index,
 		);
 	}
 }
@@ -2308,7 +2293,7 @@ impl CompileDiagnostic for ParseError
 		return write!(
 			f,
 			"{}",
-			self.span.format_error(self.source_index, sm, &format!("{self}"))
+			self.span.format_error(self.span.source_index, sm, &format!("{self}"))
 		);
 	}
 }
@@ -2551,7 +2536,7 @@ where
 			.transpose()
 			.map_err(|err| return err.clone())?
 			.ok_or_else(|| {
-				return ParseError::unexpected_eof(self.last_span, self.source_index);
+				return ParseError::unexpected_eof(self.last_span);
 			});
 
 		let Ok(tok) = token else {
@@ -2564,7 +2549,6 @@ where
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
-					source_index: self.source_index,
 					severity: Severity::Error
 				});
 			}
@@ -2579,7 +2563,7 @@ where
 		}
 
 		let tok: Token = self.lexer.next().transpose()?.ok_or_else(|| {
-			return ParseError::unexpected_eof(self.last_span, self.source_index);
+			return ParseError::unexpected_eof(self.last_span);
 		})?;
 
 		self.last_span = tok.span;
@@ -2590,7 +2574,6 @@ where
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
-					source_index: self.source_index,
 					severity: Severity::Error
 				});
 			}
@@ -2664,7 +2647,6 @@ where
 			err_tok.span,
 			Expected::Token(expected.clone()),
 			err_tok.kind,
-			self.source_index,
 		));
 	}
 
@@ -2916,7 +2898,6 @@ where
 						tok.span,
 						"declaration",
 						tok.kind,
-						self.source_index,
 					));
 				}
 			}
@@ -2942,7 +2923,7 @@ where
 					self.next()?;
 				}
 				TokenKind::Eof => {
-					return Err(ParseError::unexpected_eof(self.peek()?.span, self.source_index));
+					return Err(ParseError::unexpected_eof(self.peek()?.span));
 				}
 				_ => {
 					self.next()?;
@@ -2967,7 +2948,6 @@ where
 					tok.span,
 					Expected::Description("directive".to_string()),
 					tok.kind,
-					self.source_index,
 				));
 			}
 		} else if modifiers.is_empty() {
@@ -2982,7 +2962,6 @@ where
 				tok.span,
 				Expected::Description("directive".to_string()),
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -3038,7 +3017,6 @@ where
 							incl.span,
 							Expected::Token(TokenKind::StringLiteral(String::new())),
 							incl.kind,
-							self.source_index,
 						));
 					}
 				};
@@ -3386,7 +3364,6 @@ where
 				return Err(ParseError::invalid_type(
 					err_tok.span,
 					"expected '&', 'mut', identifier, '[' or '(' to start a type",
-					self.source_index,
 				));
 			}
 		}
@@ -3413,7 +3390,6 @@ where
 						reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
 					},
 					context: Vec::new(),
-					source_index: self.source_index,
 					severity: Severity::Error
 				});
 			}
@@ -3439,7 +3415,6 @@ where
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
-						self.source_index,
 					));
 				}
 			};
@@ -3485,7 +3460,6 @@ where
 				return Err(ParseError::generic(
 					self.peek()?.span(),
 					"glob imports (`::*`) are only allowed in `@use` directives",
-					self.source_index,
 				));
 			}
 			self.load_checkpoint(checkpoint);
@@ -3516,7 +3490,6 @@ where
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
-						self.source_index,
 					));
 				}
 			};
@@ -3599,7 +3572,6 @@ where
 						tok.span,
 						Expected::Identifier,
 						tok.kind,
-						self.source_index,
 					));
 				}
 			};
@@ -3626,7 +3598,6 @@ where
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -4291,7 +4262,6 @@ where
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -4390,7 +4360,6 @@ where
 					tok.span,
 					"Expected a loop, only a loop can have a label and return a value",
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -4399,7 +4368,6 @@ where
 					tok.span,
 					Expected::Expression,
 					tok.kind,
-					self.source_index,
 				));
 			}
 		}
@@ -4425,7 +4393,6 @@ where
 							return Err(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
-								self.source_index,
 							));
 						}
 					},
@@ -4452,7 +4419,6 @@ where
 							return Err(ParseError::generic(
 								b.span(),
 								"expected expression, block, or if statement in else branch",
-								self.source_index,
 							));
 						}
 					},
@@ -4534,7 +4500,6 @@ where
 					name_tok.span,
 					Expected::Identifier,
 					name_tok.kind,
-					self.source_index,
 				));
 			};
 
@@ -4698,7 +4663,7 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on range patterns",
-						self.source_index,
+
 					));
 				}
 
@@ -4727,7 +4692,6 @@ where
 						return Err(ParseError::invalid_pattern(
 							span,
 							"modifiers not allowed on variant patterns",
-							self.source_index,
 						));
 					}
 
@@ -4754,7 +4718,6 @@ where
 						return Err(ParseError::invalid_pattern(
 							span,
 							"modifiers not allowed on variant patterns",
-							self.source_index,
 						));
 					}
 
@@ -4769,7 +4732,6 @@ where
 									return Err(ParseError::invalid_pattern(
 										self.peek()?.span(),
 										".. must be the last element in a struct pattern",
-										self.source_index,
 									));
 								}
 								break;
@@ -4784,7 +4746,6 @@ where
 									field_tok.span,
 									Expected::Identifier,
 									field_tok.kind,
-									self.source_index,
 								));
 							};
 
@@ -4821,7 +4782,6 @@ where
 									return Err(ParseError::invalid_pattern(
 										span,
 										"modifiers require type annotation (use `: Type` after identifier)",
-										self.source_index,
 									));
 								}
 								Pattern::Variant {
@@ -4854,7 +4814,6 @@ where
 						return Err(ParseError::invalid_pattern(
 							tok.span,
 							"binding patterns must be simple identifiers, not paths",
-							self.source_index,
 						));
 					}
 
@@ -4896,7 +4855,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on tuple patterns",
-						self.source_index,
 					));
 				}
 				self.next()?; // (
@@ -4978,7 +4936,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
-						self.source_index,
 					));
 				}
 				self.next()?;
@@ -4996,7 +4953,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
-						self.source_index,
 					));
 				}
 				self.next()?;
@@ -5014,7 +4970,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
-						self.source_index,
 					));
 				}
 				self.next()?;
@@ -5032,7 +4987,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on literal patterns",
-						self.source_index,
 					));
 				}
 				self.next()?;
@@ -5050,7 +5004,6 @@ where
 					tok.span,
 					Expected::Pattern,
 					tok.kind,
-					self.source_index,
 				));
 			}
 		}
@@ -5314,7 +5267,6 @@ where
 									tok.span,
 									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
 									tok.kind,
-									self.source_index,
 								));
 							}
 						} else if self.at(&TokenKind::RightBrace)? {
@@ -5381,7 +5333,6 @@ where
 					tok.span,
 					Expected::Description("assignment operator".to_string()),
 					tok.kind,
-					self.source_index,
 				));
 			}
 		};
@@ -5556,7 +5507,6 @@ where
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -5581,7 +5531,6 @@ where
 					self.peek()?.span(),
 					Expected::Identifier,
 					self.next()?.kind,
-					self.source_index,
 				));
 			}
 			self.parse_where_clause()?
@@ -5720,7 +5669,6 @@ where
 						return Err(ParseError::generic(
 							loop_span,
 							"variadic parameter (...) must be the last parameter",
-							self.source_index,
 						));
 					}
 
@@ -5755,21 +5703,18 @@ where
 								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
-									self.source_index,
 								));
 							}
 							Pattern::Tuple { .. } => {
 								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
-									self.source_index,
 								));
 							}
 							_ => {
 								return Err(ParseError::invalid_pattern(
 									pattern.span(),
 									"parameter patterns must either be simple identifiers or tuples with type annotations",
-									self.source_index,
 								));
 							}
 						}
@@ -5885,7 +5830,6 @@ where
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -5923,7 +5867,7 @@ where
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
-					self.source_index,
+
 				));
 			};
 
@@ -5980,7 +5924,6 @@ where
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -6018,7 +5961,6 @@ where
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
-					self.source_index,
 				));
 			};
 
@@ -6092,7 +6034,6 @@ where
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -6128,7 +6069,6 @@ where
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
-					self.source_index,
 				));
 			};
 
@@ -6180,7 +6120,6 @@ where
 				tok.span,
 				Expected::Identifier,
 				tok.kind,
-				self.source_index,
 			));
 		};
 
@@ -6216,7 +6155,6 @@ where
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
-					self.source_index,
 				));
 			};
 
@@ -6358,7 +6296,6 @@ where
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -6389,7 +6326,6 @@ where
 					tok.span,
 					Expected::Identifier,
 					tok.kind,
-					self.source_index,
 				));
 			};
 
@@ -6409,7 +6345,6 @@ where
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -6463,7 +6398,6 @@ where
 					tok.span,
 					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
 					tok.kind,
-					self.source_index,
 				));
 			}
 
@@ -6505,7 +6439,6 @@ where
 					tok.span,
 					"impl block",
 					tok.kind,
-					self.source_index,
 				));
 			}
 		};
@@ -6752,7 +6685,6 @@ where
 					tok.span,
 					"trait block",
 					tok.kind,
-					self.source_index,
 				));
 			}
 		};

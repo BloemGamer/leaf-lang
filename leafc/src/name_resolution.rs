@@ -926,13 +926,13 @@ impl CompileDiagnostic for NameResolutionError
 			NameResolutionErrorKind::ShadowedVariable { first_definition, .. } => write!(
 				f,
 				"{}\n\n{}",
-				first_definition.format_error(self.source_index, sm, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(self.source_index, sm, "\nAgain at:\n")
+				first_definition.format_error(self.span.source_index, sm, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(self.span.source_index, sm, "\nAgain at:\n")
 			),
 			_ => write!(
 				f,
 				"{}",
-				self.span.format_error(self.source_index, sm, &format!("{self}"))
+				self.span.format_error(self.span.source_index, sm, &format!("{self}"))
 			),
 		};
 	}
@@ -1065,7 +1065,6 @@ impl<'a> Resolver<'a>
 			return Err(NameResolutionError {
 				span,
 				kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-				source_index: self.source_index,
 				context: Vec::new(),
 				severity: Severity::Error,
 			});
@@ -1093,7 +1092,6 @@ impl<'a> Resolver<'a>
 					return NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					};
@@ -1109,7 +1107,6 @@ impl<'a> Resolver<'a>
 						return NameResolutionError {
 							span,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-							source_index: self.source_index,
 							context: Vec::new(),
 							severity: Severity::Error,
 						};
@@ -1131,7 +1128,6 @@ impl<'a> Resolver<'a>
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					});
@@ -1142,7 +1138,6 @@ impl<'a> Resolver<'a>
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					});
@@ -1167,7 +1162,6 @@ impl<'a> Resolver<'a>
 					return NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					};
@@ -1209,7 +1203,6 @@ impl<'a> Resolver<'a>
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					});
@@ -1220,7 +1213,6 @@ impl<'a> Resolver<'a>
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					});
@@ -1249,7 +1241,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -1293,7 +1284,6 @@ impl<'a> Resolver<'a>
 					return NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					};
@@ -1303,7 +1293,6 @@ impl<'a> Resolver<'a>
 					return NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					};
@@ -1326,7 +1315,6 @@ impl<'a> Resolver<'a>
 				return Err(NameResolutionError {
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				});
@@ -1337,7 +1325,6 @@ impl<'a> Resolver<'a>
 				return Err(NameResolutionError {
 					span,
 					kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				});
@@ -1751,7 +1738,6 @@ impl<'a> Resolver<'a>
 								kind: NameResolutionErrorKind::PrivateSymbol {
 									path: original_path.clone(),
 								},
-								source_index: self.source_index,
 								context: Vec::new(),
 								severity: Severity::Error,
 							});
@@ -1774,7 +1760,6 @@ impl<'a> Resolver<'a>
 								kind: NameResolutionErrorKind::PrivateSymbol {
 									path: original_path.clone(),
 								},
-								source_index: self.source_index,
 								context: Vec::new(),
 								severity: Severity::Error,
 							});
@@ -1797,7 +1782,6 @@ impl<'a> Resolver<'a>
 										kind: NameResolutionErrorKind::UnresolvedUseTarget {
 											path: original_path.clone(),
 										},
-										source_index: self.source_index,
 										context: Vec::new(),
 										severity: Severity::Error,
 									};
@@ -1809,7 +1793,6 @@ impl<'a> Resolver<'a>
 									kind: NameResolutionErrorKind::UnresolvedUseTarget {
 										path: original_path.clone(),
 									},
-									source_index: self.source_index,
 									context: Vec::new(),
 									severity: Severity::Error,
 								};
@@ -1825,7 +1808,6 @@ impl<'a> Resolver<'a>
 								kind: NameResolutionErrorKind::PrivateSymbol {
 									path: original_path.clone(),
 								},
-								source_index: self.source_index,
 								context: Vec::new(),
 								severity: Severity::Error,
 							});
@@ -1837,7 +1819,6 @@ impl<'a> Resolver<'a>
 									kind: NameResolutionErrorKind::UnresolvedUseTarget {
 										path: original_path.clone(),
 									},
-									source_index: self.source_index,
 									context: Vec::new(),
 									severity: Severity::Error,
 								};
@@ -1862,7 +1843,6 @@ impl<'a> Resolver<'a>
 						kind: NameResolutionErrorKind::PrivateSymbol {
 							path: original_path.clone(),
 						},
-						source_index: self.source_index,
 						context: Vec::new(),
 						severity: Severity::Error,
 					});
@@ -1876,7 +1856,6 @@ impl<'a> Resolver<'a>
 			kind: NameResolutionErrorKind::UnresolvedUseTarget {
 				path: original_path.clone(),
 			},
-			source_index: self.source_index,
 			context: Vec::new(),
 			severity: Severity::Error,
 		});
@@ -2123,7 +2102,6 @@ impl<'a> Resolver<'a>
 					.ok_or_else(|| {
 						return NameResolutionError {
 							span: *span,
-							source_index: self.source_index,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 							context: Vec::new(),
 							severity: Severity::Error,
@@ -2690,7 +2668,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: sig.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: sig.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -2725,7 +2702,6 @@ impl<'a> Resolver<'a>
 			let param_sym: SymbolId = self.find_in_scope(body_scope, &param_name).ok_or_else(|| {
 				return NameResolutionError {
 					span: param_span,
-					source_index: self.source_index,
 					kind: NameResolutionErrorKind::UnresolvedPath {
 						path: Path::simple(vec![param_name.clone()], param_span),
 					},
@@ -2837,7 +2813,6 @@ impl<'a> Resolver<'a>
 						name: name_str,
 						first_definition: self.global.symbol(count[threshold - 1]).def_span,
 					},
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				});
@@ -2869,7 +2844,6 @@ impl<'a> Resolver<'a>
 					kind: NameResolutionErrorKind::UnresolvedPath {
 						path: Path::simple(vec![name_str.clone()], var_span),
 					},
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -2898,7 +2872,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: s.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: s.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -2959,7 +2932,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: u.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: u.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3014,7 +2986,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: e.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: e.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3065,7 +3036,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: v.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: v.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3114,7 +3084,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3143,7 +3112,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3176,7 +3144,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};
@@ -3233,7 +3200,6 @@ impl<'a> Resolver<'a>
 				return NameResolutionError {
 					span: m.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: m.name.clone() },
-					source_index: self.source_index,
 					context: Vec::new(),
 					severity: Severity::Error,
 				};

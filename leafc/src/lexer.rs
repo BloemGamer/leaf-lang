@@ -1,6 +1,7 @@
 pub mod expander;
 mod tests;
 
+use std::usize;
 use std::{fmt::Write, path};
 
 use leaf_proc::{generate_lexer, Spanned};
@@ -97,6 +98,7 @@ impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 					start_col,
 					end_line: start_line,
 					end_col: start_col,
+					source_index: self.source_index,
 				},
 			});
 		};
@@ -136,6 +138,7 @@ impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 				start_col,
 				end_line,
 				end_col,
+				source_index: self.source_index,
 			},
 		});
 	}
@@ -264,7 +267,7 @@ pub trait ErrorFromSpan
 ///     end_col: 6,
 /// };
 /// ```
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Span
 {
 	pub start: usize,
@@ -273,6 +276,23 @@ pub struct Span
 	pub start_col: usize,
 	pub end_line: usize,
 	pub end_col: usize,
+	pub source_index: SourceIndex,
+}
+
+impl Default for Span
+{
+	fn default() -> Self
+	{
+		return Self {
+			start: 0,
+			end: 0,
+			start_line: 0,
+			start_col: 0,
+			end_line: 0,
+			end_col: 0,
+			source_index: SourceIndex::new(usize::MAX),
+		};
+	}
 }
 
 impl Spanned for Span
@@ -322,6 +342,10 @@ impl Span
 	/// ```
 	pub fn merge(&self, other: &Span) -> Self
 	{
+		assert!(
+			self.source_index == other.source_index,
+			"Bug: two spans of other sourcefiles can't be merged\nfirst: {self:?}\nsecond: {other:?}"
+		);
 		return Self {
 			start: self.start.min(other.start),
 			end: self.end.max(other.end),
@@ -329,6 +353,7 @@ impl Span
 			start_col: self.start_col.min(other.start_col),
 			end_line: self.end_line.max(other.end_line),
 			end_col: self.end_col.max(other.end_col),
+			source_index: self.source_index,
 		};
 	}
 }

@@ -132,7 +132,6 @@ mod module_tests
 		let e = ModuleError {
 			logical_path: vec!["foo".to_string(), "bar".to_string()],
 			span: Span::default(),
-			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::FileNotFound(PathBuf::from("/a/b/bar.leaf")),
 		};
 		let s = e.to_string();
@@ -147,7 +146,6 @@ mod module_tests
 		let e = ModuleError {
 			logical_path: vec!["my_mod".to_string()],
 			span: Span::default(),
-			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::IoError("permission denied".to_string()),
 		};
 		let s = e.to_string();
@@ -161,7 +159,6 @@ mod module_tests
 		let e = ModuleError {
 			logical_path: vec!["a".to_string()],
 			span: Span::default(),
-			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::Cycle(vec![
 				vec!["a".to_string(), "b".to_string()],
 				vec!["c".to_string()],
@@ -180,7 +177,6 @@ mod module_tests
 		let e = ModuleError {
 			logical_path: vec!["x".to_string()],
 			span: Span::default(),
-			source_index: SourceIndex::new(0),
 			kind: ModuleErrorKind::IoError("oops".to_string()),
 		};
 		let ce: CompileError = e.into();
@@ -215,6 +211,6 @@ mod module_tests
 		let ast = parse_ast("module net;");
 		let pending = collect_pending(&ast, &declaring_file(), &[]);
 		// The source index should match the AST's source index
-		assert_eq!(pending[0].declared_at_source, ast.source_index);
+		assert_eq!(pending[0].declared_at_span.source_index, ast.source_index);
 	}
 }

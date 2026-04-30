@@ -200,6 +200,7 @@ fn run(
 		logical_path: Vec::new(),
 		file_path: filename.into(),
 		declared_at_span: Span {
+			source_index: SourceIndex::new(0),
 			start: 0,
 			end: 0,
 			start_line: 0,
@@ -207,7 +208,6 @@ fn run(
 			end_line: 0,
 			end_col: 0,
 		},
-		declared_at_source: SourceIndex::new(0),
 	}]);
 	let mut visited: HashSet<Vec<String>> = HashSet::new();
 
@@ -231,7 +231,6 @@ fn run(
 			return CompileError::from(ModuleError {
 				logical_path: pm.logical_path.clone(),
 				span: pm.declared_at_span,
-				source_index: pm.declared_at_source,
 				kind,
 			});
 		})?;

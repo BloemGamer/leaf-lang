@@ -465,13 +465,13 @@ impl CompileDiagnostic for SymbolCollectionError
 			SymbolCollectionErrorKind::DuplicateDefinition { first_definition, .. } => write!(
 				f,
 				"{}\n\n{}",
-				first_definition.format_error(self.source_index, sm, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(self.source_index, sm, "\nAgain at:\n")
+				first_definition.format_error(self.span.source_index, sm, &format!("\nFirst at:\n{}", self)),
+				self.span.format_error(self.span.source_index, sm, "\nAgain at:\n")
 			),
 			_ => write!(
 				f,
 				"{}",
-				self.span.format_error(self.source_index, sm, &format!("{self}"))
+				self.span.format_error(self.span.source_index, sm, &format!("{self}"))
 			),
 		};
 	}
@@ -711,7 +711,6 @@ impl Collector
 				if existing.name == name && !matches!(existing.kind, SymbolKind::Label) {
 					return Err(SymbolCollectionError {
 						span: def_span,
-						source_index: self.source_index,
 						context: Vec::new(),
 						kind: SymbolCollectionErrorKind::DuplicateDefinition {
 							name,
@@ -760,7 +759,6 @@ impl Collector
 			return Err(SymbolCollectionError {
 				span: path.span(),
 				context: Vec::new(),
-				source_index: self.source_index,
 				kind: SymbolCollectionErrorKind::InvalidPath {
 					declaration_type: declaration_type.to_string(),
 					reason: PathErrorReason::MultipleSegments,
@@ -773,7 +771,6 @@ impl Collector
 			return Err(SymbolCollectionError {
 				span: path.span(),
 				context: Vec::new(),
-				source_index: self.source_index,
 				kind: SymbolCollectionErrorKind::InvalidPath {
 					declaration_type: declaration_type.to_string(),
 					reason: PathErrorReason::HasGenerics,
@@ -835,7 +832,6 @@ impl Collector
 			return Err(SymbolCollectionError {
 				span: sig.name.span(),
 				context: Vec::new(),
-				source_index: self.source_index,
 				kind: SymbolCollectionErrorKind::Generic {
 					message: "A function signature can't be a path, and only can have one segment".to_string(),
 					scope: self.current_scope,

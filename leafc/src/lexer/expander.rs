@@ -91,7 +91,7 @@ impl<'s, 'c> ExpandedLexer<'s, 'c>
 			match t.kind {
 				TokenKind::LeftBrace => return Ok(()),
 				TokenKind::Eof => {
-					return Err(ParseError::unexpected_eof(t.span(), self.lexer.source_index));
+					return Err(ParseError::unexpected_eof(t.span()));
 				}
 				_ => {} // skip whitespace / other tokens between `#else` and `{`
 			}
@@ -182,11 +182,7 @@ impl<'s, 'c> LexerTrait<'s, 'c> for ExpandedLexer<'s, 'c>
 				// ── #else { ... } ─────────────────────────────────────────────
 				TokenKind::Directive(Directive::Custom(s)) if s == "else" => {
 					if self.stack.is_empty() {
-						return Err(ParseError::generic(
-							tok.span(),
-							"`#else` without a preceding `#if`",
-							self.lexer.source_index,
-						));
+						return Err(ParseError::generic(tok.span(), "`#else` without a preceding `#if`"));
 					}
 					// Consume the opening `{` of the else body.
 					self.consume_until_open_brace()?;

@@ -129,7 +129,6 @@ pub struct Diagnostic<K>
 	pub span: Span,
 	pub kind: K,
 	pub context: Vec<String>,
-	pub source_index: SourceIndex,
 	pub severity: Severity,
 }
 

@@ -4492,7 +4492,7 @@ mod tests
 	#[test]
 	fn test_desugar_error_display()
 	{
-		let error = DesugarError::generic(Span::default(), "test error", SourceIndex::new(0));
+		let error = DesugarError::generic(Span::default(), "test error");
 
 		let display = format!("{}", error);
 		assert!(display.contains("test error"));
@@ -4501,7 +4501,7 @@ mod tests
 	#[test]
 	fn test_desugar_error_with_context()
 	{
-		let error = DesugarError::generic(Span::default(), "test error", SourceIndex::new(0))
+		let error = DesugarError::generic(Span::default(), "test error")
 			.with_context("while desugaring function");
 
 		let display = format!("{}", error);
