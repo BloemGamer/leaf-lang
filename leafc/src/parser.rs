@@ -5,7 +5,7 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable, marker::PhantomData};
 use ignorable::PartialEq;
 
 use crate::{
-	CompileDiagnostic, CompileError, Config,
+	diagnostics::{CompileDiagnostic, CompileError}, Config,
 	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind},
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
@@ -2036,6 +2036,10 @@ pub enum ParseErrorKind
 		reason: String,
 	},
 	ReservedToken(ReservedError),
+	UseOfNotAllowedInternal
+	{
+		reason: String,
+	},
 }
 
 /// Expected token or construct description.
@@ -2267,6 +2271,9 @@ impl std::fmt::Display for ParseError
 			}
 			ParseErrorKind::NoCompileExpr { reason } => {
 				write!(f, "no compile time expr: {}", reason)?;
+			}
+			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
+				write!(f, "{}", reason)?; //TODO
 			}
 		}
 
@@ -3386,6 +3393,26 @@ where
 
 	fn get_path(&mut self) -> Result<Path, ParseError>
 	{
+		let path: Path = self.get_path_allow_internals()?;
+
+		for p in &path.segments {
+			if p.name.contains('#') {
+				return Err(ParseError {
+					span: p.span,
+					kind: ParseErrorKind::UseOfNotAllowedInternal {
+						reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
+					},
+					context: Vec::new(),
+					source_index: self.source_index,
+				});
+			}
+		}
+
+		return Ok(path);
+	}
+
+	fn get_path_allow_internals(&mut self) -> Result<Path, ParseError>
+	{
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
 
@@ -3974,7 +4001,7 @@ where
 			match self.peek_kind()? {
 				TokenKind::Dot => {
 					self.next()?;
-					let field_name: Path = self.get_path()?;
+					let field_name: Path = self.get_path_allow_internals()?;
 					expr = Expr::Field {
 						base: Box::new(expr),
 						name: field_name,
@@ -4122,7 +4149,7 @@ where
 			}
 
 			TokenKind::Identifier(_) | TokenKind::DoubleColon => {
-				let path: Path = self.get_path()?;
+				let path: Path = self.get_path_allow_internals()?;
 
 				let call_type = if self.consume(&TokenKind::Bang)? {
 					Some(CallType::UserHeap)

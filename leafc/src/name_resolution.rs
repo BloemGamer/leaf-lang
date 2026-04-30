@@ -11,7 +11,7 @@ use ignorable::PartialEq;
 use leaf_proc::Spanned;
 
 use crate::{
-	CompileDiagnostic, CompileError,
+    diagnostics::{	CompileDiagnostic, CompileError},
 	desugar::DesugaredAST,
 	lexer::{Span, Spanned},
 	parser::{
@@ -23,6 +23,7 @@ use crate::{
 	symbol_collection::{
 		GlobalSymbolTable, LocalSymbolTable, Scope, ScopeId, Symbol, SymbolId, SymbolKind, Visibility,
 	},
+	type_analysis::{self, Ty, intrinsics::Intrinsic},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +42,7 @@ pub enum ResolvedPathKind
 		base: SymbolId,
 		member: String,
 	},
+	Primitive(type_analysis::Ty),
 }
 
 #[allow(unused)]
@@ -265,6 +267,12 @@ pub enum ResolvedExpr
 	AssocSelf
 	{
 		member: PathSegment,
+		#[ignored(PartialEq)]
+		span: Span,
+	},
+	InternalCall
+	{
+		intrinsic: Intrinsic,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -938,6 +946,7 @@ struct Resolver<'a>
 	source_index: SourceIndex,
 	anon_scope_idx: usize,
 	scope_offset: usize,
+	self_sym: Option<SymbolId>,
 }
 
 #[allow(unused)]
@@ -977,6 +986,7 @@ impl<'a> Resolver<'a>
 			source_index,
 			anon_scope_idx: 0,
 			scope_offset,
+			self_sym: None,
 		};
 	}
 
@@ -1041,6 +1051,14 @@ impl<'a> Resolver<'a>
 	fn resolve_path(&self, path: &Path, span: Span) -> Result<ResolvedPathResult, NameResolutionError>
 	{
 		let segments: &Vec<parser::PathSegment> = &path.segments;
+		if !path.global
+			&& segments.len() == 1
+			&& segments[0].name == "Self"
+			&& segments[0].generics.is_empty()
+			&& let Some(sym_id) = self.self_sym
+		{
+			return Ok(ResolvedPathResult::Full(sym_id));
+		}
 		if segments.is_empty() {
 			return Err(NameResolutionError {
 				span,
@@ -1302,6 +1320,42 @@ impl<'a> Resolver<'a>
 		}
 
 		return Ok(ResolvedPathResult::Full(current_sym_id));
+	}
+
+	/// Like `resolve_path_full` but falls back to `ResolvedPathKind::Primitive`
+	/// for single-segment names that are known primitives (i32, bool, etc.).
+	/// This is needed so `impl Foo for i64` doesn't error out.
+	fn resolve_path_or_primitive(&self, path: &Path, span: Span) -> Result<ResolvedPath, NameResolutionError>
+	{
+		if !path.global && path.segments.len() == 1 {
+			match self.resolve_path_full(path, span) {
+				Ok(rp) => return Ok(rp),
+				Err(e) => {
+					let name = &path.segments[0].name;
+					// Reuse the type checker's primitive table via a name check
+					if matches!(
+						name.as_str(),
+						"bool"
+							| "char" | "i8" | "i16"
+							| "i32" | "i64" | "i128"
+							| "u8" | "u16" | "u32"
+							| "u64" | "u128" | "f32"
+							| "f64" | "isize" | "usize"
+							| "str" | "()" | "!"
+					) {
+						return Ok(ResolvedPath {
+							original: path.clone(),
+							kind: ResolvedPathKind::Primitive(
+								Ty::from_primitive_name(name)
+									.expect("the function before should have filtered this out"),
+							),
+						});
+					}
+					return Err(e);
+				}
+			}
+		}
+		return self.resolve_path_full(path, span);
 	}
 
 	fn resolve_path_full(&self, path: &Path, span: Span) -> Result<ResolvedPath, NameResolutionError>
@@ -2122,33 +2176,42 @@ impl<'a> Resolver<'a>
 		use parser::{ArrayLiteral, Expr};
 
 		return Ok(match expr {
-			Expr::Identifier { path, span } => self.resolve_path_full(path, *span).map_or_else(
-				|_| {
-					if matches!(
-						path,
-						Path {
-							segments,
-							glob: false,
-							global: false,
-							span: _
-						} if matches!(
-							&segments[0],
-							PathSegment { name, generics, span: _ }
-								if name == "Self" && generics.is_empty()
-						)
-					) {
-						return ResolvedExpr::AssocSelf {
-							member: path.segments[1].clone(),
-							span: path.span(),
-						};
+			Expr::Identifier { path, span } => {
+				// In resolve_expr, Expr::Identifier arm, at the top:
+				if !path.global && path.segments.len() == 1 && path.segments[0].name.starts_with('#') {
+					let name: &String = &path.segments[0].name;
+					if let Some(intrinsic) = Intrinsic::from_name(name) {
+						return Ok(ResolvedExpr::InternalCall { intrinsic, span: *span });
 					}
-					return ResolvedExpr::UnresolvedIdentifier {
-						path: path.clone(),
-						span: *span,
-					};
-				},
-				|rp| return ResolvedExpr::Identifier { path: rp, span: *span },
-			),
+				}
+				self.resolve_path_full(path, *span).map_or_else(
+					|_| {
+						if matches!(
+							path,
+							Path {
+								segments,
+								glob: false,
+								global: false,
+								span: _
+							} if matches!(
+								&segments[0],
+								PathSegment { name, generics, span: _ }
+									if name == "Self" && generics.is_empty()
+							)
+						) {
+							return ResolvedExpr::AssocSelf {
+								member: path.segments[1].clone(),
+								span: path.span(),
+							};
+						}
+						return ResolvedExpr::UnresolvedIdentifier {
+							path: path.clone(),
+							span: *span,
+						};
+					},
+					|rp| return ResolvedExpr::Identifier { path: rp, span: *span },
+				)
+			}
 
 			Expr::Literal { value, span } => ResolvedExpr::Literal {
 				value: value.clone(),
@@ -3133,12 +3196,18 @@ impl<'a> Resolver<'a>
 
 	fn resolve_impl_decl(&mut self, i: &ImplDecl) -> Result<ResolvedImplDecl, NameResolutionError>
 	{
-		let resolved_target: ResolvedPath = self.resolve_path_full(&i.target.path, i.target.span())?;
+		let resolved_target: ResolvedPath = self.resolve_path_or_primitive(&i.target.path, i.target.span())?;
 		let resolved_trait: Option<ResolvedPath> = i
 			.trait_path
 			.as_ref()
-			.map(|tp| return self.resolve_path_full(&tp.path, tp.span()))
+			.map(|tp| return self.resolve_path_or_primitive(&tp.path, tp.span()))
 			.transpose()?;
+
+		let prev_self_sym: Option<SymbolId> = match &resolved_target.kind {
+			ResolvedPathKind::Resolved(id) => self.self_sym.replace(*id),
+			ResolvedPathKind::AssocItem { base, .. } => self.self_sym.replace(*base),
+			ResolvedPathKind::Primitive(_) => self.self_sym.take(),
+		};
 
 		let body_scope: Option<ScopeId> = self.next_anon_scope();
 		let prev: ScopeId = self.current_scope;
@@ -3168,6 +3237,7 @@ impl<'a> Resolver<'a>
 			.collect::<Result<_, _>>()?;
 
 		self.current_scope = prev;
+		self.self_sym = prev_self_sym;
 
 		return Ok(ResolvedImplDecl {
 			resolved_target,
@@ -3246,6 +3316,7 @@ impl fmt::Display for ResolvedPath
 			ResolvedPathKind::AssocItem { base, member } => {
 				write!(f, "{} /* #{} */::{}  /* assoc */", self.original, base.0, member)
 			}
+			ResolvedPathKind::Primitive(name) => write!(f, "{} /* primitive */", name),
 		};
 	}
 }
@@ -4092,6 +4163,7 @@ pub fn write_resolved_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, exp
 			write!(f, "Self")?;
 			return write!(f, "::{}", member);
 		}
+		ResolvedExpr::InternalCall { intrinsic, .. } => return write!(f, "{}", intrinsic),
 		ResolvedExpr::Default { heap_call, .. } => {
 			write!(f, "default")?;
 			return match heap_call {

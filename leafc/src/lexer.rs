@@ -1,13 +1,13 @@
 pub mod expander;
 mod tests;
 
-use std::path;
+use std::{fmt::Write, path};
 
-use leaf_proc::{Spanned, generate_lexer};
+use leaf_proc::{generate_lexer, Spanned};
 
-use crate::Config;
 use crate::parser::ParseError;
 use crate::source_map::{SourceIndex, SourceMap};
+use crate::Config;
 
 pub trait LexerTrait<'source, 'config>: Iterator<Item = Result<Token, ParseError>> + Clone
 {
@@ -111,7 +111,7 @@ impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 			'0'..='9' => self.lex_number(),
 
 			// Identifiers and keywords
-			'a'..='z' | 'A'..='Z' | '_' => self.lex_identifier_or_keyword(),
+			'a'..='z' | 'A'..='Z' | '_' | '#' => self.lex_identifier_or_keyword(),
 
 			// Directives
 			'@' => self.lex_directive(),
@@ -703,8 +703,6 @@ pub enum TokenKind
 	#[simple_token("?")]
 	QuestionMark,
 	#[reserved]
-	#[simple_token("#")]
-	Hash,
 	/// Escape character: `\`
 	#[simple_token("\\")]
 	Backslash,
@@ -1294,7 +1292,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		let mut ident = String::new();
 
 		while let Some(ch) = self.current_char {
-			if ch.is_alphanumeric() || ch == '_' {
+			if ch.is_alphanumeric() || ch == '_' || ch == '#' {
 				ident.push(ch);
 				self.advance();
 			} else {
@@ -1500,25 +1498,9 @@ impl Span
 		let source: &str = &file.src;
 		let filename = &file.path;
 
-		let line_start = source[..self.start].rfind('\n').map_or(0, |i| return i + 1);
+		let color: bool = use_color();
 
-		let line_end = source[self.start..]
-			.find('\n')
-			.map_or(source.len(), |i| return self.start + i);
-
-		let line_text = &source[line_start..line_end];
-
-		let prefix = &source[line_start..self.start];
-		let caret_indent: String = prefix
-			.chars()
-			.map(|c| return if c == '\t' { '\t' } else { ' ' })
-			.collect();
-
-		let caret_length = (self.end - self.start).max(1);
-
-		let color = use_color();
-
-		// Helper closures
+		// Styling helpers
 		let red = |s: &str| {
 			return if color {
 				format!("{RED}{BOLD}{s}{RESET}")
@@ -1557,20 +1539,48 @@ impl Span
 		));
 		let gutter = blue("|");
 
-		let caret = red(&"^".repeat(caret_length));
+		let mut output = String::new();
 
-		return format!(
-			"{error_label}: {}\n  --> {}\n   {} \n{:>3} {} {}\n   {} {}{} {}\n",
+		let _ = write!(
+			output,
+			"{error_label}: {}\n  --> {}\n   {}\n",
 			bold(message),
 			location,
-			gutter,
-			self.start_line,
-			gutter,
-			line_text,
-			gutter,
-			caret_indent,
-			caret,
-			bold(message),
+			gutter
 		);
+
+		// Walk through lines
+		let mut current_index = 0;
+		let mut line_number = 1;
+
+		for (line_number, line) in (1..).zip(source.lines()) {
+			let line_start = current_index;
+			let line_end = current_index + line.len();
+
+			// Check if this line intersects the error span
+			if line_end >= self.start && line_start <= self.end {
+				let _ = writeln!(output, "{:>3} {} {}", line_number, gutter, line);
+
+				// Compute caret start/end within this line
+				let caret_start = self.start.max(line_start) - line_start;
+				let caret_end = self.end.min(line_end) - line_start;
+
+				let caret_len = (caret_end.saturating_sub(caret_start)).max(1);
+
+				let prefix = &line[..caret_start];
+				let caret_indent: String = prefix
+					.chars()
+					.map(|c| return if c == '\t' { '\t' } else { ' ' })
+					.collect();
+
+				let caret = red(&"^".repeat(caret_len));
+
+				let _ = writeln!(output, "    {} {}{}", gutter, caret_indent, caret);
+			}
+
+			current_index = line_end + 1; // +1 for '\n'
+		}
+
+		return output;
 	}
 }
