@@ -3,7 +3,7 @@ mod tests;
 use leaf_proc::Spanned;
 
 use crate::{
-diagnostics::{	CompileDiagnostic, CompileError},
+diagnostics::{	CompileDiagnostic, CompileError, Diagnostic, Severity},
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
@@ -105,14 +105,15 @@ pub enum DesugarErrorKind
 /// * `source_index` - Index into the source map
 /// * `kind` - The specific kind of error
 /// * `context` - Stack of processing contexts (e.g., "while desugaring for loop")
-#[derive(Debug, Clone, Spanned)]
-pub struct DesugarError
-{
-	pub span: Span,
-	pub source_index: SourceIndex,
-	pub kind: DesugarErrorKind,
-	pub context: Vec<String>,
-}
+pub type DesugarError = Diagnostic<DesugarErrorKind>;
+// #[derive(Debug, Clone, Spanned)]
+// pub struct DesugarError
+// {
+// 	pub span: Span,
+// 	pub source_index: SourceIndex,
+// 	pub kind: DesugarErrorKind,
+// 	pub context: Vec<String>,
+// }
 
 impl DesugarError
 {
@@ -132,6 +133,7 @@ impl DesugarError
 			source_index,
 			kind,
 			context: Vec::new(),
+			severity: Severity::Error
 		};
 	}
 
