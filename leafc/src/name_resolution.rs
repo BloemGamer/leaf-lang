@@ -11,8 +11,8 @@ use ignorable::PartialEq;
 use leaf_proc::Spanned;
 
 use crate::{
-    diagnostics::{	CompileDiagnostic, CompileError},
 	desugar::DesugaredAST,
+	diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity},
 	lexer::{Span, Spanned},
 	parser::{
 		self, AssignOp, AssocTypeDecl, BinaryOp, CallType, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
@@ -819,14 +819,16 @@ pub struct ResolvedModule
 	pub symbols: LocalSymbolTable,
 }
 
-#[allow(unused)]
-#[derive(Debug, Clone, Spanned, PartialEq)]
-pub struct NameResolutionError
-{
-	pub span: Span,
-	pub kind: NameResolutionErrorKind,
-	pub source_index: SourceIndex,
-}
+// #[allow(unused)]
+// #[derive(Debug, Clone, Spanned, PartialEq)]
+// pub struct NameResolutionError
+// {
+// 	pub span: Span,
+// 	pub kind: NameResolutionErrorKind,
+// 	pub source_index: SourceIndex,
+// }
+
+pub type NameResolutionError = Diagnostic<NameResolutionErrorKind>;
 
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1064,6 +1066,8 @@ impl<'a> Resolver<'a>
 				span,
 				kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 				source_index: self.source_index,
+				context: Vec::new(),
+				severity: Severity::Error,
 			});
 		}
 
@@ -1090,6 +1094,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					};
 				})?;
 
@@ -1104,6 +1110,8 @@ impl<'a> Resolver<'a>
 							span,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 							source_index: self.source_index,
+							context: Vec::new(),
+							severity: Severity::Error,
 						};
 					})?;
 
@@ -1124,6 +1132,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					});
 				};
 
@@ -1133,6 +1143,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					});
 				}
 				current_sym_id = sym_id;
@@ -1156,6 +1168,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					};
 				})?;
 
@@ -1196,6 +1210,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					});
 				};
 
@@ -1205,6 +1221,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					});
 				}
 
@@ -1232,6 +1250,8 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?;
 
@@ -1274,6 +1294,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					};
 				})?
 			} else {
@@ -1282,6 +1304,8 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					};
 				})?
 			};
@@ -1303,6 +1327,8 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				});
 			};
 
@@ -1312,6 +1338,8 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				});
 			}
 
@@ -1724,6 +1752,8 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								source_index: self.source_index,
+								context: Vec::new(),
+								severity: Severity::Error,
 							});
 						}
 						return Ok(sym_id);
@@ -1745,6 +1775,8 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								source_index: self.source_index,
+								context: Vec::new(),
+								severity: Severity::Error,
 							});
 						}
 						return Ok(sym_id);
@@ -1766,6 +1798,8 @@ impl<'a> Resolver<'a>
 											path: original_path.clone(),
 										},
 										source_index: self.source_index,
+										context: Vec::new(),
+										severity: Severity::Error,
 									};
 								})?
 						} else {
@@ -1776,6 +1810,8 @@ impl<'a> Resolver<'a>
 										path: original_path.clone(),
 									},
 									source_index: self.source_index,
+									context: Vec::new(),
+									severity: Severity::Error,
 								};
 							})?
 						};
@@ -1790,6 +1826,8 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								source_index: self.source_index,
+								context: Vec::new(),
+								severity: Severity::Error,
 							});
 						}
 						if !is_last {
@@ -1800,6 +1838,8 @@ impl<'a> Resolver<'a>
 										path: original_path.clone(),
 									},
 									source_index: self.source_index,
+									context: Vec::new(),
+									severity: Severity::Error,
 								};
 							})?;
 						}
@@ -1823,6 +1863,8 @@ impl<'a> Resolver<'a>
 							path: original_path.clone(),
 						},
 						source_index: self.source_index,
+						context: Vec::new(),
+						severity: Severity::Error,
 					});
 				}
 				return Ok(sym_id);
@@ -1835,6 +1877,8 @@ impl<'a> Resolver<'a>
 				path: original_path.clone(),
 			},
 			source_index: self.source_index,
+			context: Vec::new(),
+			severity: Severity::Error,
 		});
 	}
 
@@ -2081,6 +2125,8 @@ impl<'a> Resolver<'a>
 							span: *span,
 							source_index: self.source_index,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+							context: Vec::new(),
+							severity: Severity::Error,
 						};
 					})?;
 				let resolved_ty = self.resolve_type(ty)?;
@@ -2645,6 +2691,8 @@ impl<'a> Resolver<'a>
 					span: sig.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: sig.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2681,6 +2729,8 @@ impl<'a> Resolver<'a>
 					kind: NameResolutionErrorKind::UnresolvedPath {
 						path: Path::simple(vec![param_name.clone()], param_span),
 					},
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?;
 			let ty: ResolvedType = self.resolve_type(&param.ty)?;
@@ -2788,6 +2838,8 @@ impl<'a> Resolver<'a>
 						first_definition: self.global.symbol(count[threshold - 1]).def_span,
 					},
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				});
 			}
 
@@ -2818,6 +2870,8 @@ impl<'a> Resolver<'a>
 						path: Path::simple(vec![name_str.clone()], var_span),
 					},
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2845,6 +2899,8 @@ impl<'a> Resolver<'a>
 					span: s.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: s.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2904,6 +2960,8 @@ impl<'a> Resolver<'a>
 					span: u.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: u.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2957,6 +3015,8 @@ impl<'a> Resolver<'a>
 					span: e.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: e.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3006,6 +3066,8 @@ impl<'a> Resolver<'a>
 					span: v.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: v.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3053,6 +3115,8 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3080,6 +3144,8 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3111,6 +3177,8 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3166,6 +3234,8 @@ impl<'a> Resolver<'a>
 					span: m.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: m.name.clone() },
 					source_index: self.source_index,
+					context: Vec::new(),
+					severity: Severity::Error,
 				};
 			})?
 			.0;
