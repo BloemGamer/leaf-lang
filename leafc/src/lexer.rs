@@ -5,9 +5,9 @@ use std::{fmt::Write, path};
 
 use leaf_proc::{generate_lexer, Spanned};
 
+use crate::config::Config;
 use crate::parser::ParseError;
 use crate::source_map::{SourceIndex, SourceMap};
-use crate::Config;
 
 pub trait LexerTrait<'source, 'config>: Iterator<Item = Result<Token, ParseError>> + Clone
 {

@@ -1,5 +1,5 @@
 use super::{Lexer, LexerTrait, ParseError, Span, Token, TokenKind};
-use crate::Config;
+use crate::config::Config;
 use crate::lexer::Directive;
 use crate::lexer::Spanned;
 use crate::parser::{Expr, Parser};
