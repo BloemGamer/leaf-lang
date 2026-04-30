@@ -6,7 +6,7 @@ use ignorable::PartialEq;
 
 use crate::{
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnostic, CompileError},
+	diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity},
 	lexer::{Span, Spanned},
 	parser::{
 		self, get_visibility, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl,
@@ -437,24 +437,17 @@ pub enum Mutability
 ///     }
 /// }
 /// ```
-#[allow(unused)]
-#[derive(Debug, Clone)]
-pub struct SymbolCollectionError
-{
-	pub span: Span,
-	pub kind: SymbolCollectionErrorKind,
-	pub context: Vec<String>,
-	pub source_index: SourceIndex,
-	pub scope: ScopeId,
-}
-
-impl Spanned for SymbolCollectionError
-{
-	fn span(&self) -> Span
-	{
-		return self.span;
-	}
-}
+pub type SymbolCollectionError = Diagnostic<SymbolCollectionErrorKind>;
+// #[allow(unused)]
+// #[derive(Debug, Clone)]
+// pub struct SymbolCollectionError
+// {
+// 	pub span: Span,
+// 	pub kind: SymbolCollectionErrorKind,
+// 	pub context: Vec<String>,
+// 	pub source_index: SourceIndex,
+// 	pub scope: ScopeId,
+// }
 
 impl From<SymbolCollectionError> for CompileError
 {
@@ -514,16 +507,19 @@ pub enum SymbolCollectionErrorKind
 {
 	DuplicateDefinition
 	{
-		name: String, first_definition: Span
+		name: String,
+		first_definition: Span,
+		scope: ScopeId,
 	},
 	InvalidPath
 	{
 		declaration_type: String,
 		reason: PathErrorReason,
+		scope: ScopeId,
 	},
 	Generic
 	{
-		message: String
+		message: String, scope: ScopeId
 	},
 }
 
@@ -560,7 +556,11 @@ impl fmt::Display for SymbolCollectionError
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		match &self.kind {
-			SymbolCollectionErrorKind::DuplicateDefinition { name, first_definition } => {
+			SymbolCollectionErrorKind::DuplicateDefinition {
+				name,
+				first_definition,
+				scope: _,
+			} => {
 				return write!(
 					f,
 					"duplicate definition of `{}`: first at {:?}, again at {:?}",
@@ -572,6 +572,7 @@ impl fmt::Display for SymbolCollectionError
 			SymbolCollectionErrorKind::InvalidPath {
 				declaration_type,
 				reason,
+				scope: _,
 			} => {
 				let reason_str = match reason {
 					PathErrorReason::MultipleSegments => {
@@ -583,7 +584,7 @@ impl fmt::Display for SymbolCollectionError
 				};
 				return write!(f, "{}", reason_str);
 			}
-			SymbolCollectionErrorKind::Generic { message } => {
+			SymbolCollectionErrorKind::Generic { message, scope: _ } => {
 				return write!(f, "{}", message);
 			}
 		}
@@ -715,8 +716,9 @@ impl Collector
 						kind: SymbolCollectionErrorKind::DuplicateDefinition {
 							name,
 							first_definition: existing.def_span,
+							scope,
 						},
-						scope,
+						severity: Severity::Error,
 					});
 				}
 			}
@@ -759,11 +761,12 @@ impl Collector
 				span: path.span(),
 				context: Vec::new(),
 				source_index: self.source_index,
-				scope: self.current_scope,
 				kind: SymbolCollectionErrorKind::InvalidPath {
 					declaration_type: declaration_type.to_string(),
 					reason: PathErrorReason::MultipleSegments,
+					scope: self.current_scope,
 				},
+				severity: Severity::Error,
 			});
 		}
 		if !path.segments[0].generics.is_empty() {
@@ -771,11 +774,12 @@ impl Collector
 				span: path.span(),
 				context: Vec::new(),
 				source_index: self.source_index,
-				scope: self.current_scope,
 				kind: SymbolCollectionErrorKind::InvalidPath {
 					declaration_type: declaration_type.to_string(),
 					reason: PathErrorReason::HasGenerics,
+					scope: self.current_scope,
 				},
+				severity: Severity::Error,
 			});
 		}
 		return Ok(());
@@ -832,10 +836,11 @@ impl Collector
 				span: sig.name.span(),
 				context: Vec::new(),
 				source_index: self.source_index,
-				scope: self.current_scope,
 				kind: SymbolCollectionErrorKind::Generic {
 					message: "A function signature can't be a path, and only can have one segment".to_string(),
+					scope: self.current_scope,
 				},
+				severity: Severity::Error,
 			});
 		}
 
