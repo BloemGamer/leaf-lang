@@ -2,9 +2,11 @@ mod tests;
 
 use std::path::{self, PathBuf};
 
+use leaf_proc::Spanned;
+
 use crate::{
 	diagnostics::{CompileDiagnostic, CompileError},
-	lexer::Span,
+	lexer::{Span, Spanned},
 	parser::{ModuleKind, TopLevelBlock, TopLevelDecl, AST},
 	source_map::{SourceIndex, SourceMap},
 };
@@ -19,7 +21,7 @@ pub struct PendingModule
 	pub declared_at_source: SourceIndex,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub struct ModuleError
 {
 	pub logical_path: Vec<String>,

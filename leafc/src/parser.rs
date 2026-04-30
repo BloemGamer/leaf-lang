@@ -2076,7 +2076,7 @@ pub enum Expected
 /// * `kind` - The kind of parse error
 /// * `context` - Stack of parsing contexts (e.g., "while parsing function declaration")
 /// * `source_index` - Index into the source map
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub struct ParseError
 {
 	pub span: Span,

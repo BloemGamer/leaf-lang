@@ -1,9 +1,12 @@
+use crate::{source_map::SourceIndex, Span};
+use leaf_proc::Spanned;
+
 use crate::{
-	desugar::DesugarError, modules::ModuleError, name_resolution::NameResolutionError, parser::ParseError,
-	symbol_collection::SymbolCollectionError, type_analysis::TypeError,
+	desugar::DesugarError, lexer::Spanned, modules::ModuleError, name_resolution::NameResolutionError,
+	parser::ParseError, symbol_collection::SymbolCollectionError, type_analysis::TypeError,
 };
 
-pub trait CompileDiagnostic: std::fmt::Display + std::fmt::Debug
+pub trait CompileDiagnostic: std::fmt::Display + std::fmt::Debug + Spanned
 {
 	#[allow(clippy::missing_errors_doc)]
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result;
@@ -16,7 +19,7 @@ pub trait CompileDiagnostic: std::fmt::Display + std::fmt::Debug
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub enum CompileError
 {
 	Parse(ParseError),
@@ -78,6 +81,17 @@ pub enum CompileWarning {
 	// TODO: add warnings for each module
 }
 
+impl Spanned for CompileWarning
+{
+	fn span(&self) -> Span
+	{
+		todo!(
+			"implement this one if `CompileWarning` is not empy, CompileWarning is empyt: {}",
+			std::mem::size_of::<Self>() == 0
+		)
+	}
+}
+
 impl std::fmt::Display for CompileWarning
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -106,4 +120,23 @@ impl CompileDiagnostic for CompileWarning
 			}
 		}
 	}
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, Spanned)]
+pub struct Diagnostic<K>
+{
+	pub span: Span,
+	pub kind: K,
+	pub context: Vec<String>,
+	pub source_index: SourceIndex,
+	pub severity: Severity,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub enum Severity
+{
+	Error,
+	Warning,
 }
