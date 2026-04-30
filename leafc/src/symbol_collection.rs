@@ -460,7 +460,7 @@ impl From<SymbolCollectionError> for CompileError
 {
 	fn from(val: SymbolCollectionError) -> Self
 	{
-		return CompileError::SymbolCollectionError(val);
+		return CompileError::SymbolCollection(val);
 	}
 }
 

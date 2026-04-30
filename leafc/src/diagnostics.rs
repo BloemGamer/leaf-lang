@@ -19,12 +19,12 @@ pub trait CompileDiagnostic: std::fmt::Display + std::fmt::Debug
 #[derive(Debug, Clone)]
 pub enum CompileError
 {
-	ParseError(ParseError),
-	DesugarError(DesugarError),
-	ModuleError(ModuleError),
-	SymbolCollectionError(SymbolCollectionError),
-	NameResolutionError(NameResolutionError),
-	TypeError(TypeError),
+	Parse(ParseError),
+	Desugar(DesugarError),
+	Module(ModuleError),
+	SymbolCollection(SymbolCollectionError),
+	NameResolution(NameResolutionError),
+	Type(TypeError),
 }
 
 impl std::fmt::Display for CompileError
@@ -32,22 +32,22 @@ impl std::fmt::Display for CompileError
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
 		return match self {
-			CompileError::ParseError(error) => {
+			CompileError::Parse(error) => {
 				write!(f, "{}", error)
 			}
-			CompileError::DesugarError(error) => {
+			CompileError::Desugar(error) => {
 				write!(f, "{}", error)
 			}
-			CompileError::ModuleError(error) => {
+			CompileError::Module(error) => {
 				write!(f, "{}", error)
 			}
-			CompileError::SymbolCollectionError(error) => {
+			CompileError::SymbolCollection(error) => {
 				write!(f, "{}", error)
 			}
-			CompileError::NameResolutionError(error) => {
+			CompileError::NameResolution(error) => {
 				write!(f, "{}", error)
 			}
-			CompileError::TypeError(error) => {
+			CompileError::Type(error) => {
 				write!(f, "{}", error)
 			}
 		};
@@ -62,12 +62,12 @@ impl CompileDiagnostic for CompileError
 	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
 	{
 		return match self {
-			CompileError::ParseError(err) => err.fmt_with_source(f, sm),
-			CompileError::DesugarError(err) => err.fmt_with_source(f, sm),
-			CompileError::ModuleError(err) => err.fmt_with_source(f, sm),
-			CompileError::SymbolCollectionError(err) => err.fmt_with_source(f, sm),
-			CompileError::NameResolutionError(err) => err.fmt_with_source(f, sm),
-			CompileError::TypeError(err) => err.fmt_with_source(f, sm),
+			CompileError::Parse(err) => err.fmt_with_source(f, sm),
+			CompileError::Desugar(err) => err.fmt_with_source(f, sm),
+			CompileError::Module(err) => err.fmt_with_source(f, sm),
+			CompileError::SymbolCollection(err) => err.fmt_with_source(f, sm),
+			CompileError::NameResolution(err) => err.fmt_with_source(f, sm),
+			CompileError::Type(err) => err.fmt_with_source(f, sm),
 		};
 	}
 }

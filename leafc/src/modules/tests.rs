@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod module_tests
 {
-	use crate::lexer::Lexer;
 	use crate::lexer::expander::ExpandedLexer;
+	use crate::lexer::Lexer;
 	use crate::modules::*;
 	use crate::parser::*;
 	use crate::source_map::SourceMap;
@@ -184,7 +184,7 @@ mod module_tests
 			kind: ModuleErrorKind::IoError("oops".to_string()),
 		};
 		let ce: CompileError = e.into();
-		assert!(matches!(ce, CompileError::ModuleError(_)));
+		assert!(matches!(ce, CompileError::Module(_)));
 	}
 
 	// ── file_path resolves relative to declaring_file ─────────────────────────

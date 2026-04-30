@@ -2,10 +2,10 @@
 #[allow(clippy::module_inception)]
 mod tests
 {
-	use crate::lexer::Lexer;
 	use crate::lexer::expander::ExpandedLexer;
+	use crate::lexer::Lexer;
 	use crate::source_map::SourceMap;
-	use crate::{CompileDiagnostic, parser::*};
+	use crate::{parser::*, CompileDiagnostic};
 	use crate::{CompileError, Config};
 
 	use std::fmt::Write;
@@ -18,7 +18,7 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_expr()
-			.map_err(CompileError::ParseError)
+			.map_err(CompileError::Parse)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -30,7 +30,7 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_top_level_block()
-			.map_err(CompileError::ParseError)
+			.map_err(CompileError::Parse)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -42,7 +42,7 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_block()
-			.map_err(CompileError::ParseError)
+			.map_err(CompileError::Parse)
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -55,7 +55,7 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser
 			.parse_directive_node()
-			.map_err(|e| return CompileError::ParseError(e))
+			.map_err(|e| return CompileError::Parse(e))
 			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
 	}
 
@@ -7440,7 +7440,7 @@ mod tests
 			len: usize,
 			cap: usize,
 		}
-		
+
 		impl<T> Vec<T> {
 			fn new() -> Self {}
 			fn push(&mut self, item: T) {}
@@ -7459,7 +7459,7 @@ mod tests
 			Some(T),
 			None,
 		}
-		
+
 		impl<T> Option<T> {
 			fn is_some(&self) -> bool {}
 			fn unwrap(self) -> T {}
@@ -7501,7 +7501,7 @@ mod tests
 		struct Builder<T> {
 			value: T,
 		}
-		
+
 		impl<T> Builder<T> {
 			fn new(value: T) -> Self {}
 			fn build(self) -> T {}
@@ -7657,7 +7657,7 @@ mod tests
 	{
 		let input = r"
 		struct PhantomData<T> {}
-		
+
 		struct Wrapper<T> {
 			phantom: PhantomData<T>,
 			data: i32,
@@ -7715,7 +7715,7 @@ mod tests
 		impl Container<i32> {
 			fn specialized() {}
 		}
-		
+
 		impl<T> Container<T> {
 			fn generic() {}
 		}
@@ -7736,11 +7736,10 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 3);
-				assert!(
-					s.fields
-						.iter()
-						.all(|StructField { default_value, .. }| return default_value.is_some())
-				);
+				assert!(s
+					.fields
+					.iter()
+					.all(|StructField { default_value, .. }| return default_value.is_some()));
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -8081,12 +8080,11 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(
-					func.signature
-						.modifiers
-						.iter()
-						.any(|m| matches!(m, Modifier::Directive(_)))
-				);
+				assert!(func
+					.signature
+					.modifiers
+					.iter()
+					.any(|m| matches!(m, Modifier::Directive(_))));
 			}
 			_ => panic!("Expected function"),
 		}
@@ -8838,23 +8836,19 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Variant(v) => {
 				assert!(v.variants[0].docs.is_some());
-				assert!(
-					v.variants[0]
-						.docs
-						.as_ref()
-						.unwrap()
-						.content
-						.contains("Contains a value")
-				);
+				assert!(v.variants[0]
+					.docs
+					.as_ref()
+					.unwrap()
+					.content
+					.contains("Contains a value"));
 				assert!(v.variants[1].docs.is_some());
-				assert!(
-					v.variants[1]
-						.docs
-						.as_ref()
-						.unwrap()
-						.content
-						.contains("No value present")
-				);
+				assert!(v.variants[1]
+					.docs
+					.as_ref()
+					.unwrap()
+					.content
+					.contains("No value present"));
 			}
 			_ => panic!("Expected variant"),
 		}
@@ -9109,10 +9103,10 @@ mod tests
 		let input = r"
 		/// First function
 		fn first() {}
-		
+
 		/// Second function
 		fn second() {}
-		
+
 		/// A struct
 		struct MyStruct { x: i32 }
 	";
@@ -9174,9 +9168,9 @@ mod tests
 	{
 		let input = r"
 		/// # Header
-		/// 
+		///
 		/// This is **bold** and *italic*
-		/// 
+		///
 		/// ```
 		/// code block
 		/// ```
@@ -9227,7 +9221,7 @@ mod tests
 		struct Point {
 			/// X coordinate
 			x: i32,
-			/// Y coordinate  
+			/// Y coordinate
 			y: i32
 		}
 	";
@@ -9289,12 +9283,11 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert!(func.docs.is_some());
-				assert!(
-					func.signature
-						.modifiers
-						.iter()
-						.any(|m| matches!(m, Modifier::Directive(_)))
-				);
+				assert!(func
+					.signature
+					.modifiers
+					.iter()
+					.any(|m| matches!(m, Modifier::Directive(_))));
 			}
 			_ => panic!("Expected function"),
 		}

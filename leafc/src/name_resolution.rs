@@ -912,7 +912,7 @@ impl From<NameResolutionError> for CompileError
 {
 	fn from(e: NameResolutionError) -> Self
 	{
-		return CompileError::NameResolutionError(e);
+		return CompileError::NameResolution(e);
 	}
 }
 
@@ -3269,7 +3269,7 @@ pub fn resolve_names(
 
 	let resolved_block: ResolvedTopLevelBlock = resolver
 		.resolve_top_level_block(&ast.top_level_block)
-		.map_err(CompileError::NameResolutionError)?;
+		.map_err(CompileError::NameResolution)?;
 
 	let span: Span = resolved_block.span;
 

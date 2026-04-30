@@ -5,13 +5,13 @@ mod tests
 	use std::path::PathBuf;
 
 	use crate::{
-		CompileDiagnostic, CompileError, Config,
 		desugar::DesugaredAST,
-		lexer::{Lexer, expander::ExpandedLexer},
+		lexer::{expander::ExpandedLexer, Lexer},
 		name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
-		parser::{AST, Parser},
+		parser::{Parser, AST},
 		source_map::SourceMap,
 		symbol_collection::{self, LocalSymbolTable},
+		CompileDiagnostic, CompileError, Config,
 	};
 
 	// ─── Standard library available to every test ────────────────────────────────
@@ -678,7 +678,7 @@ mod tests
             fn foo(x: DoesNotExist) {}
         ";
 		match parse_and_resolve(src, &[]) {
-			Err(CompileError::NameResolutionError(e)) => {
+			Err(CompileError::NameResolution(e)) => {
 				assert!(
 					matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }),
 					"expected UnresolvedPath, got {:?}",
@@ -704,7 +704,7 @@ mod tests
             }
         ";
 		match parse_and_resolve(src, &[]) {
-			Err(CompileError::NameResolutionError(e)) => {
+			Err(CompileError::NameResolution(e)) => {
 				assert!(
 					matches!(e.kind, NameResolutionErrorKind::PrivateSymbol { .. }),
 					"expected PrivateSymbol, got {:?}",
@@ -730,7 +730,7 @@ mod tests
             }
         ";
 		match parse_and_resolve(src, &[]) {
-			Err(CompileError::NameResolutionError(e)) => {
+			Err(CompileError::NameResolution(e)) => {
 				assert!(
 					matches!(e.kind, NameResolutionErrorKind::ShadowedVariable { .. }),
 					"expected ShadowedVarialbe, got {:?}",
@@ -1034,7 +1034,7 @@ mod tests
 		// resolve to an UnresolvedIdentifier — it must not silently succeed with
 		// a fully-resolved symbol.
 		match &result {
-			Err(CompileError::NameResolutionError(e)) => {
+			Err(CompileError::NameResolution(e)) => {
 				assert!(matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }));
 			}
 			// Tolerate if the resolver leaves it as UnresolvedIdentifier (no hard error).

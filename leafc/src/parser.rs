@@ -2289,7 +2289,7 @@ impl From<ParseError> for CompileError
 {
 	fn from(value: ParseError) -> Self
 	{
-		return CompileError::ParseError(value);
+		return CompileError::Parse(value);
 	}
 }
 

@@ -242,7 +242,7 @@ impl From<DesugarError> for CompileError
 {
 	fn from(value: DesugarError) -> Self
 	{
-		return CompileError::DesugarError(value);
+		return CompileError::Desugar(value);
 	}
 }
 

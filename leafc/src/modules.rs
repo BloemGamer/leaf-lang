@@ -60,7 +60,7 @@ impl From<ModuleError> for CompileError
 {
 	fn from(e: ModuleError) -> Self
 	{
-		return CompileError::ModuleError(e);
+		return CompileError::Module(e);
 	}
 }
 
