@@ -1150,6 +1150,26 @@ impl<'a> Resolver<'a>
 		if let Some((sym_id, full_consumed, current_module_path)) =
 			self.resolve_first_via_use(first_name, span, path)?
 		{
+			if segments.len() == 1
+				&& let Some((local_sym, _)) = self.find_in_scope_chain(self.current_scope, first_name)
+				&& local_sym != sym_id
+			{
+				let use_path = self
+					.use_imports
+					.iter()
+					.find(|imp| return imp.alias.last().map(String::as_str) == Some(first_name))
+					.map_or_else(
+						|| return path.clone(),
+						|imp| return Path::simple(imp.target_path.clone(), span),
+					);
+
+				return Err(NameResolutionError::ambiguous_name(
+					span,
+					first_name.clone(),
+					vec![Path::simple(vec![first_name.to_owned()], span), use_path],
+				));
+			}
+
 			if full_consumed || segments.len() == 1 {
 				return Ok(ResolvedPathResult::Full(sym_id));
 			}
