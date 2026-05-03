@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod module_tests
 {
-	use crate::lexer::expander::ExpandedLexer;
 	use crate::lexer::Lexer;
+	use crate::lexer::expander::ExpandedLexer;
 	use crate::modules::*;
 	use crate::parser::*;
 	use crate::source_map::SourceMap;
@@ -133,6 +133,7 @@ mod module_tests
 			logical_path: vec!["foo".to_string(), "bar".to_string()],
 			span: Span::default(),
 			kind: ModuleErrorKind::FileNotFound(PathBuf::from("/a/b/bar.leaf")),
+			context: Vec::new(),
 		};
 		let s = e.to_string();
 		assert!(s.contains("foo::bar"), "should contain logical path");
@@ -147,6 +148,7 @@ mod module_tests
 			logical_path: vec!["my_mod".to_string()],
 			span: Span::default(),
 			kind: ModuleErrorKind::IoError("permission denied".to_string()),
+			context: Vec::new(),
 		};
 		let s = e.to_string();
 		assert!(s.contains("my_mod"));
@@ -164,6 +166,7 @@ mod module_tests
 				vec!["c".to_string()],
 				vec!["a".to_string(), "b".to_string()],
 			]),
+			context: Vec::new(),
 		};
 		let s = e.to_string();
 		assert!(s.contains("cycle"), "should mention cycle");
@@ -178,6 +181,7 @@ mod module_tests
 			logical_path: vec!["x".to_string()],
 			span: Span::default(),
 			kind: ModuleErrorKind::IoError("oops".to_string()),
+			context: Vec::new(),
 		};
 		let ce: CompileError = e.into();
 		assert!(matches!(ce, CompileError::Module(_)));

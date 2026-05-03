@@ -5,7 +5,11 @@ use std::{cmp::Ordering, convert::TryFrom, iter::Peekable, marker::PhantomData};
 use ignorable::PartialEq;
 
 use crate::{
-	Config, diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity}, lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind}, source_map::SourceIndex, symbol_collection::Visibility
+	Config,
+	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
+	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind},
+	source_map::SourceIndex,
+	symbol_collection::Visibility,
 };
 use leaf_proc::Spanned;
 
@@ -385,6 +389,7 @@ pub enum Directive
 /// * `Identifier(String)` - A standalone identifier parameter.
 /// * `Literal(Literal)` - A literal value parameter.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(unused)]
 pub enum DirectiveParam
 {
 	Named
@@ -906,7 +911,6 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 				reason: "typed integers for comptime expressions is not allowed".to_string(),
 			},
 			context: Vec::new(),
-			severity: Severity::Error
 		});
 	}
 
@@ -928,7 +932,6 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 						reason: "IntergetOverflow".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				};
 			}
 			std::num::IntErrorKind::NegOverflow => {
@@ -938,7 +941,6 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 						reason: "IntergetUnderflow".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				};
 			}
 			_ => unreachable!("somthing went wrong during parsing the number"),
@@ -948,9 +950,9 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 
 impl Expr
 {
-	pub fn comp_time_check(&self, config: &Config, source_index: SourceIndex) -> Result<bool, ParseError>
+	pub fn comp_time_check(&self, config: &Config) -> Result<bool, ParseError>
 	{
-		match self.eval(config, source_index)? {
+		match self.eval(config)? {
 			ExprEnum::Bool(b) => return Ok(b),
 			_ => {
 				return Err(ParseError {
@@ -959,13 +961,12 @@ impl Expr
 						reason: "Compile-time expression must evaluate to a boolean".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 		}
 	}
 
-	fn eval(&self, config: &Config, source_index: SourceIndex) -> Result<ExprEnum, ParseError>
+	fn eval(&self, config: &Config) -> Result<ExprEnum, ParseError>
 	{
 		match self {
 			Expr::Literal { value, span: _, .. } => {
@@ -996,7 +997,6 @@ impl Expr
 							span: *span,
 							kind: ParseErrorKind::CompileExprError { reason: err },
 							context: Vec::new(),
-							severity: Severity::Error
 						};
 					});
 				}
@@ -1004,7 +1004,7 @@ impl Expr
 			}
 
 			Expr::Unary { op, expr, span } => {
-				let v = expr.eval(config, source_index)?;
+				let v = expr.eval(config)?;
 
 				match (op, v) {
 					(UnaryOp::Neg, ExprEnum::Int(i)) => return Ok(ExprEnum::Int(-i)),
@@ -1017,7 +1017,6 @@ impl Expr
 								reason: "Invalid unary operation for given type".to_string(),
 							},
 							context: Vec::new(),
-							severity: Severity::Error
 						});
 					}
 				}
@@ -1026,11 +1025,11 @@ impl Expr
 			Expr::Binary { op, lhs, rhs, span } => {
 				match op {
 					BinaryOp::LogicalAnd => {
-						let l = lhs.eval(config, source_index)?;
+						let l = lhs.eval(config)?;
 						match l {
 							ExprEnum::Bool(false) => return Ok(ExprEnum::Bool(false)),
 							ExprEnum::Bool(true) => {
-								let r = rhs.eval(config, source_index)?;
+								let r = rhs.eval(config)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
 									_ => Err(type_err(*span)),
@@ -1041,11 +1040,11 @@ impl Expr
 					}
 
 					BinaryOp::LogicalOr => {
-						let l = lhs.eval(config, source_index)?;
+						let l = lhs.eval(config)?;
 						match l {
 							ExprEnum::Bool(true) => return Ok(ExprEnum::Bool(true)),
 							ExprEnum::Bool(false) => {
-								let r = rhs.eval(config, source_index)?;
+								let r = rhs.eval(config)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
 									_ => Err(type_err(*span)),
@@ -1058,8 +1057,8 @@ impl Expr
 					_ => {}
 				}
 
-				let l = lhs.eval(config, source_index)?;
-				let r = rhs.eval(config, source_index)?;
+				let l = lhs.eval(config)?;
+				let r = rhs.eval(config)?;
 
 				match (op, l, r) {
 					(BinaryOp::Add, ExprEnum::Int(a), ExprEnum::Int(b)) => return Ok(ExprEnum::Int(a + b)),
@@ -1092,7 +1091,6 @@ impl Expr
 						reason: "Can't use `default()` in an `@if` block".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 
@@ -1103,7 +1101,6 @@ impl Expr
 						reason: "Expression not allowed in compile-time condition".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 		}
@@ -1118,7 +1115,6 @@ fn type_err(span: Span) -> ParseError
 			reason: "Type mismatch in compile-time expression".to_string(),
 		},
 		context: Vec::new(),
-		severity: Severity::Error
 	};
 }
 
@@ -1976,21 +1972,8 @@ pub enum FuncBound
 	},
 }
 
-/// Kinds of parse errors that can occur.
-///
-/// Categorizes different types of syntax errors encountered during parsing.
-///
-/// # Variants
-/// * `UnexpectedToken` - Expected one token, found another
-/// * `UnexpectedEof` - Unexpected end of file
-/// * `InvalidPattern` - Pattern syntax error
-/// * `UnbalancedDelimiter` - Mismatched brackets/parens/braces
-/// * `InvalidType` - Type syntax error
-/// * `InvalidDeclaration` - Declaration syntax error
-/// * `UnexpectedItem` - Item in wrong context
-/// * `Generic` - Generic error with custom message
-/// * `ReservedToken` - When a reserved token is given
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum ParseErrorKind
 {
 	UnexpectedToken
@@ -2039,263 +2022,17 @@ pub enum ParseErrorKind
 	},
 }
 
-/// Expected token or construct description.
-///
-/// Describes what the parser expected to find at a given position.
-///
-/// # Variants
-/// * `Token` - Expected a specific token
-/// * `Identifier` - Expected an identifier
-/// * `Type` - Expected a type expression
-/// * `Pattern` - Expected a pattern
-/// * `Expression` - Expected an expression
-/// * `OneOf` - Expected one of several tokens
-/// * `Description` - Custom expectation description
 #[derive(Debug, Clone)]
 pub enum Expected
 {
 	Token(TokenKind),
 	Identifier,
+	#[allow(unused)]
 	Type,
 	Pattern,
 	Expression,
 	OneOf(Vec<TokenKind>),
 	Description(String),
-}
-
-/// Parse error with location and context information.
-///
-/// Contains detailed information about a syntax error including its location,
-/// kind, and contextual information about what was being parsed.
-///
-/// # Fields
-/// * `span` - Source location of the error
-/// * `kind` - The kind of parse error
-/// * `context` - Stack of parsing contexts (e.g., "while parsing function declaration")
-/// * `source_index` - Index into the source map
-// #[derive(Debug, Clone, Spanned)]
-pub type ParseError = Diagnostic<ParseErrorKind>;
-// pub struct ParseError
-// {
-// 	pub span: Span,
-// 	pub kind: ParseErrorKind,
-// 	pub context: Vec<String>,
-// 	pub source_index: SourceIndex,
-// }
-
-impl ParseError
-{
-	/// Creates a new parse error.
-	///
-	/// # Arguments
-	/// * `span` - Source location of the error
-	/// * `kind` - The kind of parse error
-	/// * `source_index` - Index into the source map
-	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
-	{
-		return Self {
-			span,
-			kind,
-			context: Vec::new(),
-			severity: Severity::Error
-		};
-	}
-
-	/// Adds context information to the error.
-	///
-	/// # Arguments
-	/// * `ctx` - Context description
-	///
-	/// # Returns
-	/// The error with added context
-	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
-	{
-		self.context.push(ctx.into());
-		return self;
-	}
-
-	/// Creates an unexpected token error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `expected` - What was expected
-	/// * `found` - What was actually found
-	/// * `source_index` - Index into the source map
-	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
-	{
-		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
-	}
-
-	/// Creates an unexpected EOF error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `source_index` - Index into the source map
-	pub const fn unexpected_eof(span: Span) -> Self
-	{
-		return Self::new(span, ParseErrorKind::UnexpectedEof);
-	}
-
-	/// Creates an invalid pattern error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `reason` - Why the pattern is invalid
-	/// * `source_index` - Index into the source map
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::InvalidPattern { reason: reason.into() },
-		);
-	}
-
-	/// Creates an unbalanced delimiter error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `delimiter` - The unbalanced delimiter character
-	/// * `source_index` - Index into the source map
-	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
-	{
-		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
-	}
-
-	/// Creates an invalid type error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `reason` - Why the type is invalid
-	/// * `source_index` - Index into the source map
-	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::InvalidType { reason: reason.into() },
-		);
-	}
-
-	/// Creates an invalid declaration error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `reason` - Why the declaration is invalid
-	/// * `source_index` - Index into the source map
-	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::InvalidDeclaration { reason: reason.into() },
-		);
-	}
-
-	/// Creates an unexpected item error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `context` - Parsing context where item was unexpected
-	/// * `found` - The unexpected token
-	/// * `source_index` - Index into the source map
-	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind)
-	-> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::UnexpectedItem {
-				context: context.into(),
-				found,
-			},
-		);
-	}
-
-	/// Creates a generic error with custom message.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `message` - Error message
-	/// * `source_index` - Index into the source map
-	pub fn generic(span: Span, message: impl Into<String>) -> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::Generic {
-				message: message.into(),
-			},
-		);
-	}
-}
-
-impl std::fmt::Display for ParseError
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-	{
-		write!(f, "Parse error at {:?}: ", self.span)?;
-
-		match &self.kind {
-			ParseErrorKind::UnexpectedToken { expected, found } => {
-				write!(f, "expected {}, found {:?}", expected, found)?;
-			}
-			ParseErrorKind::UnexpectedEof => {
-				write!(f, "unexpected end of file")?;
-			}
-			ParseErrorKind::InvalidPattern { reason } => {
-				write!(f, "invalid pattern: {}", reason)?;
-			}
-			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
-				write!(f, "unbalanced delimiter '{}'", delimiter)?;
-			}
-			ParseErrorKind::InvalidType { reason } => {
-				write!(f, "invalid type: {}", reason)?;
-			}
-			ParseErrorKind::InvalidDeclaration { reason } => {
-				write!(f, "invalid declaration: {}", reason)?;
-			}
-			ParseErrorKind::UnexpectedItem { context, found } => {
-				write!(f, "unexpected item in {}: found {:?}", context, found)?;
-			}
-			ParseErrorKind::ReservedToken(e) => {
-				write!(f, "reserved token: {:?}", e.token)?;
-			}
-			ParseErrorKind::Generic { message } => {
-				write!(f, "{}", message)?;
-			}
-			ParseErrorKind::CompileExprError { reason } => {
-				write!(f, "compile time expr error: {}", reason)?;
-			}
-			ParseErrorKind::NoCompileExpr { reason } => {
-				write!(f, "no compile time expr: {}", reason)?;
-			}
-			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
-				write!(f, "{}", reason)?; //TODO
-			}
-		}
-
-		if !self.context.is_empty() {
-			write!(f, "\n  while parsing: {}", self.context.join(" → "))?;
-		}
-
-		return Ok(());
-	}
-}
-
-impl From<ParseError> for CompileError
-{
-	fn from(value: ParseError) -> Self
-	{
-		return CompileError::Parse(value);
-	}
-}
-
-impl CompileDiagnostic for ParseError
-{
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
-	{
-		return write!(
-			f,
-			"{}",
-			self.span.format_error(self.span.source_index, sm, &format!("{self}"))
-		);
-	}
 }
 
 impl std::fmt::Display for Expected
@@ -2323,7 +2060,214 @@ impl std::fmt::Display for Expected
 	}
 }
 
-impl std::error::Error for ParseError {}
+#[derive(Debug, Clone, Spanned)]
+pub struct ParseError
+{
+	pub span: Span,
+	pub kind: ParseErrorKind,
+	pub context: Vec<String>,
+}
+
+impl From<ParseError> for CompileError
+{
+	fn from(value: ParseError) -> Self
+	{
+		return CompileError::Parse(value);
+	}
+}
+
+impl std::fmt::Display for ParseError
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		write!(f, "Parse error at {:?}: ", self.span)?;
+
+		match &self.kind {
+			ParseErrorKind::UnexpectedToken { expected, found } => {
+				write!(f, "unexpected token `{:?}`, expected {}", found, expected)?;
+			}
+			ParseErrorKind::UnexpectedEof => {
+				write!(f, "unexpected end of file")?;
+			}
+			ParseErrorKind::InvalidPattern { reason } => {
+				write!(f, "invalid pattern: {reason}")?;
+			}
+			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
+				write!(f, "unbalanced delimiter `{delimiter}`")?;
+			}
+			ParseErrorKind::InvalidType { reason } => {
+				write!(f, "invalid type: {reason}")?;
+			}
+			ParseErrorKind::InvalidDeclaration { reason } => {
+				write!(f, "invalid declaration: {reason}")?;
+			}
+			ParseErrorKind::UnexpectedItem { context, found } => {
+				write!(f, "unexpected item in {context}: found `{:?}`", found)?;
+			}
+			ParseErrorKind::Generic { message } => {
+				write!(f, "{message}")?;
+			}
+			ParseErrorKind::CompileExprError { reason } => {
+				write!(f, "compile-time expression error: {reason}")?;
+			}
+			ParseErrorKind::NoCompileExpr { reason } => {
+				write!(f, "no compile-time expression: {reason}")?;
+			}
+			ParseErrorKind::ReservedToken(e) => {
+				write!(f, "reserved token: {:?}", e.token)?;
+			}
+			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
+				write!(f, "{reason}")?;
+			}
+		}
+
+		if !self.context.is_empty() {
+			write!(f, "\n  while parsing: {}", self.context.join(" → "))?;
+		}
+
+		return Ok(());
+	}
+}
+
+#[allow(unused)]
+impl ParseError
+{
+	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
+	{
+		return Self {
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
+
+	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
+	}
+
+	pub const fn unexpected_eof(span: Span) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnexpectedEof);
+	}
+
+	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidPattern { reason: reason.into() });
+	}
+
+	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
+	{
+		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
+	}
+
+	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidType { reason: reason.into() });
+	}
+
+	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
+	{
+		return Self::new(span, ParseErrorKind::InvalidDeclaration { reason: reason.into() });
+	}
+
+	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind) -> Self
+	{
+		return Self::new(
+			span,
+			ParseErrorKind::UnexpectedItem {
+				context: context.into(),
+				found,
+			},
+		);
+	}
+
+	pub fn generic(span: Span, message: impl Into<String>) -> Self
+	{
+		return Self::new(
+			span,
+			ParseErrorKind::Generic {
+				message: message.into(),
+			},
+		);
+	}
+}
+
+impl CompileDiagnostic for ParseError
+{
+	fn build(&self) -> DiagnosticBuilder<'_>
+	{
+		let mut diag = match &self.kind {
+			ParseErrorKind::UnexpectedToken { expected, found } => {
+				DiagnosticBuilder::error(format!("unexpected token `{found:?}`, expected {expected}"))
+					.code(ErrorCode::ParseUnexpectedToken)
+			}
+
+			ParseErrorKind::UnexpectedEof => {
+				DiagnosticBuilder::error("unexpected end of file").code(ErrorCode::ParseUnexpectedEof)
+			}
+
+			ParseErrorKind::InvalidPattern { reason } => {
+				DiagnosticBuilder::error(format!("invalid pattern: {reason}")).code(ErrorCode::ParseInvalidPattern)
+			}
+
+			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
+				DiagnosticBuilder::error(format!("unbalanced delimiter `{delimiter}`"))
+					.code(ErrorCode::ParseInvalidPattern)
+			}
+
+			ParseErrorKind::InvalidType { reason } => {
+				DiagnosticBuilder::error(format!("invalid type: {reason}")).code(ErrorCode::ParseInvalidType)
+			}
+
+			ParseErrorKind::InvalidDeclaration { reason } => {
+				DiagnosticBuilder::error(format!("invalid declaration: {reason}"))
+					.code(ErrorCode::ParseInvalidDeclaration)
+			}
+
+			ParseErrorKind::UnexpectedItem { context, found } => {
+				DiagnosticBuilder::error(format!("unexpected item in {context}: found `{found:?}`"))
+					.code(ErrorCode::ParseUnexpectedItem)
+			}
+
+			ParseErrorKind::Generic { message } => {
+				DiagnosticBuilder::error(message.as_str()).code(ErrorCode::ParseGeneric)
+			}
+
+			ParseErrorKind::CompileExprError { reason } => {
+				DiagnosticBuilder::error(format!("compile-time expression error: {reason}"))
+					.code(ErrorCode::ParseCompileExprError)
+			}
+
+			ParseErrorKind::NoCompileExpr { reason } => {
+				DiagnosticBuilder::error(format!("no compile-time expression: {reason}"))
+					.code(ErrorCode::ParseNoCompileExpr)
+			}
+
+			ParseErrorKind::ReservedToken(e) => {
+				DiagnosticBuilder::error(format!("reserved token: {:?}", e.token)).code(ErrorCode::ParseReservedToken)
+			}
+
+			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
+				DiagnosticBuilder::error(reason.as_str()).code(ErrorCode::ParseUseOfNotAllowedInternal)
+			}
+		};
+
+		diag = diag.primary(self.span, None);
+
+		for ctx in &self.context {
+			diag = diag.note(format!("while parsing: {ctx}"));
+		}
+
+		return diag;
+	}
+}
 
 /// Type alias declaration.
 ///
@@ -2549,7 +2493,6 @@ where
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 		}
@@ -2574,7 +2517,6 @@ where
 					span: tok.span(),
 					kind: ParseErrorKind::ReservedToken(e),
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 		}
@@ -2894,11 +2836,7 @@ where
 					let tok: Token = self.peek()?.clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Err(ParseError::unexpected_item(
-						tok.span,
-						"declaration",
-						tok.kind,
-					));
+					return Err(ParseError::unexpected_item(tok.span, "declaration", tok.kind));
 				}
 			}
 		}
@@ -3390,7 +3328,6 @@ where
 						reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
 					},
 					context: Vec::new(),
-					severity: Severity::Error
 				});
 			}
 		}
@@ -3411,11 +3348,7 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
-					return Err(ParseError::unexpected_token(
-						tok.span,
-						Expected::Identifier,
-						tok.kind,
-					));
+					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 				}
 			};
 
@@ -3486,11 +3419,7 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
-					return Err(ParseError::unexpected_token(
-						tok.span,
-						Expected::Identifier,
-						tok.kind,
-					));
+					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 				}
 			};
 
@@ -3568,11 +3497,7 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(name) => name,
 				_ => {
-					return Err(ParseError::unexpected_token(
-						tok.span,
-						Expected::Identifier,
-						tok.kind,
-					));
+					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 				}
 			};
 
@@ -4334,7 +4259,7 @@ where
 
 			TokenKind::If => {
 				let if_stmt: Stmt = self.parse_if()?;
-				return self.stmt_if_to_expr_wrapper(if_stmt);
+				return Self::stmt_if_to_expr_wrapper(if_stmt);
 			}
 
 			TokenKind::Loop => {
@@ -4364,16 +4289,12 @@ where
 			}
 
 			_ => {
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Expression,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Expression, tok.kind));
 			}
 		}
 	}
 
-	fn stmt_if_to_expr_wrapper(&self, stmt: Stmt) -> Result<Expr, ParseError>
+	fn stmt_if_to_expr_wrapper(stmt: Stmt) -> Result<Expr, ParseError>
 	{
 		return match stmt {
 			Stmt::If {
@@ -4386,7 +4307,7 @@ where
 				then_block,
 				else_branch: match else_branch {
 					Some(b) => match *b {
-						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(self.stmt_if_to_expr_wrapper(*b)?)),
+						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(Self::stmt_if_to_expr_wrapper(*b)?)),
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
@@ -4412,7 +4333,7 @@ where
 				then_block,
 				else_branch: match else_branch {
 					Some(b) => match *b {
-						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(self.stmt_if_to_expr_wrapper(*b)?)),
+						Stmt::If { .. } | Stmt::IfVar { .. } => Some(Box::new(Self::stmt_if_to_expr_wrapper(*b)?)),
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
@@ -4663,7 +4584,6 @@ where
 					return Err(ParseError::invalid_pattern(
 						span,
 						"modifiers not allowed on range patterns",
-
 					));
 				}
 
@@ -5000,11 +4920,7 @@ where
 			}
 
 			_ => {
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Pattern,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Pattern, tok.kind));
 			}
 		}
 	}
@@ -5176,7 +5092,7 @@ where
 						if self.consume(&TokenKind::Semicolon)? {
 							stmts.push(if_var_stmt);
 						} else if self.at(&TokenKind::RightBrace)? {
-							tail_expr = Some(Box::new(self.stmt_if_to_expr_wrapper(if_var_stmt)?));
+							tail_expr = Some(Box::new(Self::stmt_if_to_expr_wrapper(if_var_stmt)?));
 							break;
 						} else {
 							stmts.push(if_var_stmt);
@@ -5189,7 +5105,7 @@ where
 						if self.consume(&TokenKind::Semicolon)? {
 							stmts.push(if_stmt);
 						} else if self.at(&TokenKind::RightBrace)? {
-							tail_expr = Some(Box::new(self.stmt_if_to_expr_wrapper(if_stmt)?));
+							tail_expr = Some(Box::new(Self::stmt_if_to_expr_wrapper(if_stmt)?));
 							break;
 						} else {
 							stmts.push(if_stmt);
@@ -5503,11 +5419,7 @@ where
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-			));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5826,11 +5738,7 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-			));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5863,12 +5771,7 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Identifier,
-					tok.kind,
-
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5920,11 +5823,7 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-			));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5957,11 +5856,7 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Identifier,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -6030,11 +5925,7 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-			));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -6065,11 +5956,7 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Identifier,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 			};
 
 			let variant_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
@@ -6116,11 +6003,7 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Identifier,
-				tok.kind,
-			));
+			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -6151,11 +6034,7 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Identifier,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 			};
 
 			let member_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
@@ -6322,11 +6201,7 @@ where
 		loop {
 			let TokenKind::Identifier(name) = self.next()?.kind else {
 				let tok: Token = self.peek()?.clone();
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Identifier,
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -6435,11 +6310,7 @@ where
 			}
 			_ => {
 				let tok = self.peek()?.clone();
-				return Err(ParseError::unexpected_item(
-					tok.span,
-					"impl block",
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_item(tok.span, "impl block", tok.kind));
 			}
 		};
 
@@ -6681,11 +6552,7 @@ where
 			}
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_item(
-					tok.span,
-					"trait block",
-					tok.kind,
-				));
+				return Err(ParseError::unexpected_item(tok.span, "trait block", tok.kind));
 			}
 		};
 

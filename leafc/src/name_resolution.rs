@@ -12,7 +12,7 @@ use leaf_proc::Spanned;
 
 use crate::{
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity},
+	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
 	parser::{
 		self, AssignOp, AssocTypeDecl, BinaryOp, CallType, EnumDecl, FunctionSignature, GenericArg, Ident, ImplDecl,
@@ -819,18 +819,6 @@ pub struct ResolvedModule
 	pub symbols: LocalSymbolTable,
 }
 
-// #[allow(unused)]
-// #[derive(Debug, Clone, Spanned, PartialEq)]
-// pub struct NameResolutionError
-// {
-// 	pub span: Span,
-// 	pub kind: NameResolutionErrorKind,
-// 	pub source_index: SourceIndex,
-// }
-
-pub type NameResolutionError = Diagnostic<NameResolutionErrorKind>;
-
-#[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum NameResolutionErrorKind
 {
@@ -838,103 +826,182 @@ pub enum NameResolutionErrorKind
 	{
 		path: Path
 	},
+
 	ShadowedVariable
 	{
 		name: String, first_definition: Span
 	},
+
 	PrivateSymbol
 	{
 		path: Path
 	},
+
 	UnresolvedUseTarget
 	{
 		path: Path
 	},
+
 	AmbiguousName
 	{
 		name: String, candidates: Vec<Path>
 	},
 }
 
+#[derive(Debug, Clone, Spanned)]
+pub struct NameResolutionError
+{
+	pub span: Span,
+	pub kind: NameResolutionErrorKind,
+	pub context: Vec<String>,
+}
+
+#[allow(unused)]
+impl NameResolutionError
+{
+	pub const fn new(span: Span, kind: NameResolutionErrorKind) -> Self
+	{
+		return Self {
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
+
+	pub const fn unresolved_path(span: Span, path: Path) -> Self
+	{
+		return Self::new(span, NameResolutionErrorKind::UnresolvedPath { path });
+	}
+
+	pub fn shadowed_variable(span: Span, name: impl Into<String>, first_definition: Span) -> Self
+	{
+		return Self::new(
+			span,
+			NameResolutionErrorKind::ShadowedVariable {
+				name: name.into(),
+				first_definition,
+			},
+		);
+	}
+
+	pub const fn private_symbol(span: Span, path: Path) -> Self
+	{
+		return Self::new(span, NameResolutionErrorKind::PrivateSymbol { path });
+	}
+
+	pub const fn unresolved_use_target(span: Span, path: Path) -> Self
+	{
+		return Self::new(span, NameResolutionErrorKind::UnresolvedUseTarget { path });
+	}
+
+	pub fn ambiguous_name(span: Span, name: impl Into<String>, candidates: Vec<Path>) -> Self
+	{
+		return Self::new(
+			span,
+			NameResolutionErrorKind::AmbiguousName {
+				name: name.into(),
+				candidates,
+			},
+		);
+	}
+}
+
 impl fmt::Display for NameResolutionError
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
-		match &self.kind {
+		return match &self.kind {
 			NameResolutionErrorKind::UnresolvedPath { path } => {
-				return write!(
-					f,
-					"unresolved path `{}`",
-					path.segments
-						.iter()
-						.map(|s| return s.name.as_str())
-						.collect::<Vec<_>>()
-						.join("::")
-				);
+				write!(f, "unresolved path `{}`", path)
 			}
+
 			NameResolutionErrorKind::ShadowedVariable { name, first_definition } => {
-				return write!(
+				write!(
 					f,
-					"variable `{}` shadows an existing binding in the same scope, first at {:?}, again at {:?}",
-					name,
-					first_definition,
-					self.span()
-				);
+					"variable `{}` shadows an existing binding (first at {:?}, again at {:?})",
+					name, first_definition, self.span
+				)
 			}
+
 			NameResolutionErrorKind::PrivateSymbol { path } => {
-				return write!(
-					f,
-					"symbol `{}` is private",
-					path.segments
-						.iter()
-						.map(|s| return s.name.as_str())
-						.collect::<Vec<_>>()
-						.join("::")
-				);
+				write!(f, "symbol `{}` is private", path)
 			}
+
 			NameResolutionErrorKind::UnresolvedUseTarget { path } => {
-				return write!(
-					f,
-					"`@use` target `{}` does not exist",
-					path.segments
-						.iter()
-						.map(|s| return s.name.as_str())
-						.collect::<Vec<_>>()
-						.join("::")
-				);
+				write!(f, "`@use` target `{}` does not exist", path)
 			}
-			NameResolutionErrorKind::AmbiguousName { name, .. } => return write!(f, "ambiguous name `{}`", name),
-		}
+
+			NameResolutionErrorKind::AmbiguousName { name, .. } => {
+				write!(f, "ambiguous name `{}`", name)
+			}
+		};
 	}
 }
 
 impl std::error::Error for NameResolutionError {}
+
+impl CompileDiagnostic for NameResolutionError
+{
+	fn build(&self) -> DiagnosticBuilder<'_>
+	{
+		let mut diag = match &self.kind {
+			NameResolutionErrorKind::UnresolvedPath { path } => {
+				DiagnosticBuilder::error(format!("unresolved path `{}`", path))
+					.code(ErrorCode::NameResolutionUnresolvedPath)
+					.primary(self.span, None)
+			}
+
+			NameResolutionErrorKind::ShadowedVariable { name, first_definition } => {
+				DiagnosticBuilder::error(format!("variable `{name}` shadows an existing binding"))
+					.code(ErrorCode::NameResolutionShadowedVariable)
+					.primary(self.span, Some("second definition".into()))
+					.secondary(*first_definition, Some("first defined here".into()))
+			}
+
+			NameResolutionErrorKind::PrivateSymbol { path } => {
+				DiagnosticBuilder::error(format!("symbol `{}` is private", path))
+					.code(ErrorCode::NameResolutionPrivateSymbol)
+					.primary(self.span, None)
+			}
+
+			NameResolutionErrorKind::UnresolvedUseTarget { path } => {
+				DiagnosticBuilder::error(format!("`@use` target `{}` does not exist", path))
+					.code(ErrorCode::NameResolutionUnresolvedUseTarget)
+					.primary(self.span, None)
+			}
+
+			NameResolutionErrorKind::AmbiguousName { name, candidates } => {
+				let mut d = DiagnosticBuilder::error(format!("ambiguous name `{name}`"))
+					.code(ErrorCode::NameResolutionAmbiguousName)
+					.primary(self.span, None);
+
+				for cand in candidates {
+					d = d.note(format!("could refer to `{}`", cand));
+				}
+
+				d
+			}
+		};
+
+		// Add context stack
+		for ctx in &self.context {
+			diag = diag.note(format!("while resolving names: {ctx}"));
+		}
+		return diag;
+	}
+}
 
 impl From<NameResolutionError> for CompileError
 {
 	fn from(e: NameResolutionError) -> Self
 	{
 		return CompileError::NameResolution(e);
-	}
-}
-
-impl CompileDiagnostic for NameResolutionError
-{
-	fn fmt_with_source(&self, f: &mut impl fmt::Write, sm: &crate::source_map::SourceMap) -> fmt::Result
-	{
-		return match self.kind {
-			NameResolutionErrorKind::ShadowedVariable { first_definition, .. } => write!(
-				f,
-				"{}\n\n{}",
-				first_definition.format_error(self.span.source_index, sm, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(self.span.source_index, sm, "\nAgain at:\n")
-			),
-			_ => write!(
-				f,
-				"{}",
-				self.span.format_error(self.span.source_index, sm, &format!("{self}"))
-			),
-		};
 	}
 }
 
@@ -945,7 +1012,6 @@ struct Resolver<'a>
 	symbols: &'a LocalSymbolTable,
 	current_scope: ScopeId,
 	use_imports: Vec<UseImport>,
-	source_index: SourceIndex,
 	anon_scope_idx: usize,
 	scope_offset: usize,
 	self_sym: Option<SymbolId>,
@@ -971,21 +1037,18 @@ enum Bool
 impl<'a> Resolver<'a>
 {
 	const fn new(
-		// was `const fn`
 		global: &'a GlobalSymbolTable,
 		modules: &'a [(Vec<String>, DesugaredAST, LocalSymbolTable)],
 		symbols: &'a LocalSymbolTable,
-		source_index: SourceIndex,
-		scope_offset: usize, // ← NEW
+		scope_offset: usize,
 	) -> Self
 	{
 		return Self {
 			global,
 			modules,
 			symbols,
-			current_scope: ScopeId(symbols.root.0 + scope_offset), // ← global ID
+			current_scope: ScopeId(symbols.root.0 + scope_offset),
 			use_imports: Vec::new(),
-			source_index,
 			anon_scope_idx: 0,
 			scope_offset,
 			self_sym: None,
@@ -1066,7 +1129,6 @@ impl<'a> Resolver<'a>
 				span,
 				kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 				context: Vec::new(),
-				severity: Severity::Error,
 			});
 		}
 
@@ -1093,7 +1155,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					};
 				})?;
 
@@ -1108,7 +1169,6 @@ impl<'a> Resolver<'a>
 							span,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 							context: Vec::new(),
-							severity: Severity::Error,
 						};
 					})?;
 
@@ -1118,7 +1178,10 @@ impl<'a> Resolver<'a>
 					let current_sym = self.global.symbol(current_sym_id);
 					if matches!(
 						current_sym.kind,
-						SymbolKind::Struct | SymbolKind::Union | SymbolKind::Enum | SymbolKind::Variant
+						SymbolKind::Struct
+							| SymbolKind::Union | SymbolKind::Enum
+							| SymbolKind::Variant | SymbolKind::TypeAlias
+							| SymbolKind::AssocType
 					) {
 						return Ok(ResolvedPathResult::Assoc {
 							base: current_sym_id,
@@ -1129,7 +1192,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					});
 				};
 
@@ -1139,7 +1201,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					});
 				}
 				current_sym_id = sym_id;
@@ -1183,7 +1244,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					};
 				})?;
 
@@ -1213,7 +1273,10 @@ impl<'a> Resolver<'a>
 					let current_sym = self.global.symbol(cur_sym);
 					if matches!(
 						current_sym.kind,
-						SymbolKind::Struct | SymbolKind::Union | SymbolKind::Enum | SymbolKind::Variant
+						SymbolKind::Struct
+							| SymbolKind::Union | SymbolKind::Enum
+							| SymbolKind::Variant | SymbolKind::TypeAlias
+							| SymbolKind::AssocType
 					) {
 						return Ok(ResolvedPathResult::Assoc {
 							base: cur_sym,
@@ -1224,7 +1287,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					});
 				};
 
@@ -1234,7 +1296,6 @@ impl<'a> Resolver<'a>
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 						context: Vec::new(),
-						severity: Severity::Error,
 					});
 				}
 
@@ -1262,7 +1323,6 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?;
 
@@ -1299,33 +1359,20 @@ impl<'a> Resolver<'a>
 				return np;
 			});
 
-			let search_scope: ScopeId = if let Some(ref abs) = current_abs_path {
-				self.scope_for_path_prefix(abs).ok_or_else(|| {
-					return NameResolutionError {
-						span,
-						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						context: Vec::new(),
-						severity: Severity::Error,
-					};
-				})?
-			} else {
-				self.find_introduced_scope(current_sym_id).ok_or_else(|| {
-					return NameResolutionError {
-						span,
-						kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-						context: Vec::new(),
-						severity: Severity::Error,
-					};
-				})?
-			};
+			let search_scope_opt: Option<ScopeId> = current_abs_path.as_ref().map_or_else(
+				|| return self.find_introduced_scope(current_sym_id),
+				|abs| return self.scope_for_path_prefix(abs),
+			);
 
-			let maybe_sym: Option<SymbolId> = self.find_sym_in_global_scope(search_scope, name);
-
-			let Some(sym_id) = maybe_sym else {
-				let current_sym: &Symbol = self.global.symbol(current_sym_id);
+			let Some(search_scope) = search_scope_opt else {
+				let current_sym = self.global.symbol(current_sym_id);
 				if matches!(
 					current_sym.kind,
-					SymbolKind::Struct | SymbolKind::Union | SymbolKind::Enum | SymbolKind::Variant
+					SymbolKind::Struct
+						| SymbolKind::Union
+						| SymbolKind::Enum | SymbolKind::Variant
+						| SymbolKind::TypeAlias
+						| SymbolKind::AssocType
 				) {
 					return Ok(ResolvedPathResult::Assoc {
 						base: current_sym_id,
@@ -1336,7 +1383,30 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
+				});
+			};
+
+			let maybe_sym: Option<SymbolId> = self.find_sym_in_global_scope(search_scope, name);
+
+			let Some(sym_id) = maybe_sym else {
+				let current_sym: &Symbol = self.global.symbol(current_sym_id);
+				if matches!(
+					current_sym.kind,
+					SymbolKind::Struct
+						| SymbolKind::Union
+						| SymbolKind::Enum | SymbolKind::Variant
+						| SymbolKind::TypeAlias
+						| SymbolKind::AssocType
+				) {
+					return Ok(ResolvedPathResult::Assoc {
+						base: current_sym_id,
+						member: name.clone(),
+					});
+				}
+				return Err(NameResolutionError {
+					span,
+					kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+					context: Vec::new(),
 				});
 			};
 
@@ -1346,7 +1416,6 @@ impl<'a> Resolver<'a>
 					span,
 					kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				});
 			}
 
@@ -1515,8 +1584,13 @@ impl<'a> Resolver<'a>
 			for &mod_root in self.global.module_roots.values() {
 				if let Some(sym_id) = self.find_sym_in_global_scope(mod_root, type_name) {
 					let sym: &Symbol = self.global.symbol(sym_id);
-					if matches!(sym.kind, SymbolKind::Variant | SymbolKind::Enum | SymbolKind::Struct)
-						&& let Some(introduced) = sym.introduced_scope
+					if matches!(
+						sym.kind,
+						SymbolKind::Variant
+							| SymbolKind::Enum | SymbolKind::Struct
+							| SymbolKind::TypeAlias
+							| SymbolKind::AssocType
+					) && let Some(introduced) = sym.introduced_scope
 						&& let Some(found) = self
 							.global
 							.scope(introduced)
@@ -1759,7 +1833,6 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								context: Vec::new(),
-								severity: Severity::Error,
 							});
 						}
 						return Ok(sym_id);
@@ -1781,7 +1854,6 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								context: Vec::new(),
-								severity: Severity::Error,
 							});
 						}
 						return Ok(sym_id);
@@ -1803,7 +1875,6 @@ impl<'a> Resolver<'a>
 											path: original_path.clone(),
 										},
 										context: Vec::new(),
-										severity: Severity::Error,
 									};
 								})?
 						} else {
@@ -1814,7 +1885,6 @@ impl<'a> Resolver<'a>
 										path: original_path.clone(),
 									},
 									context: Vec::new(),
-									severity: Severity::Error,
 								};
 							})?
 						};
@@ -1829,7 +1899,6 @@ impl<'a> Resolver<'a>
 									path: original_path.clone(),
 								},
 								context: Vec::new(),
-								severity: Severity::Error,
 							});
 						}
 						if !is_last {
@@ -1840,7 +1909,6 @@ impl<'a> Resolver<'a>
 										path: original_path.clone(),
 									},
 									context: Vec::new(),
-									severity: Severity::Error,
 								};
 							})?;
 						}
@@ -1864,7 +1932,6 @@ impl<'a> Resolver<'a>
 							path: original_path.clone(),
 						},
 						context: Vec::new(),
-						severity: Severity::Error,
 					});
 				}
 				return Ok(sym_id);
@@ -1877,7 +1944,6 @@ impl<'a> Resolver<'a>
 				path: original_path.clone(),
 			},
 			context: Vec::new(),
-			severity: Severity::Error,
 		});
 	}
 
@@ -2124,7 +2190,6 @@ impl<'a> Resolver<'a>
 							span: *span,
 							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
 							context: Vec::new(),
-							severity: Severity::Error,
 						};
 					})?;
 				let resolved_ty = self.resolve_type(ty)?;
@@ -2221,13 +2286,13 @@ impl<'a> Resolver<'a>
 
 		return Ok(match expr {
 			Expr::Identifier { path, span } => {
-				// In resolve_expr, Expr::Identifier arm, at the top:
 				if !path.global && path.segments.len() == 1 && path.segments[0].name.starts_with('#') {
 					let name: &String = &path.segments[0].name;
 					if let Some(intrinsic) = Intrinsic::from_name(name) {
 						return Ok(ResolvedExpr::InternalCall { intrinsic, span: *span });
 					}
 				}
+
 				self.resolve_path_full(path, *span).map_or_else(
 					|_| {
 						if matches!(
@@ -2689,7 +2754,6 @@ impl<'a> Resolver<'a>
 					span: sig.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: sig.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2726,7 +2790,6 @@ impl<'a> Resolver<'a>
 						path: Path::simple(vec![param_name.clone()], param_span),
 					},
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?;
 			let ty: ResolvedType = self.resolve_type(&param.ty)?;
@@ -2834,7 +2897,6 @@ impl<'a> Resolver<'a>
 						first_definition: self.global.symbol(count[threshold - 1]).def_span,
 					},
 					context: Vec::new(),
-					severity: Severity::Error,
 				});
 			}
 
@@ -2865,7 +2927,6 @@ impl<'a> Resolver<'a>
 						path: Path::simple(vec![name_str.clone()], var_span),
 					},
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2893,7 +2954,6 @@ impl<'a> Resolver<'a>
 					span: s.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: s.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -2953,7 +3013,6 @@ impl<'a> Resolver<'a>
 					span: u.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: u.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3007,7 +3066,6 @@ impl<'a> Resolver<'a>
 					span: e.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: e.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3057,7 +3115,6 @@ impl<'a> Resolver<'a>
 					span: v.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: v.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3105,7 +3162,6 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3133,7 +3189,6 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3165,7 +3220,6 @@ impl<'a> Resolver<'a>
 					span: t.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3221,7 +3275,6 @@ impl<'a> Resolver<'a>
 					span: m.name.span(),
 					kind: NameResolutionErrorKind::UnresolvedPath { path: m.name.clone() },
 					context: Vec::new(),
-					severity: Severity::Error,
 				};
 			})?
 			.0;
@@ -3321,7 +3374,7 @@ pub fn resolve_names(
 	// symbols.root is always ScopeId(0), so offset = global_root.0.
 	let scope_offset: usize = global.module_roots.get(logical_path).copied().map_or(0, |s| return s.0);
 
-	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, ast.source_index, scope_offset);
+	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, scope_offset);
 
 	let resolved_block: ResolvedTopLevelBlock = resolver
 		.resolve_top_level_block(&ast.top_level_block)

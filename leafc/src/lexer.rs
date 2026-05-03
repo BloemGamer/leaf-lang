@@ -1,10 +1,9 @@
 pub mod expander;
 mod tests;
 
-use std::usize;
-use std::{fmt::Write, path};
+use std::path;
 
-use leaf_proc::{generate_lexer, Spanned};
+use leaf_proc::{Spanned, generate_lexer};
 
 use crate::config::Config;
 use crate::parser::ParseError;
@@ -300,22 +299,6 @@ impl Spanned for Span
 	fn span(&self) -> Span
 	{
 		return *self;
-	}
-}
-
-impl Span
-{
-	/// Creates an error from this span.
-	///
-	/// # Arguments
-	/// * `source` - The source code string
-	/// * `message` - The error message
-	///
-	/// # Returns
-	/// An error of type `E` constructed from the span and formatted message
-	pub fn make_error<E: ErrorFromSpan>(self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> E
-	{
-		return E::from_span(self, self.format_error(source_index, source_map, message));
 	}
 }
 
@@ -897,7 +880,10 @@ impl<'source, 'config> Lexer<'source, 'config>
 	) -> Self
 	{
 		let source_index: SourceIndex = source_map.add_file(file_name, source);
-		let new_source: &String = &source_map.get(source_index).src;
+		let new_source: &String = &source_map
+			.get(source_index)
+			.expect("Bug: The sourcemap was not added")
+			.src;
 		let mut lexer: Lexer<'_, '_> = Lexer {
 			source: new_source,
 			source_index,
@@ -1405,207 +1391,5 @@ impl<'source, 'config> Lexer<'source, 'config>
 			return self.source[self.position + ch.len_utf8()..].chars().next();
 		}
 		return None;
-	}
-}
-
-const RESET: &str = "\x1b[0m";
-const BOLD: &str = "\x1b[1m";
-
-const RED: &str = "\x1b[31m";
-const BLUE: &str = "\x1b[34m";
-const CYAN: &str = "\x1b[36m";
-
-#[allow(unused)]
-const DIM: &str = "\x1b[2m";
-
-fn use_color() -> bool
-{
-	return std::env::var("NO_COLOR").is_err();
-}
-
-impl Token
-{
-	/// Formats an error message with source code context.
-	///
-	/// Generates a human-readable error message that includes the line number,
-	/// column number, the relevant line of source code, and a visual indicator
-	/// (caret) pointing to the location of the error.
-	///
-	/// # Arguments
-	/// * `source_index` - Index into the source map
-	/// * `source_map` - Reference to the source map containing all source files
-	/// * `message` - The error message to display
-	///
-	/// # Returns
-	/// A formatted string containing the error location, message, source line,
-	/// and visual indicator pointing to the error position.
-	///
-	/// # Example
-	/// ```no_run
-	/// # use crate::lexer::Token;
-	/// # use crate::{SourceIndex, SourceMap};
-	/// # let token = Token { kind: crate::lexer::TokenKind::Invalid, span: crate::lexer::Span::default() };
-	/// # let source_index = SourceIndex(0);
-	/// # let source_map = SourceMap::new();
-	/// let error = token.format_error(source_index, &source_map, "unexpected token");
-	/// println!("{}", error);
-	/// // Output:
-	/// // Error at 1:20: unexpected token
-	/// //   | var x = Vec<Vec<int>;
-	/// //   |                     ^
-	/// ```
-	#[allow(unused)]
-	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
-	{
-		let file = source_map.get(source_index);
-		let source: &str = &file.src;
-		let filename = &file.path;
-		let line_start = source[..self.span.start].rfind('\n').map_or(0, |i| return i + 1);
-		let line_end = source[self.span.start..]
-			.find('\n')
-			.map_or(source.len(), |i| return self.span.start + i);
-		let line_text = &source[line_start..line_end];
-
-		// Preserve tabs and spaces to maintain alignment
-		let prefix = &source[line_start..self.span.start];
-		let caret_indent: String = prefix
-			.chars()
-			.map(|c| if c == '\t' { return '\t' } else { return ' ' })
-			.collect();
-
-		let caret_length = (self.span.end - self.span.start).max(1);
-
-		return format!(
-			"Error at {} -> {}:{}: {}\n  | {}\n  | {}{}",
-			filename.display(),
-			self.span.start_line,
-			self.span.start_col,
-			message,
-			line_text,
-			caret_indent,
-			"^".repeat(caret_length)
-		);
-	}
-}
-
-impl Span
-{
-	/// Formats an error message with source code context.
-	///
-	/// Generates a human-readable error message that includes the line number,
-	/// column number, the relevant line of source code, and a visual indicator
-	/// (caret) pointing to the location of the error.
-	///
-	/// # Arguments
-	/// * `source` - The complete source code string
-	/// * `message` - The error message to display
-	///
-	/// # Returns
-	/// A formatted string containing the error location, message, source line,
-	/// and visual indicator pointing to the error position.
-	///
-	/// # Example
-	/// ```no_run
-	/// # use crate::lexer::Span;
-	/// # let span = Span::default();
-	/// # let source = "var x = 42;";
-	/// let error = span.format_error(source, "unexpected token");
-	/// println!("{}", error);
-	/// // Output:
-	/// // Error at 1:20: unexpected token
-	/// //   | var x = Vec<Vec<int>;
-	/// //   |                     ^
-	/// ```
-	#[allow(unused)]
-	pub fn format_error(&self, source_index: SourceIndex, source_map: &SourceMap, message: &str) -> String
-	{
-		let file = source_map.get(source_index);
-		let source: &str = &file.src;
-		let filename = &file.path;
-
-		let color: bool = use_color();
-
-		// Styling helpers
-		let red = |s: &str| {
-			return if color {
-				format!("{RED}{BOLD}{s}{RESET}")
-			} else {
-				s.to_string()
-			};
-		};
-		let blue = |s: &str| {
-			return if color {
-				format!("{BLUE}{s}{RESET}")
-			} else {
-				s.to_string()
-			};
-		};
-		let cyan = |s: &str| {
-			return if color {
-				format!("{CYAN}{s}{RESET}")
-			} else {
-				s.to_string()
-			};
-		};
-		let bold = |s: &str| {
-			return if color {
-				format!("{BOLD}{s}{RESET}")
-			} else {
-				s.to_string()
-			};
-		};
-
-		let error_label = red("error");
-		let location = cyan(&format!(
-			"{}:{}:{}",
-			filename.display(),
-			self.start_line,
-			self.start_col
-		));
-		let gutter = blue("|");
-
-		let mut output = String::new();
-
-		let _ = write!(
-			output,
-			"{error_label}: {}\n  --> {}\n   {}\n",
-			bold(message),
-			location,
-			gutter
-		);
-
-		// Walk through lines
-		let mut current_index = 0;
-		let mut line_number = 1;
-
-		for (line_number, line) in (1..).zip(source.lines()) {
-			let line_start = current_index;
-			let line_end = current_index + line.len();
-
-			// Check if this line intersects the error span
-			if line_end >= self.start && line_start <= self.end {
-				let _ = writeln!(output, "{:>3} {} {}", line_number, gutter, line);
-
-				// Compute caret start/end within this line
-				let caret_start = self.start.max(line_start) - line_start;
-				let caret_end = self.end.min(line_end) - line_start;
-
-				let caret_len = (caret_end.saturating_sub(caret_start)).max(1);
-
-				let prefix = &line[..caret_start];
-				let caret_indent: String = prefix
-					.chars()
-					.map(|c| return if c == '\t' { '\t' } else { ' ' })
-					.collect();
-
-				let caret = red(&"^".repeat(caret_len));
-
-				let _ = writeln!(output, "    {} {}{}", gutter, caret_indent, caret);
-			}
-
-			current_index = line_end + 1; // +1 for '\n'
-		}
-
-		return output;
 	}
 }

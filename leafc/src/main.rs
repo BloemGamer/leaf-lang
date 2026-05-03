@@ -118,6 +118,7 @@
 use std::{
 	collections::{HashSet, VecDeque},
 	fs, path,
+	process::exit,
 };
 
 use crate::{
@@ -127,10 +128,11 @@ use crate::{
 
 use self::{
 	desugar::DesugaredAST,
-	lexer::{expander::ExpandedLexer, Lexer, Span},
+	diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer},
+	lexer::{Lexer, Span, expander::ExpandedLexer},
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
-	parser::{ExprEnum, Parser, AST},
+	parser::{AST, ExprEnum, Parser},
 	source_map::{SourceIndex, SourceMap},
 	symbol_collection::{GlobalSymbolTable, LocalSymbolTable},
 	type_analysis::TypedModule,
@@ -184,9 +186,13 @@ fn main()
 	let config: Config = Config::default();
 	let mut source_map: SourceMap = SourceMap::default();
 
-	run(&args, &config, FILE_NAME, &mut source_map)
-		.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")))
-		.expect("found an error in the program");
+	let Ok(()) = run(&args, &config, FILE_NAME, &mut source_map).inspect_err(|e| {
+		let diag = e.to_diagnostic();
+		let renderer = OldStyleRenderer::new(&diag, &source_map);
+		eprintln!("{}", renderer);
+	}) else {
+		exit(1)
+	};
 }
 
 fn run(
@@ -232,6 +238,7 @@ fn run(
 				logical_path: pm.logical_path.clone(),
 				span: pm.declared_at_span,
 				kind,
+				context: Vec::new(),
 			});
 		})?;
 
@@ -266,8 +273,7 @@ fn run(
 		}
 
 		// Pass logical_path so the local table knows which module it belongs to
-		let local_symbols: LocalSymbolTable =
-			symbol_collection::collect_symbols(&desugared, pm.logical_path.clone(), desugared.source_index)?;
+		let local_symbols: LocalSymbolTable = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone())?;
 		if args.symbols {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{:#?}",
@@ -316,7 +322,7 @@ fn run(
 
 	let mut typed_modules: Vec<type_analysis::TypedModule> = Vec::new();
 	for resolved in &resolved_modules {
-		let typed: TypedModule = type_analysis::check_types(resolved, &global_symbols)?;
+		let typed: TypedModule = type_analysis::check_types(resolved, &global_symbols, &resolved_modules)?;
 		typed_modules.push(typed);
 	}
 

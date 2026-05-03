@@ -2,10 +2,11 @@
 #[allow(clippy::module_inception)]
 mod tests
 {
-	use crate::lexer::expander::ExpandedLexer;
+	use crate::diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer};
 	use crate::lexer::Lexer;
+	use crate::lexer::expander::ExpandedLexer;
+	use crate::parser::*;
 	use crate::source_map::SourceMap;
-	use crate::{parser::*, CompileDiagnostic};
 	use crate::{CompileError, Config};
 
 	use std::fmt::Write;
@@ -16,10 +17,11 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "expr", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser
-			.parse_expr()
-			.map_err(CompileError::Parse)
-			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
+		return parser.parse_expr().map_err(CompileError::Parse).inspect_err(|e| {
+			let diag = e.to_diagnostic();
+			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			eprintln!("{}", renderer);
+		});
 	}
 
 	fn parse_program_from_str(input: &str) -> Result<TopLevelBlock, CompileError>
@@ -31,7 +33,11 @@ mod tests
 		return parser
 			.parse_top_level_block()
 			.map_err(CompileError::Parse)
-			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
+			.inspect_err(|e| {
+				let diag = e.to_diagnostic();
+				let renderer = OldStyleRenderer::new(&diag, &source_map);
+				eprintln!("{}", renderer);
+			});
 	}
 
 	fn parse_block_from_str(input: &str) -> Result<Block, CompileError>
@@ -40,10 +46,11 @@ mod tests
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "block", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser
-			.parse_block()
-			.map_err(CompileError::Parse)
-			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
+		return parser.parse_block().map_err(CompileError::Parse).inspect_err(|e| {
+			let diag = e.to_diagnostic();
+			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			eprintln!("{}", renderer);
+		});
 	}
 
 	#[allow(unused)]
@@ -56,7 +63,11 @@ mod tests
 		return parser
 			.parse_directive_node()
 			.map_err(|e| return CompileError::Parse(e))
-			.inspect_err(|e| println!("{}", e.to_string_with_source(&source_map).expect("")));
+			.inspect_err(|e| {
+				let diag = e.to_diagnostic();
+				let renderer = OldStyleRenderer::new(&diag, &source_map);
+				eprintln!("{}", renderer);
+			});
 	}
 
 	// ========== Literal Tests ==========
@@ -7736,10 +7747,11 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Struct(s) => {
 				assert_eq!(s.fields.len(), 3);
-				assert!(s
-					.fields
-					.iter()
-					.all(|StructField { default_value, .. }| return default_value.is_some()));
+				assert!(
+					s.fields
+						.iter()
+						.all(|StructField { default_value, .. }| return default_value.is_some())
+				);
 			}
 			_ => panic!("Expected struct declaration"),
 		}
@@ -8080,11 +8092,12 @@ mod tests
 		let program = result.unwrap();
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
-				assert!(func
-					.signature
-					.modifiers
-					.iter()
-					.any(|m| matches!(m, Modifier::Directive(_))));
+				assert!(
+					func.signature
+						.modifiers
+						.iter()
+						.any(|m| matches!(m, Modifier::Directive(_)))
+				);
 			}
 			_ => panic!("Expected function"),
 		}
@@ -8836,19 +8849,23 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Variant(v) => {
 				assert!(v.variants[0].docs.is_some());
-				assert!(v.variants[0]
-					.docs
-					.as_ref()
-					.unwrap()
-					.content
-					.contains("Contains a value"));
+				assert!(
+					v.variants[0]
+						.docs
+						.as_ref()
+						.unwrap()
+						.content
+						.contains("Contains a value")
+				);
 				assert!(v.variants[1].docs.is_some());
-				assert!(v.variants[1]
-					.docs
-					.as_ref()
-					.unwrap()
-					.content
-					.contains("No value present"));
+				assert!(
+					v.variants[1]
+						.docs
+						.as_ref()
+						.unwrap()
+						.content
+						.contains("No value present")
+				);
 			}
 			_ => panic!("Expected variant"),
 		}
@@ -9283,11 +9300,12 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert!(func.docs.is_some());
-				assert!(func
-					.signature
-					.modifiers
-					.iter()
-					.any(|m| matches!(m, Modifier::Directive(_))));
+				assert!(
+					func.signature
+						.modifiers
+						.iter()
+						.any(|m| matches!(m, Modifier::Directive(_)))
+				);
 			}
 			_ => panic!("Expected function"),
 		}

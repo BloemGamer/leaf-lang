@@ -5,13 +5,14 @@ mod tests
 	use std::path::PathBuf;
 
 	use crate::{
+		CompileDiagnostic, CompileError, Config,
 		desugar::DesugaredAST,
-		lexer::{expander::ExpandedLexer, Lexer},
+		diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer},
+		lexer::{Lexer, expander::ExpandedLexer},
 		name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
-		parser::{Parser, AST},
+		parser::{AST, Parser},
 		source_map::SourceMap,
 		symbol_collection::{self, LocalSymbolTable},
-		CompileDiagnostic, CompileError, Config,
 	};
 
 	// ─── Standard library available to every test ────────────────────────────────
@@ -60,8 +61,11 @@ mod tests
 		// The user's module is always last in pending (stdlib is first)
 		let (logical, desugared, local) = pending.last().unwrap();
 
-		return name_resolution::resolve_names(logical, desugared, local, &global, &pending)
-			.inspect_err(|e| eprintln!("{}", e.to_string_with_source(&source_map).unwrap()));
+		return name_resolution::resolve_names(logical, desugared, local, &global, &pending).inspect_err(|e| {
+			let diag = e.to_diagnostic();
+			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			eprintln!("{}", renderer);
+		});
 	}
 
 	fn build_pending(
@@ -98,7 +102,7 @@ mod tests
 			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).try_into()?;
 			let desugared: DesugaredAST = ast.try_into()?;
 			println!("{}", desugared);
-			let local = symbol_collection::collect_symbols(&desugared, logical.clone(), desugared.source_index)?;
+			let local = symbol_collection::collect_symbols(&desugared, logical.clone())?;
 			pending.push((logical, desugared, local));
 		}
 		return Ok(pending);

@@ -36,8 +36,8 @@ impl SourceMap
 		return SourceIndex(self.files.len() - 1);
 	}
 
-	pub fn get(&self, source_index: SourceIndex) -> &SourceFile
+	pub fn get(&self, source_index: SourceIndex) -> Option<&SourceFile>
 	{
-		return &self.files[source_index.0];
+		return self.files.get(source_index.0);
 	}
 }

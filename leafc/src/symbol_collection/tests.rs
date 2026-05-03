@@ -24,7 +24,7 @@ mod tests
 		let desugared = desugar::desugar_program(program).unwrap();
 		println!("{}", desugared);
 
-		return collect_symbols(&desugared, Vec::new(), source_index);
+		return collect_symbols(&desugared, Vec::new());
 	}
 
 	fn find_symbol_by_name<'a>(table: &'a LocalSymbolTable, name: &str) -> Option<(SymbolId, &'a Symbol)>

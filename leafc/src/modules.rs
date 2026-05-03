@@ -1,14 +1,16 @@
 mod tests;
 
-use std::path::{self, PathBuf};
+use std::{
+	fmt,
+	path::{self, PathBuf},
+};
 
 use leaf_proc::Spanned;
 
 use crate::{
-	diagnostics::{CompileDiagnostic, CompileError},
+	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
-	parser::{ModuleKind, TopLevelBlock, TopLevelDecl, AST},
-	source_map::{SourceIndex, SourceMap},
+	parser::{AST, ModuleKind, TopLevelBlock, TopLevelDecl},
 };
 
 #[allow(unused)]
@@ -20,32 +22,59 @@ pub struct PendingModule
 	pub declared_at_span: Span,
 }
 
+#[derive(Debug, Clone)]
+pub enum ModuleErrorKind
+{
+	FileNotFound(PathBuf),
+	IoError(String),
+	#[allow(unused)]
+	Cycle(Vec<Vec<String>>),
+}
+
 #[derive(Debug, Clone, Spanned)]
 pub struct ModuleError
 {
 	pub logical_path: Vec<String>,
 	pub span: Span,
 	pub kind: ModuleErrorKind,
+	pub context: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
-pub enum ModuleErrorKind
+#[allow(unused)]
+impl ModuleError
 {
-	FileNotFound(PathBuf),
-	IoError(String),
-	Cycle(Vec<Vec<String>>),
+	pub const fn new(logical_path: Vec<String>, span: Span, kind: ModuleErrorKind) -> Self
+	{
+		return Self {
+			logical_path,
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
 }
 
-impl std::fmt::Display for ModuleError
+impl fmt::Display for ModuleError
 {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{
 		let path = self.logical_path.join("::");
+
 		return match &self.kind {
 			ModuleErrorKind::FileNotFound(p) => {
-				write!(f, "module '{}': file not found at '{}'", path, p.display())
+				write!(f, "module `{path}`: file not found at `{}`", p.display())
 			}
-			ModuleErrorKind::IoError(e) => write!(f, "module '{}': io error: {}", path, e),
+
+			ModuleErrorKind::IoError(e) => {
+				write!(f, "module `{path}`: io error: {e}")
+			}
+
 			ModuleErrorKind::Cycle(chain) => {
 				let chain_str: Vec<String> = chain.iter().map(|p| return p.join("::")).collect();
 				write!(f, "module cycle detected: {}", chain_str.join(" -> "))
@@ -56,6 +85,45 @@ impl std::fmt::Display for ModuleError
 
 impl std::error::Error for ModuleError {}
 
+impl CompileDiagnostic for ModuleError
+{
+	fn build(&self) -> DiagnosticBuilder<'_>
+	{
+		let module_path = self.logical_path.join("::");
+
+		let mut diag = match &self.kind {
+			ModuleErrorKind::FileNotFound(p) => {
+				DiagnosticBuilder::error(format!("module `{module_path}`: file not found at `{}`", p.display()))
+					.code(ErrorCode::ModuleFileNotFound)
+					.primary(self.span, None)
+			}
+
+			ModuleErrorKind::IoError(e) => DiagnosticBuilder::error(format!("module `{module_path}`: io error: {e}"))
+				.code(ErrorCode::ModuleIoError)
+				.primary(self.span, None),
+
+			ModuleErrorKind::Cycle(chain) => {
+				let mut d = DiagnosticBuilder::error("module cycle detected")
+					.code(ErrorCode::ModuleCycle)
+					.primary(self.span, None);
+
+				for path in chain {
+					d = d.note(format!("in cycle: {}", path.join("::")));
+				}
+
+				d
+			}
+		};
+
+		// Add context stack
+		for ctx in &self.context {
+			diag = diag.note(format!("while loading module: {ctx}"));
+		}
+
+		return diag;
+	}
+}
+
 impl From<ModuleError> for CompileError
 {
 	fn from(e: ModuleError) -> Self
@@ -64,26 +132,10 @@ impl From<ModuleError> for CompileError
 	}
 }
 
-impl CompileDiagnostic for ModuleError
-{
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &SourceMap) -> std::fmt::Result
-	{
-		let msg = self.to_string();
-		return write!(f, "{}", self.span.format_error(self.span.source_index, sm, &msg));
-	}
-}
-
 pub fn collect_pending(ast: &AST, declaring_file: &path::Path, current_modue: &[String]) -> Vec<PendingModule>
 {
 	let mut pending: Vec<PendingModule> = Vec::new();
-	collect_from_block(
-		&ast.top_level_block,
-		current_modue,
-		&[],
-		declaring_file,
-		ast.source_index,
-		&mut pending,
-	);
+	collect_from_block(&ast.top_level_block, current_modue, &[], declaring_file, &mut pending);
 	return pending;
 }
 
@@ -92,7 +144,6 @@ fn collect_from_block(
 	parent_path: &[String],
 	file_path_segments: &[String],
 	declaring_file: &path::Path,
-	declaring_source: SourceIndex,
 	pending: &mut Vec<PendingModule>,
 )
 {
@@ -117,14 +168,7 @@ fn collect_from_block(
 					});
 				}
 				ModuleKind::Inline(body) => {
-					collect_from_block(
-						body,
-						&full_path,
-						file_path_segments,
-						declaring_file,
-						declaring_source,
-						pending,
-					);
+					collect_from_block(body, &full_path, file_path_segments, declaring_file, pending);
 				}
 			}
 		}

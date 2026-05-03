@@ -4,16 +4,17 @@ use std::{collections::HashMap, fmt};
 
 use ignorable::PartialEq;
 
+use leaf_proc::Spanned;
+
 use crate::{
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnostic, CompileError, Diagnostic, Severity},
+	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
 	parser::{
-		self, get_visibility, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl,
-		FunctionSignature, Ident, ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt,
-		StructDecl, SwitchBody, TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl,
+		self, ArrayLiteral, Block, CallType, Directive, DirectiveNode, Expr, FunctionDecl, FunctionSignature, Ident,
+		ImplDecl, ImplItem, Modifier, ModuleDecl, ModuleKind, Path, Pattern, RangeExpr, Stmt, StructDecl, SwitchBody,
+		TopLevelBlock, TopLevelDecl, TraitDecl, TraitItem, VariableDecl, get_visibility,
 	},
-	source_map::SourceIndex,
 };
 
 /// Unique identifier for a scope in the symbol table.
@@ -414,40 +415,185 @@ pub enum Mutability
 	Immutable,
 }
 
-/// Error that occurred during symbol collection.
-///
-/// Contains information about what went wrong, where it happened, and context
-/// about what was being processed at the time.
-///
-/// # Fields
-///
-/// * `span` - Source location where the error occurred
-/// * `kind` - The specific kind of error
-/// * `context` - Stack of processing contexts
-/// * `source_index` - Index into the source map
-/// * `scope` - The scope being processed when the error occurred
-///
-/// # Examples
-/// ```ignore
-/// match collect_symbols(&program, source_index) {
-///     Ok(table) => { /* use table */ }
-///     Err(error) => {
-///         eprintln!("Symbol collection failed: {}", error);
-///         eprintln!("At: {:?}", error.span);
-///     }
-/// }
-/// ```
-pub type SymbolCollectionError = Diagnostic<SymbolCollectionErrorKind>;
-// #[allow(unused)]
-// #[derive(Debug, Clone)]
-// pub struct SymbolCollectionError
-// {
-// 	pub span: Span,
-// 	pub kind: SymbolCollectionErrorKind,
-// 	pub context: Vec<String>,
-// 	pub source_index: SourceIndex,
-// 	pub scope: ScopeId,
-// }
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub enum SymbolCollectionErrorKind
+{
+	DuplicateDefinition
+	{
+		name: String,
+		first_definition: Span,
+		scope: ScopeId,
+	},
+
+	InvalidPath
+	{
+		declaration_type: String,
+		reason: PathErrorReason,
+		scope: ScopeId,
+	},
+
+	Generic
+	{
+		message: String, scope: ScopeId
+	},
+}
+
+#[derive(Debug, Clone)]
+pub enum PathErrorReason
+{
+	MultipleSegments,
+	HasGenerics,
+}
+
+#[derive(Debug, Clone, Spanned)]
+pub struct SymbolCollectionError
+{
+	pub span: Span,
+	pub kind: SymbolCollectionErrorKind,
+	pub context: Vec<String>,
+}
+
+#[allow(unused)]
+impl SymbolCollectionError
+{
+	pub const fn new(span: Span, kind: SymbolCollectionErrorKind) -> Self
+	{
+		return Self {
+			span,
+			kind,
+			context: Vec::new(),
+		};
+	}
+
+	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
+	{
+		self.context.push(ctx.into());
+		return self;
+	}
+
+	pub fn duplicate_definition(span: Span, name: impl Into<String>, first_definition: Span, scope: ScopeId) -> Self
+	{
+		return Self::new(
+			span,
+			SymbolCollectionErrorKind::DuplicateDefinition {
+				name: name.into(),
+				first_definition,
+				scope,
+			},
+		);
+	}
+
+	pub fn invalid_path(
+		span: Span,
+		declaration_type: impl Into<String>,
+		reason: PathErrorReason,
+		scope: ScopeId,
+	) -> Self
+	{
+		return Self::new(
+			span,
+			SymbolCollectionErrorKind::InvalidPath {
+				declaration_type: declaration_type.into(),
+				reason,
+				scope,
+			},
+		);
+	}
+
+	pub fn generic(span: Span, message: impl Into<String>, scope: ScopeId) -> Self
+	{
+		return Self::new(
+			span,
+			SymbolCollectionErrorKind::Generic {
+				message: message.into(),
+				scope,
+			},
+		);
+	}
+}
+
+impl fmt::Display for SymbolCollectionError
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		return match &self.kind {
+			SymbolCollectionErrorKind::DuplicateDefinition {
+				name, first_definition, ..
+			} => {
+				write!(
+					f,
+					"duplicate definition of `{}`: first at {:?}, again at {:?}",
+					name, first_definition, self.span
+				)
+			}
+
+			SymbolCollectionErrorKind::InvalidPath {
+				declaration_type,
+				reason,
+				..
+			} => {
+				let msg = match reason {
+					PathErrorReason::MultipleSegments => {
+						format!("a {} cannot be a multi-segment path", declaration_type)
+					}
+					PathErrorReason::HasGenerics => format!("a {} cannot have generic arguments", declaration_type),
+				};
+				write!(f, "{msg}")
+			}
+
+			SymbolCollectionErrorKind::Generic { message, .. } => {
+				write!(f, "{message}")
+			}
+		};
+	}
+}
+
+impl std::error::Error for SymbolCollectionError {}
+
+impl CompileDiagnostic for SymbolCollectionError
+{
+	fn build(&self) -> DiagnosticBuilder<'_>
+	{
+		let mut diag = match &self.kind {
+			SymbolCollectionErrorKind::DuplicateDefinition {
+				name, first_definition, ..
+			} => {
+				let d: DiagnosticBuilder<'_> = DiagnosticBuilder::error(format!("duplicate definition of `{name}`"))
+					.code(ErrorCode::SymbolDuplicateDefinition)
+					.primary(self.span, Some("second definition".into()))
+					.secondary(*first_definition, Some("first defined here".into()));
+
+				d
+			}
+
+			SymbolCollectionErrorKind::InvalidPath {
+				declaration_type,
+				reason,
+				..
+			} => {
+				let msg: String = match reason {
+					PathErrorReason::MultipleSegments => format!("a {declaration_type} cannot be a multi-segment path"),
+					PathErrorReason::HasGenerics => format!("a {declaration_type} cannot have generic arguments"),
+				};
+
+				DiagnosticBuilder::error(msg)
+					.code(ErrorCode::SymbolInvalidPath)
+					.primary(self.span, None)
+			}
+
+			SymbolCollectionErrorKind::Generic { message, .. } => DiagnosticBuilder::error(message.as_str())
+				.code(ErrorCode::SymbolGeneric)
+				.primary(self.span, None),
+		};
+
+		for ctx in &self.context {
+			diag = diag.note(format!("while collecting symbols: {ctx}"));
+		}
+
+		return diag;
+	}
+}
 
 impl From<SymbolCollectionError> for CompileError
 {
@@ -457,155 +603,18 @@ impl From<SymbolCollectionError> for CompileError
 	}
 }
 
-impl CompileDiagnostic for SymbolCollectionError
-{
-	fn fmt_with_source(&self, f: &mut impl fmt::Write, sm: &crate::source_map::SourceMap) -> fmt::Result
-	{
-		return match self.kind {
-			SymbolCollectionErrorKind::DuplicateDefinition { first_definition, .. } => write!(
-				f,
-				"{}\n\n{}",
-				first_definition.format_error(self.span.source_index, sm, &format!("\nFirst at:\n{}", self)),
-				self.span.format_error(self.span.source_index, sm, "\nAgain at:\n")
-			),
-			_ => write!(
-				f,
-				"{}",
-				self.span.format_error(self.span.source_index, sm, &format!("{self}"))
-			),
-		};
-	}
-}
-
-/// The specific kind of symbol collection error.
-///
-/// Categorizes different types of errors that can occur during symbol collection,
-/// such as duplicate definitions or invalid paths in declarations.
-///
-/// # Variants
-///
-/// * `DuplicateDefinition { name, first_definition }` - A symbol is defined twice in the same scope
-/// * `InvalidPath { declaration_type, reason }` - A declaration uses an invalid path
-/// * `Generic { message }` - A generic error with a custom message
-///
-/// # Examples
-/// ```ignore
-/// match error.kind {
-///     SymbolCollectionErrorKind::DuplicateDefinition { ref name, first_definition } => {
-///         eprintln!("Symbol '{}' is already defined at {:?}", name, first_definition);
-///     }
-///     SymbolCollectionErrorKind::InvalidPath { ref declaration_type, .. } => {
-///         eprintln!("Invalid path in {} declaration", declaration_type);
-///     }
-///     SymbolCollectionErrorKind::Generic { ref message } => {
-///         eprintln!("Error: {}", message);
-///     }
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub enum SymbolCollectionErrorKind
-{
-	DuplicateDefinition
-	{
-		name: String,
-		first_definition: Span,
-		scope: ScopeId,
-	},
-	InvalidPath
-	{
-		declaration_type: String,
-		reason: PathErrorReason,
-		scope: ScopeId,
-	},
-	Generic
-	{
-		message: String, scope: ScopeId
-	},
-}
-
-/// Reason why a path is invalid in a declaration.
-///
-/// Some declarations (like functions and structs) must use simple single-segment
-/// paths without generics. This enum explains why a given path is invalid.
-///
-/// # Variants
-///
-/// * `MultipleSegments` - Path has multiple segments (e.g., `foo::bar`) where only one is allowed
-/// * `HasGenerics` - Path has generic arguments (e.g., `Foo<T>`) where none are allowed
-///
-/// # Examples
-/// ```ignore
-/// match reason {
-///     PathErrorReason::MultipleSegments => {
-///         eprintln!("Declaration must use a simple name, not a path");
-///     }
-///     PathErrorReason::HasGenerics => {
-///         eprintln!("Declaration name cannot have generic arguments");
-///     }
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub enum PathErrorReason
-{
-	MultipleSegments,
-	HasGenerics,
-}
-
-impl fmt::Display for SymbolCollectionError
-{
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-	{
-		match &self.kind {
-			SymbolCollectionErrorKind::DuplicateDefinition {
-				name,
-				first_definition,
-				scope: _,
-			} => {
-				return write!(
-					f,
-					"duplicate definition of `{}`: first at {:?}, again at {:?}",
-					name,
-					first_definition,
-					self.span()
-				);
-			}
-			SymbolCollectionErrorKind::InvalidPath {
-				declaration_type,
-				reason,
-				scope: _,
-			} => {
-				let reason_str = match reason {
-					PathErrorReason::MultipleSegments => {
-						format!("A {} can't be a path, and only can have one segment", declaration_type)
-					}
-					PathErrorReason::HasGenerics => {
-						format!("A {} can't have a generic in the path", declaration_type)
-					}
-				};
-				return write!(f, "{}", reason_str);
-			}
-			SymbolCollectionErrorKind::Generic { message, scope: _ } => {
-				return write!(f, "{}", message);
-			}
-		}
-	}
-}
-
-impl std::error::Error for SymbolCollectionError {}
-
 struct Collector
 {
 	table: LocalSymbolTable,
 	current_scope: ScopeId,
-	source_index: SourceIndex,
 	next_node_id: usize,
 }
 
 impl Collector
 {
-	fn new(source_index: SourceIndex) -> Self
+	fn new() -> Self
 	{
-		let root = Scope {
+		let root: Scope = Scope {
 			kind: ScopeKind::ModuleInline,
 			parent: None,
 			symbols: Vec::new(),
@@ -624,7 +633,6 @@ impl Collector
 				anon_scopes: Vec::new(),
 			},
 			current_scope: ScopeId(0),
-			source_index,
 			next_node_id: 1,
 		};
 	}
@@ -717,7 +725,6 @@ impl Collector
 							first_definition: existing.def_span,
 							scope,
 						},
-						severity: Severity::Error,
 					});
 				}
 			}
@@ -764,7 +771,6 @@ impl Collector
 					reason: PathErrorReason::MultipleSegments,
 					scope: self.current_scope,
 				},
-				severity: Severity::Error,
 			});
 		}
 		if !path.segments[0].generics.is_empty() {
@@ -776,7 +782,6 @@ impl Collector
 					reason: PathErrorReason::HasGenerics,
 					scope: self.current_scope,
 				},
-				severity: Severity::Error,
 			});
 		}
 		return Ok(());
@@ -836,7 +841,6 @@ impl Collector
 					message: "A function signature can't be a path, and only can have one segment".to_string(),
 					scope: self.current_scope,
 				},
-				severity: Severity::Error,
 			});
 		}
 
@@ -1594,10 +1598,9 @@ impl Collector
 pub fn collect_symbols(
 	program: &DesugaredAST,
 	module_path: Vec<String>,
-	source_index: SourceIndex,
 ) -> Result<LocalSymbolTable, SymbolCollectionError>
 {
-	let mut collector: Collector = Collector::new(source_index);
+	let mut collector: Collector = Collector::new();
 	collector.table.module_path = module_path;
 	collector.table.scopes[collector.table.root.0].span = program.span();
 	collector.collect_program(program)?;

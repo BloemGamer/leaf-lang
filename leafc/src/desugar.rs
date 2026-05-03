@@ -1,9 +1,13 @@
+#![allow(clippy::unused_self)]
+
 mod tests;
 
 use leaf_proc::Spanned;
 
+use std::fmt::Debug;
+
 use crate::{
-diagnostics::{	CompileDiagnostic, CompileError, Diagnostic, Severity},
+	diagnostics::{CompileDiagnostic, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
@@ -56,7 +60,6 @@ impl Spanned for DesugaredAST
 struct Desugarer
 {
 	tmp_counter: usize,
-	source_index: SourceIndex,
 	loop_stack: Vec<String>,
 }
 
@@ -80,6 +83,7 @@ pub enum DesugarErrorKind
 	///
 	/// This can occur when patterns are too complex for their context,
 	/// or when they contain constructs that aren't supported.
+	#[allow(unused)]
 	InvalidPattern
 	{
 		reason: String
@@ -94,113 +98,43 @@ pub enum DesugarErrorKind
 	},
 }
 
-/// Desugaring error with location and context information.
-///
-/// Contains detailed information about what went wrong during desugaring,
-/// including source location and a stack of contexts showing what was
-/// being processed when the error occurred.
-///
-/// # Fields
-/// * `span` - Source location where the error occurred
-/// * `source_index` - Index into the source map
-/// * `kind` - The specific kind of error
-/// * `context` - Stack of processing contexts (e.g., "while desugaring for loop")
-pub type DesugarError = Diagnostic<DesugarErrorKind>;
-// #[derive(Debug, Clone, Spanned)]
-// pub struct DesugarError
-// {
-// 	pub span: Span,
-// 	pub source_index: SourceIndex,
-// 	pub kind: DesugarErrorKind,
-// 	pub context: Vec<String>,
-// }
+#[derive(Debug, Clone, Spanned)]
+pub struct DesugarError
+{
+	pub span: Span,
+	pub kind: DesugarErrorKind,
+	pub context: Vec<String>,
+}
 
 impl DesugarError
 {
-	/// Creates a new desugaring error.
-	///
-	/// # Arguments
-	/// * `span` - Source location of the error
-	/// * `kind` - The kind of desugaring error
-	/// * `source_index` - Index into the source map
-	///
-	/// # Returns
-	/// A new `DesugarError` with no context
 	pub const fn new(span: Span, kind: DesugarErrorKind) -> Self
 	{
 		return Self {
 			span,
 			kind,
 			context: Vec::new(),
-			severity: Severity::Error
 		};
 	}
 
-	/// Adds context information to the error.
-	///
-	/// Context helps track what operations were in progress when the error
-	/// occurred, creating a stack trace of desugaring operations.
-	///
-	/// # Arguments
-	/// * `ctx` - Context description to add
-	///
-	/// # Returns
-	/// The error with the added context
-	///
-	/// # Example
-	/// ```ignore
-	/// error.with_context("while desugaring for loop")
-	///      .with_context("in function foo")
-	/// ```
+	#[allow(unused)]
 	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
 	{
 		self.context.push(ctx.into());
 		return self;
 	}
 
-	/// Creates an invalid constructor type error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `reason` - Why the constructor type is invalid
-	/// * `source_index` - Index into the source map
-	///
-	/// # Returns
-	/// A new error indicating an invalid constructor type
 	pub fn invalid_constructor_type(span: Span, reason: impl Into<String>) -> Self
 	{
-		return Self::new(
-			span,
-			DesugarErrorKind::InvalidConstructorType { reason: reason.into() },
-		);
+		return Self::new(span, DesugarErrorKind::InvalidConstructorType { reason: reason.into() });
 	}
 
-	/// Creates an invalid pattern error.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `reason` - Why the pattern is invalid
-	/// * `source_index` - Index into the source map
-	///
-	/// # Returns
-	/// A new error indicating an invalid pattern
+	#[allow(unused)]
 	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
 	{
-		return Self::new(
-			span,
-			DesugarErrorKind::InvalidPattern { reason: reason.into() },
-		);
+		return Self::new(span, DesugarErrorKind::InvalidPattern { reason: reason.into() });
 	}
 
-	/// Creates a generic error with a custom message.
-	///
-	/// # Arguments
-	/// * `span` - Source location
-	/// * `message` - The error message
-	/// * `source_index` - Index into the source map
-	///
-	/// # Returns
-	/// A new generic desugaring error
 	pub fn generic(span: Span, message: impl Into<String>) -> Self
 	{
 		return Self::new(
@@ -212,6 +146,12 @@ impl DesugarError
 	}
 }
 
+//
+// ────────────────────────────────────────────────────────────────────────────────
+//   Display
+// ────────────────────────────────────────────────────────────────────────────────
+//
+
 impl std::fmt::Display for DesugarError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -220,13 +160,13 @@ impl std::fmt::Display for DesugarError
 
 		match &self.kind {
 			DesugarErrorKind::InvalidConstructorType { reason } => {
-				write!(f, "invalid constructor type: {}", reason)?;
+				write!(f, "invalid constructor type: {reason}")?;
 			}
 			DesugarErrorKind::InvalidPattern { reason } => {
-				write!(f, "invalid pattern: {}", reason)?;
+				write!(f, "invalid pattern: {reason}")?;
 			}
 			DesugarErrorKind::Generic { message } => {
-				write!(f, "{}", message)?;
+				write!(f, "{message}")?;
 			}
 		}
 
@@ -238,36 +178,54 @@ impl std::fmt::Display for DesugarError
 	}
 }
 
-impl From<DesugarError> for CompileError
-{
-	fn from(value: DesugarError) -> Self
-	{
-		return CompileError::Desugar(value);
-	}
-}
-
 impl std::error::Error for DesugarError {}
 
 impl CompileDiagnostic for DesugarError
 {
-	fn fmt_with_source(&self, f: &mut impl std::fmt::Write, sm: &crate::source_map::SourceMap) -> std::fmt::Result
+	fn build(&self) -> DiagnosticBuilder<'_>
 	{
-		return write!(
-			f,
-			"{}",
-			self.span.format_error(self.span.source_index, sm, &format!("{self}"))
-		);
+		let mut diag = match &self.kind {
+			DesugarErrorKind::InvalidConstructorType { reason } => {
+				DiagnosticBuilder::error(format!("invalid constructor type: {reason}"))
+					.code(ErrorCode::DesugarInvalidConstructorType)
+			}
+
+			DesugarErrorKind::InvalidPattern { reason } => {
+				DiagnosticBuilder::error(format!("invalid pattern: {reason}")).code(ErrorCode::DesugarInvalidPattern)
+			}
+
+			DesugarErrorKind::Generic { message } => {
+				DiagnosticBuilder::error(message.as_str()).code(ErrorCode::DesugarGeneric)
+			}
+		};
+
+		// Primary label
+		diag = diag.primary(self.span, None);
+
+		// Context stack
+		for ctx in &self.context {
+			diag = diag.note(format!("while desugaring: {ctx}"));
+		}
+
+		return diag;
+	}
+}
+
+impl From<DesugarError> for crate::CompileError
+{
+	fn from(value: DesugarError) -> Self
+	{
+		return crate::CompileError::Desugar(value);
 	}
 }
 
 impl Desugarer
 {
 	#[allow(unused)]
-	const fn new(source_index: SourceIndex) -> Self
+	const fn new() -> Self
 	{
 		return Desugarer {
 			tmp_counter: 0,
-			source_index,
 			loop_stack: Vec::new(),
 		};
 	}
@@ -758,10 +716,7 @@ impl Desugarer
 						let span = var.span;
 						let comp_const = var.comp_const;
 						let init = var.init.ok_or_else(|| {
-							return DesugarError::generic(
-								span,
-								"complex pattern requires initializer",
-							);
+							return DesugarError::generic(span, "complex pattern requires initializer");
 						})?;
 
 						let var_decls = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
@@ -1395,7 +1350,7 @@ impl Desugarer
 			} = &var.pattern
 			&& call_constructor.is_some()
 		{
-			var.init = Some(self.type_to_constructor_call(
+			var.init = Some(Self::type_to_constructor_call(
 				ty,
 				call_constructor.expect("Because of the checks before this, this should not be none"),
 			)?);
@@ -1681,7 +1636,7 @@ impl Desugarer
 	}
 
 	#[allow(clippy::result_large_err)]
-	fn type_to_constructor_call(&self, ty: &Type, call_type: CallType) -> Result<Expr, DesugarError>
+	fn type_to_constructor_call(ty: &Type, call_type: CallType) -> Result<Expr, DesugarError>
 	{
 		let span: Span = ty.span();
 
@@ -1733,7 +1688,7 @@ impl Desugarer
 					span,
 				};
 
-				return self.type_to_constructor_call(&inner_type, call_type);
+				return Self::type_to_constructor_call(&inner_type, call_type);
 			}
 
 			TypeCore::Array { inner, size } => {
@@ -1742,7 +1697,7 @@ impl Desugarer
 					span,
 				};
 
-				let element_constructor = self.type_to_constructor_call(&inner_type, call_type)?;
+				let element_constructor: Expr = Self::type_to_constructor_call(&inner_type, call_type)?;
 
 				if let Some(size_expr) = size {
 					return Ok(Expr::Array(ArrayLiteral::Repeat {
@@ -1758,10 +1713,10 @@ impl Desugarer
 			}
 
 			TypeCore::Tuple(types) => {
-				let mut element_constructors = Vec::new();
+				let mut element_constructors: Vec<Expr> = Vec::new();
 
 				for tuple_ty in types {
-					let element_constructor = self.type_to_constructor_call(tuple_ty, call_type)?;
+					let element_constructor: Expr = Self::type_to_constructor_call(tuple_ty, call_type)?;
 					element_constructors.push(element_constructor);
 				}
 
@@ -2162,10 +2117,7 @@ impl Desugarer
 			}
 
 			_ => {
-				return Err(DesugarError::generic(
-					span,
-					"unsupported pattern type in var binding",
-				));
+				return Err(DesugarError::generic(span, "unsupported pattern type in var binding"));
 			}
 		}
 
@@ -2480,6 +2432,6 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 /// ```
 pub fn desugar_program(program: AST) -> Result<DesugaredAST, DesugarError>
 {
-	let mut desugarer: Desugarer = Desugarer::new(program.source_index);
+	let mut desugarer: Desugarer = Desugarer::new();
 	return desugarer.desugar_program(program);
 }
