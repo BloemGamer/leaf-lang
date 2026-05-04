@@ -2,13 +2,9 @@ use std::borrow::Cow;
 
 use leaf_proc::Spanned;
 
+use crate::config::{ColourConf, Config};
+use crate::utils;
 use crate::{Span, lexer::Spanned, source_map::SourceMap};
-
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Error Codes
-// ────────────────────────────────────────────────────────────────────────────────
-//
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorCode
@@ -73,12 +69,6 @@ pub enum ErrorCode
 	ModuleCycle,
 }
 
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Severity
-// ────────────────────────────────────────────────────────────────────────────────
-//
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity
 {
@@ -86,12 +76,6 @@ pub enum Severity
 	#[allow(unused)]
 	Warning,
 }
-
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Labels
-// ────────────────────────────────────────────────────────────────────────────────
-//
 
 #[derive(Debug, Clone, Spanned)]
 pub struct Label
@@ -107,12 +91,6 @@ pub enum LabelKind
 	Primary,
 	Secondary,
 }
-
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Suggestions
-// ────────────────────────────────────────────────────────────────────────────────
-//
 
 #[derive(Debug, Clone)]
 pub struct Suggestion
@@ -131,12 +109,6 @@ pub enum Applicability
 	MaybeIncorrect,
 	HasPlaceholders,
 }
-
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Diagnostic Builder
-// ────────────────────────────────────────────────────────────────────────────────
-//
 
 pub struct DiagnosticBuilder<'a>
 {
@@ -268,7 +240,7 @@ pub trait CompileDiagnostic: std::fmt::Debug + Spanned
 
 pub trait CompileDiagnosticRenderer<'a>: std::fmt::Display
 {
-	fn new(diag: &'a Diagnostic, source_map: &'a SourceMap) -> Self;
+	fn new(diag: &'a Diagnostic, source_map: &'a SourceMap, config: &'a Config) -> Self;
 }
 
 #[derive(Debug, Clone, Spanned)]
@@ -353,16 +325,11 @@ impl CompileDiagnostic for CompileError
 	}
 }
 
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Rendering
-// ────────────────────────────────────────────────────────────────────────────────
-//
-
 pub struct OldStyleRenderer<'a>
 {
 	diag: &'a Diagnostic,
 	source_map: &'a SourceMap,
+	config: &'a Config,
 }
 
 #[allow(unused)]
@@ -442,16 +409,39 @@ pub const CLEAR_LINE: &str = "\x1b[2K";
 #[allow(unused)]
 pub const CURSOR_HOME: &str = "\x1b[H";
 
-pub const fn use_color() -> bool
+pub fn use_colour_conf(config: &Config) -> bool
 {
-	return true; // TODO: implement a good way to do this
+	return use_colour(config.colour);
+}
+
+pub fn use_colour(colour_conf: ColourConf) -> bool
+{
+	match colour_conf {
+		crate::config::ColourConf::Always => return true,
+		crate::config::ColourConf::Auto => {
+			#[cfg(target_os = "linux")]
+			{
+				unsafe {
+					// SAFETY: need to check if `stdin` is a terminal, and is using FFI
+					return utils::libc::isatty(1) == 1; // `fd` = 1 -> `stdin`
+				}
+			}
+			#[allow(unreachable_code)]
+			return true;
+		} // TODO
+		crate::config::ColourConf::Never => return false,
+	}
 }
 
 impl<'a> CompileDiagnosticRenderer<'a> for OldStyleRenderer<'a>
 {
-	fn new(diag: &'a Diagnostic, source_map: &'a SourceMap) -> Self
+	fn new(diag: &'a Diagnostic, source_map: &'a SourceMap, config: &'a Config) -> Self
 	{
-		return Self { diag, source_map };
+		return Self {
+			diag,
+			source_map,
+			config,
+		};
 	}
 }
 
@@ -459,36 +449,36 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
 	{
-		let red = |s: &str| {
-			return if use_color() {
+		let red = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
 				format!("{RED}{BOLD}{s}{RESET}")
 			} else {
 				s.to_string()
 			};
 		};
-		let yellow = |s: &str| {
-			return if use_color() {
+		let yellow = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
 				format!("{YELLOW}{BOLD}{s}{RESET}")
 			} else {
 				s.to_string()
 			};
 		};
-		let blue = |s: &str| {
-			return if use_color() {
+		let blue = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
 				format!("{BLUE}{s}{RESET}")
 			} else {
 				s.to_string()
 			};
 		};
-		let cyan = |s: &str| {
-			return if use_color() {
+		let cyan = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
 				format!("{CYAN}{s}{RESET}")
 			} else {
 				s.to_string()
 			};
 		};
-		let bold = |s: &str| {
-			return if use_color() {
+		let bold = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
 				format!("{BOLD}{s}{RESET}")
 			} else {
 				s.to_string()
@@ -496,8 +486,8 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 		};
 
 		let severity_label: String = match self.diag.severity {
-			Severity::Error => red("error"),
-			Severity::Warning => yellow("warning"),
+			Severity::Error => red("error", self.config),
+			Severity::Warning => yellow("warning", self.config),
 		};
 
 		let Some(primary): Option<&Label> = self
@@ -520,18 +510,16 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 		let source: &str = &file.src;
 		let filename: &std::path::PathBuf = &file.path;
 
-		let location: String = cyan(&format!(
-			"{}:{}:{}",
-			filename.display(),
-			span.start_line,
-			span.start_col
-		));
-		let gutter: String = blue("|");
+		let location: String = cyan(
+			&format!("{}:{}:{}", filename.display(), span.start_line, span.start_col),
+			self.config,
+		);
+		let gutter: String = blue("|", self.config);
 
 		writeln!(
 			f,
 			"{severity_label}: {}\n  --> {}\n   {}",
-			bold(&self.diag.message),
+			bold(&self.diag.message, self.config),
 			location,
 			gutter
 		)?;
@@ -572,12 +560,12 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 						LabelKind::Secondary => blue,
 					};
 
-					let caret: String = caret_color(&"^".repeat(caret_len));
+					let caret: String = caret_color(&"^".repeat(caret_len), self.config);
 
 					writeln!(f, "    {} {}{}", gutter, caret_indent, caret)?;
 
 					if let Some(msg) = &label.message {
-						writeln!(f, "    {} {}{}", gutter, caret_indent, caret_color(msg))?;
+						writeln!(f, "    {} {}{}", gutter, caret_indent, caret_color(msg, self.config))?;
 					}
 				}
 			}
@@ -603,7 +591,7 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 		for related in &self.diag.related {
 			writeln!(f)?;
 			writeln!(f, "related:")?;
-			let r: OldStyleRenderer<'_> = Self::new(related, self.source_map);
+			let r: OldStyleRenderer<'_> = Self::new(related, self.source_map, self.config);
 			writeln!(f, "{}", r)?;
 		}
 		return Ok(());

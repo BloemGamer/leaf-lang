@@ -1,5 +1,5 @@
-use crate::parser::Path;
 use crate::ExprEnum;
+use crate::parser::Path;
 
 #[allow(unused)]
 #[derive(Debug, Eq, PartialEq, Clone, Default)]
@@ -134,24 +134,35 @@ impl Default for OperatingSystem
 	}
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[allow(unused)]
+#[derive(Default, Debug, Eq, PartialEq, PartialOrd, Ord, Clone, Copy, clap::ValueEnum)]
+pub enum ColourConf
+{
+	Always,
+	#[default]
+	Auto,
+	Never,
+}
+
+impl std::fmt::Display for ColourConf
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return match self {
+			ColourConf::Always => write!(f, "always"),
+			ColourConf::Auto => write!(f, "auto"),
+			ColourConf::Never => write!(f, "never"),
+		};
+	}
+}
+
+#[derive(Default, Debug, Eq, PartialEq, Clone)]
 pub struct Config
 {
 	pub optimization: Optimization,
 	pub arch: Architecture,
 	pub os: OperatingSystem,
-}
-
-impl Default for Config
-{
-	fn default() -> Self
-	{
-		return Self {
-			optimization: Optimization::default(),
-			os: OperatingSystem::default(),
-			arch: Architecture::default(),
-		};
-	}
+	pub colour: ColourConf,
 }
 
 impl Config

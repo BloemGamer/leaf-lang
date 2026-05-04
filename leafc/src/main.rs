@@ -127,8 +127,9 @@ use crate::{
 };
 
 use self::{
+	config::ColourConf,
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer},
+	diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
@@ -149,6 +150,7 @@ mod type_analysis;
 mod config;
 mod diagnostics;
 mod source_map;
+mod utils;
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Parser, Debug)]
@@ -169,6 +171,9 @@ struct Args
 	name_resolution: bool,
 	#[arg(short, long)]
 	types: bool,
+
+	#[arg(short, long, default_value_t = ColourConf::Auto)]
+	colour: ColourConf,
 }
 
 impl Args
@@ -183,12 +188,19 @@ fn main()
 {
 	const FILE_NAME: &str = "leaf-test/main.leaf";
 	let args: Args = <Args as clap::Parser>::parse();
-	let config: Config = Config::default();
+	let config: Config = {
+		let mut conf: Config = Config::default();
+		conf.colour = match use_colour(args.colour) {
+			true => ColourConf::Always,
+			false => ColourConf::Never,
+		};
+		conf
+	};
 	let mut source_map: SourceMap = SourceMap::default();
 
 	let Ok(()) = run(&args, &config, FILE_NAME, &mut source_map).inspect_err(|e| {
 		let diag = e.to_diagnostic();
-		let renderer = OldStyleRenderer::new(&diag, &source_map);
+		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
 	}) else {
 		exit(1)
