@@ -2034,6 +2034,12 @@ impl<'a> Resolver<'a>
 	{
 		return Ok(match core {
 			TypeCore::Base { path, generics } => {
+				if path.len() == 1 && path.segments[0].name == "Self" {
+					return Ok(ResolvedTypeCore::Primitive {
+						name: "Self".to_string(),
+						generics: Vec::new(),
+					});
+				}
 				let resolved_generics: Vec<ResolvedType> = generics
 					.iter()
 					.map(|g| return self.resolve_type(g))
