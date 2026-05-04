@@ -19,7 +19,8 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser.parse_expr().map_err(CompileError::Parse).inspect_err(|e| {
 			let diag = e.to_diagnostic();
-			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			let config: Config = Config::default();
+			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 			eprintln!("{}", renderer);
 		});
 	}
@@ -35,7 +36,8 @@ mod tests
 			.map_err(CompileError::Parse)
 			.inspect_err(|e| {
 				let diag = e.to_diagnostic();
-				let renderer = OldStyleRenderer::new(&diag, &source_map);
+				let config: Config = Config::default();
+				let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 				eprintln!("{}", renderer);
 			});
 	}
@@ -48,7 +50,8 @@ mod tests
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		return parser.parse_block().map_err(CompileError::Parse).inspect_err(|e| {
 			let diag = e.to_diagnostic();
-			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			let config: Config = Config::default();
+			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 			eprintln!("{}", renderer);
 		});
 	}
@@ -65,7 +68,8 @@ mod tests
 			.map_err(|e| return CompileError::Parse(e))
 			.inspect_err(|e| {
 				let diag = e.to_diagnostic();
-				let renderer = OldStyleRenderer::new(&diag, &source_map);
+				let config: Config = Config::default();
+				let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 				eprintln!("{}", renderer);
 			});
 	}

@@ -132,7 +132,7 @@ mod module_tests
 		let e = ModuleError {
 			logical_path: vec!["foo".to_string(), "bar".to_string()],
 			span: Span::default(),
-			kind: ModuleErrorKind::FileNotFound(PathBuf::from("/a/b/bar.leaf")),
+			kind: ModuleErrorKind::NoFileOrDirectoryFound(PathBuf::from("/a/b/bar.leaf")),
 			context: Vec::new(),
 		};
 		let s = e.to_string();

@@ -261,7 +261,7 @@ fn run(
 			);
 		}
 
-		queue.extend(modules::collect_pending(&ast, &pm.file_path, &pm.logical_path));
+		queue.extend(modules::collect_pending(&ast, &pm.file_path, &pm.logical_path)?);
 
 		let desugared: DesugaredAST = desugar::desugar_program(ast)?;
 		if args.desugared {

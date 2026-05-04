@@ -26,6 +26,7 @@ pub struct PendingModule
 pub enum ModuleErrorKind
 {
 	FileNotFound(PathBuf),
+	NoFileOrDirectory(PathBuf),
 	IoError(String),
 	#[allow(unused)]
 	Cycle(Vec<Vec<String>>),
@@ -71,6 +72,20 @@ impl fmt::Display for ModuleError
 				write!(f, "module `{path}`: file not found at `{}`", p.display())
 			}
 
+			ModuleErrorKind::NoFileOrDirectory(p) => {
+				let mut file_path: PathBuf = p.clone();
+				file_path.set_extension("leaf");
+				let mut dir_path: PathBuf = p.clone();
+				dir_path.push("module");
+				dir_path.set_extension("leaf");
+				write!(
+					f,
+					"module `{path}`: files not found at `{}` or `{}`",
+					dir_path.display(),
+					file_path.display()
+				)
+			}
+
 			ModuleErrorKind::IoError(e) => {
 				write!(f, "module `{path}`: io error: {e}")
 			}
@@ -96,6 +111,21 @@ impl CompileDiagnostic for ModuleError
 				DiagnosticBuilder::error(format!("module `{module_path}`: file not found at `{}`", p.display()))
 					.code(ErrorCode::ModuleFileNotFound)
 					.primary(self.span, None)
+			}
+
+			ModuleErrorKind::NoFileOrDirectory(p) => {
+				let mut file_path: PathBuf = p.clone();
+				file_path.set_extension("leaf");
+				let mut dir_path: PathBuf = p.clone();
+				dir_path.push("module");
+				dir_path.set_extension("leaf");
+				DiagnosticBuilder::error(format!(
+					"module `{module_path}`: files not found at `{}` or `{}`",
+					dir_path.display(),
+					file_path.display(),
+				))
+				.code(ErrorCode::ModuleFileNotFound)
+				.primary(self.span, None)
 			}
 
 			ModuleErrorKind::IoError(e) => DiagnosticBuilder::error(format!("module `{module_path}`: io error: {e}"))
@@ -132,11 +162,15 @@ impl From<ModuleError> for CompileError
 	}
 }
 
-pub fn collect_pending(ast: &AST, declaring_file: &path::Path, current_modue: &[String]) -> Vec<PendingModule>
+pub fn collect_pending(
+	ast: &AST,
+	declaring_file: &path::Path,
+	current_modue: &[String],
+) -> Result<Vec<PendingModule>, ModuleError>
 {
 	let mut pending: Vec<PendingModule> = Vec::new();
-	collect_from_block(&ast.top_level_block, current_modue, &[], declaring_file, &mut pending);
-	return pending;
+	collect_from_block(&ast.top_level_block, current_modue, &[], declaring_file, &mut pending)?;
+	return Ok(pending);
 }
 
 fn collect_from_block(
@@ -145,7 +179,7 @@ fn collect_from_block(
 	file_path_segments: &[String],
 	declaring_file: &path::Path,
 	pending: &mut Vec<PendingModule>,
-)
+) -> Result<(), ModuleError>
 {
 	for item in &block.items {
 		if let TopLevelDecl::Module(module_decl) = item {
@@ -162,26 +196,50 @@ fn collect_from_block(
 			match &module_decl.kind {
 				ModuleKind::External => {
 					pending.push(PendingModule {
-						file_path: resolve_file(&file_segments, declaring_file),
+						file_path: resolve_file(&file_segments, declaring_file, module_decl.span)?,
 						logical_path: full_path,
 						declared_at_span: module_decl.span,
 					});
 				}
 				ModuleKind::Inline(body) => {
-					collect_from_block(body, &full_path, file_path_segments, declaring_file, pending);
+					collect_from_block(body, &full_path, file_path_segments, declaring_file, pending)?;
 				}
 			}
 		}
 	}
+	return Ok(());
 }
 
-fn resolve_file(logical_path: &[String], declared_in: &path::Path) -> PathBuf
+fn resolve_file(logical_path: &[String], declared_in: &path::Path, span: Span) -> Result<PathBuf, ModuleError>
 {
 	let base_dir: &path::Path = declared_in.parent().unwrap_or_else(|| return path::Path::new("."));
 	let mut path: PathBuf = base_dir.to_path_buf();
 	for segment in logical_path {
 		path.push(segment);
 	}
+	// first check if `path/mudule.leaf` exsists, otherwise, check if `path.leaf` exsists
+	if !path.exists() {
+		path.set_extension("leaf");
+		if path.exists() {
+			return Ok(path);
+		}
+
+		return Err(ModuleError {
+			logical_path: logical_path.to_vec(),
+			span,
+			kind: ModuleErrorKind::NoFileOrDirectory(path),
+			context: Vec::new(),
+		});
+	}
+	path.push("module");
 	path.set_extension("leaf");
-	return path;
+	if !path.exists() {
+		return Err(ModuleError {
+			logical_path: logical_path.to_vec(),
+			span,
+			kind: ModuleErrorKind::FileNotFound(path),
+			context: Vec::new(),
+		});
+	}
+	return Ok(path);
 }
