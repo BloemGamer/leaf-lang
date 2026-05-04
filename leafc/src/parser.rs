@@ -692,6 +692,7 @@ pub enum TypeCore
 
 	Pointer
 	{
+		mutable: bool,
 		inner: Box<TypeCore>,
 	},
 
@@ -3206,7 +3207,7 @@ where
 		let span: Span = self.peek()?.span();
 		let core: TypeCore = self.parse_type_core()?;
 		return Ok(Type {
-			core: Box::new(self.parse_type_suffix(core)?),
+			core: Box::new(core),
 			span: span.merge(&self.last_span),
 		});
 	}
@@ -3242,6 +3243,17 @@ where
 					self.next()?;
 				}
 				return Ok(TypeCore::Reference {
+					mutable,
+					inner: Box::new(self.parse_type_core()?),
+				});
+			}
+			TokenKind::Star => {
+				self.next()?;
+				let mutable: bool = self.at(&TokenKind::Mut)?;
+				if mutable {
+					self.next()?;
+				}
+				return Ok(TypeCore::Pointer {
 					mutable,
 					inner: Box::new(self.parse_type_core()?),
 				});
@@ -3282,8 +3294,6 @@ where
 
 				let base_type: TypeCore = self.parse_type_core()?;
 
-				let complete_type: TypeCore = self.parse_type_suffix(base_type)?;
-
 				let size: Option<Box<Expr>> = if self.consume(&TokenKind::Semicolon)? {
 					Some(Box::new(self.parse_expr()?))
 				} else {
@@ -3293,7 +3303,7 @@ where
 				self.expect(&TokenKind::RightBracket)?;
 
 				return Ok(TypeCore::Array {
-					inner: Box::new(complete_type),
+					inner: Box::new(base_type),
 					size,
 				});
 			}
@@ -3301,19 +3311,10 @@ where
 				let err_tok: Token = tok.clone();
 				return Err(ParseError::invalid_type(
 					err_tok.span,
-					"expected '&', 'mut', identifier, '[' or '(' to start a type",
+					"expected '&', '*', 'mut', identifier, '[' or '(' to start a type",
 				));
 			}
 		}
-	}
-
-	fn parse_type_suffix(&mut self, mut base: TypeCore) -> Result<TypeCore, ParseError>
-	{
-		while matches!(self.peek_kind()?, TokenKind::Star) {
-			self.next()?; // *
-			base = TypeCore::Pointer { inner: Box::new(base) };
-		}
-		return Ok(base);
 	}
 
 	fn get_path(&mut self) -> Result<Path, ParseError>
@@ -7035,7 +7036,13 @@ impl fmt::Display for TypeCore
 			TypeCore::Mutable { inner } => {
 				return write!(f, "mut {}", inner);
 			}
-			TypeCore::Pointer { inner } => return write!(f, "{}*", inner),
+			TypeCore::Pointer { mutable, inner } => {
+				write!(f, "*")?;
+				if *mutable {
+					write!(f, "mut ")?;
+				}
+				return write!(f, "{}", inner);
+			}
 			TypeCore::Array { inner, size } => {
 				write!(f, "[")?;
 				write!(f, "{}", inner)?;

@@ -4851,6 +4851,7 @@ mod tests
 				modifiers: Vec::new(),
 				ty: Type {
 					core: Box::new(TypeCore::Pointer {
+						mutable: false,
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
 							generics: Vec::new(),

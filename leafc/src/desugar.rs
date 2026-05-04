@@ -539,7 +539,7 @@ impl Desugarer
 
 				return Ok(Some(generic_param));
 			}
-			TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner } => {
+			TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner, .. } => {
 				let mut inner_ty: Type = Type {
 					core: inner.clone(),
 					span: ty.span,
@@ -2333,7 +2333,7 @@ fn get_mentioned_type_params_in_type(ty: &Type) -> Vec<String>
 		}
 		TypeCore::Reference { inner, .. }
 		| TypeCore::Mutable { inner }
-		| TypeCore::Pointer { inner }
+		| TypeCore::Pointer { inner, .. }
 		| TypeCore::Array { inner, size: _ } => {
 			return get_mentioned_type_params_in_type_core(inner);
 		}
@@ -2398,7 +2398,7 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 		}
 		TypeCore::Reference { inner, .. }
 		| TypeCore::Mutable { inner }
-		| TypeCore::Pointer { inner }
+		| TypeCore::Pointer { inner, .. }
 		| TypeCore::Array { inner, .. } => return get_mentioned_type_params_in_type_core(inner),
 		TypeCore::Tuple(types) => return types.iter().flat_map(get_mentioned_type_params_in_type).collect(),
 		TypeCore::ImplTrait { .. } => return Vec::new(),

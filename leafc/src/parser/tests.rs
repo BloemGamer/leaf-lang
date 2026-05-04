@@ -1352,7 +1352,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "i32*", "test_file_8", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "*i32", "test_file_8", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -2389,12 +2389,12 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "i32**", "test_file_32", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "**i32", "test_file_32", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
 		match result.unwrap().core.as_ref() {
-			TypeCore::Pointer { inner } => match inner.as_ref() {
+			TypeCore::Pointer { inner, .. } => match inner.as_ref() {
 				TypeCore::Pointer { .. } => (),
 				_ => panic!("Expected nested pointer"),
 			},
@@ -2407,7 +2407,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "[i32*; 10]", "test_file_33", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "[*i32; 10]", "test_file_33", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -2425,7 +2425,7 @@ mod tests
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
-		let lexer = Lexer::new_add_to_source_map(&config, "i32[10]*", "test_file_34", &mut source_map);
+		let lexer = Lexer::new_add_to_source_map(&config, "*[i32; 10]", "test_file_34", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
 		let result = parser.parse_type();
 		assert!(result.is_ok());
@@ -4393,7 +4393,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_function_with_params()
 	{
-		let input = "fn! allocate(size: usize) -> u8* {}";
+		let input = "fn! allocate(size: usize) -> *u8 {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
@@ -4628,7 +4628,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_call_in_expression()
 	{
-		let input = "var ptr: u8* = allocate!(size);";
+		let input = "var ptr: *u8 = allocate!(size);";
 		let result = parse_block_from_str(&format!("{{{}}}", input));
 		assert!(result.is_ok());
 	}
@@ -4948,7 +4948,7 @@ mod tests
 	#[test]
 	fn test_display_heap_function()
 	{
-		let input = "fn! allocate(size: usize) -> u8* {}";
+		let input = "fn! allocate(size: usize) -> *u8 {}";
 		let program = parse_program_from_str(input).unwrap();
 		let output = format!("{}", program);
 		assert!(output.contains("fn!"));
@@ -5009,7 +5009,7 @@ mod tests
 	{
 		let input = r"
             fn! create_buffer<A: Allocator>(allocator: A, size: usize) -> Buffer {
-                var ptr: u8* = allocator.allocate!(size);
+                var ptr: *u8 = allocator.allocate!(size);
                 return Buffer { ptr, size };
             }
         ";
@@ -5077,8 +5077,8 @@ mod tests
 	{
 		let input = r"
             trait Allocator {
-                fn! allocate(&self, size: usize) -> u8*;
-                fn! deallocate(&self, ptr: u8*);
+                fn! allocate(&self, size: usize) -> *u8;
+                fn! deallocate(&self, ptr: *u8);
             }
         ";
 		let result = parse_program_from_str(input);
@@ -5090,7 +5090,7 @@ mod tests
 	{
 		let input = r"
             impl Allocator for SystemAlloc {
-                fn! allocate(&self, size: usize) -> u8* {
+                fn! allocate(&self, size: usize) -> *u8 {
                     system_alloc!(size)
                 }
             }
@@ -6135,7 +6135,7 @@ mod tests
 	#[test]
 	fn test_parse_delete_function_declaration()
 	{
-		let input = "fn delete(ptr: u8*) {}";
+		let input = "fn delete(ptr: *u8) {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7326,7 +7326,7 @@ mod tests
 	#[test]
 	fn test_parse_generic_pointer_type()
 	{
-		let input = "{ var x: Vec<i32>* = default(); }";
+		let input = "{ var x: *Vec<i32> = default(); }";
 		let result = parse_block_from_str(input);
 		assert!(result.is_ok());
 	}
@@ -7447,7 +7447,7 @@ mod tests
 	{
 		let input = r"
 		struct Vec<T> {
-			data: T*,
+			data: *T,
 			len: usize,
 			cap: usize,
 		}
@@ -7636,7 +7636,7 @@ mod tests
 	{
 		let input = r"
 		module collections {
-			struct Vec<T> { data: T* }
+			struct Vec<T> { data: *T }
 		}
 	";
 		let result = parse_program_from_str(input);
@@ -9384,7 +9384,7 @@ mod tests
 	{
 		let input = r"
 		/// Allocates memory
-		fn! allocate(size: usize) -> u8* {}
+		fn! allocate(size: usize) -> *u8 {}
 	";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
