@@ -1,6 +1,7 @@
 pub mod expander;
 mod tests;
 
+use std::marker::PhantomData;
 use std::path;
 
 use leaf_proc::{Spanned, generate_lexer};
@@ -177,6 +178,40 @@ pub struct Lexer<'source, 'config>
 	line: usize,
 	column: usize,
 	eof_returned: bool,
+}
+
+impl<'source, 'config> Lexer<'source, 'config>
+{
+	fn make_checkpoint(&self) -> LexerCheckpoint<'source, 'config>
+	{
+		return LexerCheckpoint {
+			position: self.position,
+			current_char: self.current_char,
+			line: self.line,
+			column: self.column,
+			eof_returned: self.eof_returned,
+			_marker: PhantomData,
+		};
+	}
+
+	fn restore_checkpoint(&mut self, checkpoint: LexerCheckpoint<'source, 'config>)
+	{
+		self.position = checkpoint.position;
+		self.current_char = checkpoint.current_char;
+		self.line = checkpoint.line;
+		self.column = checkpoint.column;
+		self.eof_returned = checkpoint.eof_returned;
+	}
+}
+
+struct LexerCheckpoint<'source, 'config>
+{
+	position: usize,
+	current_char: Option<char>,
+	line: usize,
+	column: usize,
+	eof_returned: bool,
+	_marker: PhantomData<(&'source str, &'config Config)>,
 }
 
 /// A token produced by the lexer.
@@ -373,8 +408,15 @@ pub enum IntSign
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct IntType
 {
-	pub bits: u16,
+	pub bits: IntSize,
 	pub sign: IntSign,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IntSize
+{
+	Size,
+	Fixed(u16),
 }
 
 impl std::fmt::Display for IntType
@@ -386,6 +428,17 @@ impl std::fmt::Display for IntType
 			IntSign::Unsigned => write!(f, "u{}", self.bits)?,
 		}
 		return Ok(());
+	}
+}
+
+impl std::fmt::Display for IntSize
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		return match self {
+			IntSize::Size => write!(f, "size"),
+			IntSize::Fixed(bits) => write!(f, "{bits}"),
+		};
 	}
 }
 
@@ -1149,36 +1202,72 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 	fn read_int_suffix(&mut self) -> Option<IntType>
 	{
-		let sign: IntSign = match self.current_char {
-			Some('u') => {
-				self.advance();
-				IntSign::Unsigned
-			}
-			Some('i') => {
-				self.advance();
-				IntSign::Signed
-			}
-			_ => return None,
-		};
+		let checkpoint: LexerCheckpoint<'_, '_> = self.make_checkpoint();
 
-		let mut digits: String = String::new();
+		let result: Option<IntType> = (|| {
+			let sign: IntSign = match self.current_char {
+				Some('u') => {
+					self.advance();
+					IntSign::Unsigned
+				}
+				Some('i') => {
+					self.advance();
+					IntSign::Signed
+				}
+				_ => return None,
+			};
 
-		while let Some(ch) = self.current_char {
-			if ch.is_ascii_digit() {
-				digits.push(ch);
+			if self.current_char == Some('s') {
 				self.advance();
-			} else {
-				break;
+
+				let mut s: String = String::from("s");
+
+				for _ in 0..3 {
+					let c = self.current_char?;
+					self.advance();
+					s.push(c);
+				}
+
+				if s != "size" {
+					return None;
+				}
+
+				return Some(IntType {
+					bits: IntSize::Size,
+					sign,
+				});
+			}
+
+			let mut digits = String::new();
+
+			while let Some(ch) = self.current_char {
+				if ch.is_ascii_digit() {
+					digits.push(ch);
+					self.advance();
+				} else {
+					break;
+				}
+			}
+
+			if digits.is_empty() {
+				return None;
+			}
+
+			let bits: u16 = digits.parse::<u16>().ok()?;
+
+			Some(IntType {
+				bits: IntSize::Fixed(bits),
+				sign,
+			})
+		})();
+
+		match result {
+			Some(v) => Some(v),
+			None => {
+				self.restore_checkpoint(checkpoint);
+				None
 			}
 		}
-
-		if digits.is_empty() {
-			return None;
-		}
-
-		let bits: u16 = digits.parse::<u16>().ok()?;
-
-		return Some(IntType { bits, sign });
 	}
 
 	fn read_float_suffix(&mut self) -> Option<u16>
