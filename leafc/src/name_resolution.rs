@@ -92,6 +92,7 @@ pub enum ResolvedTypeCore
 	},
 	Pointer
 	{
+		mutable: bool,
 		inner: Box<ResolvedTypeCore>,
 	},
 	Array
@@ -2071,7 +2072,8 @@ impl<'a> Resolver<'a>
 			TypeCore::Mutable { inner } => ResolvedTypeCore::Mutable {
 				inner: Box::new(self.resolve_type_core(inner, span)?),
 			},
-			TypeCore::Pointer { inner } => ResolvedTypeCore::Pointer {
+			TypeCore::Pointer { mutable, inner } => ResolvedTypeCore::Pointer {
+				mutable: *mutable,
 				inner: Box::new(self.resolve_type_core(inner, span)?),
 			},
 			TypeCore::Array { inner, size } => {
@@ -3485,7 +3487,13 @@ impl fmt::Display for ResolvedTypeCore
 				return write!(f, "{}", inner);
 			}
 			ResolvedTypeCore::Mutable { inner } => return write!(f, "mut {}", inner),
-			ResolvedTypeCore::Pointer { inner } => return write!(f, "{}*", inner),
+			ResolvedTypeCore::Pointer { mutable, inner } => {
+				write!(f, "*")?;
+				if *mutable {
+					write!(f, "mut ")?;
+				}
+				return write!(f, "{}", inner);
+			}
 			ResolvedTypeCore::Array { inner, size } => {
 				write!(f, "[{}", inner)?;
 				if let Some(s) = size {
