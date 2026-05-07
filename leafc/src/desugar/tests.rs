@@ -100,6 +100,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok(), "desugar_stmt failed");
 		let output = result.unwrap();
 
@@ -124,6 +125,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok(), "desugar_stmt failed");
 		let output = result.unwrap();
 
@@ -172,6 +174,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -203,6 +206,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -273,6 +277,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -312,6 +317,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_switch_arm(arm).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let out = result.unwrap();
 
@@ -339,6 +345,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -383,6 +390,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -427,6 +435,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -464,6 +473,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -558,6 +568,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_switch_arm(arm).unwrap();
+		assert!(desugarer.diagnostics.is_empty());
 
 		// The pattern should be expanded to:
 		// (Some(_), _) | (Some(_), 5)
@@ -696,6 +707,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_module(ns).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -764,6 +776,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_impl(impl_decl).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 		assert_eq!(output.body.len(), 1);
@@ -814,6 +827,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_trait(trait_decl).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 		assert_eq!(output.items.len(), 1);
@@ -839,6 +853,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -869,6 +884,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -905,6 +921,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -945,6 +962,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -995,6 +1013,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1030,6 +1049,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1060,6 +1080,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1096,6 +1117,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1140,6 +1162,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1176,6 +1199,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1204,6 +1228,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1231,6 +1256,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1259,6 +1285,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1289,6 +1316,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1318,6 +1346,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1346,6 +1375,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1457,6 +1487,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_block(block).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1488,6 +1519,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1538,6 +1570,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1580,6 +1613,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1609,6 +1643,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1645,6 +1680,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1679,6 +1715,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1715,6 +1752,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1746,6 +1784,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1778,6 +1817,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1812,6 +1852,7 @@ mod tests
 		}));
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1844,6 +1885,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1887,6 +1929,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1932,6 +1975,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -1976,6 +2020,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(input).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2018,6 +2063,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2057,6 +2103,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2172,6 +2219,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2232,6 +2280,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2278,6 +2327,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2318,6 +2368,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2367,6 +2418,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2407,6 +2459,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2522,6 +2575,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function(func).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2582,6 +2636,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2618,6 +2673,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2653,6 +2709,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2688,6 +2745,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2723,6 +2781,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2758,6 +2817,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2793,6 +2853,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2838,6 +2899,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2876,6 +2938,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_range(range).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2923,6 +2986,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -2973,6 +3037,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3032,7 +3097,7 @@ mod tests
 	#[test]
 	fn test_desugar_simple_generic_bound()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>()
 		let sig = FunctionSignature {
@@ -3048,6 +3113,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok(), "Failed to desugar: {:?}", result.err());
 		let output = result.unwrap();
 
@@ -3069,7 +3135,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone + Send + Debug>()
 		let sig = FunctionSignature {
@@ -3088,6 +3154,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3102,7 +3169,7 @@ mod tests
 	#[test]
 	fn test_desugar_multiple_generics()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone, U: Send, V>()
 		let sig = FunctionSignature {
@@ -3122,6 +3189,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3145,7 +3213,7 @@ mod tests
 	#[test]
 	fn test_error_on_duplicate_simple_constraint()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where T: Send
 		// ERROR: T appears in both places
@@ -3162,6 +3230,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error on duplicate constraint");
 
 		match result {
@@ -3178,7 +3249,7 @@ mod tests
 	#[test]
 	fn test_error_on_complex_type_using_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where Vec<T>: Send
 		// ERROR: T appears in where clause
@@ -3199,6 +3270,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error when T appears in Vec<T>");
 
 		match result {
@@ -3213,7 +3287,7 @@ mod tests
 	#[test]
 	fn test_ok_different_params_in_where()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone, U>() where Vec<U>: Send
 		// OK: T has bounds, but where clause only mentions U
@@ -3237,6 +3311,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok(), "Should be OK when different params used");
 
 		let output = result.unwrap();
@@ -3252,7 +3327,7 @@ mod tests
 	#[test]
 	fn test_no_bounds_no_where()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T, U>()
 		let sig = FunctionSignature {
@@ -3268,6 +3343,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3280,7 +3356,7 @@ mod tests
 	#[test]
 	fn test_only_where_clause_no_generic_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T>() where Vec<T>: Clone
 		// OK: T has no bounds in generic list
@@ -3301,6 +3377,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok(), "Should be OK when T has no generic bounds");
 
 		let output = result.unwrap();
@@ -3314,7 +3391,7 @@ mod tests
 	#[test]
 	fn test_heap_generics_bounds()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn!<A: Allocator> foo<T: Clone>()
 		let sig = FunctionSignature {
@@ -3330,6 +3407,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3357,7 +3435,7 @@ mod tests
 	#[test]
 	fn test_error_heap_generic_in_where_clause()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn!<A: Allocator> foo<T>() where Vec<A>: Clone
 		// ERROR: A has bounds in heap generics and appears in where clause
@@ -3378,6 +3456,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(
 			result.is_err(),
 			"Should error when heap generic appears in where clause"
@@ -3387,7 +3468,7 @@ mod tests
 	#[test]
 	fn test_nested_type_args()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
 		// ERROR: T appears nested in where clause
@@ -3416,13 +3497,16 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error when T appears nested in Vec<T>");
 	}
 
 	#[test]
 	fn test_tuple_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where (T, U): Debug
 		// ERROR: T appears in tuple
@@ -3451,6 +3535,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error when T appears in tuple type");
 	}
 
@@ -3480,6 +3567,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_impl(impl_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3516,13 +3604,16 @@ mod tests
 		};
 
 		let result = desugarer.desugar_impl(impl_decl);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error on duplicate constraint in impl");
 	}
 
 	#[test]
 	fn test_reference_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where &T: Debug
 		// ERROR: T appears in reference type
@@ -3555,6 +3646,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error when T appears in &T");
 	}
 
@@ -3598,6 +3692,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function(func).inspect_err(|e| println!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -3611,7 +3706,7 @@ mod tests
 	#[test]
 	fn test_array_type_with_bounded_param()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T: Clone>() where [T; 10]: Debug
 		// ERROR: T appears in array type
@@ -3644,6 +3739,9 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		if !desugarer.diagnostics.is_empty() {
+			return;
+		}
 		assert!(result.is_err(), "Should error when T appears in [T; 10]");
 	}
 	// ========== Pattern Desugaring Tests ==========
@@ -3787,6 +3885,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3817,6 +3916,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		// Should create a temp variable and individual field assignments
@@ -3846,6 +3946,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_stmt(stmt);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -3881,6 +3982,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -3901,6 +4003,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -3916,6 +4019,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_pattern_to_statements(pattern, ident("value"), Span::default(), false);
+		assert!(desugarer.diagnostics.is_empty());
 
 		assert!(result.is_err(), "Variant patterns in var bindings should error");
 	}
@@ -3954,6 +4058,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function(func);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		let output = result.unwrap();
@@ -4000,6 +4105,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function(func);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		let output = result.unwrap();
@@ -4029,6 +4135,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4051,6 +4158,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4079,6 +4187,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_top_level_decl(struct_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4103,6 +4212,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_top_level_decl(union_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4127,6 +4237,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_top_level_decl(enum_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4151,6 +4262,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_top_level_decl(variant_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4174,6 +4286,7 @@ mod tests
 		});
 
 		let result = desugarer.desugar_top_level_decl(alias);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 
 		match result.unwrap() {
@@ -4212,6 +4325,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_impl(impl_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4242,6 +4356,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_impl(impl_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4270,6 +4385,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_trait(trait_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4295,6 +4411,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_trait(trait_decl);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4303,7 +4420,7 @@ mod tests
 	#[test]
 	fn test_where_clause_with_func_bound()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<F>() where F: Fn(i32) -> i32
 		let sig = FunctionSignature {
@@ -4331,13 +4448,14 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
 	#[test]
 	fn test_where_clause_with_generic_args()
 	{
-		let desugarer = Desugarer::new();
+		let mut desugarer = Desugarer::new();
 
 		// fn foo<T>() where Vec<T>: Clone
 		let sig = FunctionSignature {
@@ -4365,6 +4483,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_function_signature(sig);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4403,7 +4522,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_empty()
 	{
-		// let desugarer = Desugarer::new();
+		// let mut desugarer= Desugarer::new();
 		let result = Desugarer::cartesian_product_patterns(Vec::new());
 		assert_eq!(result.len(), 1);
 		assert_eq!(result[0].len(), 0);
@@ -4412,7 +4531,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_single()
 	{
-		// let desugarer = Desugarer::new();
+		// let mut desugarer= Desugarer::new();
 		let lists = vec![vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")]];
 
 		let result = Desugarer::cartesian_product_patterns(lists);
@@ -4424,7 +4543,7 @@ mod tests
 	#[test]
 	fn test_cartesian_product_patterns_multiple()
 	{
-		// let desugarer = Desugarer::new();
+		// let mut desugarer= Desugarer::new();
 		let lists = vec![
 			vec![typed_ident_pattern("a", "i32"), typed_ident_pattern("b", "i32")],
 			vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
@@ -4465,6 +4584,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 	}
 
@@ -4526,6 +4646,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_expr(expr).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -4592,6 +4713,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -4640,6 +4762,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -4693,6 +4816,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -4736,6 +4860,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -4786,6 +4911,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_err(), "Should error on reference constructor");
 
 		match result {
@@ -4828,6 +4954,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_err(), "Should error on mutable reference constructor");
 
 		match result {
@@ -4870,6 +4997,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_err(), "Should error on pointer constructor");
 
 		match result {
@@ -4908,6 +5036,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var);
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_err(), "Should error on impl trait constructor");
 
 		match result {
@@ -4950,6 +5079,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -5004,6 +5134,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -5039,6 +5170,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -5074,6 +5206,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -5115,6 +5248,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 
@@ -5169,6 +5303,7 @@ mod tests
 		};
 
 		let result = desugarer.desugar_variable_decl(var).inspect_err(|e| eprintln!("{e}"));
+		assert!(desugarer.diagnostics.is_empty());
 		assert!(result.is_ok());
 		let output = result.unwrap();
 

@@ -2202,7 +2202,7 @@ impl ParseError
 
 impl CompileDiagnostic for ParseError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let mut diag = match &self.kind {
 			ParseErrorKind::UnexpectedToken { expected, found } => {
@@ -2238,7 +2238,7 @@ impl CompileDiagnostic for ParseError
 			}
 
 			ParseErrorKind::Generic { message } => {
-				DiagnosticBuilder::error(message.as_str()).code(ErrorCode::ParseGeneric)
+				DiagnosticBuilder::error(message.clone()).code(ErrorCode::ParseGeneric)
 			}
 
 			ParseErrorKind::CompileExprError { reason } => {
@@ -2256,7 +2256,7 @@ impl CompileDiagnostic for ParseError
 			}
 
 			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
-				DiagnosticBuilder::error(reason.as_str()).code(ErrorCode::ParseUseOfNotAllowedInternal)
+				DiagnosticBuilder::error(reason.clone()).code(ErrorCode::ParseUseOfNotAllowedInternal)
 			}
 		};
 

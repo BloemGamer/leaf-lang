@@ -31,14 +31,14 @@ pub struct DesugaredAST
 	pub source_index: SourceIndex,
 }
 
-impl TryFrom<AST> for DesugaredAST
-{
-	type Error = DesugarError;
-	fn try_from(value: AST) -> Result<Self, Self::Error>
-	{
-		return desugar_program(value);
-	}
-}
+// impl TryFrom<AST> for DesugaredAST
+// {
+// 	type Error = DesugarError;
+// 	fn try_from(value: AST) -> Result<Self, Self::Error>
+// 	{
+// 		return desugar_program(value);
+// 	}
+// }
 
 impl std::fmt::Display for DesugaredAST
 {
@@ -61,6 +61,7 @@ struct Desugarer
 {
 	tmp_counter: usize,
 	loop_stack: Vec<String>,
+	diagnostics: Vec<DiagnosticBuilder>,
 }
 
 /// Types of errors that can occur during desugaring.
@@ -146,12 +147,6 @@ impl DesugarError
 	}
 }
 
-//
-// ────────────────────────────────────────────────────────────────────────────────
-//   Display
-// ────────────────────────────────────────────────────────────────────────────────
-//
-
 impl std::fmt::Display for DesugarError
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
@@ -182,7 +177,7 @@ impl std::error::Error for DesugarError {}
 
 impl CompileDiagnostic for DesugarError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let mut diag = match &self.kind {
 			DesugarErrorKind::InvalidConstructorType { reason } => {
@@ -195,12 +190,12 @@ impl CompileDiagnostic for DesugarError
 			}
 
 			DesugarErrorKind::Generic { message } => {
-				DiagnosticBuilder::error(message.as_str()).code(ErrorCode::DesugarGeneric)
+				DiagnosticBuilder::error(message.clone()).code(ErrorCode::DesugarGeneric)
 			}
 		};
 
 		// Primary label
-		diag = diag.primary(self.span, None);
+		diag = diag.primary(self.span(), None);
 
 		// Context stack
 		for ctx in &self.context {
@@ -227,6 +222,7 @@ impl Desugarer
 		return Desugarer {
 			tmp_counter: 0,
 			loop_stack: Vec::new(),
+			diagnostics: Vec::new(),
 		};
 	}
 
@@ -373,7 +369,8 @@ impl Desugarer
 		return Ok(func);
 	}
 
-	fn desugar_function_signature(&self, mut func_sig: FunctionSignature) -> Result<FunctionSignature, DesugarError>
+	fn desugar_function_signature(&mut self, mut func_sig: FunctionSignature)
+	-> Result<FunctionSignature, DesugarError>
 	{
 		let mut impl_trait_counter: usize = 0;
 		let mut new_generics: Vec<GenericParam> = Vec::new();
@@ -393,18 +390,18 @@ impl Desugarer
 			func_sig.generics.push(new_generic);
 		}
 
-		let generics_with_bounds: Vec<&String> = func_sig
+		let generics_with_bounds: Vec<(&String, Span)> = func_sig
 			.generics
 			.iter()
 			.filter(|g| return g.has_bounds())
-			.map(|g| return &g.name)
+			.map(|g| return (&g.name, g.span()))
 			.collect();
 
-		let heap_generics_with_bounds: Vec<&String> = func_sig
+		let heap_generics_with_bounds: Vec<(&String, Span)> = func_sig
 			.heap_generics
 			.iter()
 			.filter(|g| return g.has_bounds())
-			.map(|g| return &g.name)
+			.map(|g| return (&g.name, g.span()))
 			.collect();
 
 		for where_constraint in &func_sig.where_clause {
@@ -419,26 +416,50 @@ impl Desugarer
 			let all_mentioned: Vec<Ident> = mentioned_types.into_iter().chain(mentioned_in_args).collect();
 
 			for type_param in all_mentioned {
-				if generics_with_bounds.contains(&&type_param) {
-					return Err(DesugarError::generic(
-						where_constraint.span,
-						format!(
-							"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
-								Move all bounds for `{}` to the where clause instead.",
-							type_param, type_param
-						),
-					));
+				if let Some((_, generic_span)) = generics_with_bounds
+					.iter()
+					.find(|(name, _)| return *name == &type_param)
+				{
+					self.diagnostics.push(
+						DesugarError::generic(
+							*generic_span,
+							format!(
+								"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+									Move all bounds for `{}` to the where clause instead.",
+								type_param, type_param
+							),
+						)
+						.build()
+						.secondary(
+							where_constraint.span(),
+							"second constraint here in the where clause".to_string(),
+						)
+						.note("during desugaring")
+						.help("move all the constraints to the where clause"),
+					);
 				}
 
-				if heap_generics_with_bounds.contains(&&type_param) {
-					return Err(DesugarError::generic(
-						where_constraint.span,
-						format!(
-							"heap generic type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+				if let Some((_, generic_span)) = heap_generics_with_bounds
+					.iter()
+					.find(|(name, _)| return *name == &type_param)
+				{
+					self.diagnostics.push(
+						DesugarError::generic(
+							*generic_span,
+							format!(
+								"heap generic type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
 								Move all bounds for `{}` to the where clause instead.",
-							type_param, type_param
-						),
-					));
+								type_param, type_param
+							),
+						)
+						.build()
+						.secondary(
+							where_constraint.span(),
+							"second constraint here in the where clause".to_string(),
+						)
+						.note("during desugaring")
+						.help("move the all the constraints to the where clause"),
+					);
 				}
 			}
 		}
@@ -587,7 +608,7 @@ impl Desugarer
 	#[allow(clippy::result_large_err)]
 	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> Result<ImplDecl, DesugarError>
 	{
-		impl_decl = self.desugar_impl_generics(impl_decl)?;
+		impl_decl = self.desugar_impl_generics(impl_decl);
 
 		impl_decl.body = impl_decl
 			.body
@@ -604,13 +625,13 @@ impl Desugarer
 		return Ok(impl_decl);
 	}
 
-	fn desugar_impl_generics(&self, mut impl_decl: ImplDecl) -> Result<ImplDecl, DesugarError>
+	fn desugar_impl_generics(&mut self, mut impl_decl: ImplDecl) -> ImplDecl
 	{
-		let generics_with_bounds: Vec<&String> = impl_decl
+		let generics_with_bounds: Vec<(&String, Span)> = impl_decl
 			.generics
 			.iter()
 			.filter(|g| return g.has_bounds())
-			.map(|g| return &g.name)
+			.map(|g| return (&g.name, g.span()))
 			.collect();
 
 		for where_constraint in &impl_decl.where_clause {
@@ -625,15 +646,27 @@ impl Desugarer
 			let all_mentioned: Vec<String> = mentioned_types.into_iter().chain(mentioned_in_args).collect();
 
 			for type_param in all_mentioned {
-				if generics_with_bounds.contains(&&type_param) {
-					return Err(DesugarError::generic(
-						where_constraint.span,
-						format!(
-							"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
-								 Move all bounds for `{}` to the where clause instead.",
-							type_param, type_param
-						),
-					));
+				if let Some((_, generic_span)) = generics_with_bounds
+					.iter()
+					.find(|(name, _)| return *name == &type_param)
+				{
+					self.diagnostics.push(
+						DesugarError::generic(
+							*generic_span,
+							format!(
+								"type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
+									Move all bounds for `{}` to the where clause instead.",
+								type_param, type_param
+							),
+						)
+						.build()
+						.secondary(
+							where_constraint.span(),
+							"second constraint here in the where clause".to_string(),
+						)
+						.note("during desugaring")
+						.help("move the all the constraints to the where clause"),
+					);
 				}
 			}
 		}
@@ -664,7 +697,7 @@ impl Desugarer
 			generic.bounds.clear();
 		}
 
-		return Ok(impl_decl);
+		return impl_decl;
 	}
 
 	#[allow(clippy::result_large_err)]
@@ -2430,8 +2463,8 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 ///
 /// let desugared = desugar_program(parsed_program)?;
 /// ```
-pub fn desugar_program(program: AST) -> Result<DesugaredAST, DesugarError>
+pub fn desugar_program(program: AST) -> (Result<DesugaredAST, DesugarError>, Vec<DiagnosticBuilder>)
 {
 	let mut desugarer: Desugarer = Desugarer::new();
-	return desugarer.desugar_program(program);
+	return (desugarer.desugar_program(program), desugarer.diagnostics);
 }

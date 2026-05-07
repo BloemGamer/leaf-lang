@@ -949,7 +949,7 @@ impl std::error::Error for NameResolutionError {}
 
 impl CompileDiagnostic for NameResolutionError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let mut diag = match &self.kind {
 			NameResolutionErrorKind::UnresolvedPath { path } => {

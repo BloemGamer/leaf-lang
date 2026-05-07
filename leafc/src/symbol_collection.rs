@@ -553,13 +553,13 @@ impl std::error::Error for SymbolCollectionError {}
 
 impl CompileDiagnostic for SymbolCollectionError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let mut diag = match &self.kind {
 			SymbolCollectionErrorKind::DuplicateDefinition {
 				name, first_definition, ..
 			} => {
-				let d: DiagnosticBuilder<'_> = DiagnosticBuilder::error(format!("duplicate definition of `{name}`"))
+				let d: DiagnosticBuilder = DiagnosticBuilder::error(format!("duplicate definition of `{name}`"))
 					.code(ErrorCode::SymbolDuplicateDefinition)
 					.primary(self.span, Some("second definition".into()))
 					.secondary(*first_definition, Some("first defined here".into()));
@@ -582,7 +582,7 @@ impl CompileDiagnostic for SymbolCollectionError
 					.primary(self.span, None)
 			}
 
-			SymbolCollectionErrorKind::Generic { message, .. } => DiagnosticBuilder::error(message.as_str())
+			SymbolCollectionErrorKind::Generic { message, .. } => DiagnosticBuilder::error(message.clone())
 				.code(ErrorCode::SymbolGeneric)
 				.primary(self.span, None),
 		};

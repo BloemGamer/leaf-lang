@@ -129,7 +129,7 @@ use crate::{
 use self::{
 	config::ColourConf,
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer, use_colour},
+	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
@@ -198,7 +198,14 @@ fn main()
 	};
 	let mut source_map: SourceMap = SourceMap::default();
 
-	let Ok(()) = run(&args, &config, FILE_NAME, &mut source_map).inspect_err(|e| {
+	let (res, diagnostics) = run(&args, &config, FILE_NAME, &mut source_map);
+
+	for d in diagnostics {
+		let diag = d.finish();
+		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
+		eprintln!("{}", renderer);
+	}
+	let Ok(()) = res.inspect_err(|e| {
 		let diag = e.to_diagnostic();
 		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
@@ -212,8 +219,9 @@ fn run(
 	config: &Config,
 	filename: impl Into<path::PathBuf> + Clone,
 	source_map: &mut SourceMap,
-) -> Result<(), CompileError>
+) -> (Result<(), CompileError>, Vec<DiagnosticBuilder>)
 {
+	let mut diagnostics = Vec::new();
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
 		logical_path: Vec::new(),
 		file_path: filename.into(),
@@ -240,7 +248,7 @@ fn run(
 			continue;
 		}
 
-		let source: String = fs::read_to_string(&pm.file_path).map_err(|e| {
+		let res = fs::read_to_string(&pm.file_path).map_err(|e| {
 			let kind: ModuleErrorKind = if e.kind() == std::io::ErrorKind::NotFound {
 				ModuleErrorKind::FileNotFound(pm.file_path.clone())
 			} else {
@@ -252,7 +260,11 @@ fn run(
 				kind,
 				context: Vec::new(),
 			});
-		})?;
+		});
+		let source: String = match res {
+			Ok(s) => s,
+			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+		};
 
 		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
 		if args.lexed {
@@ -264,7 +276,11 @@ fn run(
 		}
 		let expanded_lexer: ExpandedLexer = ExpandedLexer::new(lexer);
 
-		let ast: AST = Parser::from(expanded_lexer).try_into()?;
+		let res = Parser::from(expanded_lexer).try_into();
+		let ast: AST = match res {
+			Ok(ast) => ast,
+			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Parse), diagnostics),
+		};
 		if args.parsed {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",
@@ -273,9 +289,18 @@ fn run(
 			);
 		}
 
-		queue.extend(modules::collect_pending(&ast, &pm.file_path, &pm.logical_path)?);
+		let ret = modules::collect_pending(&ast, &pm.file_path, &pm.logical_path);
+		queue.extend(match ret {
+			Ok(p) => p,
+			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Module), diagnostics),
+		});
 
-		let desugared: DesugaredAST = desugar::desugar_program(ast)?;
+		let (res, mut diags) = desugar::desugar_program(ast);
+		diagnostics.append(&mut diags);
+		let desugared: DesugaredAST = match res {
+			Ok(ast) => ast,
+			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Desugar), diagnostics),
+		};
 		if args.desugared {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",
@@ -285,7 +310,11 @@ fn run(
 		}
 
 		// Pass logical_path so the local table knows which module it belongs to
-		let local_symbols: LocalSymbolTable = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone())?;
+		let ret = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone());
+		let local_symbols: LocalSymbolTable = match ret {
+			Ok(ls) => ls,
+			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::SymbolCollection), diagnostics),
+		};
 		if args.symbols {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{:#?}",
@@ -317,8 +346,11 @@ fn run(
 
 	let mut resolved_modules: Vec<ResolvedModule> = Vec::new();
 	for (path, desugared, symbols) in &pending_modules {
-		let resolved: ResolvedModule =
-			name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules)?;
+		let ret = name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules);
+		let resolved: ResolvedModule = match ret {
+			Ok(r) => r,
+			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+		};
 		resolved_modules.push(resolved);
 	}
 
@@ -334,7 +366,11 @@ fn run(
 
 	let mut typed_modules: Vec<type_analysis::TypedModule> = Vec::new();
 	for resolved in &resolved_modules {
-		let typed: TypedModule = type_analysis::check_types(resolved, &global_symbols, &resolved_modules)?;
+		let ret = type_analysis::check_types(resolved, &global_symbols, &resolved_modules);
+		let typed: TypedModule = match ret {
+			Ok(t) => t,
+			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+		};
 		typed_modules.push(typed);
 	}
 
@@ -348,5 +384,5 @@ fn run(
 		}
 	}
 
-	return Ok(());
+	return (Ok(()), diagnostics);
 }

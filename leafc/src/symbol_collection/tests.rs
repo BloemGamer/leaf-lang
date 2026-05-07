@@ -21,7 +21,9 @@ mod tests
 		let mut parser = Parser::from(lexer);
 		let program = parser.parse_program().unwrap();
 
-		let desugared = desugar::desugar_program(program).unwrap();
+		let (res, diags) = crate::desugar::desugar_program(program);
+		assert!(diags.is_empty());
+		let desugared = res.unwrap();
 		println!("{}", desugared);
 
 		return collect_symbols(&desugared, Vec::new());

@@ -110,21 +110,22 @@ pub enum Applicability
 	HasPlaceholders,
 }
 
-pub struct DiagnosticBuilder<'a>
+#[derive(Debug)]
+pub struct DiagnosticBuilder
 {
 	pub code: Option<ErrorCode>,
 	pub severity: Severity,
-	pub message: Cow<'a, str>,
+	pub message: Cow<'static, str>,
 	pub labels: Vec<Label>,
-	pub notes: Vec<Cow<'a, str>>,
-	pub helps: Vec<Cow<'a, str>>,
+	pub notes: Vec<Cow<'static, str>>,
+	pub helps: Vec<Cow<'static, str>>,
 	pub suggestions: Vec<Suggestion>,
 	pub related: Vec<Diagnostic>,
 }
 
-impl<'a> DiagnosticBuilder<'a>
+impl DiagnosticBuilder
 {
-	pub fn error<M: Into<Cow<'a, str>>>(msg: M) -> Self
+	pub fn error<M: Into<Cow<'static, str>>>(msg: M) -> Self
 	{
 		return Self {
 			code: None,
@@ -139,7 +140,7 @@ impl<'a> DiagnosticBuilder<'a>
 	}
 
 	#[allow(unused)]
-	pub fn warning<M: Into<Cow<'a, str>>>(msg: M) -> Self
+	pub fn warning<M: Into<Cow<'static, str>>>(msg: M) -> Self
 	{
 		return Self {
 			severity: Severity::Warning,
@@ -173,13 +174,13 @@ impl<'a> DiagnosticBuilder<'a>
 		return self;
 	}
 
-	pub fn note(mut self, msg: impl Into<Cow<'a, str>>) -> Self
+	pub fn note(mut self, msg: impl Into<Cow<'static, str>>) -> Self
 	{
 		self.notes.push(msg.into());
 		return self;
 	}
 
-	pub fn help(mut self, msg: impl Into<Cow<'a, str>>) -> Self
+	pub fn help(mut self, msg: impl Into<Cow<'static, str>>) -> Self
 	{
 		self.helps.push(msg.into());
 		return self;
@@ -230,7 +231,7 @@ pub struct Diagnostic
 
 pub trait CompileDiagnostic: std::fmt::Debug + Spanned
 {
-	fn build(&self) -> DiagnosticBuilder<'_>;
+	fn build(&self) -> DiagnosticBuilder;
 
 	fn to_diagnostic(&self) -> Diagnostic
 	{
@@ -284,7 +285,7 @@ impl std::fmt::Display for CompileError
 
 impl CompileDiagnostic for CompileError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let mut diag = delegate!(self, build);
 
@@ -591,7 +592,7 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 		for related in &self.diag.related {
 			writeln!(f)?;
 			writeln!(f, "related:")?;
-			let r: OldStyleRenderer<'_> = Self::new(related, self.source_map, self.config);
+			let r: OldStyleRenderer = Self::new(related, self.source_map, self.config);
 			writeln!(f, "{}", r)?;
 		}
 		return Ok(());

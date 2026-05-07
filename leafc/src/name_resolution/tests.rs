@@ -100,7 +100,9 @@ mod tests
 				source_map,
 			);
 			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).try_into()?;
-			let desugared: DesugaredAST = ast.try_into()?;
+			let (res, diags) = crate::desugar::desugar_program(ast);
+			assert!(diags.is_empty());
+			let desugared = res.unwrap();
 			println!("{}", desugared);
 			let local = symbol_collection::collect_symbols(&desugared, logical.clone())?;
 			pending.push((logical, desugared, local));

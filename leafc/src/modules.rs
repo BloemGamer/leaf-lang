@@ -102,7 +102,7 @@ impl std::error::Error for ModuleError {}
 
 impl CompileDiagnostic for ModuleError
 {
-	fn build(&self) -> DiagnosticBuilder<'_>
+	fn build(&self) -> DiagnosticBuilder
 	{
 		let module_path = self.logical_path.join("::");
 
