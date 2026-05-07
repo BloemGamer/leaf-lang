@@ -63,7 +63,7 @@ mod tests
 
 		return name_resolution::resolve_names(logical, desugared, local, &global, &pending).inspect_err(|e| {
 			let diag = e.to_diagnostic();
-			let renderer = OldStyleRenderer::new(&diag, &source_map);
+			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 			eprintln!("{}", renderer);
 		});
 	}

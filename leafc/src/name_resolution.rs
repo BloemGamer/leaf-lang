@@ -1012,10 +1012,12 @@ struct Resolver<'a>
 	modules: &'a [(Vec<String>, DesugaredAST, LocalSymbolTable)],
 	symbols: &'a LocalSymbolTable,
 	current_scope: ScopeId,
+	trait_scope: Option<ScopeId>,
 	use_imports: Vec<UseImport>,
 	anon_scope_idx: usize,
 	scope_offset: usize,
 	self_sym: Option<SymbolId>,
+	in_expr_context: bool,
 }
 
 #[allow(unused)]
@@ -1048,11 +1050,13 @@ impl<'a> Resolver<'a>
 			global,
 			modules,
 			symbols,
+			trait_scope: None,
 			current_scope: ScopeId(symbols.root.0 + scope_offset),
 			use_imports: Vec::new(),
 			anon_scope_idx: 0,
 			scope_offset,
 			self_sym: None,
+			in_expr_context: false,
 		};
 	}
 
@@ -1072,11 +1076,42 @@ impl<'a> Resolver<'a>
 		let mut scope_id: ScopeId = start;
 		loop {
 			let scope: &Scope = self.global.scope(scope_id);
-			for &sym_id in &scope.symbols {
-				if self.global.symbol(sym_id).name == name {
-					return Some((sym_id, scope_id));
+
+			let blocked = self.in_expr_context && self.trait_scope == Some(scope_id);
+
+			if !blocked {
+				for &sym_id in &scope.symbols {
+					if self.global.symbol(sym_id).name == name {
+						return Some((sym_id, scope_id));
+					}
 				}
 			}
+
+			match scope.parent {
+				Some(parent) => scope_id = parent,
+				None => return None,
+			}
+		}
+	}
+
+	fn find_in_scope_chain_expr(&self, start: ScopeId, name: &str) -> Option<(SymbolId, ScopeId)>
+	{
+		let mut scope_id: ScopeId = start;
+		loop {
+			let scope: &Scope = self.global.scope(scope_id);
+
+			// Block the trait scope so bare calls to sibling methods fail —
+			// they must be written as `Self::method`.
+			let blocked = self.trait_scope == Some(scope_id);
+
+			if !blocked {
+				for &sym_id in &scope.symbols {
+					if self.global.symbol(sym_id).name == name {
+						return Some((sym_id, scope_id));
+					}
+				}
+			}
+
 			match scope.parent {
 				Some(parent) => scope_id = parent,
 				None => return None,
@@ -2290,6 +2325,15 @@ impl<'a> Resolver<'a>
 
 	fn resolve_expr(&mut self, expr: &parser::Expr) -> Result<ResolvedExpr, NameResolutionError>
 	{
+		let prev_in_expr = self.in_expr_context;
+		self.in_expr_context = true;
+		let result = self.resolve_expr_inner(expr);
+		self.in_expr_context = prev_in_expr;
+		return result;
+	}
+
+	fn resolve_expr_inner(&mut self, expr: &parser::Expr) -> Result<ResolvedExpr, NameResolutionError>
+	{
 		use parser::{ArrayLiteral, Expr};
 
 		return Ok(match expr {
@@ -3236,6 +3280,8 @@ impl<'a> Resolver<'a>
 		let prev: ScopeId = self.current_scope;
 		self.current_scope = body_scope;
 
+		let prev_trait_scope: Option<ScopeId> = self.trait_scope.replace(body_scope);
+
 		let super_traits: Vec<ResolvedWhereBound> = t
 			.super_traits
 			.iter()
@@ -3260,6 +3306,7 @@ impl<'a> Resolver<'a>
 			.collect::<Result<_, _>>()?;
 
 		self.current_scope = prev;
+		self.trait_scope = prev_trait_scope;
 
 		return Ok(ResolvedTraitDecl {
 			resolved_name,
