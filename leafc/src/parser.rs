@@ -3910,57 +3910,46 @@ where
 				TokenKind::Dot => {
 					self.next()?; // .
 					// let field_name: Path = self.get_path_allow_internals()?;
-					let field_name: Path = Path {
-						segments: match self.peek_kind()? {
-							TokenKind::Identifier(_) => {
-								let tok: Token = self.next()?;
-								vec![PathSegment {
-									name: if let TokenKind::Identifier(name) = tok.kind {
-										name
-									} else {
-										unreachable!()
+					let field_name: Path = match self.peek_kind()? {
+						TokenKind::Identifier(_) => self.get_path()?,
+						TokenKind::IntLiteral { .. } => {
+							let tok: Token = self.next()?;
+							let tok_span: Span = tok.span();
+							let TokenKind::IntLiteral { value, base, ty } = tok.kind else {
+								todo!()
+							};
+							if ty.is_some() {
+								return Err(ParseError {
+									span: tok_span,
+									kind: ParseErrorKind::Generic {
+										message: "a sized index on a tuple index is not allowed".to_string(),
 									},
-									generics: Vec::new(),
-									span: tok.span,
-								}]
+									context: Vec::new(),
+								});
 							}
-							TokenKind::IntLiteral { .. } => {
-								let tok: Token = self.next()?;
-								let tok_span: Span = tok.span();
-								let TokenKind::IntLiteral { value, base, ty } = tok.kind else {
-									todo!()
-								};
-								if ty.is_some() {
-									return Err(ParseError {
-										span: tok_span,
-										kind: ParseErrorKind::Generic {
-											message: "a sized index on a tuple index is not allowed".to_string(),
-										},
-										context: Vec::new(),
-									});
-								}
-								if base != IntBase::Decimal {
-									return Err(ParseError {
-										span: tok_span,
-										kind: ParseErrorKind::Generic {
-											message: "a typed index on a tuple index is not allowed".to_string(),
-										},
-										context: Vec::new(),
-									});
-								}
-								vec![PathSegment {
+							if base != IntBase::Decimal {
+								return Err(ParseError {
+									span: tok_span,
+									kind: ParseErrorKind::Generic {
+										message: "a typed index on a tuple index is not allowed".to_string(),
+									},
+									context: Vec::new(),
+								});
+							}
+							Path {
+								segments: vec![PathSegment {
 									name: value,
 									generics: Vec::new(),
 									span: tok.span,
-								}]
+								}],
+								glob: false,
+								global: false,
+								span,
 							}
-							_ => {
-								todo!("make a good error")
-							}
-						},
-						glob: false,
-						global: false,
-						span,
+						}
+						_ => {
+							todo!("make a good error")
+						}
 					};
 					expr = Expr::Field {
 						base: Box::new(expr),
