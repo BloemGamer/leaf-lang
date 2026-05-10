@@ -5,8 +5,14 @@
 [![Status](https://img.shields.io/badge/status-in%20development-orange)](https://github.com/BloemGamer/leaf-lang)
 
 
+> [!NOTE]
+> Leaf-lang is still in active development and is not yet ready to be used.
+
 # Leaf-lang
-A language that is designed to be used with C, with modern features and a platform to learn compiler design.
+Leaf-lang is a systems programming language designed for interoperability with C,
+predictable memory behavior, and educational compiler architecture.
+
+Inspired by Rust, but designed with its own tradeoffs and goals.
 
 ## Code preview
 ```leaf
@@ -31,27 +37,33 @@ fn! main()
 
 ### Current focus
 - [ ] Small improvements in the compiler
-- [ ] Writing the name resolutions
+- [ ] Type resolutions
+- [ ] Improve diagnostics
 
 ### Still actively being developed
-- [x] Writing the lexer
-- [x] Writing the parser
-- [x] Writing the desugarer
-- [x] Writing the symbol collections
+- [x] Lexer
+- [x] Parser
+- [x] Desugarer
+- [x] Symbol collections
+- [x] Name resolution
+- [ ] Type resolution
 - [ ] Refining the syntax
 
 ### Short-term
 - [ ] Finish first compiler version
 
 ### Long-term
-- [ ] Adding variants
-- [ ] Adding templates
+
+### Language features
 - [ ] Adding lambda functions
 - [ ] Preprocessor
+
+### Compiler infrastructure
+- [ ] Compile-time execution
+	- [ ] Reflection system
 - [ ] Code optimisations
 - [ ] C parser integration
 - [ ] Design a build system
-- [ ] Write compile-time execution
 - [ ] Adding a LLVM backend (very low priority)
 
 </details>
@@ -92,8 +104,6 @@ Each stage transforms the program into a simpler or more constrained form.
 	- Shadowing rules
 - [ ] **Type Analysis** (ResolvedAST -> TypedAST)
 	- Type checking
-- [ ] **Basic ownership validation**
-	- Checking ownerships
 - [ ] **Lowering to HIR**
 	- AST -> High-Level IR (HIR)
 
@@ -104,6 +114,9 @@ Each stage transforms the program into a simpler or more constrained form.
 - [ ] **Lifetime Analysis**
 	- Ownership rules
 	- Destructor insertion
+- [ ] **Function generation**
+	- For each generic, generate a specialized function
+	- Name mangling
 - [ ] **HIR Optimizations** (low priority)
 
 ---
@@ -119,6 +132,13 @@ Each stage transforms the program into a simpler or more constrained form.
 	- MIR -> C source code
 - [ ] **C Compilation**
 	- Invoke system C compiler (C23)
+
+
+### Backend (MIR -> LLVM) (low priority)
+- [ ] **Code Generation**
+	- MIR -> LLVM IR
+- [ ] **LLVM Compilation**
+	- Invoke LLVM
 
 </details>
 
