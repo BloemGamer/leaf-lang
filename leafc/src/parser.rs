@@ -1,13 +1,13 @@
 mod tests;
 
-use std::{cmp::Ordering, convert::TryFrom, iter::Peekable, marker::PhantomData};
+use std::{cmp::Ordering, iter::Peekable, marker::PhantomData};
 
 use ignorable::PartialEq;
 
 use crate::{
 	Config,
 	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
-	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, StringFlags, Token, TokenKind},
+	lexer::{self, IntBase, IntType, LexerTrait, ReservedError, Span, Spanned, StringFlags, Token, TokenKind},
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
@@ -1151,7 +1151,7 @@ impl Expr
 								}
 								.build(),
 							)),
-						}?
+						}?;
 					}
 
 					_ => {}
@@ -1180,16 +1180,18 @@ impl Expr
 					(BinaryOp::Eq, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a == b)),
 					(BinaryOp::Ne, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a != b)),
 
-					_ => Err(Box::new(
-						ParseError {
-							span: *span,
-							kind: ParseErrorKind::NoCompileExpr {
-								reason: "Type mismatch in compile-time expression".to_string(),
-							},
-							context: Vec::new(),
-						}
-						.build(),
-					)),
+					_ => {
+						return Err(Box::new(
+							ParseError {
+								span: *span,
+								kind: ParseErrorKind::NoCompileExpr {
+									reason: "Type mismatch in compile-time expression".to_string(),
+								},
+								context: Vec::new(),
+							}
+							.build(),
+						));
+					}
 				}
 			}
 
@@ -1220,17 +1222,6 @@ impl Expr
 			}
 		}
 	}
-}
-
-fn type_err(span: Span) -> ParseError
-{
-	return ParseError {
-		span,
-		kind: ParseErrorKind::NoCompileExpr {
-			reason: "Type mismatch in compile-time expression".to_string(),
-		},
-		context: Vec::new(),
-	};
 }
 
 /// Type of function call
