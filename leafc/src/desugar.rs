@@ -7,7 +7,7 @@ use leaf_proc::Spanned;
 use std::fmt::Debug;
 
 use crate::{
-	diagnostics::{CompileDiagnostic, DiagnosticBuilder, ErrorCode},
+	diagnostics::{CompileDiagnostic, DiagnosticBuilder, ErrorCode, Severity},
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
@@ -256,56 +256,56 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_program(&mut self, program: AST) -> Result<DesugaredAST, DesugarError>
+
+	fn desugar_program(&mut self, program: AST) -> DesugaredAST
 	{
-		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block)?;
+		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block);
 
 		#[allow(clippy::debug_assert_with_mut_call)]
 		{
-			debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone())?);
+			debug_assert_eq!(top_lvl, self.desugar_top_level_block(top_lvl.clone()));
 		}
 
-		return Ok(DesugaredAST {
+		return DesugaredAST {
 			top_level_block: top_lvl,
 			source_index: program.source_index,
-		});
+		};
 	}
 
-	fn desugar_top_level_block(&mut self, top_level_block: TopLevelBlock) -> Result<TopLevelBlock, DesugarError>
+	fn desugar_top_level_block(&mut self, top_level_block: TopLevelBlock) -> TopLevelBlock
 	{
 		let items: Vec<TopLevelDecl> = top_level_block
 			.items
 			.into_iter()
 			.map(|item| return self.desugar_top_level_decl(item))
-			.collect::<Result<Vec<_>, _>>()?;
+			.collect::<Vec<_>>();
 
-		return Ok(TopLevelBlock {
+		return TopLevelBlock {
 			items,
 			span: top_level_block.span,
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> Result<TopLevelDecl, DesugarError>
+
+	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> TopLevelDecl
 	{
-		return Ok(match decl {
-			TopLevelDecl::Function(func) => TopLevelDecl::Function(self.desugar_function(func)?),
-			TopLevelDecl::Module(ns) => TopLevelDecl::Module(self.desugar_module(ns)?),
-			TopLevelDecl::Impl(impl_decl) => TopLevelDecl::Impl(self.desugar_impl(impl_decl)?),
-			TopLevelDecl::Trait(trait_decl) => TopLevelDecl::Trait(self.desugar_trait(trait_decl)?),
-			TopLevelDecl::Directive(d) => TopLevelDecl::Directive(self.desugar_directive_node(d)?),
-			TopLevelDecl::VariableDecl(var) => TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)?),
+		return match decl {
+			TopLevelDecl::Function(func) => TopLevelDecl::Function(self.desugar_function(func)),
+			TopLevelDecl::Module(ns) => TopLevelDecl::Module(self.desugar_module(ns)),
+			TopLevelDecl::Impl(impl_decl) => TopLevelDecl::Impl(self.desugar_impl(impl_decl)),
+			TopLevelDecl::Trait(trait_decl) => TopLevelDecl::Trait(self.desugar_trait(trait_decl)),
+			TopLevelDecl::Directive(d) => TopLevelDecl::Directive(self.desugar_directive_node(d)),
+			TopLevelDecl::VariableDecl(var) => TopLevelDecl::VariableDecl(self.desugar_variable_decl(var)),
 			TopLevelDecl::Struct(s) => TopLevelDecl::Struct(s),
 			TopLevelDecl::Union(u) => TopLevelDecl::Union(u),
 			TopLevelDecl::Enum(e) => TopLevelDecl::Enum(e),
 			TopLevelDecl::Variant(v) => TopLevelDecl::Variant(v),
 			TopLevelDecl::TypeAlias(t) => TopLevelDecl::TypeAlias(t),
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_function(&mut self, mut func: FunctionDecl) -> Result<FunctionDecl, DesugarError>
+
+	fn desugar_function(&mut self, mut func: FunctionDecl) -> FunctionDecl
 	{
 		debug_assert!(self.loop_stack.is_empty(), "loop_stack should be empty");
 
@@ -357,26 +357,25 @@ impl Desugarer
 		}
 
 		func.signature.params = new_params;
-		func.signature = self.desugar_function_signature(func.signature)?;
+		func.signature = self.desugar_function_signature(func.signature);
 
 		if let Some(body) = func.body {
 			let mut new_body: Block = body;
 			body_stmts.extend(new_body.stmts);
 			new_body.stmts = body_stmts;
-			func.body = Some(self.desugar_block(new_body)?);
+			func.body = Some(self.desugar_block(new_body));
 		}
 
-		return Ok(func);
+		return func;
 	}
 
-	fn desugar_function_signature(&mut self, mut func_sig: FunctionSignature)
-	-> Result<FunctionSignature, DesugarError>
+	fn desugar_function_signature(&mut self, mut func_sig: FunctionSignature) -> FunctionSignature
 	{
 		let mut impl_trait_counter: usize = 0;
 		let mut new_generics: Vec<GenericParam> = Vec::new();
 
 		for param in &mut func_sig.params {
-			if let Some(new_generic) = Self::desugar_impl_trait_in_param(param, &mut impl_trait_counter)? {
+			if let Some(new_generic) = Self::desugar_impl_trait_in_param(param, &mut impl_trait_counter) {
 				new_generics.push(new_generic);
 			}
 		}
@@ -385,7 +384,7 @@ impl Desugarer
 		func_sig.generics = new_generics;
 
 		if let Some(ret_ty) = &mut func_sig.return_type
-			&& let Some(new_generic) = Self::desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)?
+			&& let Some(new_generic) = Self::desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)
 		{
 			func_sig.generics.push(new_generic);
 		}
@@ -516,22 +515,21 @@ impl Desugarer
 			generic.bounds.clear();
 		}
 
-		return Ok(func_sig);
+		return func_sig;
 	}
 
-	fn desugar_impl_trait_in_param(param: &mut Param, counter: &mut usize)
-	-> Result<Option<GenericParam>, DesugarError>
+	fn desugar_impl_trait_in_param(param: &mut Param, counter: &mut usize) -> Option<GenericParam>
 	{
-		let generic_param = Self::desugar_impl_trait_in_type(&mut param.ty, counter)?;
+		let generic_param: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut param.ty, counter);
 
 		if let Pattern::TypedIdentifier { ty, .. } = &mut param.pattern {
 			*ty = param.ty.clone();
 		}
 
-		return Ok(generic_param);
+		return generic_param;
 	}
 
-	fn desugar_impl_trait_in_type(ty: &mut Type, counter: &mut usize) -> Result<Option<GenericParam>, DesugarError>
+	fn desugar_impl_trait_in_type(ty: &mut Type, counter: &mut usize) -> Option<GenericParam>
 	{
 		match ty.core.as_mut() {
 			TypeCore::ImplTrait { bounds } => {
@@ -558,71 +556,71 @@ impl Desugarer
 					generics: Vec::new(),
 				};
 
-				return Ok(Some(generic_param));
+				return Some(generic_param);
 			}
 			TypeCore::Reference { inner, .. } | TypeCore::Mutable { inner } | TypeCore::Pointer { inner, .. } => {
 				let mut inner_ty: Type = Type {
 					core: inner.clone(),
 					span: ty.span,
 				};
-				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter);
 				*inner = inner_ty.core;
-				return Ok(result);
+				return result;
 			}
 			TypeCore::Array { inner, .. } => {
 				let mut inner_ty = Type {
 					core: inner.clone(),
 					span: ty.span,
 				};
-				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter)?;
+				let result: Option<GenericParam> = Self::desugar_impl_trait_in_type(&mut inner_ty, counter);
 				*inner = inner_ty.core;
-				return Ok(result);
+				return result;
 			}
 			TypeCore::Tuple(types) => {
 				for tuple_ty in types.iter_mut() {
 					Self::desugar_impl_trait_in_type(tuple_ty, counter)?;
 				}
-				return Ok(None);
+				return None;
 			}
 			TypeCore::Base { generics, .. } => {
 				for gen_ty in generics.iter_mut() {
 					Self::desugar_impl_trait_in_type(gen_ty, counter)?;
 				}
-				return Ok(None);
+				return None;
 			}
 		}
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_module(&mut self, mut ns: ModuleDecl) -> Result<ModuleDecl, DesugarError>
+
+	fn desugar_module(&mut self, mut ns: ModuleDecl) -> ModuleDecl
 	{
 		match &mut ns.kind {
 			ModuleKind::Inline(body) => {
-				*body = self.desugar_top_level_block(std::mem::take(body))?;
+				*body = self.desugar_top_level_block(std::mem::take(body));
 			}
 			ModuleKind::External => {}
 		}
-		return Ok(ns);
+		return ns;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> Result<ImplDecl, DesugarError>
+
+	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> ImplDecl
 	{
 		impl_decl = self.desugar_impl_generics(impl_decl);
 
 		impl_decl.body = impl_decl
 			.body
 			.into_iter()
-			.map(|item| -> Result<ImplItem, DesugarError> {
-				return Ok(match item {
-					ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)?),
+			.map(|item| {
+				return match item {
+					ImplItem::Function(func) => ImplItem::Function(self.desugar_function(func)),
 					ImplItem::TypeAlias(t) => ImplItem::TypeAlias(t),
 					ImplItem::AssocType(t) => ImplItem::AssocType(t),
-					ImplItem::Const(c) => ImplItem::Const(self.desugar_variable_decl(c)?),
-				});
+					ImplItem::Const(c) => ImplItem::Const(self.desugar_variable_decl(c)),
+				};
 			})
-			.collect::<Result<Vec<_>, _>>()?;
-		return Ok(impl_decl);
+			.collect::<Vec<_>>();
+		return impl_decl;
 	}
 
 	fn desugar_impl_generics(&mut self, mut impl_decl: ImplDecl) -> ImplDecl
@@ -700,106 +698,107 @@ impl Desugarer
 		return impl_decl;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> Result<TraitDecl, DesugarError>
+
+	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> TraitDecl
 	{
 		trait_decl.items = trait_decl
 			.items
 			.into_iter()
-			.map(|item| -> Result<TraitItem, DesugarError> {
-				return Ok(match item {
+			.map(|item| -> TraitItem {
+				return match item {
 					TraitItem::Function(func) => {
 						debug_assert!(self.loop_stack.is_empty());
-						TraitItem::Function(self.desugar_function(func)?)
+						TraitItem::Function(self.desugar_function(func))
 					}
 					TraitItem::TypeAlias(t) => TraitItem::TypeAlias(t),
 					TraitItem::AssocType(t) => TraitItem::AssocType(t),
-					TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)?),
-				});
+					TraitItem::Const(c) => TraitItem::Const(self.desugar_variable_decl(c)),
+				};
 			})
-			.collect::<Result<Vec<_>, _>>()?;
-		return Ok(trait_decl);
+			.collect::<Vec<_>>();
+		return trait_decl;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> Result<DirectiveNode, DesugarError>
+
+	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> DirectiveNode
 	{
-		directive.body = directive
-			.body
-			.map(|body| return self.desugar_block_content(body))
-			.transpose()?;
-		return Ok(directive);
+		directive.body = directive.body.map(|body| return self.desugar_block_content(body));
+		return directive;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_block(&mut self, block: Block) -> Result<Block, DesugarError>
+
+	fn desugar_block(&mut self, block: Block) -> Block
 	{
 		let mut stmts: Vec<Stmt> = Vec::new();
 
 		for stmt in block.stmts {
 			match stmt {
 				Stmt::VariableDecl(var) => {
-					let needs_complex_desugar = match &var.pattern {
+					let needs_complex_desugar: bool = match &var.pattern {
 						Pattern::Struct { .. } | Pattern::Variant { .. } => true,
 						Pattern::Tuple { patterns, .. } => patterns.len() > 1 || Self::has_nested_patterns(patterns),
 						_ => false,
 					};
 
 					if needs_complex_desugar {
-						let span = var.span;
-						let comp_const = var.comp_const;
-						let init = var.init.ok_or_else(|| {
-							return DesugarError::generic(span, "complex pattern requires initializer");
-						})?;
+						let span: Span = var.span;
+						let comp_const: bool = var.comp_const;
+						let init: Expr = if let Some(i) = var.init {
+							i
+						} else {
+							self.diagnostics
+								.push(DesugarError::generic(span, "complex pattern requires initializer").build());
+							Expr::Identifier {
+								path: Path::simple(Vec::new(), span),
+								span,
+							}
+						};
 
-						let var_decls = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+						let var_decls = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const);
 
 						for var_decl in var_decls {
 							stmts.push(var_decl);
 						}
 					} else {
-						stmts.push(Stmt::VariableDecl(self.desugar_variable_decl(var)?));
+						stmts.push(Stmt::VariableDecl(self.desugar_variable_decl(var)));
 					}
 				}
 
 				other_stmt => {
-					stmts.push(self.desugar_stmt(other_stmt)?);
+					stmts.push(self.desugar_stmt(other_stmt));
 				}
 			}
 		}
 
-		let tail_expr = block
-			.tail_expr
-			.map(|expr| -> Result<Box<Expr>, DesugarError> { return Ok(Box::new(self.desugar_expr(*expr)?)) })
-			.transpose()?;
+		let tail_expr = block.tail_expr.map(|expr| return Box::new(self.desugar_expr(*expr)));
 
-		return Ok(Block {
+		return Block {
 			stmts,
 			tail_expr,
 			span: block.span,
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_block_content(&mut self, content: BlockContent) -> Result<BlockContent, DesugarError>
+
+	fn desugar_block_content(&mut self, content: BlockContent) -> BlockContent
 	{
-		return Ok(match content {
-			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)?),
-			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_top_level_block(block)?),
-		});
+		return match content {
+			BlockContent::Block(block) => BlockContent::Block(self.desugar_block(block)),
+			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_top_level_block(block)),
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_stmt(&mut self, stmt: Stmt) -> Result<Stmt, DesugarError>
+
+	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
 	{
-		return Ok(match stmt {
+		return match stmt {
 			Stmt::For {
 				label,
 				pattern,
 				iter,
 				body,
 				span,
-			} => self.desugar_for_loop(label, pattern, iter, body, span)?,
+			} => self.desugar_for_loop(label, pattern, iter, body, span),
 
 			Stmt::If {
 				cond,
@@ -807,11 +806,9 @@ impl Desugarer
 				else_branch,
 				span,
 			} => Stmt::If {
-				cond: self.desugar_expr(cond)?,
-				then_block: self.desugar_block(then_block)?,
-				else_branch: else_branch
-					.map(|stmt| -> Result<Box<Stmt>, DesugarError> { return Ok(Box::new(self.desugar_stmt(*stmt)?)) })
-					.transpose()?,
+				cond: self.desugar_expr(cond),
+				then_block: self.desugar_block(then_block),
+				else_branch: else_branch.map(|stmt| -> Box<Stmt> { return Box::new(self.desugar_stmt(*stmt)) }),
 				span,
 			},
 
@@ -821,20 +818,20 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_var(pattern, expr, then_block, else_branch, span)?,
+			} => self.desugar_if_var(pattern, expr, then_block, else_branch, span),
 
 			Stmt::While {
 				label,
 				cond,
 				body,
 				span,
-			} => self.desugar_while_loop(label, cond, body, span)?,
+			} => self.desugar_while_loop(label, cond, body, span),
 
 			Stmt::Loop { label, body, span } => {
 				let actual_label = self.push_loop(label);
 				let desugared = Stmt::Loop {
 					label: Some(actual_label),
-					body: self.desugar_block(body)?,
+					body: self.desugar_block(body),
 					span,
 				};
 				self.pop_loop();
@@ -847,7 +844,7 @@ impl Desugarer
 				expr,
 				body,
 				span,
-			} => self.desugar_while_var_loop(label, pattern, expr, body, span)?,
+			} => self.desugar_while_var_loop(label, pattern, expr, body, span),
 
 			Stmt::VariableDecl(var) => {
 				let needs_complex_desugar = match &var.pattern {
@@ -859,11 +856,18 @@ impl Desugarer
 				if needs_complex_desugar {
 					let span: Span = var.span;
 					let comp_const: bool = var.comp_const;
-					let init: Expr = var.init.ok_or_else(|| {
-						return DesugarError::generic(span, "complex pattern requires initializer");
-					})?;
+					let init: Expr = if let Some(i) = var.init {
+						i
+					} else {
+						self.diagnostics
+							.push(DesugarError::generic(span, "complex pattern requires initializer").build());
+						Expr::Identifier {
+							path: Path::simple(Vec::new(), span),
+							span,
+						}
+					};
 
-					let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+					let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const);
 
 					Stmt::Block(Block {
 						stmts,
@@ -871,7 +875,7 @@ impl Desugarer
 						span,
 					})
 				} else {
-					Stmt::VariableDecl(self.desugar_variable_decl(var)?)
+					Stmt::VariableDecl(self.desugar_variable_decl(var))
 				}
 			}
 
@@ -890,7 +894,7 @@ impl Desugarer
 				};
 
 				if needs_complex_desugar && matches!(op, AssignOp::Assign) {
-					let desugared_value: Expr = self.desugar_expr(value)?;
+					let desugared_value: Expr = self.desugar_expr(value);
 
 					let temp: Ident = self.gen_temp("assign");
 					let value_span: Span = desugared_value.span();
@@ -923,7 +927,7 @@ impl Desugarer
 							span: value_span,
 						},
 						span,
-					)?;
+					);
 
 					let mut stmts: Vec<Stmt> = vec![temp_decl];
 					stmts.extend(assignments);
@@ -935,26 +939,26 @@ impl Desugarer
 					})
 				} else {
 					Stmt::Assignment {
-						target: self.desugar_expr(target)?,
+						target: self.desugar_expr(target),
 						op,
-						value: self.desugar_expr(value)?,
+						value: self.desugar_expr(value),
 						span,
 					}
 				}
 			}
 
 			Stmt::Return { value, span } => Stmt::Return {
-				value: value.map(|e| return self.desugar_expr(e)).transpose()?,
+				value: value.map(|e| return self.desugar_expr(e)),
 				span,
 			},
 
-			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)?),
+			Stmt::Expr(expr) => Stmt::Expr(self.desugar_expr(expr)),
 
 			Stmt::Break { label, value, span } => {
 				let actual_label = label.or_else(|| return self.current_loop().cloned());
 				Stmt::Break {
 					label: actual_label,
-					value: value.map(|v| return self.desugar_expr(v)).transpose()?,
+					value: value.map(|v| return self.desugar_expr(v)),
 					span,
 				}
 			}
@@ -967,38 +971,32 @@ impl Desugarer
 				}
 			}
 
-			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)?),
-			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)?),
+			Stmt::Unsafe(block) => Stmt::Unsafe(self.desugar_block(block)),
+			Stmt::Block(block) => Stmt::Block(self.desugar_block(block)),
 
-			Stmt::Directive(directive) => Stmt::Directive(self.desugar_directive_node(directive)?),
+			Stmt::Directive(directive) => Stmt::Directive(self.desugar_directive_node(directive)),
 
 			Stmt::Delete { expr, span } => Stmt::Delete {
-				expr: self.desugar_expr(expr)?,
+				expr: self.desugar_expr(expr),
 				span,
 			},
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_for_loop(
-		&mut self,
-		label: Option<String>,
-		pattern: Pattern,
-		iter: Expr,
-		body: Block,
-		span: Span,
-	) -> Result<Stmt, DesugarError>
+
+	fn desugar_for_loop(&mut self, label: Option<String>, pattern: Pattern, iter: Expr, body: Block, span: Span)
+	-> Stmt
 	{
 		let iter_temp: Ident = self.gen_temp("loop");
 		let iter_span: Span = iter.span();
 		let pattern_span: Span = pattern.span();
 
-		let desugared_iter: Expr = self.desugar_expr(iter)?;
+		let desugared_iter: Expr = self.desugar_expr(iter);
 
 		let actual_label: Ident = self.push_loop(label);
-		let desugared_body: Block = self.desugar_block(body)?;
+		let desugared_body: Block = self.desugar_block(body);
 
-		let desugared_pattern: Pattern = Self::desugar_pattern(pattern)?;
+		let desugared_pattern: Pattern = Self::desugar_pattern(pattern);
 
 		let item_type: Type = extract_type_from_pattern(&desugared_pattern).unwrap_or_else(|| {
 			return Type {
@@ -1136,14 +1134,14 @@ impl Desugarer
 
 		self.pop_loop();
 
-		return Ok(Stmt::Block(Block {
+		return Stmt::Block(Block {
 			stmts: vec![iter_decl, loop_stmt],
 			tail_expr: None,
 			span,
-		}));
+		});
 	}
 
-	#[allow(clippy::result_large_err)]
+
 	fn desugar_if_var(
 		&mut self,
 		pattern: Pattern,
@@ -1151,14 +1149,14 @@ impl Desugarer
 		then_block: Block,
 		else_branch: Option<Box<Stmt>>,
 		span: Span,
-	) -> Result<Stmt, DesugarError>
+	) -> Stmt
 	{
 		let temp_var: Ident = self.gen_temp("ifvar");
 		let expr_span: Span = expr.span();
 		let pattern_span: Span = pattern.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr)?;
-		let desugared_then: Block = self.desugar_block(then_block)?;
+		let desugared_expr: Expr = self.desugar_expr(expr);
+		let desugared_then: Block = self.desugar_block(then_block);
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -1182,7 +1180,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: Self::desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern),
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
 		};
@@ -1193,22 +1191,22 @@ impl Desugarer
 				ty: None,
 			},
 			body: else_branch.map_or_else(
-				|| -> Result<SwitchBody, DesugarError> {
-					return Ok(SwitchBody::Block(Block {
+				|| {
+					return SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
 						span: pattern_span,
-					}));
+					});
 				},
 				|else_stmt| {
 					let stmt_span = else_stmt.span();
-					return Ok(SwitchBody::Block(Block {
-						stmts: vec![self.desugar_stmt(*else_stmt)?],
+					return SwitchBody::Block(Block {
+						stmts: vec![self.desugar_stmt(*else_stmt)],
 						tail_expr: None,
 						span: stmt_span,
-					}));
+					});
 				},
-			)?,
+			),
 			span: pattern_span,
 		};
 
@@ -1221,14 +1219,14 @@ impl Desugarer
 			span,
 		};
 
-		return Ok(Stmt::Block(Block {
+		return Stmt::Block(Block {
 			stmts: vec![temp_decl, Stmt::Expr(switch_expr)],
 			tail_expr: None,
 			span,
-		}));
+		});
 	}
 
-	#[allow(clippy::result_large_err)]
+
 	fn desugar_while_var_loop(
 		&mut self,
 		label: Option<String>,
@@ -1236,16 +1234,16 @@ impl Desugarer
 		expr: Expr,
 		body: Block,
 		span: Span,
-	) -> Result<Stmt, DesugarError>
+	) -> Stmt
 	{
 		let temp_var: Ident = self.gen_temp("whilevar");
 		let expr_span: Span = expr.span();
 		let pattern_span: Span = pattern.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr)?;
+		let desugared_expr: Expr = self.desugar_expr(expr);
 
 		let actual_label: Ident = self.push_loop(label);
-		let desugared_body: Block = self.desugar_block(body)?;
+		let desugared_body: Block = self.desugar_block(body);
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -1269,7 +1267,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: Self::desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern),
 			body: SwitchBody::Block(desugared_body),
 			span: pattern_span,
 		};
@@ -1312,25 +1310,19 @@ impl Desugarer
 
 		self.pop_loop();
 
-		return Ok(result);
+		return result;
 	}
 
-	fn desugar_while_loop(
-		&mut self,
-		label: Option<String>,
-		cond: Expr,
-		body: Block,
-		span: Span,
-	) -> Result<Stmt, DesugarError>
+	fn desugar_while_loop(&mut self, label: Option<String>, cond: Expr, body: Block, span: Span) -> Stmt
 	{
 		let cond_span: Span = cond.span();
 
-		let desugared_cond: Expr = self.desugar_expr(cond)?;
+		let desugared_cond: Expr = self.desugar_expr(cond);
 
 		let actual_label: Ident = self.push_loop(label);
-		let desugared_body: Block = self.desugar_block(body)?;
+		let desugared_body: Block = self.desugar_block(body);
 
-		let negated_cond = Expr::Unary {
+		let negated_cond: Expr = Expr::Unary {
 			op: crate::parser::UnaryOp::Not,
 			expr: Box::new(desugared_cond),
 			span: cond_span,
@@ -1366,11 +1358,11 @@ impl Desugarer
 
 		self.pop_loop();
 
-		return Ok(result);
+		return result;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> Result<VariableDecl, DesugarError>
+
+	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
 	{
 		let needs_constructor: bool = match &var.pattern {
 			Pattern::TypedIdentifier { call_constructor, .. } => call_constructor.is_some() && var.init.is_none(),
@@ -1383,10 +1375,10 @@ impl Desugarer
 			} = &var.pattern
 			&& call_constructor.is_some()
 		{
-			var.init = Some(Self::type_to_constructor_call(
+			var.init = Some(self.type_to_constructor_call(
 				ty,
 				call_constructor.expect("Because of the checks before this, this should not be none"),
-			)?);
+			));
 
 			if let Pattern::TypedIdentifier {
 				path,
@@ -1418,31 +1410,31 @@ impl Desugarer
 			return self.desugar_complex_pattern_binding(var);
 		}
 
-		var.init = var.init.map(|init| return self.desugar_expr(init)).transpose()?;
-		var.pattern = Self::desugar_pattern(var.pattern)?;
-		return Ok(var);
+		var.init = var.init.map(|init| return self.desugar_expr(init));
+		var.pattern = Self::desugar_pattern(var.pattern);
+		return var;
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_expr(&mut self, expr: Expr) -> Result<Expr, DesugarError>
+
+	fn desugar_expr(&mut self, expr: Expr) -> Expr
 	{
-		return Ok(match expr {
+		return match expr {
 			Expr::Unary { op, expr, span } => Expr::Unary {
 				op,
-				expr: Box::new(self.desugar_expr(*expr)?),
+				expr: Box::new(self.desugar_expr(*expr)),
 				span,
 			},
 
 			Expr::Binary { op, lhs, rhs, span } => Expr::Binary {
 				op,
-				lhs: Box::new(self.desugar_expr(*lhs)?),
-				rhs: Box::new(self.desugar_expr(*rhs)?),
+				lhs: Box::new(self.desugar_expr(*lhs)),
+				rhs: Box::new(self.desugar_expr(*rhs)),
 				span,
 			},
 
 			Expr::Cast { ty, expr, span } => Expr::Cast {
 				ty,
-				expr: Box::new(self.desugar_expr(*expr)?),
+				expr: Box::new(self.desugar_expr(*expr)),
 				span,
 			},
 
@@ -1453,25 +1445,25 @@ impl Desugarer
 				args,
 				span,
 			} => Expr::Call {
-				callee: Box::new(self.desugar_expr(*callee)?),
+				callee: Box::new(self.desugar_expr(*callee)),
 				call_type,
 				named_generics,
 				args: args
 					.into_iter()
 					.map(|arg| return self.desugar_expr(arg))
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 			},
 
 			Expr::Field { base, name, span } => Expr::Field {
-				base: Box::new(self.desugar_expr(*base)?),
+				base: Box::new(self.desugar_expr(*base)),
 				name,
 				span,
 			},
 
 			Expr::Index { base, index, span } => Expr::Index {
-				base: Box::new(self.desugar_expr(*base)?),
-				index: Box::new(self.desugar_expr(*index)?),
+				base: Box::new(self.desugar_expr(*base)),
+				index: Box::new(self.desugar_expr(*index)),
 				span,
 			},
 
@@ -1479,11 +1471,11 @@ impl Desugarer
 				elements: elements
 					.into_iter()
 					.map(|e| return self.desugar_expr(e))
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 			},
 
-			Expr::Array(array_lit) => Expr::Array(self.desugar_array_literal(array_lit)?),
+			Expr::Array(array_lit) => Expr::Array(self.desugar_array_literal(array_lit)),
 
 			Expr::StructInit {
 				path,
@@ -1494,15 +1486,12 @@ impl Desugarer
 			} => {
 				let desugared_fields: Vec<(Ident, Expr)> = fields
 					.into_iter()
-					.map(|(name, expr)| -> Result<(String, Expr), DesugarError> {
-						return Ok((name, self.desugar_expr(expr)?));
+					.map(|(name, expr)| {
+						return (name, self.desugar_expr(expr));
 					})
-					.collect::<Result<Vec<_>, _>>()?;
+					.collect::<Vec<_>>();
 
-				let desugared_base = base
-					.map(|expr| return self.desugar_expr(*expr))
-					.transpose()?
-					.map(Box::new);
+				let desugared_base = base.map(|expr| return self.desugar_expr(*expr)).map(Box::new);
 
 				Expr::StructInit {
 					path,
@@ -1512,16 +1501,16 @@ impl Desugarer
 					has_rest,
 				}
 			}
-			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block)?)),
+			Expr::Block(block) => Expr::Block(Box::new(self.desugar_block(*block))),
 
-			Expr::UnsafeBlock(block) => Expr::UnsafeBlock(Box::new(self.desugar_block(*block)?)),
+			Expr::UnsafeBlock(block) => Expr::UnsafeBlock(Box::new(self.desugar_block(*block))),
 
 			Expr::Switch { expr, arms, span } => Expr::Switch {
-				expr: Box::new(self.desugar_expr(*expr)?),
+				expr: Box::new(self.desugar_expr(*expr)),
 				arms: arms
 					.into_iter()
 					.map(|arm| return self.desugar_switch_arm(arm))
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 			},
 
@@ -1530,7 +1519,7 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_expr(*cond, then_block, else_branch, span)?,
+			} => self.desugar_if_expr(*cond, then_block, else_branch, span),
 
 			Expr::IfVar {
 				pattern,
@@ -1538,45 +1527,37 @@ impl Desugarer
 				then_block,
 				else_branch,
 				span,
-			} => self.desugar_if_var_expr(pattern, *expr, then_block, else_branch, span)?,
+			} => self.desugar_if_var_expr(pattern, *expr, then_block, else_branch, span),
 
 			Expr::Loop { label, body, span } => {
 				let actual_label: String = self.push_loop(label);
 				let desugared: Expr = Expr::Loop {
 					label: Some(actual_label),
-					body: Box::new(self.desugar_block(*body)?),
+					body: Box::new(self.desugar_block(*body)),
 					span,
 				};
 				self.pop_loop();
 				desugared
 			}
 
-			Expr::Range(range_expr) => self.desugar_range(range_expr)?,
+			Expr::Range(range_expr) => self.desugar_range(range_expr),
 
 			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Default { .. } => expr,
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_if_expr(
-		&mut self,
-		cond: Expr,
-		then_block: Block,
-		else_branch: Option<Box<Expr>>,
-		span: Span,
-	) -> Result<Expr, DesugarError>
+
+	fn desugar_if_expr(&mut self, cond: Expr, then_block: Block, else_branch: Option<Box<Expr>>, span: Span) -> Expr
 	{
-		return Ok(Expr::If {
-			cond: Box::new(self.desugar_expr(cond)?),
-			then_block: self.desugar_block(then_block)?,
-			else_branch: else_branch
-				.map(|e| -> Result<Box<Expr>, DesugarError> { return Ok(Box::new(self.desugar_expr(*e)?)) })
-				.transpose()?,
+		return Expr::If {
+			cond: Box::new(self.desugar_expr(cond)),
+			then_block: self.desugar_block(then_block),
+			else_branch: else_branch.map(|e| return Box::new(self.desugar_expr(*e))),
 			span,
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
+
 	fn desugar_if_var_expr(
 		&mut self,
 		pattern: Pattern,
@@ -1584,14 +1565,14 @@ impl Desugarer
 		then_block: Block,
 		else_branch: Option<Box<Expr>>,
 		span: Span,
-	) -> Result<Expr, DesugarError>
+	) -> Expr
 	{
 		let temp_var: Ident = self.gen_temp("ifvar_expr");
 		let expr_span: Span = expr.span();
 		let pattern_span: Span = pattern.span();
 
-		let desugared_expr: Expr = self.desugar_expr(expr)?;
-		let desugared_then: Block = self.desugar_block(then_block)?;
+		let desugared_expr: Expr = self.desugar_expr(expr);
+		let desugared_then: Block = self.desugar_block(then_block);
 
 		let temp_decl: Stmt = Stmt::VariableDecl(VariableDecl {
 			pattern: Pattern::TypedIdentifier {
@@ -1615,7 +1596,7 @@ impl Desugarer
 		});
 
 		let match_arm: SwitchArm = SwitchArm {
-			pattern: Self::desugar_pattern(pattern)?,
+			pattern: Self::desugar_pattern(pattern),
 			body: SwitchBody::Block(desugared_then),
 			span: pattern_span,
 		};
@@ -1626,17 +1607,17 @@ impl Desugarer
 				ty: None,
 			},
 			body: else_branch.map_or_else(
-				|| -> Result<SwitchBody, DesugarError> {
-					return Ok(SwitchBody::Block(Block {
+				|| {
+					return SwitchBody::Block(Block {
 						stmts: vec![],
 						tail_expr: None,
 						span: pattern_span,
-					}));
+					});
 				},
 				|else_expr| {
-					let desugared_else = self.desugar_expr(*else_expr)?;
+					let desugared_else = self.desugar_expr(*else_expr);
 
-					return Ok(match desugared_else {
+					return match desugared_else {
 						Expr::Block(block) => SwitchBody::Block(*block),
 						other_expr => {
 							let other_span: Span = other_expr.span();
@@ -1646,9 +1627,9 @@ impl Desugarer
 								span: other_span,
 							})
 						}
-					});
+					};
 				},
-			)?,
+			),
 			span: pattern_span,
 		};
 
@@ -1661,15 +1642,15 @@ impl Desugarer
 			span,
 		};
 
-		return Ok(Expr::Block(Box::new(Block {
+		return Expr::Block(Box::new(Block {
 			stmts: vec![temp_decl],
 			tail_expr: Some(Box::new(switch_expr)),
 			span,
-		})));
+		}));
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn type_to_constructor_call(ty: &Type, call_type: CallType) -> Result<Expr, DesugarError>
+
+	fn type_to_constructor_call(&mut self, ty: &Type, call_type: CallType) -> Expr
 	{
 		let span: Span = ty.span();
 
@@ -1689,7 +1670,7 @@ impl Desugarer
 					span,
 				});
 
-				return Ok(Expr::Call {
+				return Expr::Call {
 					callee: Box::new(Expr::Identifier {
 						path: constructor_path,
 						span,
@@ -1698,21 +1679,35 @@ impl Desugarer
 					named_generics: Vec::new(),
 					args: vec![],
 					span,
-				});
+				};
 			}
 
 			TypeCore::Reference { .. } => {
-				return Err(DesugarError::invalid_constructor_type(
+				self.diagnostics.push(
+					DesugarError::invalid_constructor_type(
+						span,
+						"cannot call constructor on reference types - references must point to existing values",
+					)
+					.build(),
+				);
+				return Expr::Identifier {
+					path: Path::simple(Vec::new(), span),
 					span,
-					"cannot call constructor on reference types - references must point to existing values",
-				));
+				};
 			}
 
 			TypeCore::Pointer { .. } => {
-				return Err(DesugarError::invalid_constructor_type(
+				self.diagnostics.push(
+					DesugarError::invalid_constructor_type(
+						span,
+						"cannot call constructor on pointer types - pointers must point to existing values",
+					)
+					.build(),
+				);
+				return Expr::Identifier {
+					path: Path::simple(Vec::new(), span),
 					span,
-					"cannot call constructor on pointer types - pointers must point to existing values",
-				));
+				};
 			}
 
 			TypeCore::Mutable { inner } => {
@@ -1721,7 +1716,7 @@ impl Desugarer
 					span,
 				};
 
-				return Self::type_to_constructor_call(&inner_type, call_type);
+				return self.type_to_constructor_call(&inner_type, call_type);
 			}
 
 			TypeCore::Array { inner, size } => {
@@ -1730,78 +1725,85 @@ impl Desugarer
 					span,
 				};
 
-				let element_constructor: Expr = Self::type_to_constructor_call(&inner_type, call_type)?;
+				let element_constructor: Expr = self.type_to_constructor_call(&inner_type, call_type);
 
 				if let Some(size_expr) = size {
-					return Ok(Expr::Array(ArrayLiteral::Repeat {
+					return Expr::Array(ArrayLiteral::Repeat {
 						value: Box::new(element_constructor),
 						count: size_expr.clone(),
 						span,
-					}));
+					});
 				}
-				return Ok(Expr::Array(ArrayLiteral::List {
+				return Expr::Array(ArrayLiteral::List {
 					elements: Vec::new(),
 					span,
-				}));
+				});
 			}
 
 			TypeCore::Tuple(types) => {
 				let mut element_constructors: Vec<Expr> = Vec::new();
 
 				for tuple_ty in types {
-					let element_constructor: Expr = Self::type_to_constructor_call(tuple_ty, call_type)?;
+					let element_constructor: Expr = self.type_to_constructor_call(tuple_ty, call_type);
 					element_constructors.push(element_constructor);
 				}
 
-				return Ok(Expr::Tuple {
+				return Expr::Tuple {
 					elements: element_constructors,
 					span,
-				});
+				};
 			}
 
 			TypeCore::ImplTrait { .. } => {
-				return Err(DesugarError::invalid_constructor_type(
+				self.diagnostics.push(
+					DesugarError::invalid_constructor_type(
+						span,
+						"cannot call constructor on 'impl Trait' types - they must be concrete types",
+					)
+					.build(),
+				);
+				return Expr::Identifier {
+					path: Path::simple(Vec::new(), span),
 					span,
-					"cannot call constructor on 'impl Trait' types - they must be concrete types",
-				));
+				};
 			}
 		}
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> Result<ArrayLiteral, DesugarError>
+
+	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> ArrayLiteral
 	{
-		return Ok(match array_lit {
+		return match array_lit {
 			ArrayLiteral::List { elements, span } => ArrayLiteral::List {
 				elements: elements
 					.into_iter()
 					.map(|e| return self.desugar_expr(e))
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 			},
 			ArrayLiteral::Repeat { value, count, span } => ArrayLiteral::Repeat {
-				value: Box::new(self.desugar_expr(*value)?),
-				count: Box::new(self.desugar_expr(*count)?),
+				value: Box::new(self.desugar_expr(*value)),
+				count: Box::new(self.desugar_expr(*count)),
 				span,
 			},
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> Result<SwitchArm, DesugarError>
+
+	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> SwitchArm
 	{
-		return Ok(SwitchArm {
-			pattern: Self::desugar_pattern(arm.pattern)?,
+		return SwitchArm {
+			pattern: Self::desugar_pattern(arm.pattern),
 			body: match arm.body {
-				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)?),
-				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)?),
+				SwitchBody::Expr(expr) => SwitchBody::Expr(self.desugar_expr(expr)),
+				SwitchBody::Block(block) => SwitchBody::Block(self.desugar_block(block)),
 			},
 			span: arm.span,
-		});
+		};
 	}
 
-	#[allow(clippy::result_large_err)]
-	fn desugar_pattern(pattern: Pattern) -> Result<Pattern, DesugarError>
+
+	fn desugar_pattern(pattern: Pattern) -> Pattern
 	{
 		let expanded: Vec<Pattern> = Self::expand_or_patterns(pattern);
 
@@ -1818,7 +1820,7 @@ impl Desugarer
 				.expect("expand_or_patterns always returns at least one pattern")
 		};
 
-		return Ok(match pattern {
+		return match pattern {
 			Pattern::Wildcard { span, ty } => Pattern::Wildcard { span, ty },
 			Pattern::Literal { value, span } => Pattern::Literal { value, span },
 			Pattern::TypedIdentifier {
@@ -1842,7 +1844,7 @@ impl Desugarer
 				args: args
 					.into_iter()
 					.map(|p| return Self::desugar_pattern(p))
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 			},
 
@@ -1850,7 +1852,7 @@ impl Desugarer
 				let desugared: Vec<Pattern> = patterns
 					.into_iter()
 					.map(|p| return Self::desugar_pattern(p))
-					.collect::<Result<Vec<_>, _>>()?;
+					.collect::<Vec<_>>();
 
 				if desugared.len() == 1 {
 					desugared.into_iter().next().expect("len == 1, so should not error")
@@ -1871,10 +1873,10 @@ impl Desugarer
 				path,
 				fields: fields
 					.into_iter()
-					.map(|(name, pat)| -> Result<(String, Pattern), DesugarError> {
-						return Ok((name, Self::desugar_pattern(pat)?));
+					.map(|(name, pat)| {
+						return (name, Self::desugar_pattern(pat));
 					})
-					.collect::<Result<Vec<_>, _>>()?,
+					.collect::<Vec<_>>(),
 				span,
 				has_rest,
 			},
@@ -1885,7 +1887,7 @@ impl Desugarer
 				let flattened: Vec<Pattern> = patterns
 					.into_iter()
 					.map(|p| return Self::desugar_pattern(p))
-					.collect::<Result<Vec<_>, _>>()?;
+					.collect::<Vec<_>>();
 
 				if flattened.len() == 1 {
 					flattened.into_iter().next().expect("len == 1, so should not error")
@@ -1896,10 +1898,10 @@ impl Desugarer
 					}
 				}
 			}
-		});
+		};
 	}
 
-	fn desugar_range(&mut self, expr: RangeExpr) -> Result<Expr, DesugarError>
+	fn desugar_range(&mut self, expr: RangeExpr) -> Expr
 	{
 		fn call(path: &[&str], args: Vec<Expr>, span: Span) -> Expr
 		{
@@ -1930,10 +1932,10 @@ impl Desugarer
 		}
 		let span: Span = expr.span;
 
-		let start: Option<Expr> = expr.start.map(|x| return self.desugar_expr(*x)).transpose()?;
-		let end: Option<Expr> = expr.end.map(|x| return self.desugar_expr(*x)).transpose()?;
+		let start: Option<Expr> = expr.start.map(|x| return self.desugar_expr(*x));
+		let end: Option<Expr> = expr.end.map(|x| return self.desugar_expr(*x));
 
-		return Ok(match (start, end, expr.inclusive) {
+		return match (start, end, expr.inclusive) {
 			// a..b
 			(Some(a), Some(b), false) => call(&["std", "Range", "new"], vec![a, b], span),
 
@@ -1951,7 +1953,7 @@ impl Desugarer
 
 			// ..
 			(None, None, _) => call(&["std", "RangeFull", "new"], vec![], span),
-		});
+		};
 	}
 
 	fn has_nested_patterns(patterns: &[Pattern]) -> bool
@@ -1961,30 +1963,32 @@ impl Desugarer
 			.any(|p| return !matches!(p, Pattern::TypedIdentifier { .. } | Pattern::Wildcard { .. }));
 	}
 
-	fn desugar_complex_pattern_binding(&mut self, var: VariableDecl) -> Result<VariableDecl, DesugarError>
+	fn desugar_complex_pattern_binding(&mut self, var: VariableDecl) -> VariableDecl
 	{
 		let span: Span = var.span;
 		let comp_const: bool = var.comp_const;
-		let init: Expr = var.init.ok_or_else(|| {
-			return DesugarError::generic(span, "complex pattern requires initializer");
-		})?;
+		let init: Expr = if let Some(i) = var.init {
+			i
+		} else {
+			self.diagnostics
+				.push(DesugarError::generic(span, "complex pattern requires initializer").build());
+			Expr::Identifier {
+				path: Path::simple(Vec::new(), span),
+				span,
+			}
+		};
 
-		let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const)?;
+		let stmts: Vec<Stmt> = self.desugar_pattern_to_statements(var.pattern, init, span, comp_const);
 
 		if let Some(Stmt::VariableDecl(var_decl)) = stmts.into_iter().next() {
-			return Ok(var_decl);
+			return var_decl;
 		}
 
 		unreachable!("desugar_pattern_to_statements should always return at least one statement");
 	}
 
-	fn desugar_pattern_to_statements(
-		&mut self,
-		pattern: Pattern,
-		init: Expr,
-		span: Span,
-		comp_const: bool,
-	) -> Result<Vec<Stmt>, DesugarError>
+	fn desugar_pattern_to_statements(&mut self, pattern: Pattern, init: Expr, span: Span, comp_const: bool)
+	-> Vec<Stmt>
 	{
 		let mut statements: Vec<Stmt> = Vec::new();
 
@@ -2009,18 +2013,29 @@ impl Desugarer
 						span: id_span,
 						mutable,
 					},
-					init: Some(self.desugar_expr(init)?),
+					init: Some(self.desugar_expr(init)),
 					comp_const,
 					docs: None,
 					span: id_span,
 				}));
 			}
-			return Ok(statements);
+			return statements;
 		}
 
-		let temp_type: Type = extract_type_from_pattern(&pattern).ok_or_else(|| {
-			return DesugarError::generic(pattern.span(), "cannot extract type from pattern");
-		})?;
+		let temp_type: Type = if let Some(t) = extract_type_from_pattern(&pattern) {
+			t
+		} else {
+			// todo!()
+			self.diagnostics
+				.push(DesugarError::generic(pattern.span(), "cannot extract type from pattern").build());
+			Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(Vec::new(), span),
+					generics: Vec::new(),
+				}),
+				span,
+			}
+		};
 
 		let temp: String = self.gen_temp("pattern");
 		let temp_span: Span = init.span();
@@ -2034,7 +2049,7 @@ impl Desugarer
 				span: temp_span,
 				mutable: false,
 			},
-			init: Some(self.desugar_expr(init)?),
+			init: Some(self.desugar_expr(init)),
 			comp_const,
 			docs: None,
 			span,
@@ -2093,7 +2108,7 @@ impl Desugarer
 					};
 
 					let nested_stmts: Vec<Stmt> =
-						self.desugar_pattern_to_statements(field_pattern, field_expr, pattern_span, comp_const)?;
+						self.desugar_pattern_to_statements(field_pattern, field_expr, pattern_span, comp_const);
 
 					statements.extend(nested_stmts);
 				}
@@ -2114,7 +2129,7 @@ impl Desugarer
 					};
 
 					let nested_stmts =
-						self.desugar_pattern_to_statements(elem_pattern, index_expr, pattern_span, comp_const)?;
+						self.desugar_pattern_to_statements(elem_pattern, index_expr, pattern_span, comp_const);
 
 					statements.extend(nested_stmts);
 				}
@@ -2143,18 +2158,22 @@ impl Desugarer
 			}
 
 			Pattern::Variant { .. } => {
-				return Err(DesugarError::generic(
-					span,
-					"variant patterns in var bindings not yet supported - use switch instead",
-				));
+				self.diagnostics.push(
+					DesugarError::generic(
+						span,
+						"variant patterns in var bindings not yet supported - use switch instead",
+					)
+					.build(),
+				);
 			}
 
 			_ => {
-				return Err(DesugarError::generic(span, "unsupported pattern type in var binding"));
+				self.diagnostics
+					.push(DesugarError::generic(span, "unsupported pattern type in var binding").build());
 			}
 		}
 
-		return Ok(statements);
+		return statements;
 	}
 
 	fn expand_or_patterns(pattern: Pattern) -> Vec<Pattern>
@@ -2257,7 +2276,7 @@ impl Desugarer
 		return result;
 	}
 
-	fn desugar_assignment_target(&mut self, target: Expr, source: Expr, span: Span) -> Result<Vec<Stmt>, DesugarError>
+	fn desugar_assignment_target(&mut self, target: Expr, source: Expr, span: Span) -> Vec<Stmt>
 	{
 		let mut statements = Vec::new();
 
@@ -2273,7 +2292,7 @@ impl Desugarer
 						span: tuple_span,
 					};
 
-					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(elem, index_expr, span)?;
+					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(elem, index_expr, span);
 					statements.extend(nested_stmts);
 				}
 			}
@@ -2306,22 +2325,22 @@ impl Desugarer
 						span: struct_span,
 					};
 
-					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(field_expr, field_access, span)?;
+					let nested_stmts: Vec<Stmt> = self.desugar_assignment_target(field_expr, field_access, span);
 					statements.extend(nested_stmts);
 				}
 			}
 
 			other_expr => {
 				statements.push(Stmt::Assignment {
-					target: self.desugar_expr(other_expr)?,
+					target: self.desugar_expr(other_expr),
 					op: AssignOp::Assign,
-					value: self.desugar_expr(source)?,
+					value: self.desugar_expr(source),
 					span,
 				});
 			}
 		}
 
-		return Ok(statements);
+		return statements;
 	}
 }
 
@@ -2463,8 +2482,16 @@ fn get_mentioned_type_params_in_type_core(core: &TypeCore) -> Vec<String>
 ///
 /// let desugared = desugar_program(parsed_program)?;
 /// ```
-pub fn desugar_program(program: AST) -> (Result<DesugaredAST, DesugarError>, Vec<DiagnosticBuilder>)
+pub fn desugar_program(program: AST) -> Result<(DesugaredAST, Vec<DiagnosticBuilder>), Vec<DiagnosticBuilder>>
 {
 	let mut desugarer: Desugarer = Desugarer::new();
-	return (desugarer.desugar_program(program), desugarer.diagnostics);
+	let desugared_program = desugarer.desugar_program(program);
+	if desugarer
+		.diagnostics
+		.iter()
+		.any(|d| return d.severity == Severity::Error)
+	{
+		return Err(desugarer.diagnostics);
+	}
+	return Ok((desugared_program, desugarer.diagnostics));
 }

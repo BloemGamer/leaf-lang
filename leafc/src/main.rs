@@ -307,20 +307,17 @@ fn run(
 			}
 		});
 
-		let (res, mut diags) = desugar::desugar_program(ast);
-		diagnostics.append(&mut diags);
+		let res = desugar::desugar_program(ast);
 		let desugared: DesugaredAST = match res {
-			Ok(ast) => ast,
-			e @ Err(_) => {
-				return (
-					e.map(|_| ()).map_err(CompileError::Desugar).map_err(Option::Some),
-					diagnostics,
-				);
+			Ok((ast, mut diags)) => {
+				diagnostics.append(&mut diags);
+				ast
+			}
+			Err(mut diags) => {
+				diagnostics.append(&mut diags);
+				return (Err(None), diagnostics);
 			}
 		};
-		if let Some(_) = diags.iter().find(|x| return x.severity == Severity::Error) {
-			todo!("probably remove the whole `CompileError` from this function or wrap in an `Option`")
-		}
 		if args.desugared {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",

@@ -100,12 +100,12 @@ mod tests
 				source_map,
 			);
 			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).parse_program().unwrap();
-			let (res, diags) = crate::desugar::desugar_program(ast);
-			assert!(diags.is_empty());
+			let res = crate::desugar::desugar_program(ast);
+			assert!(res.is_ok());
 			let desugared = res.unwrap();
-			println!("{}", desugared);
-			let local = symbol_collection::collect_symbols(&desugared, logical.clone())?;
-			pending.push((logical, desugared, local));
+			println!("{}", desugared.0);
+			let local = symbol_collection::collect_symbols(&desugared.0, logical.clone())?;
+			pending.push((logical, desugared.0, local));
 		}
 		return Ok(pending);
 	}
