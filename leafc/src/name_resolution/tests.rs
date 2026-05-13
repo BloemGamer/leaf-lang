@@ -99,7 +99,7 @@ mod tests
 				)),
 				source_map,
 			);
-			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).try_into()?;
+			let ast: AST = Parser::from(ExpandedLexer::new(lexer)).parse_program().unwrap();
 			let (res, diags) = crate::desugar::desugar_program(ast);
 			assert!(diags.is_empty());
 			let desugared = res.unwrap();

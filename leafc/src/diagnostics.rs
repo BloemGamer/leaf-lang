@@ -111,7 +111,7 @@ pub enum Applicability
 	HasPlaceholders,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DiagnosticBuilder
 {
 	pub code: Option<ErrorCode>,

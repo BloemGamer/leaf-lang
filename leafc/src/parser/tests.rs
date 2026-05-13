@@ -11,67 +11,61 @@ mod tests
 
 	use std::fmt::Write;
 
-	fn parse_expr_from_str(input: &str) -> Result<Expr, CompileError>
+	fn parse_expr_from_str(input: &str) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "expr", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser.parse_expr().map_err(CompileError::Parse).inspect_err(|e| {
-			let diag = e.to_diagnostic();
+		return parser.parse_expr().inspect_err(|e| {
 			let config: Config = Config::default();
+			let diag = e.clone().finish();
 			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 			eprintln!("{}", renderer);
 		});
 	}
 
-	fn parse_program_from_str(input: &str) -> Result<TopLevelBlock, CompileError>
+	fn parse_program_from_str(input: &str) -> Result<TopLevelBlock, Box<DiagnosticBuilder>>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "program", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser
-			.parse_top_level_block()
-			.map_err(CompileError::Parse)
-			.inspect_err(|e| {
-				let diag = e.to_diagnostic();
-				let config: Config = Config::default();
-				let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
-				eprintln!("{}", renderer);
-			});
+		return parser.parse_top_level_block().inspect_err(|e| {
+			let config: Config = Config::default();
+			let diag = e.clone().finish();
+			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
+			eprintln!("{}", renderer);
+		});
 	}
 
-	fn parse_block_from_str(input: &str) -> Result<Block, CompileError>
+	fn parse_block_from_str(input: &str) -> Result<Block, Box<DiagnosticBuilder>>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "block", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser.parse_block().map_err(CompileError::Parse).inspect_err(|e| {
-			let diag = e.to_diagnostic();
+		return parser.parse_block().inspect_err(|e| {
 			let config: Config = Config::default();
+			let diag = e.clone().finish();
 			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 			eprintln!("{}", renderer);
 		});
 	}
 
 	#[allow(unused)]
-	fn parse_directive(input: &str) -> Result<DirectiveNode, CompileError>
+	fn parse_directive(input: &str) -> Result<DirectiveNode, Box<DiagnosticBuilder>>
 	{
 		let config = Config::default();
 		let mut source_map = SourceMap::default();
 		let lexer = Lexer::new_add_to_source_map(&config, input, "directive", &mut source_map);
 		let mut parser = Parser::from(ExpandedLexer::new(lexer));
-		return parser
-			.parse_directive_node()
-			.map_err(|e| return CompileError::Parse(e))
-			.inspect_err(|e| {
-				let diag = e.to_diagnostic();
-				let config: Config = Config::default();
-				let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
-				eprintln!("{}", renderer);
-			});
+		return parser.parse_directive_node().inspect_err(|e| {
+			let config: Config = Config::default();
+			let diag = e.clone().finish();
+			let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
+			eprintln!("{}", renderer);
+		});
 	}
 
 	// ========== Literal Tests ==========
@@ -1194,7 +1188,7 @@ mod tests
 	#[test]
 	fn test_parse_struct_init_empty()
 	{
-		let result = parse_expr_from_str("Point {}").inspect_err(|e| println!("{}", e));
+		let result = parse_expr_from_str("Point {}");
 		assert!(result.is_ok());
 		match result.unwrap() {
 			Expr::StructInit { path, fields, .. } => {
@@ -1271,9 +1265,7 @@ mod tests
 			Ok(program) => {
 				println!("{:#?}", program);
 			}
-			Err(e) => {
-				println!("{}", e);
-			}
+			Err(_) => {}
 		}
 		assert!(result.is_ok());
 		match result.unwrap() {
@@ -1657,7 +1649,7 @@ mod tests
 	fn test_parse_type_alias()
 	{
 		let input = "type Int = i32;";
-		let result = parse_program_from_str(input).inspect_err(|e| println!("{}", e));
+		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
@@ -3261,7 +3253,7 @@ mod tests
 	#[test]
 	fn test_parse_deeply_nested_expressions()
 	{
-		let result = parse_expr_from_str("(((((((42)))))))"); // more braces made the test give a stackoverflow
+		let result = parse_expr_from_str("((((((((((((42))))))))))))"); // more braces made the test give a stackoverflow
 		assert!(result.is_ok());
 	}
 
@@ -8401,16 +8393,6 @@ mod tests
 	}
 
 	// ========== Display/Format Coverage ==========
-
-	#[test]
-	fn test_display_parse_error()
-	{
-		let result = parse_expr_from_str("var");
-		assert!(result.is_err());
-		let error = result.unwrap_err();
-		let error_string = format!("{}", error);
-		assert!(!error_string.is_empty());
-	}
 
 	#[test]
 	fn test_display_empty_program()

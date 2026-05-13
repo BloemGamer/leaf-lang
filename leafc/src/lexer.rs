@@ -10,15 +10,16 @@ use crate::bit_enum;
 use crate::bit_enum_impl_op;
 use crate::bit_enum_impl_op_assign;
 use crate::config::Config;
+use crate::diagnostics::DiagnosticBuilder;
 use crate::parser::ParseError;
 use crate::source_map::{SourceIndex, SourceMap};
 
-pub trait LexerTrait<'source, 'config>: Iterator<Item = Result<Token, ParseError>> + Clone
+pub trait LexerTrait<'source, 'config>: Iterator<Item = Result<Token, Box<DiagnosticBuilder>>> + Clone
 {
 	fn into_parts(self) -> (&'config Config, SourceIndex, Self);
 	fn read_eof_returned(&self) -> bool;
 	fn set_eof_returned(&mut self, eof_returned: bool);
-	fn next_token(&mut self) -> Result<Token, ParseError>;
+	fn next_token(&mut self) -> Result<Token, Box<DiagnosticBuilder>>;
 }
 
 impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
@@ -83,7 +84,7 @@ impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 	/// let token = lexer.next_token(); // Returns IntLiteral(42)
 	/// ```
 	#[allow(unused)]
-	fn next_token(&mut self) -> Result<Token, ParseError>
+	fn next_token(&mut self) -> Result<Token, Box<DiagnosticBuilder>>
 	{
 		self.skip_whitespace();
 
@@ -878,7 +879,7 @@ pub enum Directive
 
 impl Iterator for Lexer<'_, '_>
 {
-	type Item = Result<Token, ParseError>;
+	type Item = Result<Token, Box<DiagnosticBuilder>>;
 
 	fn next(&mut self) -> Option<Self::Item>
 	{

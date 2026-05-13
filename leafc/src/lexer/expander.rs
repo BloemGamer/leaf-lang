@@ -1,5 +1,7 @@
 use super::{Lexer, LexerTrait, ParseError, Span, Token, TokenKind};
 use crate::config::Config;
+use crate::diagnostics::CompileDiagnostic;
+use crate::diagnostics::DiagnosticBuilder;
 use crate::lexer::Directive;
 use crate::lexer::Spanned;
 use crate::parser::{Expr, Parser};
@@ -64,14 +66,14 @@ impl<'s, 'c> ExpandedLexer<'s, 'c>
 		self.stack.pop();
 	}
 
-	fn consume_until_open_brace(&mut self) -> Result<(), ParseError>
+	fn consume_until_open_brace(&mut self) -> Result<(), Box<DiagnosticBuilder>>
 	{
 		loop {
 			let t: Token = self.lexer.next_token()?;
 			match t.kind {
 				TokenKind::LeftBrace => return Ok(()),
 				TokenKind::Eof => {
-					return Err(ParseError::unexpected_eof(t.span()));
+					return Err(Box::new(ParseError::unexpected_eof(t.span()).build()));
 				}
 				_ => {}
 			}
@@ -98,7 +100,7 @@ impl<'s, 'c> LexerTrait<'s, 'c> for ExpandedLexer<'s, 'c>
 		self.lexer.eof_returned = eof_returned;
 	}
 
-	fn next_token(&mut self) -> Result<Token, ParseError>
+	fn next_token(&mut self) -> Result<Token, Box<DiagnosticBuilder>>
 	{
 		loop {
 			let tok: Token = if let Some(t) = self.pending.take() {
@@ -145,7 +147,9 @@ impl<'s, 'c> LexerTrait<'s, 'c> for ExpandedLexer<'s, 'c>
 
 				TokenKind::Directive(Directive::Custom(s)) if s == "else" => {
 					if self.stack.is_empty() {
-						return Err(ParseError::generic(tok.span(), "`@else` without a preceding `@if`"));
+						return Err(Box::new(
+							ParseError::generic(tok.span(), "`@else` without a preceding `@if`").build(),
+						));
 					}
 					self.consume_until_open_brace()?;
 					self.enter_else();
@@ -204,7 +208,7 @@ impl<'s, 'c> LexerTrait<'s, 'c> for ExpandedLexer<'s, 'c>
 
 impl Iterator for ExpandedLexer<'_, '_>
 {
-	type Item = Result<Token, ParseError>;
+	type Item = Result<Token, Box<DiagnosticBuilder>>;
 
 	fn next(&mut self) -> Option<Self::Item>
 	{
@@ -264,7 +268,7 @@ where
 		self.eof_returned = eof_returned;
 	}
 
-	fn next_token(&mut self) -> Result<Token, ParseError>
+	fn next_token(&mut self) -> Result<Token, Box<DiagnosticBuilder>>
 	{
 		let Some(tok) = self.tokens.next() else {
 			return Ok(Token {
@@ -280,7 +284,7 @@ impl<T> Iterator for IterLexer<'_, T>
 where
 	T: Iterator<Item = Token> + Clone,
 {
-	type Item = Result<Token, ParseError>;
+	type Item = Result<Token, Box<DiagnosticBuilder>>;
 
 	fn next(&mut self) -> Option<Self::Item>
 	{

@@ -129,90 +129,90 @@ impl Spanned for AST
 	}
 }
 
-impl<'s, 'c, T> TryFrom<Parser<'s, 'c, T>> for AST
-where
-	T: LexerTrait<'s, 'c>,
-{
-	type Error = ParseError;
+// impl<'s, 'c, T> TryFrom<Parser<'s, 'c, T>> for AST
+// where
+// 	T: LexerTrait<'s, 'c>,
+// {
+// 	type Error = ParseError;
+//
+// 	/// Converts a parser into a parsed program result.
+// 	///
+// 	/// This provides a convenient way to parse a complete program by consuming
+// 	/// the parser. It calls `parse_program()` internally.
+// 	///
+// 	/// # Arguments
+// 	/// * `parser` - The parser to consume
+// 	///
+// 	/// # Returns
+// 	/// * `Ok(AST)` - The successfully parsed program AST
+// 	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
+// 	///
+// 	/// # Example
+// 	/// ```ignore
+// 	/// # use crate::{Parser, AST, ParseError, Config, SourceIndex};
+// 	/// # use crate::lexer::Lexer;
+// 	/// # fn main() -> Result<(), Box<DiagnosticBuilder>> {
+// 	/// let config = Config::default();
+// 	/// let source = "fn main() { var x = 42; }";
+// 	/// let source_index = SourceIndex(0);
+// 	/// let lexer = Lexer::new(&config, source, source_index);
+// 	/// let parser = Parser::from(lexer);
+// 	///
+// 	/// // Convert parser to AST using TryFrom
+// 	/// let program = AST::try_from(parser)?;
+// 	///
+// 	/// // Or more idiomatically in a single chain:
+// 	/// let program = AST::try_from(Parser::from(Lexer::new(&config, source, source_index)))?;
+// 	/// # Ok(())
+// 	/// # }
+// 	/// ```
+// 	fn try_from(mut parser: Parser<'s, 'c, T>) -> Result<Self, Self::Error>
+// 	{
+// 		return parser.parse_program();
+// 	}
+// }
 
-	/// Converts a parser into a parsed program result.
-	///
-	/// This provides a convenient way to parse a complete program by consuming
-	/// the parser. It calls `parse_program()` internally.
-	///
-	/// # Arguments
-	/// * `parser` - The parser to consume
-	///
-	/// # Returns
-	/// * `Ok(AST)` - The successfully parsed program AST
-	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
-	///
-	/// # Example
-	/// ```ignore
-	/// # use crate::{Parser, AST, ParseError, Config, SourceIndex};
-	/// # use crate::lexer::Lexer;
-	/// # fn main() -> Result<(), ParseError> {
-	/// let config = Config::default();
-	/// let source = "fn main() { var x = 42; }";
-	/// let source_index = SourceIndex(0);
-	/// let lexer = Lexer::new(&config, source, source_index);
-	/// let parser = Parser::from(lexer);
-	///
-	/// // Convert parser to AST using TryFrom
-	/// let program = AST::try_from(parser)?;
-	///
-	/// // Or more idiomatically in a single chain:
-	/// let program = AST::try_from(Parser::from(Lexer::new(&config, source, source_index)))?;
-	/// # Ok(())
-	/// # }
-	/// ```
-	fn try_from(mut parser: Parser<'s, 'c, T>) -> Result<Self, Self::Error>
-	{
-		return parser.parse_program();
-	}
-}
-
-impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
-{
-	type Error = ParseError;
-
-	/// Converts a lexer into a parsed program.
-	///
-	/// This provides a convenient way to parse a complete program directly from a lexer.
-	/// Internally, it first converts the lexer into a parser, then parses the program.
-	///
-	/// # Arguments
-	/// * `lexer` - The lexer to consume
-	///
-	/// # Returns
-	/// * `Ok(AST)` - The successfully parsed program AST
-	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
-	///
-	/// # Example
-	/// ```ignore
-	/// # use crate::lexer::Lexer;
-	/// # use crate::{Parser, AST, Config, ParseError, SourceIndex};
-	/// # fn main() -> Result<(), ParseError> {
-	/// let config = Config::default();
-	/// let source = "fn main() { var x = 42; }";
-	/// let source_index = SourceIndex(0);
-	/// let lexer = Lexer::new(&config, source, source_index);
-	///
-	/// // Convert lexer directly to a AST
-	/// let program = AST::try_from(lexer)?;
-	///
-	/// // Or in a single chain:
-	/// let program = AST::try_from(Lexer::new(&config, source, source_index))?;
-	/// # Ok(())
-	/// # }
-	/// ```
-	fn try_from(lexer: Lexer<'s, 'c>) -> Result<Self, Self::Error>
-	{
-		let mut parser: Parser<'_, '_, _> = Parser::from(lexer);
-
-		return parser.parse_top_level_block();
-	}
-}
+// impl<'s, 'c> TryFrom<Lexer<'s, 'c>> for TopLevelBlock
+// {
+// 	type Error = ParseError;
+//
+// 	/// Converts a lexer into a parsed program.
+// 	///
+// 	/// This provides a convenient way to parse a complete program directly from a lexer.
+// 	/// Internally, it first converts the lexer into a parser, then parses the program.
+// 	///
+// 	/// # Arguments
+// 	/// * `lexer` - The lexer to consume
+// 	///
+// 	/// # Returns
+// 	/// * `Ok(AST)` - The successfully parsed program AST
+// 	/// * `Err(ParseError)` - If a syntax error is encountered during parsing
+// 	///
+// 	/// # Example
+// 	/// ```ignore
+// 	/// # use crate::lexer::Lexer;
+// 	/// # use crate::{Parser, AST, Config, ParseError, SourceIndex};
+// 	/// # fn main() -> Result<(), Box<DiagnosticBuilder>> {
+// 	/// let config = Config::default();
+// 	/// let source = "fn main() { var x = 42; }";
+// 	/// let source_index = SourceIndex(0);
+// 	/// let lexer = Lexer::new(&config, source, source_index);
+// 	///
+// 	/// // Convert lexer directly to a AST
+// 	/// let program = AST::try_from(lexer)?;
+// 	///
+// 	/// // Or in a single chain:
+// 	/// let program = AST::try_from(Lexer::new(&config, source, source_index))?;
+// 	/// # Ok(())
+// 	/// # }
+// 	/// ```
+// 	fn try_from(lexer: Lexer<'s, 'c>) -> Result<Self, Self::Error>
+// 	{
+// 		let mut parser: Parser<'_, '_, _> = Parser::from(lexer);
+//
+// 		return parser.parse_top_level_block();
+// 	}
+// }
 
 /// Top-level declaration types.
 ///
@@ -900,19 +900,22 @@ pub enum ExprEnum
 	String(String),
 }
 
-fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
+fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
 {
 	let Literal::Int { value, base, ty, span } = lit else {
 		unreachable!("Called `read_radix_number` with a not `Literal::Int`: {:?}", lit);
 	};
 	if !ty.is_some() {
-		return Err(ParseError {
-			span: *span,
-			kind: ParseErrorKind::CompileExprError {
-				reason: "typed integers for comptime expressions is not allowed".to_string(),
-			},
-			context: Vec::new(),
-		});
+		return Err(Box::new(
+			ParseError {
+				span: *span,
+				kind: ParseErrorKind::CompileExprError {
+					reason: "typed integers for comptime expressions is not allowed".to_string(),
+				},
+				context: Vec::new(),
+			}
+			.build(),
+		));
 	}
 
 	return i128::from_str_radix(
@@ -924,25 +927,31 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 			IntBase::Hexadecimal => 16,
 		},
 	)
-	.map_err(|err| -> ParseError {
+	.map_err(|err| -> Box<DiagnosticBuilder> {
 		match err.kind() {
 			std::num::IntErrorKind::PosOverflow => {
-				return ParseError {
-					span: *span,
-					kind: ParseErrorKind::CompileExprError {
-						reason: "IntergetOverflow".to_string(),
-					},
-					context: Vec::new(),
-				};
+				return Box::new(
+					ParseError {
+						span: *span,
+						kind: ParseErrorKind::CompileExprError {
+							reason: "IntergetOverflow".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				);
 			}
 			std::num::IntErrorKind::NegOverflow => {
-				return ParseError {
-					span: *span,
-					kind: ParseErrorKind::CompileExprError {
-						reason: "IntergetUnderflow".to_string(),
-					},
-					context: Vec::new(),
-				};
+				return Box::new(
+					ParseError {
+						span: *span,
+						kind: ParseErrorKind::CompileExprError {
+							reason: "IntergetUnderflow".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				);
 			}
 			_ => unreachable!("somthing went wrong during parsing the number"),
 		}
@@ -951,30 +960,42 @@ fn read_radix_number(lit: &Literal) -> Result<i128, ParseError>
 
 impl Expr
 {
-	pub fn comp_time_check(&self, config: &Config) -> Result<bool, ParseError>
+	pub fn comp_time_check(&self, config: &Config) -> Result<bool, Box<DiagnosticBuilder>>
 	{
 		match self.eval(config)? {
 			ExprEnum::Bool(b) => return Ok(b),
 			_ => {
-				return Err(ParseError {
-					span: self.span(),
-					kind: ParseErrorKind::NoCompileExpr {
-						reason: "Compile-time expression must evaluate to a boolean".to_string(),
-					},
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: self.span(),
+						kind: ParseErrorKind::NoCompileExpr {
+							reason: "Compile-time expression must evaluate to a boolean".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 		}
 	}
 
-	fn eval(&self, config: &Config) -> Result<ExprEnum, ParseError>
+	fn eval(&self, config: &Config) -> Result<ExprEnum, Box<DiagnosticBuilder>>
 	{
 		match self {
 			Expr::Literal { value, span: _, .. } => {
 				return Ok(match value {
 					lit @ Literal::Int { .. } => ExprEnum::Int(read_radix_number(lit)?),
 					Literal::Float { span, .. } | Literal::Char { value: _, span } => {
-						return Err(type_err(*span));
+						return Err(Box::new(
+							ParseError {
+								span: *span,
+								kind: ParseErrorKind::NoCompileExpr {
+									reason: "Type mismatch in compile-time expression".to_string(),
+								},
+								context: Vec::new(),
+							}
+							.build(),
+						));
 					}
 					Literal::Bool { value, span: _ } => ExprEnum::Bool(*value),
 					Literal::String {
@@ -983,13 +1004,16 @@ impl Expr
 						span,
 					} => {
 						if *flags != StringFlags::NONE {
-							return Err(ParseError {
-								span: *span,
-								kind: ParseErrorKind::Generic {
-									message: "no string flags are allowed on evals for now".to_string(),
-								},
-								context: Vec::new(),
-							});
+							return Err(Box::new(
+								ParseError {
+									span: *span,
+									kind: ParseErrorKind::Generic {
+										message: "no string flags are allowed on evals for now".to_string(),
+									},
+									context: Vec::new(),
+								}
+								.build(),
+							));
 						}
 						ExprEnum::String(value.clone())
 					}
@@ -998,7 +1022,16 @@ impl Expr
 
 			Expr::Identifier { path, span } => {
 				if path.has_generics() || path.glob || path.global {
-					return Err(type_err(*span));
+					return Err(Box::new(
+						ParseError {
+							span: *span,
+							kind: ParseErrorKind::NoCompileExpr {
+								reason: "Type mismatch in compile-time expression".to_string(),
+							},
+							context: Vec::new(),
+						}
+						.build(),
+					));
 				}
 				if matches!(&path.segments[0], PathSegment { name, generics, span, } if name == "cfg" && generics.is_empty())
 				{
@@ -1009,14 +1042,26 @@ impl Expr
 						span: path.span,
 					};
 					return config.lookup(&p).map_err(|err| {
-						return ParseError {
-							span: *span,
-							kind: ParseErrorKind::CompileExprError { reason: err },
-							context: Vec::new(),
-						};
+						return Box::new(
+							ParseError {
+								span: *span,
+								kind: ParseErrorKind::CompileExprError { reason: err },
+								context: Vec::new(),
+							}
+							.build(),
+						);
 					});
 				}
-				return Err(type_err(*span));
+				return Err(Box::new(
+					ParseError {
+						span: *span,
+						kind: ParseErrorKind::NoCompileExpr {
+							reason: "Type mismatch in compile-time expression".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 
 			Expr::Unary { op, expr, span } => {
@@ -1027,13 +1072,16 @@ impl Expr
 					(UnaryOp::Not, ExprEnum::Bool(b)) => return Ok(ExprEnum::Bool(!b)),
 
 					_ => {
-						return Err(ParseError {
-							span: *span,
-							kind: ParseErrorKind::NoCompileExpr {
-								reason: "Invalid unary operation for given type".to_string(),
-							},
-							context: Vec::new(),
-						});
+						return Err(Box::new(
+							ParseError {
+								span: *span,
+								kind: ParseErrorKind::NoCompileExpr {
+									reason: "Invalid unary operation for given type".to_string(),
+								},
+								context: Vec::new(),
+							}
+							.build(),
+						));
 					}
 				}
 			}
@@ -1048,10 +1096,28 @@ impl Expr
 								let r = rhs.eval(config)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
-									_ => Err(type_err(*span)),
+									_ => Err(Box::new(
+										ParseError {
+											span: *span,
+											kind: ParseErrorKind::NoCompileExpr {
+												reason: "Type mismatch in compile-time expression".to_string(),
+											},
+											context: Vec::new(),
+										}
+										.build(),
+									)),
 								};
 							}
-							_ => return Err(type_err(*span)),
+							_ => Err(Box::new(
+								ParseError {
+									span: *span,
+									kind: ParseErrorKind::NoCompileExpr {
+										reason: "Type mismatch in compile-time expression".to_string(),
+									},
+									context: Vec::new(),
+								}
+								.build(),
+							))?,
 						}
 					}
 
@@ -1063,11 +1129,29 @@ impl Expr
 								let r = rhs.eval(config)?;
 								return match r {
 									ExprEnum::Bool(b) => Ok(ExprEnum::Bool(b)),
-									_ => Err(type_err(*span)),
+									_ => Err(Box::new(
+										ParseError {
+											span: *span,
+											kind: ParseErrorKind::NoCompileExpr {
+												reason: "Type mismatch in compile-time expression".to_string(),
+											},
+											context: Vec::new(),
+										}
+										.build(),
+									)),
 								};
 							}
-							_ => return Err(type_err(*span)),
-						}
+							_ => Err(Box::new(
+								ParseError {
+									span: *span,
+									kind: ParseErrorKind::NoCompileExpr {
+										reason: "Type mismatch in compile-time expression".to_string(),
+									},
+									context: Vec::new(),
+								}
+								.build(),
+							)),
+						}?
 					}
 
 					_ => {}
@@ -1096,28 +1180,43 @@ impl Expr
 					(BinaryOp::Eq, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a == b)),
 					(BinaryOp::Ne, ExprEnum::String(a), ExprEnum::String(b)) => return Ok(ExprEnum::Bool(a != b)),
 
-					_ => return Err(type_err(*span)),
+					_ => Err(Box::new(
+						ParseError {
+							span: *span,
+							kind: ParseErrorKind::NoCompileExpr {
+								reason: "Type mismatch in compile-time expression".to_string(),
+							},
+							context: Vec::new(),
+						}
+						.build(),
+					)),
 				}
 			}
 
 			Expr::Default { span, .. } => {
-				return Err(ParseError {
-					span: *span,
-					kind: ParseErrorKind::NoCompileExpr {
-						reason: "Can't use `default()` in an `@if` block".to_string(),
-					},
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: *span,
+						kind: ParseErrorKind::NoCompileExpr {
+							reason: "Can't use `default()` in an `@if` block".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 
 			_ => {
-				return Err(ParseError {
-					span: self.span(),
-					kind: ParseErrorKind::NoCompileExpr {
-						reason: "Expression not allowed in compile-time condition".to_string(),
-					},
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: self.span(),
+						kind: ParseErrorKind::NoCompileExpr {
+							reason: "Expression not allowed in compile-time condition".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 		}
 	}
@@ -2492,20 +2591,20 @@ impl<'s, 'c, T> Parser<'s, 'c, T>
 where
 	T: LexerTrait<'s, 'c>,
 {
-	fn peek(&mut self) -> Result<&Token, ParseError>
+	fn peek(&mut self) -> Result<&Token, Box<DiagnosticBuilder>>
 	{
 		if let Some(token) = self.buffered_token.as_ref() {
 			return Ok(token);
 		}
 
-		let token: Result<&Token, ParseError> = self
+		let token: Result<&Token, Box<DiagnosticBuilder>> = self
 			.lexer
 			.peek()
 			.map(|x| return x.as_ref())
 			.transpose()
 			.map_err(|err| return err.clone())?
 			.ok_or_else(|| {
-				return ParseError::unexpected_eof(self.last_span);
+				return Box::new(ParseError::unexpected_eof(self.last_span).build());
 			});
 
 		let Ok(tok) = token else {
@@ -2514,16 +2613,19 @@ where
 		match tok.check_reserved() {
 			Ok(()) => return Ok(tok),
 			Err(e) => {
-				return Err(ParseError {
-					span: tok.span(),
-					kind: ParseErrorKind::ReservedToken(e),
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: tok.span(),
+						kind: ParseErrorKind::ReservedToken(e),
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 		}
 	}
 
-	fn next(&mut self) -> Result<Token, ParseError>
+	fn next(&mut self) -> Result<Token, Box<DiagnosticBuilder>>
 	{
 		if let Some(tok) = self.buffered_token.take() {
 			self.last_span = tok.span;
@@ -2531,18 +2633,21 @@ where
 		}
 
 		let tok: Token = self.lexer.next().transpose()?.ok_or_else(|| {
-			return ParseError::unexpected_eof(self.last_span);
+			return Box::new(ParseError::unexpected_eof(self.last_span).build());
 		})?;
 
 		self.last_span = tok.span;
 		match tok.check_reserved() {
 			Ok(()) => return Ok(tok),
 			Err(e) => {
-				return Err(ParseError {
-					span: tok.span(),
-					kind: ParseErrorKind::ReservedToken(e),
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: tok.span(),
+						kind: ParseErrorKind::ReservedToken(e),
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 		}
 	}
@@ -2560,17 +2665,17 @@ where
 		self.buffered_token = buffered_token;
 	}
 
-	fn peek_kind(&mut self) -> Result<&TokenKind, ParseError>
+	fn peek_kind(&mut self) -> Result<&TokenKind, Box<DiagnosticBuilder>>
 	{
 		return Ok(&self.peek()?.kind);
 	}
 
-	fn at(&mut self, kind: &TokenKind) -> Result<bool, ParseError>
+	fn at(&mut self, kind: &TokenKind) -> Result<bool, Box<DiagnosticBuilder>>
 	{
 		return Ok(self.peek_kind()? == kind);
 	}
 
-	fn consume(&mut self, kind: &TokenKind) -> Result<bool, ParseError>
+	fn consume(&mut self, kind: &TokenKind) -> Result<bool, Box<DiagnosticBuilder>>
 	{
 		if self.at(kind)? {
 			self.next()?;
@@ -2579,7 +2684,7 @@ where
 		return Ok(false);
 	}
 
-	fn consume_greater_than(&mut self) -> Result<bool, ParseError>
+	fn consume_greater_than(&mut self) -> Result<bool, Box<DiagnosticBuilder>>
 	{
 		if self.at(&TokenKind::GreaterThan)? {
 			self.next()?;
@@ -2602,7 +2707,7 @@ where
 		return Ok(false);
 	}
 
-	fn expect(&mut self, expected: &TokenKind) -> Result<Token, ParseError>
+	fn expect(&mut self, expected: &TokenKind) -> Result<Token, Box<DiagnosticBuilder>>
 	{
 		let tok: &Token = self.peek()?;
 
@@ -2610,10 +2715,8 @@ where
 			return self.next();
 		}
 		let err_tok: Token = tok.clone();
-		return Err(ParseError::unexpected_token(
-			err_tok.span,
-			Expected::Token(expected.clone()),
-			err_tok.kind,
+		return Err(Box::new(
+			ParseError::unexpected_token(err_tok.span, Expected::Token(expected.clone()), err_tok.kind).build(),
 		));
 	}
 
@@ -2629,13 +2732,13 @@ where
 	/// # Example
 	/// ```ignore
 	/// # use crate::{Parser, AST, ParseError};
-	/// # fn example(parser: &mut Parser) -> Result<(), ParseError> {
+	/// # fn example(parser: &mut Parser) -> Result<(), Box<DiagnosticBuilder>> {
 	/// let program = parser.parse_program()?;
 	/// println!("Parsed {} items", program.items.len());
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn parse_program(&mut self) -> Result<AST, ParseError>
+	pub fn parse_program(&mut self) -> Result<AST, Box<DiagnosticBuilder>>
 	{
 		let top_level_block: TopLevelBlock = self.parse_top_level_block()?;
 
@@ -2645,7 +2748,7 @@ where
 		});
 	}
 
-	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, ParseError>
+	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, Box<DiagnosticBuilder>>
 	{
 		let mut items: Vec<TopLevelDecl> = Vec::new();
 
@@ -2670,7 +2773,7 @@ where
 		return Ok(TopLevelBlock { items, span });
 	}
 
-	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, ParseError>
+	fn parse_top_level_decl(&mut self) -> Result<TopLevelDecl, Box<DiagnosticBuilder>>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -2734,7 +2837,7 @@ where
 		return Ok(ret);
 	}
 
-	fn peek_declaration_kind(&mut self) -> Result<DeclKind, ParseError>
+	fn peek_declaration_kind(&mut self) -> Result<DeclKind, Box<DiagnosticBuilder>>
 	{
 		let checkpoint: Peekable<T> = self.lexer.clone();
 		let checkpoint_span: Span = self.last_span;
@@ -2861,13 +2964,15 @@ where
 					let tok: Token = self.peek()?.clone();
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
-					return Err(ParseError::unexpected_item(tok.span, "declaration", tok.kind));
+					return Err(Box::new(
+						ParseError::unexpected_item(tok.span, "declaration", tok.kind).build(),
+					));
 				}
 			}
 		}
 	}
 
-	fn skip_until_balanced_paren(&mut self) -> Result<(), ParseError>
+	fn skip_until_balanced_paren(&mut self) -> Result<(), Box<DiagnosticBuilder>>
 	{
 		if !self.at(&TokenKind::LeftParen)? {
 			return Ok(());
@@ -2885,9 +2990,7 @@ where
 					depth -= 1;
 					self.next()?;
 				}
-				TokenKind::Eof => {
-					return Err(ParseError::unexpected_eof(self.peek()?.span));
-				}
+				TokenKind::Eof => return Err(Box::new(ParseError::unexpected_eof(self.peek()?.span).build())),
 				_ => {
 					self.next()?;
 				}
@@ -2896,7 +2999,7 @@ where
 		return Ok(());
 	}
 
-	fn parse_directive_node(&mut self) -> Result<DirectiveNode, ParseError>
+	fn parse_directive_node(&mut self) -> Result<DirectiveNode, Box<DiagnosticBuilder>>
 	{
 		let start: Span = self.peek()?.span;
 
@@ -2907,10 +3010,9 @@ where
 				d
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Description("directive".to_string()),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Description("directive".to_string()), tok.kind)
+						.build(),
 				));
 			}
 		} else if modifiers.is_empty() {
@@ -2921,10 +3023,9 @@ where
 			}
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(
-				tok.span,
-				Expected::Description("directive".to_string()),
-				tok.kind,
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Description("directive".to_string()), tok.kind)
+					.build(),
 			));
 		};
 
@@ -2959,7 +3060,7 @@ where
 		&mut self,
 		direct: lexer::Directive,
 		modifiers: Vec<Modifier>,
-	) -> Result<Directive, ParseError>
+	) -> Result<Directive, Box<DiagnosticBuilder>>
 	{
 		return match direct {
 			lexer::Directive::Use => Ok(Directive::Use {
@@ -2976,13 +3077,16 @@ where
 						import: string.clone(),
 					},
 					_ => {
-						return Err(ParseError::unexpected_token(
-							incl.span,
-							Expected::Token(TokenKind::StringLiteral {
-								string: String::new(),
-								flags: StringFlags::NONE,
-							}),
-							incl.kind,
+						return Err(Box::new(
+							ParseError::unexpected_token(
+								incl.span,
+								Expected::Token(TokenKind::StringLiteral {
+									string: String::new(),
+									flags: StringFlags::NONE,
+								}),
+								incl.kind,
+							)
+							.build(),
 						));
 					}
 				};
@@ -3000,7 +3104,7 @@ where
 	}
 
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, ParseError>
+	fn parse_directive_params(&mut self) -> Result<Vec<DirectiveParam>, Box<DiagnosticBuilder>>
 	{
 		unimplemented!("don't know what to do for this yet");
 		// if !self.consume(&TokenKind::LeftParen)? {
@@ -3198,7 +3302,7 @@ where
 		// return Ok(params);
 	}
 
-	fn parse_var_decl(&mut self) -> Result<VariableDecl, ParseError>
+	fn parse_var_decl(&mut self) -> Result<VariableDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let tok: Token = self.next()?;
@@ -3229,7 +3333,7 @@ where
 		});
 	}
 
-	fn parse_type(&mut self) -> Result<Type, ParseError>
+	fn parse_type(&mut self) -> Result<Type, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let core: TypeCore = self.parse_type_core()?;
@@ -3239,7 +3343,7 @@ where
 		});
 	}
 
-	fn parse_type_core(&mut self) -> Result<TypeCore, ParseError>
+	fn parse_type_core(&mut self) -> Result<TypeCore, Box<DiagnosticBuilder>>
 	{
 		let tok: &Token = self.peek()?;
 		match &tok.kind {
@@ -3336,34 +3440,40 @@ where
 			}
 			_ => {
 				let err_tok: Token = tok.clone();
-				return Err(ParseError::invalid_type(
-					err_tok.span,
-					"expected '&', '*', 'mut', identifier, '[' or '(' to start a type",
+				return Err(Box::new(
+					ParseError::invalid_type(
+						err_tok.span,
+						"expected '&', '*', 'mut', identifier, '[' or '(' to start a type",
+					)
+					.build(),
 				));
 			}
 		}
 	}
 
-	fn get_path(&mut self) -> Result<Path, ParseError>
+	fn get_path(&mut self) -> Result<Path, Box<DiagnosticBuilder>>
 	{
 		let path: Path = self.get_path_allow_internals()?;
 
 		for p in &path.segments {
 			if p.name.contains('#') {
-				return Err(ParseError {
-					span: p.span,
-					kind: ParseErrorKind::UseOfNotAllowedInternal {
-						reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
-					},
-					context: Vec::new(),
-				});
+				return Err(Box::new(
+					ParseError {
+						span: p.span,
+						kind: ParseErrorKind::UseOfNotAllowedInternal {
+							reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				));
 			}
 		}
 
 		return Ok(path);
 	}
 
-	fn get_path_allow_internals(&mut self) -> Result<Path, ParseError>
+	fn get_path_allow_internals(&mut self) -> Result<Path, Box<DiagnosticBuilder>>
 	{
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
@@ -3376,7 +3486,9 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
-					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+					return Err(Box::new(
+						ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+					));
 				}
 			};
 
@@ -3418,9 +3530,12 @@ where
 			self.next()?; // ::
 			if self.at(&TokenKind::Star)? {
 				// Someone wrote foo::* outside of @use — give a clear error
-				return Err(ParseError::generic(
-					self.peek()?.span(),
-					"glob imports (`::*`) are only allowed in `@use` directives",
+				return Err(Box::new(
+					ParseError::generic(
+						self.peek()?.span(),
+						"glob imports (`::*`) are only allowed in `@use` directives",
+					)
+					.build(),
 				));
 			}
 			self.load_checkpoint(checkpoint);
@@ -3434,7 +3549,7 @@ where
 		});
 	}
 
-	fn get_path_with_glob(&mut self) -> Result<Path, ParseError>
+	fn get_path_with_glob(&mut self) -> Result<Path, Box<DiagnosticBuilder>>
 	{
 		let start_span: Span = self.peek()?.span();
 		let mut segments: Vec<PathSegment> = Vec::new();
@@ -3447,7 +3562,9 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
-					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+					return Err(Box::new(
+						ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+					));
 				}
 			};
 
@@ -3506,7 +3623,7 @@ where
 		});
 	}
 
-	fn get_generics(&mut self) -> Result<Vec<GenericParam>, ParseError>
+	fn get_generics(&mut self) -> Result<Vec<GenericParam>, Box<DiagnosticBuilder>>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -3525,7 +3642,9 @@ where
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(name) => name,
 				_ => {
-					return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+					return Err(Box::new(
+						ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+					));
 				}
 			};
 
@@ -3547,10 +3666,13 @@ where
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
@@ -3562,22 +3684,22 @@ where
 		return Ok(generics);
 	}
 
-	fn parse_expr(&mut self) -> Result<Expr, ParseError>
+	fn parse_expr(&mut self) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NONE);
 	}
 
-	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, ParseError>
+	pub fn parse_expr_no_struct(&mut self) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NO_STRUCT_LITERAL);
 	}
 
-	fn parse_expr_with_restrictions(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_expr_with_restrictions(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		return self.parse_logical_or(restrictions);
 	}
 
-	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_logical_or(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_logical_and(restrictions)?;
@@ -3595,7 +3717,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_logical_and(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_or(restrictions)?;
@@ -3613,7 +3735,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_bitwise_or(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_xor(restrictions)?;
@@ -3632,7 +3754,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_bitwise_xor(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_bitwise_and(restrictions)?;
@@ -3651,7 +3773,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_bitwise_and(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_equality(restrictions)?;
@@ -3670,7 +3792,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_equality(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_relational(restrictions)?;
@@ -3695,7 +3817,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_relational(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_shift(restrictions)?;
@@ -3722,7 +3844,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_shift(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_range(restrictions)?;
@@ -3747,7 +3869,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_range(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -3813,7 +3935,7 @@ where
 		);
 	}
 
-	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_additive(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_multiplicative(restrictions)?;
@@ -3838,7 +3960,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_multiplicative(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut lhs: Expr = self.parse_cast(restrictions)?;
@@ -3864,7 +3986,7 @@ where
 		return Ok(lhs);
 	}
 
-	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		if self.at(&TokenKind::LeftParen)? {
@@ -3895,7 +4017,7 @@ where
 		return self.parse_unary(restrictions);
 	}
 
-	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_unary(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let op: UnaryOp = match self.peek_kind()? {
@@ -3927,7 +4049,7 @@ where
 		});
 	}
 
-	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_postfix(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut expr: Expr = self.parse_primary(restrictions)?;
@@ -3946,22 +4068,28 @@ where
 								todo!()
 							};
 							if ty.is_some() {
-								return Err(ParseError {
-									span: tok_span,
-									kind: ParseErrorKind::Generic {
-										message: "a sized index on a tuple index is not allowed".to_string(),
-									},
-									context: Vec::new(),
-								});
+								return Err(Box::new(
+									ParseError {
+										span: tok_span,
+										kind: ParseErrorKind::Generic {
+											message: "a sized index on a tuple index is not allowed".to_string(),
+										},
+										context: Vec::new(),
+									}
+									.build(),
+								));
 							}
 							if base != IntBase::Decimal {
-								return Err(ParseError {
-									span: tok_span,
-									kind: ParseErrorKind::Generic {
-										message: "a typed index on a tuple index is not allowed".to_string(),
-									},
-									context: Vec::new(),
-								});
+								return Err(Box::new(
+									ParseError {
+										span: tok_span,
+										kind: ParseErrorKind::Generic {
+											message: "a typed index on a tuple index is not allowed".to_string(),
+										},
+										context: Vec::new(),
+									}
+									.build(),
+								));
 							}
 							Path {
 								segments: vec![PathSegment {
@@ -4040,7 +4168,7 @@ where
 		return Ok(expr);
 	}
 
-	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, ParseError>
+	fn parse_primary(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let tok: Token = self.peek()?.clone();
 		let span: Span = tok.span();
@@ -4071,11 +4199,14 @@ where
 			}
 			TokenKind::StringLiteral { string, flags } => {
 				if flags.contains_single(StringFlags::INVALID) {
-					return Err(ParseError {
-						span,
-						kind: ParseErrorKind::UndefinedStringFlags,
-						context: Vec::new(),
-					});
+					return Err(Box::new(
+						ParseError {
+							span,
+							kind: ParseErrorKind::UndefinedStringFlags,
+							context: Vec::new(),
+						}
+						.build(),
+					));
 				}
 
 				self.next()?;
@@ -4264,10 +4395,13 @@ where
 					});
 				}
 
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::RightParen]),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
@@ -4362,20 +4496,25 @@ where
 					});
 				}
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_item(
-					tok.span,
-					"Expected a loop, only a loop can have a label and return a value",
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_item(
+						tok.span,
+						"Expected a loop, only a loop can have a label and return a value",
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
 			_ => {
-				return Err(ParseError::unexpected_token(tok.span, Expected::Expression, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Expression, tok.kind).build(),
+				));
 			}
 		}
 	}
 
-	fn stmt_if_to_expr_wrapper(stmt: Stmt) -> Result<Expr, ParseError>
+	fn stmt_if_to_expr_wrapper(stmt: Stmt) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		return match stmt {
 			Stmt::If {
@@ -4392,9 +4531,12 @@ where
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(ParseError::generic(
-								b.span(),
-								"expected expression, block, or if statement in else branch",
+							return Err(Box::new(
+								ParseError::generic(
+									b.span(),
+									"expected expression, block, or if statement in else branch",
+								)
+								.build(),
 							));
 						}
 					},
@@ -4418,9 +4560,12 @@ where
 						Stmt::Block(block) => Some(Box::new(Expr::Block(Box::new(block)))),
 						Stmt::Expr(expr) => Some(Box::new(expr)),
 						_ => {
-							return Err(ParseError::generic(
-								b.span(),
-								"expected expression, block, or if statement in else branch",
+							return Err(Box::new(
+								ParseError::generic(
+									b.span(),
+									"expected expression, block, or if statement in else branch",
+								)
+								.build(),
 							));
 						}
 					},
@@ -4446,7 +4591,7 @@ where
 		}
 	}
 
-	fn lookahead_for_struct_field(&mut self) -> Result<bool, ParseError>
+	fn lookahead_for_struct_field(&mut self) -> Result<bool, Box<DiagnosticBuilder>>
 	{
 		if let TokenKind::Identifier(_) = self.peek_kind()? {
 			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
@@ -4463,7 +4608,7 @@ where
 		return Ok(false);
 	}
 
-	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError>
+	fn parse_argument_list(&mut self) -> Result<Vec<Expr>, Box<DiagnosticBuilder>>
 	{
 		if self.at(&TokenKind::RightParen)? {
 			return Ok(Vec::new());
@@ -4481,7 +4626,7 @@ where
 		return Ok(args);
 	}
 
-	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, ParseError>
+	fn parse_struct_fields(&mut self) -> Result<Vec<(Ident, Expr)>, Box<DiagnosticBuilder>>
 	{
 		if self.at(&TokenKind::RightBrace)? || self.at(&TokenKind::DotDot)? {
 			return Ok(Vec::new());
@@ -4498,10 +4643,8 @@ where
 			let name: Ident = if let TokenKind::Identifier(str) = name_tok.kind {
 				str
 			} else {
-				return Err(ParseError::unexpected_token(
-					name_tok.span,
-					Expected::Identifier,
-					name_tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(name_tok.span, Expected::Identifier, name_tok.kind).build(),
 				));
 			};
 
@@ -4527,7 +4670,7 @@ where
 		return Ok(fields);
 	}
 
-	fn parse_switch_arm(&mut self) -> Result<SwitchArm, ParseError>
+	fn parse_switch_arm(&mut self) -> Result<SwitchArm, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -4622,7 +4765,7 @@ where
 		});
 	}
 
-	fn parse_pattern(&mut self) -> Result<Pattern, ParseError>
+	fn parse_pattern(&mut self) -> Result<Pattern, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut patterns: Vec<Pattern> = vec![self.parse_pattern_no_or()?];
@@ -4640,7 +4783,7 @@ where
 		});
 	}
 
-	fn parse_pattern_no_or(&mut self) -> Result<Pattern, ParseError>
+	fn parse_pattern_no_or(&mut self) -> Result<Pattern, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 
@@ -4662,9 +4805,8 @@ where
 
 			TokenKind::DotDot | TokenKind::DotDotEquals => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on range patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on range patterns").build(),
 					));
 				}
 
@@ -4690,9 +4832,8 @@ where
 
 				if self.consume(&TokenKind::LeftParen)? {
 					if !modifiers.is_empty() {
-						return Err(ParseError::invalid_pattern(
-							span,
-							"modifiers not allowed on variant patterns",
+						return Err(Box::new(
+							ParseError::invalid_pattern(span, "modifiers not allowed on variant patterns").build(),
 						));
 					}
 
@@ -4716,9 +4857,8 @@ where
 					});
 				} else if self.consume(&TokenKind::LeftBrace)? {
 					if !modifiers.is_empty() {
-						return Err(ParseError::invalid_pattern(
-							span,
-							"modifiers not allowed on variant patterns",
+						return Err(Box::new(
+							ParseError::invalid_pattern(span, "modifiers not allowed on variant patterns").build(),
 						));
 					}
 
@@ -4730,9 +4870,12 @@ where
 							if self.consume(&TokenKind::DotDot)? {
 								has_rest = true;
 								if !self.at(&TokenKind::RightBrace)? {
-									return Err(ParseError::invalid_pattern(
-										self.peek()?.span(),
-										".. must be the last element in a struct pattern",
+									return Err(Box::new(
+										ParseError::invalid_pattern(
+											self.peek()?.span(),
+											".. must be the last element in a struct pattern",
+										)
+										.build(),
 									));
 								}
 								break;
@@ -4743,10 +4886,9 @@ where
 							let field_name: Ident = if let TokenKind::Identifier(name) = field_tok.kind {
 								name
 							} else {
-								return Err(ParseError::unexpected_token(
-									field_tok.span,
-									Expected::Identifier,
-									field_tok.kind,
+								return Err(Box::new(
+									ParseError::unexpected_token(field_tok.span, Expected::Identifier, field_tok.kind)
+										.build(),
 								));
 							};
 
@@ -4780,9 +4922,12 @@ where
 								}
 							} else {
 								if !modifiers.is_empty() {
-									return Err(ParseError::invalid_pattern(
-										span,
-										"modifiers require type annotation (use `: Type` after identifier)",
+									return Err(Box::new(
+										ParseError::invalid_pattern(
+											span,
+											"modifiers require type annotation (use `: Type` after identifier)",
+										)
+										.build(),
 									));
 								}
 								Pattern::Variant {
@@ -4812,9 +4957,12 @@ where
 					});
 				} else if self.consume(&TokenKind::Colon)? {
 					if path.len() != 1 {
-						return Err(ParseError::invalid_pattern(
-							tok.span,
-							"binding patterns must be simple identifiers, not paths",
+						return Err(Box::new(
+							ParseError::invalid_pattern(
+								tok.span,
+								"binding patterns must be simple identifiers, not paths",
+							)
+							.build(),
 						));
 					}
 
@@ -4853,9 +5001,8 @@ where
 
 			TokenKind::LeftParen => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on tuple patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on tuple patterns").build(),
 					));
 				}
 				self.next()?; // (
@@ -4934,9 +5081,8 @@ where
 
 			TokenKind::True => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on literal patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on literal patterns").build(),
 					));
 				}
 				self.next()?;
@@ -4951,9 +5097,8 @@ where
 
 			TokenKind::False => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on literal patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on literal patterns").build(),
 					));
 				}
 				self.next()?;
@@ -4968,9 +5113,8 @@ where
 
 			TokenKind::StringLiteral { string, flags } => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on literal patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on literal patterns").build(),
 					));
 				}
 				self.next()?;
@@ -4986,9 +5130,8 @@ where
 
 			TokenKind::CharLiteral(c) => {
 				if !modifiers.is_empty() {
-					return Err(ParseError::invalid_pattern(
-						span,
-						"modifiers not allowed on literal patterns",
+					return Err(Box::new(
+						ParseError::invalid_pattern(span, "modifiers not allowed on literal patterns").build(),
 					));
 				}
 				self.next()?;
@@ -5002,12 +5145,14 @@ where
 			}
 
 			_ => {
-				return Err(ParseError::unexpected_token(tok.span, Expected::Pattern, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Pattern, tok.kind).build(),
+				));
 			}
 		}
 	}
 
-	fn parse_block(&mut self) -> Result<Block, ParseError>
+	fn parse_block(&mut self) -> Result<Block, Box<DiagnosticBuilder>>
 	{
 		self.expect(&TokenKind::LeftBrace)?;
 
@@ -5017,7 +5162,7 @@ where
 		return Ok(ret);
 	}
 
-	fn parse_block_content(&mut self) -> Result<Block, ParseError>
+	fn parse_block_content(&mut self) -> Result<Block, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let mut stmts: Vec<Stmt> = Vec::new();
@@ -5261,10 +5406,13 @@ where
 								break;
 							} else {
 								let tok: Token = self.next()?;
-								return Err(ParseError::unexpected_token(
-									tok.span,
-									Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
-									tok.kind,
+								return Err(Box::new(
+									ParseError::unexpected_token(
+										tok.span,
+										Expected::OneOf(vec![TokenKind::Semicolon, TokenKind::RightBrace]),
+										tok.kind,
+									)
+									.build(),
 								));
 							}
 						} else if self.at(&TokenKind::RightBrace)? {
@@ -5311,7 +5459,7 @@ where
 		);
 	}
 
-	fn parse_assign_op(&mut self) -> Result<AssignOp, ParseError>
+	fn parse_assign_op(&mut self) -> Result<AssignOp, Box<DiagnosticBuilder>>
 	{
 		let op: AssignOp = match self.peek_kind()? {
 			TokenKind::Equals => AssignOp::Assign,
@@ -5327,10 +5475,13 @@ where
 			TokenKind::RShiftEquals => AssignOp::ShrAssign,
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::Description("assignment operator".to_string()),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::Description("assignment operator".to_string()),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 		};
@@ -5338,7 +5489,7 @@ where
 		return Ok(op);
 	}
 
-	fn parse_if(&mut self) -> Result<Stmt, ParseError>
+	fn parse_if(&mut self) -> Result<Stmt, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::If)?;
@@ -5391,7 +5542,7 @@ where
 		};
 	}
 
-	fn parse_while(&mut self) -> Result<Stmt, ParseError>
+	fn parse_while(&mut self) -> Result<Stmt, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::While)?;
@@ -5421,7 +5572,7 @@ where
 		});
 	}
 
-	fn parse_for(&mut self) -> Result<Stmt, ParseError>
+	fn parse_for(&mut self) -> Result<Stmt, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::For)?;
@@ -5439,7 +5590,7 @@ where
 		});
 	}
 
-	fn parse_loop(&mut self) -> Result<Stmt, ParseError>
+	fn parse_loop(&mut self) -> Result<Stmt, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		self.expect(&TokenKind::Loop)?;
@@ -5450,7 +5601,7 @@ where
 		});
 	}
 
-	fn parse_function_decl(&mut self) -> Result<FunctionDecl, ParseError>
+	fn parse_function_decl(&mut self) -> Result<FunctionDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let mut span: Span = self.peek()?.span();
@@ -5469,7 +5620,7 @@ where
 		});
 	}
 
-	fn parse_function_signature(&mut self) -> Result<FunctionSignature, ParseError>
+	fn parse_function_signature(&mut self) -> Result<FunctionSignature, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span;
 		let modifiers: Vec<Modifier> = self.parse_modifiers()?;
@@ -5501,7 +5652,9 @@ where
 			Path::simple(vec!["delete".to_string()], tok.span())
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5521,10 +5674,8 @@ where
 		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
 			self.next()?; // where
 			if !matches!(self.peek_kind()?, TokenKind::Identifier(_)) {
-				return Err(ParseError::unexpected_token(
-					self.peek()?.span(),
-					Expected::Identifier,
-					self.next()?.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(self.peek()?.span(), Expected::Identifier, self.next()?.kind).build(),
 				));
 			}
 			self.parse_where_clause()?
@@ -5545,7 +5696,7 @@ where
 		});
 	}
 
-	fn parse_function_arguments(&mut self) -> Result<Vec<Param>, ParseError>
+	fn parse_function_arguments(&mut self) -> Result<Vec<Param>, Box<DiagnosticBuilder>>
 	{
 		self.expect(&TokenKind::LeftParen)?;
 
@@ -5660,9 +5811,9 @@ where
 					let span: Span = self.next()?.span(); // ...
 
 					if !self.at(&TokenKind::RightParen)? {
-						return Err(ParseError::generic(
-							loop_span,
-							"variadic parameter (...) must be the last parameter",
+						return Err(Box::new(
+							ParseError::generic(loop_span, "variadic parameter (...) must be the last parameter")
+								.build(),
 						));
 					}
 
@@ -5694,21 +5845,30 @@ where
 					} else {
 						match &pattern {
 							Pattern::Variant { args, .. } if args.is_empty() => {
-								return Err(ParseError::invalid_pattern(
-									pattern.span(),
-									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+								return Err(Box::new(
+									ParseError::invalid_pattern(
+										pattern.span(),
+										"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+									)
+									.build(),
 								));
 							}
 							Pattern::Tuple { .. } => {
-								return Err(ParseError::invalid_pattern(
-									pattern.span(),
-									"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+								return Err(Box::new(
+									ParseError::invalid_pattern(
+										pattern.span(),
+										"tuple patterns in parameters must have type annotations for each element (e.g., (a: i64, b: i64))",
+									)
+									.build(),
 								));
 							}
 							_ => {
-								return Err(ParseError::invalid_pattern(
-									pattern.span(),
-									"parameter patterns must either be simple identifiers or tuples with type annotations",
+								return Err(Box::new(
+									ParseError::invalid_pattern(
+										pattern.span(),
+										"parameter patterns must either be simple identifiers or tuples with type annotations",
+									)
+									.build(),
 								));
 							}
 						}
@@ -5736,7 +5896,7 @@ where
 		return Ok(params);
 	}
 
-	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, ParseError>
+	fn parse_modifiers(&mut self) -> Result<Vec<Modifier>, Box<DiagnosticBuilder>>
 	{
 		let mut ret: Vec<Modifier> = Vec::new();
 
@@ -5809,7 +5969,7 @@ where
 		return Ok(ret);
 	}
 
-	fn parse_struct(&mut self) -> Result<StructDecl, ParseError>
+	fn parse_struct(&mut self) -> Result<StructDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5820,7 +5980,9 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5853,7 +6015,9 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5894,7 +6058,7 @@ where
 		});
 	}
 
-	fn parse_union(&mut self) -> Result<UnionDecl, ParseError>
+	fn parse_union(&mut self) -> Result<UnionDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5905,7 +6069,9 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -5938,7 +6104,9 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -5972,7 +6140,7 @@ where
 		});
 	}
 
-	fn parse_module(&mut self) -> Result<ModuleDecl, ParseError>
+	fn parse_module(&mut self) -> Result<ModuleDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -5996,7 +6164,7 @@ where
 		});
 	}
 
-	fn parse_enum(&mut self) -> Result<EnumDecl, ParseError>
+	fn parse_enum(&mut self) -> Result<EnumDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6007,7 +6175,9 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -6038,7 +6208,9 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+				));
 			};
 
 			let variant_value: Option<Expr> = if self.at(&TokenKind::Equals)? {
@@ -6074,7 +6246,7 @@ where
 		});
 	}
 
-	fn parse_variant(&mut self) -> Result<VariantDecl, ParseError>
+	fn parse_variant(&mut self) -> Result<VariantDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6085,7 +6257,9 @@ where
 			self.get_path()?
 		} else {
 			let tok: Token = self.next()?;
-			return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+			return Err(Box::new(
+				ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+			));
 		};
 
 		let generics: Vec<GenericParam> = if self.at(&TokenKind::LessThan)? {
@@ -6116,7 +6290,9 @@ where
 				str
 			} else {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+				));
 			};
 
 			let member_type: Option<Type> = if self.at(&TokenKind::LeftParen)? {
@@ -6162,7 +6338,7 @@ where
 		});
 	}
 
-	fn parse_impl(&mut self) -> Result<ImplDecl, ParseError>
+	fn parse_impl(&mut self) -> Result<ImplDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6214,7 +6390,7 @@ where
 		});
 	}
 
-	fn parse_impl_target(&mut self) -> Result<ImplTarget, ParseError>
+	fn parse_impl_target(&mut self) -> Result<ImplTarget, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
 		let path: Path = self.get_path()?;
@@ -6232,7 +6408,7 @@ where
 		});
 	}
 
-	fn parse_type_generics(&mut self) -> Result<Vec<Type>, ParseError>
+	fn parse_type_generics(&mut self) -> Result<Vec<Type>, Box<DiagnosticBuilder>>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6253,10 +6429,13 @@ where
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok = self.peek()?.clone();
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
@@ -6268,7 +6447,7 @@ where
 		return Ok(generics);
 	}
 
-	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, ParseError>
+	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, Box<DiagnosticBuilder>>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6283,7 +6462,9 @@ where
 		loop {
 			let TokenKind::Identifier(name) = self.next()?.kind else {
 				let tok: Token = self.peek()?.clone();
-				return Err(ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+				));
 			};
 
 			self.expect(&TokenKind::Colon)?;
@@ -6298,10 +6479,13 @@ where
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok = self.peek()?.clone();
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
@@ -6313,7 +6497,7 @@ where
 		return Ok(named_generics);
 	}
 
-	fn parse_generic_args(&mut self) -> Result<Vec<GenericArg>, ParseError>
+	fn parse_generic_args(&mut self) -> Result<Vec<GenericArg>, Box<DiagnosticBuilder>>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
@@ -6351,10 +6535,13 @@ where
 
 			if !self.consume(&TokenKind::Comma)? {
 				let tok: Token = self.peek()?.clone();
-				return Err(ParseError::unexpected_token(
-					tok.span,
-					Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
-					tok.kind,
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+						tok.kind,
+					)
+					.build(),
 				));
 			}
 
@@ -6366,7 +6553,7 @@ where
 		return Ok(args);
 	}
 
-	fn parse_impl_item(&mut self) -> Result<ImplItem, ParseError>
+	fn parse_impl_item(&mut self) -> Result<ImplItem, Box<DiagnosticBuilder>>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -6392,14 +6579,16 @@ where
 			}
 			_ => {
 				let tok = self.peek()?.clone();
-				return Err(ParseError::unexpected_item(tok.span, "impl block", tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_item(tok.span, "impl block", tok.kind).build(),
+				));
 			}
 		};
 
 		return Ok(node);
 	}
 
-	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, ParseError>
+	fn parse_where_clause(&mut self) -> Result<Vec<WhereConstraint>, Box<DiagnosticBuilder>>
 	{
 		let mut constraints: Vec<WhereConstraint> = Vec::new();
 
@@ -6445,7 +6634,7 @@ where
 		return Ok(constraints);
 	}
 
-	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, ParseError>
+	fn parse_type_alias(&mut self) -> Result<TypeAliasDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6473,7 +6662,7 @@ where
 		});
 	}
 
-	fn parse_assoc_type(&mut self) -> Result<AssocTypeDecl, ParseError>
+	fn parse_assoc_type(&mut self) -> Result<AssocTypeDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6504,7 +6693,7 @@ where
 		});
 	}
 
-	fn parse_trait(&mut self) -> Result<TraitDecl, ParseError>
+	fn parse_trait(&mut self) -> Result<TraitDecl, Box<DiagnosticBuilder>>
 	{
 		let docs: Option<DocsComment> = self.parse_docs()?;
 		let span: Span = self.peek()?.span;
@@ -6547,7 +6736,7 @@ where
 		});
 	}
 
-	fn parse_trait_bounds(&mut self) -> Result<Vec<WhereBound>, ParseError>
+	fn parse_trait_bounds(&mut self) -> Result<Vec<WhereBound>, Box<DiagnosticBuilder>>
 	{
 		let mut bounds: Vec<WhereBound> = Vec::new();
 
@@ -6563,7 +6752,7 @@ where
 		return Ok(bounds);
 	}
 
-	fn parse_where_bound(&mut self) -> Result<WhereBound, ParseError>
+	fn parse_where_bound(&mut self) -> Result<WhereBound, Box<DiagnosticBuilder>>
 	{
 		let bound: WhereBound = if matches!(self.peek_kind()?, TokenKind::Identifier(s) if *s == "Fn") {
 			self.next()?; // Fn
@@ -6607,7 +6796,7 @@ where
 		return Ok(bound);
 	}
 
-	fn parse_trait_item(&mut self) -> Result<TraitItem, ParseError>
+	fn parse_trait_item(&mut self) -> Result<TraitItem, Box<DiagnosticBuilder>>
 	{
 		let decl_kind: DeclKind = self.peek_declaration_kind()?;
 
@@ -6634,21 +6823,23 @@ where
 			}
 			_ => {
 				let tok: Token = self.next()?;
-				return Err(ParseError::unexpected_item(tok.span, "trait block", tok.kind));
+				return Err(Box::new(
+					ParseError::unexpected_item(tok.span, "trait block", tok.kind).build(),
+				));
 			}
 		};
 
 		return Ok(node);
 	}
 
-	fn parse_delete(&mut self) -> Result<Expr, ParseError>
+	fn parse_delete(&mut self) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		self.expect(&TokenKind::Delete)?;
 
 		return self.parse_expr();
 	}
 
-	fn parse_docs(&mut self) -> Result<Option<DocsComment>, ParseError>
+	fn parse_docs(&mut self) -> Result<Option<DocsComment>, Box<DiagnosticBuilder>>
 	{
 		let mut combined_content = String::new();
 		let mut start_span: Option<Span> = None;

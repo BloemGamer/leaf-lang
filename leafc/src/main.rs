@@ -107,7 +107,7 @@
 // Allow
 #![allow(clippy::needless_return)]
 #![allow(clippy::use_self)]
-#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
+//#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
 #![allow(clippy::self_named_module_files)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::uninlined_format_args)]
@@ -206,7 +206,7 @@ fn main()
 		eprintln!("{}", renderer);
 	}
 	match res.inspect_err(|e| {
-		let diag = e.to_diagnostic();
+		let diag = e.as_ref().unwrap().to_diagnostic();
 		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
 	}) {
@@ -223,7 +223,7 @@ fn run(
 	config: &Config,
 	filename: impl Into<path::PathBuf> + Clone,
 	source_map: &mut SourceMap,
-) -> (Result<(), CompileError>, Vec<DiagnosticBuilder>)
+) -> (Result<(), Option<CompileError>>, Vec<DiagnosticBuilder>)
 {
 	let mut diagnostics = Vec::new();
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
@@ -267,7 +267,7 @@ fn run(
 		});
 		let source: String = match res {
 			Ok(s) => s,
-			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
 		};
 
 		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
@@ -280,10 +280,13 @@ fn run(
 		}
 		let expanded_lexer: ExpandedLexer = ExpandedLexer::new(lexer);
 
-		let res = Parser::from(expanded_lexer).try_into();
+		let res = Parser::from(expanded_lexer).parse_program();
 		let ast: AST = match res {
 			Ok(ast) => ast,
-			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Parse), diagnostics),
+			Err(err) => {
+				diagnostics.push(*err);
+				return (Err(None), diagnostics);
+			}
 		};
 		if args.parsed {
 			println!(
@@ -296,14 +299,24 @@ fn run(
 		let ret = modules::collect_pending(&ast, &pm.file_path, &pm.logical_path);
 		queue.extend(match ret {
 			Ok(p) => p,
-			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Module), diagnostics),
+			e @ Err(_) => {
+				return (
+					e.map(|_| ()).map_err(CompileError::Module).map_err(Option::Some),
+					diagnostics,
+				);
+			}
 		});
 
 		let (res, mut diags) = desugar::desugar_program(ast);
 		diagnostics.append(&mut diags);
 		let desugared: DesugaredAST = match res {
 			Ok(ast) => ast,
-			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Desugar), diagnostics),
+			e @ Err(_) => {
+				return (
+					e.map(|_| ()).map_err(CompileError::Desugar).map_err(Option::Some),
+					diagnostics,
+				);
+			}
 		};
 		if let Some(_) = diags.iter().find(|x| return x.severity == Severity::Error) {
 			todo!("probably remove the whole `CompileError` from this function or wrap in an `Option`")
@@ -320,7 +333,14 @@ fn run(
 		let ret = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone());
 		let local_symbols: LocalSymbolTable = match ret {
 			Ok(ls) => ls,
-			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::SymbolCollection), diagnostics),
+			e @ Err(_) => {
+				return (
+					e.map(|_| ())
+						.map_err(CompileError::SymbolCollection)
+						.map_err(Option::Some),
+					diagnostics,
+				);
+			}
 		};
 		if args.symbols {
 			println!(
@@ -356,7 +376,7 @@ fn run(
 		let ret = name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules);
 		let resolved: ResolvedModule = match ret {
 			Ok(r) => r,
-			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
 		};
 		resolved_modules.push(resolved);
 	}
@@ -376,7 +396,7 @@ fn run(
 		let ret = type_analysis::check_types(resolved, &global_symbols, &resolved_modules);
 		let typed: TypedModule = match ret {
 			Ok(t) => t,
-			e @ Err(_) => return (e.map(|_| ()), diagnostics),
+			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
 		};
 		typed_modules.push(typed);
 	}
