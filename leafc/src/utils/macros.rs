@@ -148,11 +148,11 @@ macro_rules! bit_enum {
 			}
 		}
 
-		bit_enum_impl_op!($name, std::ops::BitAnd => bitand(&));
-		bit_enum_impl_op!($name, std::ops::BitOr => bitor(|));
-		bit_enum_impl_op!($name, std::ops::BitXor => bitxor(^));
-		bit_enum_impl_op_assign!($name, std::ops::BitAndAssign => bitand_assign(&=));
-		bit_enum_impl_op_assign!($name, std::ops::BitOrAssign => bitor_assign(|=));
-		bit_enum_impl_op_assign!($name, std::ops::BitXorAssign => bitxor_assign(^=));
+		$crate::bit_enum_impl_op!($name, std::ops::BitAnd => bitand(&));
+		$crate::bit_enum_impl_op!($name, std::ops::BitOr => bitor(|));
+		$crate::bit_enum_impl_op!($name, std::ops::BitXor => bitxor(^));
+		$crate::bit_enum_impl_op_assign!($name, std::ops::BitAndAssign => bitand_assign(&=));
+		$crate::bit_enum_impl_op_assign!($name, std::ops::BitOrAssign => bitor_assign(|=));
+		$crate::bit_enum_impl_op_assign!($name, std::ops::BitXorAssign => bitxor_assign(^=));
 	};
 }

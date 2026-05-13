@@ -7,8 +7,6 @@ use std::path;
 use leaf_proc::{Spanned, generate_lexer};
 
 use crate::bit_enum;
-use crate::bit_enum_impl_op;
-use crate::bit_enum_impl_op_assign;
 use crate::config::Config;
 use crate::diagnostics::DiagnosticBuilder;
 use crate::parser::ParseError;
