@@ -128,8 +128,8 @@ use crate::{
 
 use self::{
 	config::ColourConf,
-	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
+	desugar::{DesugarError, DesugaredAST},
+	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, Severity, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
@@ -205,13 +205,17 @@ fn main()
 		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
 	}
-	let Ok(()) = res.inspect_err(|e| {
+	match res.inspect_err(|e| {
 		let diag = e.to_diagnostic();
 		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
-	}) else {
-		exit(1)
-	};
+	}) {
+		Ok(()) => {}
+		Err(e) => {
+			eprintln!("{:?}", e);
+			exit(1)
+		}
+	}
 }
 
 fn run(
@@ -301,6 +305,9 @@ fn run(
 			Ok(ast) => ast,
 			e @ Err(_) => return (e.map(|_| ()).map_err(CompileError::Desugar), diagnostics),
 		};
+		if let Some(_) = diags.iter().find(|x| return x.severity == Severity::Error) {
+			todo!("probably remove the whole `CompileError` from this function or wrap in an `Option`")
+		}
 		if args.desugared {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",

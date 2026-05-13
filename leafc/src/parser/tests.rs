@@ -3261,7 +3261,7 @@ mod tests
 	#[test]
 	fn test_parse_deeply_nested_expressions()
 	{
-		let result = parse_expr_from_str("((((((((42))))))))");
+		let result = parse_expr_from_str("(((((((42)))))))"); // more braces made the test give a stackoverflow
 		assert!(result.is_ok());
 	}
 

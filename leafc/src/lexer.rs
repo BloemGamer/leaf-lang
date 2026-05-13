@@ -6,6 +6,9 @@ use std::path;
 
 use leaf_proc::{Spanned, generate_lexer};
 
+use crate::bit_enum;
+use crate::bit_enum_impl_op;
+use crate::bit_enum_impl_op_assign;
 use crate::config::Config;
 use crate::parser::ParseError;
 use crate::source_map::{SourceIndex, SourceMap};
@@ -108,7 +111,7 @@ impl<'source, 'config> LexerTrait<'source, 'config> for Lexer<'source, 'config>
 			'/' => self.lex_slash_or_comment(),
 
 			// Literals
-			'"' => self.lex_string_literal(),
+			'"' => self.lex_string_literal(None),
 			'\'' => self.lex_char_or_label(),
 			'0'..='9' => self.lex_number(),
 
@@ -182,7 +185,7 @@ pub struct Lexer<'source, 'config>
 
 impl<'source, 'config> Lexer<'source, 'config>
 {
-	fn make_checkpoint(&self) -> LexerCheckpoint<'source, 'config>
+	const fn make_checkpoint(&self) -> LexerCheckpoint<'source, 'config>
 	{
 		return LexerCheckpoint {
 			position: self.position,
@@ -194,7 +197,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 	}
 
-	fn restore_checkpoint(&mut self, checkpoint: LexerCheckpoint<'source, 'config>)
+	const fn restore_checkpoint(&mut self, checkpoint: LexerCheckpoint<'source, 'config>)
 	{
 		self.position = checkpoint.position;
 		self.current_char = checkpoint.current_char;
@@ -398,25 +401,26 @@ impl std::fmt::Display for IntBase
 	}
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum IntSign
 {
 	Signed,
 	Unsigned,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntType
 {
 	pub bits: IntSize,
 	pub sign: IntSign,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IntSize
 {
 	Size,
 	Fixed(u16),
+	Generic(String),
 }
 
 impl std::fmt::Display for IntType
@@ -438,7 +442,50 @@ impl std::fmt::Display for IntSize
 		return match self {
 			IntSize::Size => write!(f, "size"),
 			IntSize::Fixed(bits) => write!(f, "{bits}"),
+			IntSize::Generic(generic) => write!(f, "<{generic}>"),
 		};
+	}
+}
+
+bit_enum!(pub struct StringFlags : u8
+	{
+		INVALID = 0b01,
+		CSTRING = 0b10,
+	}
+);
+
+impl std::fmt::Display for StringFlags
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		if self.contains_single(StringFlags::INVALID) {
+			return write!(f, "<INVALID FLAG>");
+		}
+		if self.contains_single(StringFlags::CSTRING) {
+			write!(f, "c")?;
+		}
+		return Ok(());
+	}
+}
+
+impl StringFlags
+{
+	fn from_string(string: &str) -> Self
+	{
+		let f = || {
+			let mut flags: StringFlags = StringFlags::default();
+			for c in string.chars() {
+				flags = match c {
+					'c' => flags.add_flag(StringFlags::CSTRING)?,
+					_ => return Err(()),
+				};
+			}
+			return Ok(flags);
+		};
+		match f() {
+			Ok(flags) => return flags,
+			Err(()) => return Self::INVALID,
+		}
 	}
 }
 
@@ -476,7 +523,10 @@ pub enum TokenKind
 	/// Character literal: `'a'`, `'\n'`, `'\0'`
 	CharLiteral(char),
 	/// String literal: `"hello"`, `"world\n"`
-	StringLiteral(String),
+	StringLiteral
+	{
+		string: String, flags: StringFlags
+	},
 	/// Boolean literal: `true`
 	#[keyword("true")]
 	True,
@@ -1021,15 +1071,18 @@ impl<'source, 'config> Lexer<'source, 'config>
 		return TokenKind::BlockComment(comment);
 	}
 
-	fn lex_string_literal(&mut self) -> TokenKind
+	fn lex_string_literal(&mut self, flags_str: Option<String>) -> TokenKind
 	{
 		self.advance(); // consume opening '"'
 		let mut string = String::new();
 
+		let flags: StringFlags =
+			flags_str.map_or_else(StringFlags::default, |str| return StringFlags::from_string(&str));
+
 		while let Some(ch) = self.current_char {
 			if ch == '"' {
 				self.advance(); // consume closing '"'
-				return TokenKind::StringLiteral(string);
+				return TokenKind::StringLiteral { string, flags };
 			} else if ch == '\\' {
 				self.advance();
 				if let Some(escaped) = self.lex_escape_sequence() {
@@ -1404,6 +1457,9 @@ impl<'source, 'config> Lexer<'source, 'config>
 			return keyword;
 		}
 
+		if self.current_char == Some('"') {
+			return self.lex_string_literal(Some(ident));
+		}
 		return TokenKind::Identifier(ident);
 	}
 

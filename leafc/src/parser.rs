@@ -7,7 +7,7 @@ use ignorable::PartialEq;
 use crate::{
 	Config,
 	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
-	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, Token, TokenKind},
+	lexer::{self, IntBase, IntType, Lexer, LexerTrait, ReservedError, Span, Spanned, StringFlags, Token, TokenKind},
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
@@ -977,7 +977,22 @@ impl Expr
 						return Err(type_err(*span));
 					}
 					Literal::Bool { value, span: _ } => ExprEnum::Bool(*value),
-					Literal::String { value, span: _ } => ExprEnum::String(value.clone()),
+					Literal::String {
+						value,
+						flags, // TODO
+						span,
+					} => {
+						if *flags != StringFlags::NONE {
+							return Err(ParseError {
+								span: *span,
+								kind: ParseErrorKind::Generic {
+									message: "no string flags are allowed on evals for now".to_string(),
+								},
+								context: Vec::new(),
+							});
+						}
+						ExprEnum::String(value.clone())
+					}
 				});
 			}
 
@@ -1220,7 +1235,9 @@ pub enum Literal
 	},
 	String
 	{
-		value: String, span: Span
+		value: String,
+		flags: StringFlags,
+		span: Span,
 	},
 	Char
 	{
@@ -2021,6 +2038,7 @@ pub enum ParseErrorKind
 	{
 		reason: String,
 	},
+	UndefinedStringFlags,
 }
 
 #[derive(Debug, Clone)]
@@ -2119,6 +2137,9 @@ impl std::fmt::Display for ParseError
 			}
 			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
 				write!(f, "{reason}")?;
+			}
+			ParseErrorKind::UndefinedStringFlags => {
+				write!(f, "undefined string flags")?;
 			}
 		}
 
@@ -2257,6 +2278,9 @@ impl CompileDiagnostic for ParseError
 
 			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
 				DiagnosticBuilder::error(reason.clone()).code(ErrorCode::ParseUseOfNotAllowedInternal)
+			}
+			ParseErrorKind::UndefinedStringFlags => {
+				DiagnosticBuilder::error("undefined string flag").code(ErrorCode::ParseUndefinedStringFlags)
 			}
 		};
 
@@ -2946,15 +2970,18 @@ where
 			lexer::Directive::Import => {
 				let incl: Token = self.next()?;
 				let ret = match &incl.kind {
-					TokenKind::StringLiteral(str) => Directive::Import {
+					TokenKind::StringLiteral { string, .. } => Directive::Import {
 						visibility: get_visibility(&modifiers),
 						modifers: modifiers,
-						import: str.clone(),
+						import: string.clone(),
 					},
 					_ => {
 						return Err(ParseError::unexpected_token(
 							incl.span,
-							Expected::Token(TokenKind::StringLiteral(String::new())),
+							Expected::Token(TokenKind::StringLiteral {
+								string: String::new(),
+								flags: StringFlags::NONE,
+							}),
 							incl.kind,
 						));
 					}
@@ -4025,7 +4052,7 @@ where
 					value: Literal::Int {
 						value: value.clone(),
 						base: *base,
-						ty: *ty,
+						ty: ty.clone(),
 						span,
 					},
 					span: span.merge(&self.last_span),
@@ -4042,10 +4069,22 @@ where
 					span: span.merge(&self.last_span),
 				});
 			}
-			TokenKind::StringLiteral(s) => {
+			TokenKind::StringLiteral { string, flags } => {
+				if flags.contains_single(StringFlags::INVALID) {
+					return Err(ParseError {
+						span,
+						kind: ParseErrorKind::UndefinedStringFlags,
+						context: Vec::new(),
+					});
+				}
+
 				self.next()?;
 				return Ok(Expr::Literal {
-					value: Literal::String { value: s.clone(), span },
+					value: Literal::String {
+						value: string.clone(),
+						flags: *flags,
+						span,
+					},
 					span: span.merge(&self.last_span),
 				});
 			}
@@ -4872,7 +4911,7 @@ where
 							value: Literal::Int {
 								value: value.clone(),
 								base: *base,
-								ty: *ty,
+								ty: ty.clone(),
 								span: tok.span(),
 							},
 							span: tok.span(),
@@ -4886,7 +4925,7 @@ where
 					value: Literal::Int {
 						value: value.clone(),
 						base: *base,
-						ty: *ty,
+						ty: ty.clone(),
 						span: tok.span(),
 					},
 					span: tok.span(),
@@ -4927,7 +4966,7 @@ where
 				});
 			}
 
-			TokenKind::StringLiteral(s) => {
+			TokenKind::StringLiteral { string, flags } => {
 				if !modifiers.is_empty() {
 					return Err(ParseError::invalid_pattern(
 						span,
@@ -4937,7 +4976,8 @@ where
 				self.next()?;
 				return Ok(Pattern::Literal {
 					value: Literal::String {
-						value: s.clone(),
+						value: string.clone(),
+						flags: *flags,
 						span: span.merge(&self.last_span),
 					},
 					span: span.merge(&self.last_span),
@@ -7448,7 +7488,11 @@ impl fmt::Display for Literal
 				return Ok(());
 			}
 			Literal::Bool { value: b, span: _ } => return write!(f, "{}", b),
-			Literal::String { value: s, span: _ } => return write!(f, "{:?}", s),
+			Literal::String {
+				value: s,
+				flags,
+				span: _,
+			} => return write!(f, "{}{:?}", flags, s),
 			Literal::Char { value: c, span: _ } => return write!(f, "{:?}", c),
 		}
 	}

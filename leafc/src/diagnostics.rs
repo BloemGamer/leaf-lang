@@ -21,6 +21,7 @@ pub enum ErrorCode
 	ParseCompileExprError,
 	ParseReservedToken,
 	ParseUseOfNotAllowedInternal,
+	ParseUndefinedStringFlags,
 
 	// Desugarer
 	DesugarInvalidConstructorType,

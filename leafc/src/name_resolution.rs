@@ -1152,6 +1152,13 @@ impl<'a> Resolver<'a>
 	fn resolve_path(&self, path: &Path, span: Span) -> Result<ResolvedPathResult, NameResolutionError>
 	{
 		let segments: &Vec<parser::PathSegment> = &path.segments;
+		if segments.is_empty() {
+			return Err(NameResolutionError {
+				span,
+				kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+				context: Vec::new(),
+			});
+		}
 		if !path.global
 			&& segments.len() == 1
 			&& segments[0].name == "Self"
@@ -1160,11 +1167,17 @@ impl<'a> Resolver<'a>
 		{
 			return Ok(ResolvedPathResult::Full(sym_id));
 		}
-		if segments.is_empty() {
-			return Err(NameResolutionError {
-				span,
-				kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-				context: Vec::new(),
+		if !path.global
+			&& segments.len() >= 2
+			&& segments[0].name == "Self"
+			&& segments[0].generics.is_empty()
+			&& let Some(self_sym) = self.self_sym
+		{
+			// Treat it as an AssocItem: base = Self's symbol, member = next segment
+			// For deeper paths like Self::Foo::Bar, fall through to Assoc for now
+			return Ok(ResolvedPathResult::Assoc {
+				base: self_sym,
+				member: segments[1].name.clone(),
 			});
 		}
 
@@ -2075,6 +2088,55 @@ impl<'a> Resolver<'a>
 						name: "Self".to_string(),
 						generics: Vec::new(),
 					});
+				}
+				if !path.global && path.segments.len() >= 2 && path.segments[0].name == "Self" {
+					let resolved_generics = generics
+						.iter()
+						.map(|g| self.resolve_type(g))
+						.collect::<Result<_, _>>()?;
+					let member = path.segments[1].name.clone();
+					// Use self_sym if available, otherwise emit as Primitive for later passes
+					if let Some(self_sym) = self.self_sym {
+						return Ok(ResolvedTypeCore::Base {
+							path: ResolvedPath {
+								original: path.clone(),
+								kind: ResolvedPathKind::AssocItem { base: self_sym, member },
+							},
+							generics: resolved_generics,
+						});
+					} else {
+						// In trait definitions Self is abstract, but we still need a real
+						// AssocItem node so the type checker can look up the associated type.
+						// Use the trait's own symbol (found via trait_scope) as the base.
+						let base = self.trait_scope.and_then(|sc| {
+							// The trait symbol is the one whose introduced_scope == trait_scope.
+							self.global.symbols.iter().enumerate().find_map(|(i, sym)| {
+								if sym.introduced_scope == Some(sc) {
+									Some(SymbolId(i))
+								} else {
+									None
+								}
+							})
+						});
+
+						if let Some(base_sym) = base {
+							return Ok(ResolvedTypeCore::Base {
+								path: ResolvedPath {
+									original: path.clone(),
+									kind: ResolvedPathKind::AssocItem { base: base_sym, member },
+								},
+								generics: resolved_generics,
+							});
+						} else {
+							// Last resort: emit Primitive with just the member name,
+							// not the full "Self::Output" string — at least it degrades
+							// to UnknownType("Output") which is clearer.
+							return Ok(ResolvedTypeCore::Primitive {
+								name: member,
+								generics: resolved_generics,
+							});
+						}
+					}
 				}
 				let resolved_generics: Vec<ResolvedType> = generics
 					.iter()

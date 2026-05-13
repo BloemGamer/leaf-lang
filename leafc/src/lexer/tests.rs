@@ -204,10 +204,22 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::StringLiteral("hello".to_string()),
-				TokenKind::StringLiteral("world".to_string()),
-				TokenKind::StringLiteral(String::new()),
-				TokenKind::StringLiteral("with spaces".to_string()),
+				TokenKind::StringLiteral {
+					string: "hello".to_string(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: "world".to_string(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: String::new(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: "with spaces".to_string(),
+					flags: StringFlags::NONE
+				},
 				TokenKind::Eof,
 			]
 		);
@@ -220,10 +232,22 @@ mod tests
 		assert_eq!(
 			kinds,
 			vec![
-				TokenKind::StringLiteral("hello\nworld".to_string()),
-				TokenKind::StringLiteral("tab\there".to_string()),
-				TokenKind::StringLiteral("quote\"".to_string()),
-				TokenKind::StringLiteral("backslash\\".to_string()),
+				TokenKind::StringLiteral {
+					string: "hello\nworld".to_string(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: "tab\there".to_string(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: "quote\"".to_string(),
+					flags: StringFlags::NONE
+				},
+				TokenKind::StringLiteral {
+					string: "backslash\\".to_string(),
+					flags: StringFlags::NONE
+				},
 				TokenKind::Eof,
 			]
 		);
