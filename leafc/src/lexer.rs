@@ -198,6 +198,7 @@ impl<'source, 'config> Lexer<'source, 'config>
 		};
 	}
 
+	#[allow(clippy::needless_pass_by_value)]
 	const fn restore_checkpoint(&mut self, checkpoint: LexerCheckpoint<'source, 'config>)
 	{
 		self.position = checkpoint.position;
@@ -1309,19 +1310,19 @@ impl<'source, 'config> Lexer<'source, 'config>
 
 			let bits: u16 = digits.parse::<u16>().ok()?;
 
-			Some(IntType {
+			return Some(IntType {
 				bits: IntSize::Fixed(bits),
 				sign,
-			})
+			});
 		})();
 
-		match result {
-			Some(v) => Some(v),
-			None => {
+		return result.map_or_else(
+			|| {
 				self.restore_checkpoint(checkpoint);
-				None
-			}
-		}
+				return None;
+			},
+			|v| return Some(v),
+		);
 	}
 
 	fn read_float_suffix(&mut self) -> Option<u16>

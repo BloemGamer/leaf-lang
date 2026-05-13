@@ -128,8 +128,8 @@ use crate::{
 
 use self::{
 	config::ColourConf,
-	desugar::{DesugarError, DesugaredAST},
-	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, Severity, use_colour},
+	desugar::DesugaredAST,
+	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
@@ -188,13 +188,13 @@ fn main()
 {
 	const FILE_NAME: &str = "leaf-test/main.leaf";
 	let args: Args = <Args as clap::Parser>::parse();
-	let config: Config = {
-		let mut conf: Config = Config::default();
-		conf.colour = match use_colour(args.colour) {
-			true => ColourConf::Always,
-			false => ColourConf::Never,
-		};
-		conf
+	let config: Config = Config {
+		colour: if use_colour(args.colour) {
+			ColourConf::Always
+		} else {
+			ColourConf::Never
+		},
+		..Default::default()
 	};
 	let mut source_map: SourceMap = SourceMap::default();
 
@@ -206,7 +206,10 @@ fn main()
 		eprintln!("{}", renderer);
 	}
 	match res.inspect_err(|e| {
-		let diag = e.as_ref().unwrap().to_diagnostic();
+		let Some(err) = e.as_ref() else {
+			return;
+		};
+		let diag = err.to_diagnostic();
 		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
 	}) {
