@@ -209,8 +209,8 @@ fn main()
 		let Some(err) = e.as_ref() else {
 			return;
 		};
-		let diag = err.to_diagnostic();
-		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
+		let diag: diagnostics::Diagnostic = err.to_diagnostic();
+		let renderer: OldStyleRenderer<'_> = OldStyleRenderer::new(&diag, &source_map, &config);
 		eprintln!("{}", renderer);
 	}) {
 		Ok(()) => {}
