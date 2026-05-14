@@ -5,8 +5,8 @@ mod tests
 	use crate::desugar::*;
 	use crate::lexer::IntBase;
 	use crate::parser::{
-		AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericParam, ImplTarget, Literal, Param, Path, StructDecl,
-		TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
+		AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericHeapParam, GenericParam, ImplTarget, Literal, Param,
+		Path, StructDecl, TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
 	};
 
 	// Helper to create a simple identifier expression
@@ -3239,7 +3239,7 @@ mod tests
 	{
 		let mut desugarer = Desugarer::new();
 
-		// fn!<A: Allocator> foo<T: Clone>()
+		// fn!<A: Alloc> foo<T: Clone>()
 		let sig = FunctionSignature {
 			modifiers: Vec::new(),
 			name: Path::simple(vec!["foo".into()], Span::default()),
@@ -3248,7 +3248,11 @@ mod tests
 			return_type: None,
 			where_clause: Vec::new(),
 			call_type: CallType::UserHeap,
-			heap_generics: vec![generic_param("A", vec![trait_bound("Allocator")])],
+			heap_generics: vec![GenericHeapParam {
+				name: "Alloc".to_string(),
+				kind: crate::parser::HeapGenericKind::Forwarded,
+				span: Span::default(),
+			}],
 			span: Span::default(),
 		};
 
@@ -3257,58 +3261,17 @@ mod tests
 
 		// Both regular and heap generics should have no bounds
 		assert!(output.generics[0].bounds.is_empty());
-		assert!(output.heap_generics[0].bounds.is_empty());
 
-		// Where clause should have both T: Clone and A: Allocator
-		assert_eq!(output.where_clause.len(), 2);
+		// Where clause should have both T: Clone
+		assert_eq!(output.where_clause.len(), 1);
 
 		// Check that both constraints are present (order doesn't matter)
 		let has_t_clone = output
 			.where_clause
 			.iter()
 			.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "T" && w.bounds.len() == 1);
-		let has_a_alloc = output
-			.where_clause
-			.iter()
-			.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "A" && w.bounds.len() == 1);
 
 		assert!(has_t_clone, "Should have T: Clone in where clause");
-		assert!(has_a_alloc, "Should have A: Allocator in where clause");
-	}
-
-	#[test]
-	fn test_error_heap_generic_in_where_clause()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn!<A: Allocator> foo<T>() where Vec<A>: Clone
-		// ERROR: A has bounds in heap generics and appears in where clause
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", Vec::new())],
-			params: Vec::new(),
-			return_type: None,
-			where_clause: vec![where_constraint(
-				"Vec",
-				vec![trait_bound("Clone")],
-				vec![simple_type("A")],
-			)],
-			call_type: CallType::UserHeap,
-			heap_generics: vec![generic_param("A", vec![trait_bound("Allocator")])],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
-		}
-		let _: FunctionSignature = output;
-		// assert!(
-		// 	output.is_err(),
-		// 	"Should error when heap generic appears in where clause"
-		// );
-		// TODO
 	}
 
 	#[test]

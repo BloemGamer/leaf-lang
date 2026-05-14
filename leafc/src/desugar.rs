@@ -256,7 +256,6 @@ impl Desugarer
 		return self.loop_stack.last();
 	}
 
-
 	fn desugar_program(&mut self, program: AST) -> DesugaredAST
 	{
 		let top_lvl: TopLevelBlock = self.desugar_top_level_block(program.top_level_block);
@@ -286,7 +285,6 @@ impl Desugarer
 		};
 	}
 
-
 	fn desugar_top_level_decl(&mut self, decl: TopLevelDecl) -> TopLevelDecl
 	{
 		return match decl {
@@ -303,7 +301,6 @@ impl Desugarer
 			TopLevelDecl::TypeAlias(t) => TopLevelDecl::TypeAlias(t),
 		};
 	}
-
 
 	fn desugar_function(&mut self, mut func: FunctionDecl) -> FunctionDecl
 	{
@@ -396,13 +393,6 @@ impl Desugarer
 			.map(|g| return (&g.name, g.span()))
 			.collect();
 
-		let heap_generics_with_bounds: Vec<(&String, Span)> = func_sig
-			.heap_generics
-			.iter()
-			.filter(|g| return g.has_bounds())
-			.map(|g| return (&g.name, g.span()))
-			.collect();
-
 		for where_constraint in &func_sig.where_clause {
 			let mentioned_types: Vec<Ident> = get_mentioned_type_params(&where_constraint.ty);
 
@@ -437,29 +427,6 @@ impl Desugarer
 						.help("move all the constraints to the where clause"),
 					);
 				}
-
-				if let Some((_, generic_span)) = heap_generics_with_bounds
-					.iter()
-					.find(|(name, _)| return *name == &type_param)
-				{
-					self.diagnostics.push(
-						DesugarError::generic(
-							*generic_span,
-							format!(
-								"heap generic type parameter `{}` has bounds in generic parameter list but is also used in where clause. \
-								Move all bounds for `{}` to the where clause instead.",
-								type_param, type_param
-							),
-						)
-						.build()
-						.secondary(
-							where_constraint.span(),
-							"second constraint here in the where clause".to_string(),
-						)
-						.note("during desugaring")
-						.help("move the all the constraints to the where clause"),
-					);
-				}
 			}
 		}
 
@@ -486,32 +453,6 @@ impl Desugarer
 		}
 
 		for generic in &mut func_sig.generics {
-			generic.bounds.clear();
-		}
-
-		for generic in &func_sig.heap_generics {
-			if generic.bounds.is_empty() {
-				continue;
-			}
-
-			func_sig.where_clause.push(WhereConstraint {
-				ty: Path {
-					segments: vec![PathSegment {
-						name: generic.name.clone(),
-						generics: Vec::new(),
-						span: generic.span,
-					}],
-					glob: false,
-					global: false,
-					span: generic.span,
-				},
-				bounds: generic.bounds.clone(),
-				type_args: Vec::new(),
-				span: generic.span,
-			});
-		}
-
-		for generic in &mut func_sig.heap_generics {
 			generic.bounds.clear();
 		}
 
@@ -591,7 +532,6 @@ impl Desugarer
 		}
 	}
 
-
 	fn desugar_module(&mut self, mut ns: ModuleDecl) -> ModuleDecl
 	{
 		match &mut ns.kind {
@@ -602,7 +542,6 @@ impl Desugarer
 		}
 		return ns;
 	}
-
 
 	fn desugar_impl(&mut self, mut impl_decl: ImplDecl) -> ImplDecl
 	{
@@ -698,7 +637,6 @@ impl Desugarer
 		return impl_decl;
 	}
 
-
 	fn desugar_trait(&mut self, mut trait_decl: TraitDecl) -> TraitDecl
 	{
 		trait_decl.items = trait_decl
@@ -719,13 +657,11 @@ impl Desugarer
 		return trait_decl;
 	}
 
-
 	fn desugar_directive_node(&mut self, mut directive: DirectiveNode) -> DirectiveNode
 	{
 		directive.body = directive.body.map(|body| return self.desugar_block_content(body));
 		return directive;
 	}
-
 
 	fn desugar_block(&mut self, block: Block) -> Block
 	{
@@ -779,7 +715,6 @@ impl Desugarer
 		};
 	}
 
-
 	fn desugar_block_content(&mut self, content: BlockContent) -> BlockContent
 	{
 		return match content {
@@ -787,7 +722,6 @@ impl Desugarer
 			BlockContent::TopLevelBlock(block) => BlockContent::TopLevelBlock(self.desugar_top_level_block(block)),
 		};
 	}
-
 
 	fn desugar_stmt(&mut self, stmt: Stmt) -> Stmt
 	{
@@ -983,7 +917,6 @@ impl Desugarer
 		};
 	}
 
-
 	fn desugar_for_loop(&mut self, label: Option<String>, pattern: Pattern, iter: Expr, body: Block, span: Span)
 	-> Stmt
 	{
@@ -1141,7 +1074,6 @@ impl Desugarer
 		});
 	}
 
-
 	fn desugar_if_var(
 		&mut self,
 		pattern: Pattern,
@@ -1225,7 +1157,6 @@ impl Desugarer
 			span,
 		});
 	}
-
 
 	fn desugar_while_var_loop(
 		&mut self,
@@ -1361,7 +1292,6 @@ impl Desugarer
 		return result;
 	}
 
-
 	fn desugar_variable_decl(&mut self, mut var: VariableDecl) -> VariableDecl
 	{
 		let needs_constructor: bool = match &var.pattern {
@@ -1414,7 +1344,6 @@ impl Desugarer
 		var.pattern = Self::desugar_pattern(var.pattern);
 		return var;
 	}
-
 
 	fn desugar_expr(&mut self, expr: Expr) -> Expr
 	{
@@ -1546,7 +1475,6 @@ impl Desugarer
 		};
 	}
 
-
 	fn desugar_if_expr(&mut self, cond: Expr, then_block: Block, else_branch: Option<Box<Expr>>, span: Span) -> Expr
 	{
 		return Expr::If {
@@ -1556,7 +1484,6 @@ impl Desugarer
 			span,
 		};
 	}
-
 
 	fn desugar_if_var_expr(
 		&mut self,
@@ -1648,7 +1575,6 @@ impl Desugarer
 			span,
 		}));
 	}
-
 
 	fn type_to_constructor_call(&mut self, ty: &Type, call_type: CallType) -> Expr
 	{
@@ -1770,7 +1696,6 @@ impl Desugarer
 		}
 	}
 
-
 	fn desugar_array_literal(&mut self, array_lit: ArrayLiteral) -> ArrayLiteral
 	{
 		return match array_lit {
@@ -1789,7 +1714,6 @@ impl Desugarer
 		};
 	}
 
-
 	fn desugar_switch_arm(&mut self, arm: SwitchArm) -> SwitchArm
 	{
 		return SwitchArm {
@@ -1801,7 +1725,6 @@ impl Desugarer
 			span: arm.span,
 		};
 	}
-
 
 	fn desugar_pattern(pattern: Pattern) -> Pattern
 	{

@@ -525,7 +525,7 @@ pub struct ResolvedFunctionSignature
 	pub name: String,
 	pub modifiers: Vec<parser::Modifier>,
 	pub generics: Vec<(Ident, Span)>,
-	pub heap_generics: Vec<parser::GenericParam>,
+	pub heap_generics: Vec<ResolvedGenericHeapParam>,
 	pub call_type: CallType,
 	pub params: Vec<ResolvedParam>,
 	pub return_type: Option<ResolvedType>,
@@ -818,6 +818,21 @@ pub struct ResolvedModule
 	pub path: Vec<String>,
 	pub ast: ResolvedAST,
 	pub symbols: LocalSymbolTable,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolvedGenericHeapKind
+{
+	Forwarded,
+	Forced(ResolvedType),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedGenericHeapParam
+{
+	pub name: Ident,
+	pub kind: ResolvedGenericHeapKind,
+	pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2928,6 +2943,22 @@ impl<'a> Resolver<'a>
 			.map(|c| return self.resolve_where_constraint(c))
 			.collect::<Result<_, _>>()?;
 
+		let heap_generics: Vec<ResolvedGenericHeapParam> = sig
+			.heap_generics
+			.iter()
+			.map(|hp| {
+				let kind = match &hp.kind {
+					parser::HeapGenericKind::Forwarded => ResolvedGenericHeapKind::Forwarded,
+					parser::HeapGenericKind::Forced(ty) => ResolvedGenericHeapKind::Forced(self.resolve_type(ty)?),
+				};
+				return Ok(ResolvedGenericHeapParam {
+					name: hp.name.clone(),
+					kind,
+					span: hp.span,
+				});
+			})
+			.collect::<Result<_, NameResolutionError>>()?;
+
 		let resolved_sig: ResolvedFunctionSignature = ResolvedFunctionSignature {
 			resolved_name,
 			name: sig
@@ -2948,7 +2979,7 @@ impl<'a> Resolver<'a>
 					return (g.name.clone(), g.span);
 				})
 				.collect(),
-			heap_generics: sig.heap_generics.clone(),
+			heap_generics,
 			call_type: sig.call_type,
 			params: resolved_params,
 			return_type,
@@ -3930,6 +3961,18 @@ pub fn write_resolved_function_signature(
 	}
 
 	return Ok(());
+}
+
+impl std::fmt::Display for ResolvedGenericHeapParam
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}", self.name)?;
+		if let ResolvedGenericHeapKind::Forced(fg) = &self.kind {
+			write!(f, " = {}", fg)?;
+		}
+		return Ok(());
+	}
 }
 
 fn write_resolved_param(f: &mut fmt::Formatter<'_>, param: &ResolvedParam) -> fmt::Result

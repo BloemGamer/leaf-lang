@@ -589,7 +589,7 @@ pub struct FunctionSignature
 	pub return_type: Option<Type>,
 	pub where_clause: Vec<WhereConstraint>,
 	pub call_type: CallType,
-	pub heap_generics: Vec<GenericParam>,
+	pub heap_generics: Vec<GenericHeapParam>,
 	#[ignored(PartialEq)]
 	pub span: Span,
 }
@@ -610,6 +610,23 @@ pub struct GenericParam
 	pub bounds: Vec<WhereBound>,
 	#[ignored(PartialEq)]
 	pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Spanned)]
+pub struct GenericHeapParam
+{
+	pub name: Ident,
+	pub kind: HeapGenericKind,
+	#[ignored(PartialEq)]
+	pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HeapGenericKind
+{
+	Forwarded,
+	/// Mostly used for C functions, so they can be set to have IO or Alloc, while not being able to be changed
+	Forced(Type),
 }
 
 #[allow(dead_code)]
@@ -3690,6 +3707,67 @@ where
 		return Ok(generics);
 	}
 
+	fn get_heap_generics(&mut self) -> Result<Vec<GenericHeapParam>, Box<DiagnosticBuilder>>
+	{
+		if !self.consume(&TokenKind::LessThan)? {
+			return Ok(Vec::new());
+		}
+
+		let mut generics: Vec<GenericHeapParam> = Vec::new();
+
+		if self.consume_greater_than()? {
+			return Ok(generics);
+		}
+
+		loop {
+			let start_span: Span = self.peek()?.span;
+			let tok: Token = self.next()?;
+
+			let name: Ident = match tok.kind {
+				TokenKind::Identifier(name) => name,
+				_ => {
+					return Err(Box::new(
+						ParseError::unexpected_token(tok.span, Expected::Identifier, tok.kind).build(),
+					));
+				}
+			};
+
+			let forced_generic: HeapGenericKind = if self.consume(&TokenKind::Equals)? {
+				HeapGenericKind::Forced(self.parse_type()?)
+			} else {
+				HeapGenericKind::Forwarded
+			};
+
+			generics.push(GenericHeapParam {
+				name,
+				kind: forced_generic,
+				span: start_span.merge(&self.last_span),
+			});
+
+			if self.consume_greater_than()? {
+				break;
+			}
+
+			if !self.consume(&TokenKind::Comma)? {
+				let tok: Token = self.next()?;
+				return Err(Box::new(
+					ParseError::unexpected_token(
+						tok.span,
+						Expected::OneOf(vec![TokenKind::Comma, TokenKind::GreaterThan]),
+						tok.kind,
+					)
+					.build(),
+				));
+			}
+
+			if self.consume_greater_than()? {
+				break;
+			}
+		}
+
+		return Ok(generics);
+	}
+
 	fn parse_expr(&mut self) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		return self.parse_expr_with_restrictions(Restrictions::NONE);
@@ -5633,7 +5711,7 @@ where
 
 		self.expect(&TokenKind::FuncDef)?;
 
-		let call_type = if self.consume(&TokenKind::Bang)? {
+		let call_type: CallType = if self.consume(&TokenKind::Bang)? {
 			CallType::UserHeap
 		} else if self.consume(&TokenKind::QuestionMark)? {
 			CallType::UserMaybeHeap
@@ -5641,12 +5719,54 @@ where
 			CallType::Regular
 		};
 
-		let heap_generics: Vec<GenericParam> = if call_type.is_heap_call() && self.at(&TokenKind::LessThan)? {
-			let generic_pars: Vec<GenericParam> = self.get_generics()?;
-			generic_pars
-				.iter()
-				.all(|v| return ALLOWED_HEAP_GENERICS.iter().any(|&n| return v.name == n));
-			generic_pars
+		let heap_generics = if call_type.is_heap_call() {
+			if self.at(&TokenKind::LessThan)? {
+				let parsed = self.get_heap_generics()?;
+				// validate names are in ALLOWED_HEAP_GENERICS
+				for g in &parsed {
+					if !ALLOWED_HEAP_GENERICS.contains(&g.name.as_str()) {
+						return Err(Box::new(
+							ParseError {
+								span,
+								kind: ParseErrorKind::Generic {
+									message: "Not an allowed heap generic".to_string(),
+								},
+								context: Vec::new(),
+							}
+							.build(),
+						));
+					}
+				}
+				// fill in any missing ones as Forwarded
+				ALLOWED_HEAP_GENERICS
+					.iter()
+					.map(|&name| {
+						return parsed
+							.iter()
+							.find(|g| return g.name == name)
+							.cloned()
+							.unwrap_or_else(|| {
+								return GenericHeapParam {
+									name: name.to_string(),
+									kind: HeapGenericKind::Forwarded,
+									span,
+								};
+							});
+					})
+					.collect()
+			} else {
+				// no angle brackets = forward everything
+				ALLOWED_HEAP_GENERICS
+					.iter()
+					.map(|&name| {
+						return GenericHeapParam {
+							name: name.to_string(),
+							kind: HeapGenericKind::Forwarded,
+							span,
+						};
+					})
+					.collect()
+			}
 		} else {
 			Vec::new()
 		};
@@ -5936,12 +6056,11 @@ where
 								return Err(Box::new(
 									ParseError {
 										span: tok.span(),
-										kind: ParseErrorKind::UnexpectedItem {
-											context: format!(
-												"extected {:?} or {:?}",
+										kind: ParseErrorKind::UnexpectedToken {
+											expected: Expected::OneOf(vec![
 												TokenKind::Identifier("C".to_string()),
-												TokenKind::Identifier("Leaf".to_string())
-											),
+												TokenKind::Identifier("Leaf".to_string()),
+											]),
 											found: tok.kind,
 										},
 										context: Vec::new(),
@@ -7037,7 +7156,7 @@ impl fmt::Display for Modifier
 			Modifier::Extern(lang) => {
 				write!(f, "extern")?;
 				if let Some(l) = lang {
-					write!(f, "{l}")?;
+					write!(f, "({l})")?;
 				}
 				return Ok(());
 			}
@@ -7321,6 +7440,18 @@ impl fmt::Display for GenericParam
 				}
 				write!(f, "{}", bound)?;
 			}
+		}
+		return Ok(());
+	}
+}
+
+impl fmt::Display for GenericHeapParam
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		write!(f, "{}", self.name)?;
+		if let HeapGenericKind::Forced(fg) = &self.kind {
+			write!(f, " = {}", fg)?;
 		}
 		return Ok(());
 	}

@@ -2,12 +2,12 @@
 #[allow(clippy::module_inception)]
 mod tests
 {
+	use crate::Config;
 	use crate::diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer};
 	use crate::lexer::Lexer;
 	use crate::lexer::expander::ExpandedLexer;
 	use crate::parser::*;
 	use crate::source_map::SourceMap;
-	use crate::{CompileError, Config};
 
 	use std::fmt::Write;
 
@@ -5360,22 +5360,6 @@ mod tests
 		assert!(result.is_ok() || result.is_err());
 	}
 
-	#[test]
-	fn test_parse_heap_function_with_inline_bounds()
-	{
-		let input = "fn!<A: Allocator + Send>func(alloc: A) -> Result {}";
-		let result = parse_program_from_str(input);
-		assert!(result.is_ok());
-		let program = result.unwrap();
-		match &program.items[0] {
-			TopLevelDecl::Function(func) => {
-				assert_eq!(func.signature.call_type, CallType::UserHeap);
-				assert_eq!(func.signature.heap_generics[0].bounds.len(), 2);
-			}
-			_ => panic!("Expected heap function declaration"),
-		}
-	}
-
 	// ========== Display/Formatting Tests ==========
 
 	#[test]
@@ -6200,7 +6184,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_function_with_both_generic_types()
 	{
-		let input = "fn!<A: Allocator> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
+		let input = "fn!<Alloc = CAlloc> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}
