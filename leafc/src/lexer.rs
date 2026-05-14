@@ -642,6 +642,8 @@ pub enum TokenKind
 	/// Inline function: `inline`
 	#[keyword("inline")]
 	Inline,
+	#[keyword("extern")]
+	Extern,
 
 	// ===== Keywords - Other =====
 	/// Iterator source: `in` (for x in iter)

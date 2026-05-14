@@ -292,7 +292,15 @@ pub enum Modifier
 	Inline,
 	Const, // for variables this one is not used, for functions it is
 	Volatile,
+	Extern(Option<ExternLanguage>),
 	Directive(Directive),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExternLanguage
+{
+	C,
+	Leaf,
 }
 
 impl PartialOrd for Modifier
@@ -302,16 +310,17 @@ impl PartialOrd for Modifier
 		const fn rank(m: &Modifier) -> u8
 		{
 			// ordering:
-			// @directive pub export const unsafe inline volatile mut
+			// @directive extern(C) pub export const unsafe inline volatile mut
 			return match m {
 				Modifier::Directive(_) => 0,
-				Modifier::Pub => 1,
-				Modifier::Export => 2,
-				Modifier::Const => 3,
-				Modifier::Unsafe => 4,
-				Modifier::Inline => 5,
-				Modifier::Volatile => 6,
-				Modifier::Mut => 7,
+				Modifier::Extern(_) => 1,
+				Modifier::Pub => 2,
+				Modifier::Export => 3,
+				Modifier::Const => 4,
+				Modifier::Unsafe => 5,
+				Modifier::Inline => 6,
+				Modifier::Volatile => 7,
+				Modifier::Mut => 8,
 			};
 		}
 
@@ -323,7 +332,7 @@ pub fn get_visibility(modifiers: &Vec<Modifier>) -> Visibility
 {
 	for m in modifiers {
 		match m {
-			Modifier::Directive(_) => {}
+			Modifier::Directive(_) | Modifier::Extern(_) => {}
 			Modifier::Pub => return Visibility::Public,
 			Modifier::Export => return Visibility::Export,
 			Modifier::Mut | Modifier::Unsafe | Modifier::Inline | Modifier::Const | Modifier::Volatile => {
@@ -2853,6 +2862,12 @@ where
 					self.lexer = checkpoint;
 					self.last_span = checkpoint_span;
 					return Ok(DeclKind::Variable);
+				}
+				TokenKind::Extern => {
+					self.next()?;
+					if self.at(&TokenKind::LeftParen)? {
+						self.skip_until_balanced_paren()?;
+					}
 				}
 				TokenKind::Directive(_) => {
 					self.next()?;
@@ -5910,6 +5925,36 @@ where
 						_ => unreachable!(),
 					}
 				}
+				TokenKind::Extern => {
+					self.next()?;
+					if self.consume(&TokenKind::LeftParen)? {
+						let tok: Token = self.next()?;
+						ret.push(match tok.kind {
+							TokenKind::Identifier(str) if str == "C" => Modifier::Extern(Some(ExternLanguage::C)),
+							TokenKind::Identifier(str) if str == "Leaf" => Modifier::Extern(Some(ExternLanguage::Leaf)),
+							_ => {
+								return Err(Box::new(
+									ParseError {
+										span: tok.span(),
+										kind: ParseErrorKind::UnexpectedItem {
+											context: format!(
+												"extected {:?} or {:?}",
+												TokenKind::Identifier("C".to_string()),
+												TokenKind::Identifier("Leaf".to_string())
+											),
+											found: tok.kind,
+										},
+										context: Vec::new(),
+									}
+									.build(),
+								));
+							}
+						});
+						self.expect(&TokenKind::RightParen)?;
+					} else {
+						ret.push(Modifier::Extern(None));
+					}
+				}
 				TokenKind::Pub => {
 					ret.push(Modifier::Pub);
 					self.next()?;
@@ -6989,8 +7034,27 @@ impl fmt::Display for Modifier
 			Modifier::Const => return write!(f, "const"),
 			Modifier::Volatile => return write!(f, "volatile"),
 			Modifier::Mut => return write!(f, "mut"),
+			Modifier::Extern(lang) => {
+				write!(f, "extern")?;
+				if let Some(l) = lang {
+					write!(f, "{l}")?;
+				}
+				return Ok(());
+			}
 			Modifier::Directive(d) => return write!(f, "{}", d),
 		}
+	}
+}
+
+impl fmt::Display for ExternLanguage
+{
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+	{
+		match self {
+			ExternLanguage::C => write!(f, "C")?,
+			ExternLanguage::Leaf => write!(f, "Leaf")?,
+		}
+		return Ok(());
 	}
 }
 
