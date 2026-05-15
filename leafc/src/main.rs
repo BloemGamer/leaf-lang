@@ -107,9 +107,10 @@
 // Allow
 #![allow(clippy::needless_return)]
 #![allow(clippy::use_self)]
-//#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
+#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
 #![allow(clippy::self_named_module_files)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::similar_names)]
 #![allow(clippy::uninlined_format_args)]
 // #![allow(dead_code)]
 

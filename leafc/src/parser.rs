@@ -5946,7 +5946,7 @@ where
 					params.push(Param {
 						ty: Type {
 							core: Box::new(TypeCore::Base {
-								path: Path::simple(vec!["_".to_string()], span),
+								path: Path::simple(vec!["...".to_string()], span),
 								generics: vec![],
 							}),
 							span,

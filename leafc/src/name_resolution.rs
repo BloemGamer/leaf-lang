@@ -2894,6 +2894,7 @@ impl<'a> Resolver<'a>
 		let mut resolved_params: Vec<ResolvedParam> = Vec::new();
 		for param in &sig.params {
 			if param.variadic {
+				break;
 				let ty: ResolvedType = self.resolve_type(&param.ty)?;
 				resolved_params.push(ResolvedParam {
 					symbol: SymbolId(usize::MAX),

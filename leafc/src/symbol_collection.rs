@@ -95,6 +95,7 @@ pub enum SymbolKind
 	Function
 	{
 		comp_const: bool,
+		variadic: bool,
 	},
 	Struct,
 	Union,
@@ -856,6 +857,7 @@ impl Collector
 			name,
 			SymbolKind::Function {
 				comp_const: sig.modifiers.iter().any(|m| matches!(m, Modifier::Const)),
+				variadic: sig.params.iter().last().is_some_and(|p| return p.variadic),
 			},
 			sig.span(),
 			get_visibility(&func.signature.modifiers),
@@ -894,6 +896,9 @@ impl Collector
 			}
 
 			for param in &sig.params {
+				if param.variadic {
+					break; // TODO, check if this is the right implementation
+				}
 				let Pattern::TypedIdentifier { path, span, .. } = &param.pattern else {
 					unreachable!("Desugarer should have handled this");
 				};

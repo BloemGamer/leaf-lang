@@ -47,7 +47,7 @@ macro_rules! bit_enum {
 		#[allow(unused)]
 		impl $name {
 			$vis const NONE: $name = $name(0);
-			$vis $(const $fname: $name = $name($val);)*
+			$($vis const $fname: $name = $name($val);)*
 		}
 
 		const _: () = {
