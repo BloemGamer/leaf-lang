@@ -528,7 +528,7 @@ pub struct ResolvedFunctionSignature
 	pub heap_generics: Vec<ResolvedGenericHeapParam>,
 	pub call_type: CallType,
 	pub params: Vec<ResolvedParam>,
-	pub return_type: Option<ResolvedType>,
+	pub return_type: ResolvedType,
 	pub where_clause: Vec<ResolvedWhereConstraint>,
 	#[ignored(PartialEq)]
 	pub span: Span,
@@ -2933,11 +2933,7 @@ impl<'a> Resolver<'a>
 			});
 		}
 
-		let return_type: Option<ResolvedType> = sig
-			.return_type
-			.as_ref()
-			.map(|t| return self.resolve_type(t))
-			.transpose()?;
+		let return_type: ResolvedType = self.resolve_type(&sig.return_type)?;
 		let where_clause: Vec<ResolvedWhereConstraint> = sig
 			.where_clause
 			.iter()
@@ -3947,9 +3943,7 @@ pub fn write_resolved_function_signature(
 	}
 	write!(f, ")")?;
 
-	if let Some(ret) = &sig.return_type {
-		write!(f, " -> {}", ret)?;
-	}
+	write!(f, " -> {}", sig.return_type)?;
 
 	if !sig.where_clause.is_empty() {
 		write!(f, " where ")?;

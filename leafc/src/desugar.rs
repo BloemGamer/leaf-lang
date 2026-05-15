@@ -380,8 +380,7 @@ impl Desugarer
 		new_generics.extend(func_sig.generics);
 		func_sig.generics = new_generics;
 
-		if let Some(ret_ty) = &mut func_sig.return_type
-			&& let Some(new_generic) = Self::desugar_impl_trait_in_type(ret_ty, &mut impl_trait_counter)
+		if let Some(new_generic) = Self::desugar_impl_trait_in_type(&mut func_sig.return_type, &mut impl_trait_counter)
 		{
 			func_sig.generics.push(new_generic);
 		}

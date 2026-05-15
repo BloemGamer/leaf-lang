@@ -586,7 +586,7 @@ pub struct FunctionSignature
 	pub name: Path,
 	pub generics: Vec<GenericParam>,
 	pub params: Vec<Param>,
-	pub return_type: Option<Type>,
+	pub return_type: Type,
 	pub where_clause: Vec<WhereConstraint>,
 	pub call_type: CallType,
 	pub heap_generics: Vec<GenericHeapParam>,
@@ -3390,6 +3390,12 @@ where
 
 				return Ok(TypeCore::Base { path, generics });
 			}
+			TokenKind::Bang => {
+				return Ok(TypeCore::Base {
+					path: Path::simple(vec!["!".to_string()], tok.span()),
+					generics: Vec::new(),
+				});
+			}
 			TokenKind::Ampersand => {
 				self.next()?;
 				let mutable: bool = self.at(&TokenKind::Mut)?;
@@ -5790,11 +5796,14 @@ where
 		};
 		let params: Vec<Param> = self.parse_function_arguments()?;
 
-		let return_type: Option<Type> = if self.at(&TokenKind::Arrow)? {
+		let return_type: Type = if self.at(&TokenKind::Arrow)? {
 			self.next()?; // ->
-			Some(self.parse_type()?)
+			self.parse_type()?
 		} else {
-			None
+			Type {
+				core: Box::new(TypeCore::Tuple(Vec::new())),
+				span,
+			}
 		};
 
 		let where_clause: Vec<WhereConstraint> = if self.at(&TokenKind::Where)? {
@@ -7398,9 +7407,7 @@ pub fn write_function_signature(
 	}
 	write!(f, ")")?;
 
-	if let Some(ret_ty) = &sig.return_type {
-		write!(f, " -> {}", ret_ty)?;
-	}
+	write!(f, " -> {}", sig.return_type)?;
 
 	if !sig.where_clause.is_empty() {
 		write!(f, " where ")?;
