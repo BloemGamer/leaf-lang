@@ -44,6 +44,10 @@ where
 	lexer: Peekable<T>,
 	last_span: Span,
 	buffered_token: Option<Token>,
+	/// Should always be false unless testing or otherwise
+	/// Type inference is a specific feature the language does not opt in for
+	/// The only reason this option is even here is for testing purposes
+	pub allow_type_inference: bool,
 
 	_marker: PhantomData<&'source ()>,
 }
@@ -83,6 +87,7 @@ where
 			lexer: lex.peekable(),
 			last_span: Span::default(),
 			buffered_token: None,
+			allow_type_inference: false,
 			_marker: PhantomData,
 		};
 	}
@@ -3379,6 +3384,7 @@ where
 
 	fn parse_type_core(&mut self) -> Result<TypeCore, Box<DiagnosticBuilder>>
 	{
+		let allow_type_inference: bool = self.allow_type_inference;
 		let tok: &Token = self.peek()?;
 		match &tok.kind {
 			TokenKind::Impl => {
@@ -3402,8 +3408,9 @@ where
 				return Ok(TypeCore::Base { path, generics });
 			}
 			TokenKind::Bang => {
+				let token: Token = self.next()?;
 				return Ok(TypeCore::Base {
-					path: Path::simple(vec!["!".to_string()], tok.span()),
+					path: Path::simple(vec!["!".to_string()], token.span()),
 					generics: Vec::new(),
 				});
 			}
@@ -3476,6 +3483,13 @@ where
 				return Ok(TypeCore::Array {
 					inner: Box::new(base_type),
 					size,
+				});
+			}
+			TokenKind::Underscore if allow_type_inference => {
+				let token: Token = self.next()?; // _
+				return Ok(TypeCore::Base {
+					path: Path::simple(vec!["_".to_string()], token.span()),
+					generics: Vec::new(),
 				});
 			}
 			_ => {
@@ -3749,7 +3763,7 @@ where
 				}
 			};
 
-			let forced_generic: HeapGenericKind = if self.consume(&TokenKind::Equals)? {
+			let forced_generic: HeapGenericKind = if self.consume(&TokenKind::Arrow)? {
 				HeapGenericKind::Forced(self.parse_type()?)
 			} else {
 				HeapGenericKind::Forwarded
@@ -6642,7 +6656,7 @@ where
 				));
 			};
 
-			self.expect(&TokenKind::Colon)?;
+			self.expect(&TokenKind::Arrow)?;
 
 			let ty: Type = self.parse_type()?;
 

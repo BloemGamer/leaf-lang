@@ -4527,7 +4527,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_call_with_named_generics()
 	{
-		let input = "allocate!<Allocator: MyAlloc>(size)";
+		let input = "allocate!<Allocator -> MyAlloc>(size)";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 		match result.unwrap() {
@@ -4549,7 +4549,7 @@ mod tests
 	#[test]
 	fn test_parse_maybe_heap_call_with_named_generics()
 	{
-		let input = "allocate?<IO: StdIO>(data)";
+		let input = "allocate?<IO -> StdIO>(data)";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 		match result.unwrap() {
@@ -4569,7 +4569,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_call_multiple_named_generics()
 	{
-		let input = "create!<Alloc: System, Error: MyError>()";
+		let input = "create!<Alloc -> System, Error -> MyError>()";
 		let result = parse_expr_from_str(input);
 		assert!(result.is_ok());
 		match result.unwrap() {
@@ -5002,8 +5002,8 @@ mod tests
 	fn test_parse_allocator_pattern()
 	{
 		let input = r"
-            fn! create_buffer<A: Allocator>(allocator: A, size: usize) -> Buffer {
-                var ptr: *u8 = allocator.allocate!(size);
+            fn! create_buffer<Alloc: Alloc>(size: usize) -> Buffer {
+                var ptr: *u8 = Alloc.allocate!(size);
                 return Buffer { ptr, size };
             }
         ";
@@ -5016,7 +5016,7 @@ mod tests
 	{
 		let input = r"{
             if should_heap {
-                create!<Alloc: Heap>(data)
+                create!<Alloc -> Heap>(data)
             } else {
                 create(data)
             }
@@ -5059,7 +5059,7 @@ mod tests
 	{
 		let input = r"
             fn! create_vec<T>() -> Vec<T> {
-                Vec!<Alloc: System>()
+                Vec!<Alloc -> System>()
             }
         ";
 		let result = parse_program_from_str(input);
@@ -6182,7 +6182,7 @@ mod tests
 	#[test]
 	fn test_parse_heap_function_with_both_generic_types()
 	{
-		let input = "fn!<Alloc = CAlloc> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
+		let input = "fn!<Alloc -> CAlloc> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
 		let result = parse_program_from_str(input);
 		assert!(result.is_ok());
 	}

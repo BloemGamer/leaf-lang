@@ -284,7 +284,9 @@ fn run(
 		}
 		let expanded_lexer: ExpandedLexer = ExpandedLexer::new(lexer);
 
-		let res = Parser::from(expanded_lexer).parse_program();
+		let mut parser = Parser::from(expanded_lexer);
+		parser.allow_type_inference = true;
+		let res = parser.parse_program();
 		let ast: AST = match res {
 			Ok(ast) => ast,
 			Err(err) => {
