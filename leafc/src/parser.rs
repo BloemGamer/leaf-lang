@@ -691,6 +691,7 @@ pub struct Type
 
 impl Type
 {
+	#[allow(unused)]
 	pub fn unit(span: Span) -> Type
 	{
 		return Type {
@@ -2872,8 +2873,7 @@ where
 
 	fn peek_declaration_kind(&mut self) -> Result<DeclKind, Box<DiagnosticBuilder>>
 	{
-		let checkpoint: Peekable<T> = self.lexer.clone();
-		let checkpoint_span: Span = self.last_span;
+		let checkpoint = self.make_checkpoint();
 
 		loop {
 			match self.peek_kind()? {
@@ -2888,12 +2888,10 @@ where
 				TokenKind::Const => {
 					self.next()?;
 					if self.at(&TokenKind::FuncDef)? {
-						self.lexer = checkpoint;
-						self.last_span = checkpoint_span;
+						self.load_checkpoint(checkpoint);
 						return Ok(DeclKind::Function);
 					}
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Variable);
 				}
 				TokenKind::Extern => {
@@ -2913,8 +2911,7 @@ where
 						#[allow(clippy::match_same_arms)]
 						match self.peek_kind()? {
 							TokenKind::Semicolon | TokenKind::LeftBrace => {
-								self.lexer = checkpoint;
-								self.last_span = checkpoint_span;
+								self.load_checkpoint(checkpoint);
 								return Ok(DeclKind::Directive);
 							}
 							TokenKind::FuncDef
@@ -2945,64 +2942,52 @@ where
 					}
 				}
 				TokenKind::FuncDef => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Function);
 				}
 				TokenKind::Struct => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Struct);
 				}
 				TokenKind::Union => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Union);
 				}
 				TokenKind::Enum => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Enum);
 				}
 				TokenKind::Type => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::TypeAlias);
 				}
 				TokenKind::Assoc => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::AssocType);
 				}
 				TokenKind::Variant => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Variant);
 				}
 				TokenKind::Var => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Variable);
 				}
 				TokenKind::Module => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Module);
 				}
 				TokenKind::Impl => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Impl);
 				}
 				TokenKind::Trait => {
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Ok(DeclKind::Trait);
 				}
 				_ => {
 					let tok: Token = self.peek()?.clone();
-					self.lexer = checkpoint;
-					self.last_span = checkpoint_span;
+					self.load_checkpoint(checkpoint);
 					return Err(Box::new(
 						ParseError::unexpected_item(tok.span, "declaration", tok.kind).build(),
 					));
@@ -3018,7 +3003,7 @@ where
 		}
 		self.next()?; // (
 
-		let mut depth = 1;
+		let mut depth: usize = 1;
 		while depth > 0 {
 			match self.peek_kind()? {
 				TokenKind::LeftParen => {
@@ -3536,7 +3521,7 @@ where
 
 		loop {
 			let tok: Token = self.next()?;
-			let segment_start = tok.span;
+			let segment_start: Span = tok.span;
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
@@ -3583,7 +3568,6 @@ where
 			let checkpoint = self.make_checkpoint();
 			self.next()?; // ::
 			if self.at(&TokenKind::Star)? {
-				// Someone wrote foo::* outside of @use — give a clear error
 				return Err(Box::new(
 					ParseError::generic(
 						self.peek()?.span(),
@@ -3612,7 +3596,7 @@ where
 
 		loop {
 			let tok: Token = self.next()?;
-			let segment_start = tok.span;
+			let segment_start: Span = tok.span;
 			let name: Ident = match tok.kind {
 				TokenKind::Identifier(s) => s,
 				_ => {
@@ -3989,7 +3973,7 @@ where
 		let span: Span = self.peek()?.span();
 
 		if self.at(&TokenKind::DotDot)? || self.at(&TokenKind::DotDotEquals)? {
-			let inclusive = self.at(&TokenKind::DotDotEquals)?;
+			let inclusive: bool = self.at(&TokenKind::DotDotEquals)?;
 			self.next()?; // .. | ..=
 
 			let end: Option<Box<Expr>> = if self.is_range_end() {
@@ -4173,7 +4157,6 @@ where
 			match self.peek_kind()? {
 				TokenKind::Dot => {
 					self.next()?; // .
-					// let field_name: Path = self.get_path_allow_internals()?;
 					let field_name: Path = match self.peek_kind()? {
 						TokenKind::Identifier(_) => self.get_path()?,
 						TokenKind::IntLiteral { .. } => {
@@ -4229,7 +4212,7 @@ where
 				}
 				TokenKind::LeftBracket => {
 					self.next()?;
-					let index: Expr = self.parse_expr()?; // Always allow struct init inside []
+					let index: Expr = self.parse_expr()?;
 					self.expect(&TokenKind::RightBracket)?;
 					expr = Expr::Index {
 						base: Box::new(expr),
@@ -4571,7 +4554,7 @@ where
 
 			TokenKind::Switch => {
 				self.next()?; // switch
-				let expr: Expr = self.parse_expr_no_struct()?; // Use no_struct for switch expression
+				let expr: Expr = self.parse_expr_no_struct()?;
 				self.expect(&TokenKind::LeftBrace)?;
 
 				let mut arms: Vec<SwitchArm> = Vec::new();
@@ -4792,6 +4775,7 @@ where
 		let pattern: Pattern = self.parse_pattern()?;
 		self.expect(&TokenKind::FatArrow)?; // =>
 
+		// TODO: check spans
 		let body: SwitchBody = if self.at(&TokenKind::LeftBrace)? {
 			let switch: SwitchBody = SwitchBody::Block(self.parse_block()?);
 			self.consume(&TokenKind::Comma)?;
@@ -5284,6 +5268,7 @@ where
 		let mut tail_expr: Option<Box<Expr>> = None;
 
 		while !self.at(&TokenKind::RightBrace)? {
+			let stmt_span: Span = self.peek()?.span();
 			let saved_label: Option<String> = if matches!(self.peek_kind()?, TokenKind::Label(_)) {
 				let tok = self.next()?;
 				if let TokenKind::Label(l) = tok.kind {
@@ -5318,7 +5303,7 @@ where
 					self.expect(&TokenKind::Semicolon)?;
 					stmts.push(Stmt::Return {
 						value: ret_expr,
-						span: span.merge(&self.last_span),
+						span: stmt_span.merge(&self.last_span),
 					});
 				}
 
@@ -5346,7 +5331,7 @@ where
 					stmts.push(Stmt::Break {
 						label,
 						value,
-						span: span.merge(&self.last_span),
+						span: stmt_span.merge(&self.last_span),
 					});
 				}
 
@@ -5367,7 +5352,7 @@ where
 					self.expect(&TokenKind::Semicolon)?;
 					stmts.push(Stmt::Continue {
 						label,
-						span: span.merge(&self.last_span),
+						span: stmt_span.merge(&self.last_span),
 					});
 				}
 
@@ -5428,7 +5413,7 @@ where
 							expr,
 							then_block,
 							else_branch,
-							span,
+							span: stmt_span.merge(&self.last_span),
 						};
 
 						if self.consume(&TokenKind::Semicolon)? {
@@ -5499,7 +5484,7 @@ where
 							target: expr,
 							op,
 							value,
-							span: span.merge(&self.last_span),
+							span: stmt_span.merge(&self.last_span),
 						});
 					} else if let Expr::Block(block) = expr {
 						if self.consume(&TokenKind::Semicolon)? {
