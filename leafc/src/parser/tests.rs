@@ -1432,7 +1432,6 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.params.len(), 2);
-				assert!(func.signature.return_type.is_some());
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -4397,7 +4396,6 @@ mod tests
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.call_type, CallType::UserHeap);
 				assert_eq!(func.signature.params.len(), 1);
-				assert!(func.signature.return_type.is_some());
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -4413,7 +4411,7 @@ mod tests
 		match &program.items[0] {
 			TopLevelDecl::Function(func) => {
 				assert_eq!(func.signature.call_type, CallType::UserHeap);
-				assert_eq!(func.signature.heap_generics.len(), 1);
+				assert_eq!(func.signature.heap_generics.len(), 2); // All heap generics are always given
 			}
 			_ => panic!("Expected function declaration"),
 		}
@@ -7099,9 +7097,7 @@ mod tests
 		assert!(result.is_ok());
 		let program = result.unwrap();
 		match &program.items[0] {
-			TopLevelDecl::Function(func) => {
-				assert!(func.signature.return_type.is_some());
-			}
+			TopLevelDecl::Function(_) => {}
 			_ => panic!("Expected function"),
 		}
 	}

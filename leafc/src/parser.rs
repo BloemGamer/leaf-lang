@@ -684,6 +684,17 @@ pub struct Type
 	pub span: Span,
 }
 
+impl Type
+{
+	pub fn unit(span: Span) -> Type
+	{
+		return Type {
+			core: Box::new(TypeCore::Tuple(Vec::new())),
+			span,
+		};
+	}
+}
+
 /// Core type expressions.
 ///
 /// Represents the fundamental type constructs in the language.

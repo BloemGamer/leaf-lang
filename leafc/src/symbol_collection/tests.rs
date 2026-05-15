@@ -3,7 +3,7 @@
 mod tests
 {
 	use crate::{
-		Config, desugar,
+		Config,
 		lexer::Lexer,
 		parser::Parser,
 		source_map::SourceIndex,
@@ -52,7 +52,13 @@ mod tests
 
 		let (_, main_symbol) = find_symbol_by_name(&table, "main").expect("main function not found");
 		assert_eq!(main_symbol.name, "main");
-		assert!(matches!(main_symbol.kind, SymbolKind::Function { comp_const: false }));
+		assert!(matches!(
+			main_symbol.kind,
+			SymbolKind::Function {
+				comp_const: false,
+				variadic: false
+			}
+		));
 		assert_eq!(main_symbol.visibility, Visibility::Private);
 	}
 
@@ -81,7 +87,13 @@ mod tests
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, compute_symbol) = find_symbol_by_name(&table, "compute").expect("compute function not found");
-		assert!(matches!(compute_symbol.kind, SymbolKind::Function { comp_const: true }));
+		assert!(matches!(
+			compute_symbol.kind,
+			SymbolKind::Function {
+				comp_const: true,
+				variadic: false
+			}
+		));
 	}
 
 	#[test]
@@ -374,7 +386,13 @@ mod tests
 		assert!(matches!(display_symbol.kind, SymbolKind::Trait));
 
 		let (_, show_symbol) = find_symbol_by_name(&table, "show").expect("show method not found");
-		assert!(matches!(show_symbol.kind, SymbolKind::Function { comp_const: false }));
+		assert!(matches!(
+			show_symbol.kind,
+			SymbolKind::Function {
+				comp_const: false,
+				variadic: false
+			}
+		));
 	}
 
 	#[test]
@@ -412,7 +430,13 @@ mod tests
 		assert!(matches!(utils_symbol.kind, SymbolKind::Module));
 
 		let (_, helper_symbol) = find_symbol_by_name(&table, "helper").expect("helper function not found");
-		assert!(matches!(helper_symbol.kind, SymbolKind::Function { comp_const: false }));
+		assert!(matches!(
+			helper_symbol.kind,
+			SymbolKind::Function {
+				comp_const: false,
+				variadic: false
+			}
+		));
 	}
 
 	#[test]
@@ -433,7 +457,13 @@ mod tests
 
 		let table = parse_and_collect(source).unwrap();
 		let (_, new_symbol) = find_symbol_by_name(&table, "new").expect("new method not found");
-		assert!(matches!(new_symbol.kind, SymbolKind::Function { comp_const: false }));
+		assert!(matches!(
+			new_symbol.kind,
+			SymbolKind::Function {
+				comp_const: false,
+				variadic: false
+			}
+		));
 	}
 
 	#[test]
@@ -792,7 +822,13 @@ mod tests
 
 		assert!(matches!(outer_mod.kind, SymbolKind::Module));
 		assert!(matches!(data_struct.kind, SymbolKind::Struct));
-		assert!(matches!(process_fn.kind, SymbolKind::Function { comp_const: false }));
+		assert!(matches!(
+			process_fn.kind,
+			SymbolKind::Function {
+				comp_const: false,
+				variadic: false
+			}
+		));
 
 		// Check scope relationships
 		let inner_scope = table.scope(inner_var.scope);
