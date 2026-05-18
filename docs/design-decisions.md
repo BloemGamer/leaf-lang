@@ -9,7 +9,7 @@ This document explains key design decisions behind Leaf-lang, including language
 ### Target Audience & Philosophy
 - **Target users:** Mostly C, C++ and rust developers that want to try a new language
 - **Design philosophy:** Everything is explicit while being mostly safe
-- **Tradeoffs:** Some of the design choices will make writing very optimized code a little harder
+- **Tradeoffs:** Sometimes more code is needed than in other languages
 
 ---
 

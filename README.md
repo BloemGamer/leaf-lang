@@ -56,11 +56,13 @@ fn! main()
 
 ### Language features
 - [ ] Adding lambda functions
-- [ ] Preprocessor
-
-### Compiler infrastructure
+- [ ] Dynamic dispatch
 - [ ] Compile-time execution
 	- [ ] Reflection system
+- [ ] Borrow checker
+
+### Compiler infrastructure
+- [ ] Moving conditional compilation to compile-time execution
 - [ ] Code optimisations
 - [ ] C parser integration
 - [ ] Design a build system
@@ -152,10 +154,11 @@ Each stage transforms the program into a simpler or more constrained form.
 	- **Cargo** that supports the newest rust version
 - Generated C code
 	- **CMake** >= 3.10
-	- **C compiler** with full C23 support (fully tested with GCC 14.2.0)
+	- **C compiler** with full C23 support (fully tested with GCC 16.1.1)
 
 Leaf-lang is currently under development, but you can build it from source.
-The build is tested on **Linux** and **Windows**. macOS is **not currently supported**.
+The build is tested on **Linux** and **Windows**. MacOS is **not currently supported**.
+<!-- I don't have a MacOS device, so I can't test MacOS, but probably the compiler works, but some functions of the stdlib not -->
 
 ![Linux][Linux-shield] ![Windows][Windows-shield]
 
