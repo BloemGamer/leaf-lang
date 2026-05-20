@@ -1005,7 +1005,6 @@ impl CompileDiagnostic for NameResolutionError
 			}
 		};
 
-		// Add context stack
 		for ctx in &self.context {
 			diag = diag.note(format!("while resolving names: {ctx}"));
 		}
@@ -1115,8 +1114,6 @@ impl<'a> Resolver<'a>
 		loop {
 			let scope: &Scope = self.global.scope(scope_id);
 
-			// Block the trait scope so bare calls to sibling methods fail —
-			// they must be written as `Self::method`.
 			let blocked = self.trait_scope == Some(scope_id);
 
 			if !blocked {
@@ -1136,8 +1133,42 @@ impl<'a> Resolver<'a>
 
 	fn find_introduced_scope(&self, sym_id: SymbolId) -> Option<ScopeId>
 	{
-		// Always use the global table; sym_id is now always a global ID.
 		return self.global.symbol(sym_id).introduced_scope;
+	}
+
+	fn find_self_member_kind(&self, name: &str) -> Option<&'static str>
+	{
+		let self_sym = self.self_sym?;
+
+		if let Some(scope_id) = self.global.symbol(self_sym).introduced_scope {
+			let scope = self.global.scope(scope_id);
+			for &child_id in &scope.symbols {
+				let child = self.global.symbol(child_id);
+				if child.name == name {
+					match child.kind {
+						SymbolKind::AssocType | SymbolKind::TypeAlias => {
+							return Some("associated type");
+						}
+						SymbolKind::Function { .. } => {
+							return Some("method");
+						}
+						_ => {}
+					}
+				}
+			}
+		}
+
+		if let Some(trait_scope) = self.trait_scope {
+			let scope = self.global.scope(trait_scope);
+			for &child_id in &scope.symbols {
+				let child = self.global.symbol(child_id);
+				if child.name == name && matches!(child.kind, SymbolKind::Function { .. }) {
+					return Some("method");
+				}
+			}
+		}
+
+		return None;
 	}
 
 	fn is_descendant_of(&self, mut scope: ScopeId, ancestor: ScopeId) -> bool
@@ -1188,8 +1219,6 @@ impl<'a> Resolver<'a>
 			&& segments[0].generics.is_empty()
 			&& let Some(self_sym) = self.self_sym
 		{
-			// Treat it as an AssocItem: base = Self's symbol, member = next segment
-			// For deeper paths like Self::Foo::Bar, fall through to Assoc for now
 			return Ok(ResolvedPathResult::Assoc {
 				base: self_sym,
 				member: segments[1].name.clone(),
@@ -1490,9 +1519,6 @@ impl<'a> Resolver<'a>
 		return Ok(ResolvedPathResult::Full(current_sym_id));
 	}
 
-	/// Like `resolve_path_full` but falls back to `ResolvedPathKind::Primitive`
-	/// for single-segment names that are known primitives (i32, bool, etc.).
-	/// This is needed so `impl Foo for i64` doesn't error out.
 	fn resolve_path_or_primitive(&self, path: &Path, span: Span) -> Result<ResolvedPath, NameResolutionError>
 	{
 		if !path.global && path.segments.len() == 1 {
@@ -1500,7 +1526,6 @@ impl<'a> Resolver<'a>
 				Ok(rp) => return Ok(rp),
 				Err(e) => {
 					let name = &path.segments[0].name;
-					// Reuse the type checker's primitive table via a name check
 					if matches!(
 						name.as_str(),
 						"bool"
@@ -2104,13 +2129,26 @@ impl<'a> Resolver<'a>
 						generics: Vec::new(),
 					});
 				}
+				if !path.global && path.segments.len() == 1 {
+					let name = &path.segments[0].name;
+					if name != "Self"
+						&& let Some(kind_str) = self.find_self_member_kind(name)
+					{
+						return Err(NameResolutionError {
+							span,
+							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+							context: vec![format!(
+								"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
+							)],
+						});
+					}
+				}
 				if !path.global && path.segments.len() >= 2 && path.segments[0].name == "Self" {
 					let resolved_generics = generics
 						.iter()
-						.map(|g| self.resolve_type(g))
+						.map(|g| return self.resolve_type(g))
 						.collect::<Result<_, _>>()?;
 					let member = path.segments[1].name.clone();
-					// Use self_sym if available, otherwise emit as Primitive for later passes
 					if let Some(self_sym) = self.self_sym {
 						return Ok(ResolvedTypeCore::Base {
 							path: ResolvedPath {
@@ -2119,38 +2157,6 @@ impl<'a> Resolver<'a>
 							},
 							generics: resolved_generics,
 						});
-					} else {
-						// In trait definitions Self is abstract, but we still need a real
-						// AssocItem node so the type checker can look up the associated type.
-						// Use the trait's own symbol (found via trait_scope) as the base.
-						let base = self.trait_scope.and_then(|sc| {
-							// The trait symbol is the one whose introduced_scope == trait_scope.
-							self.global.symbols.iter().enumerate().find_map(|(i, sym)| {
-								if sym.introduced_scope == Some(sc) {
-									Some(SymbolId(i))
-								} else {
-									None
-								}
-							})
-						});
-
-						if let Some(base_sym) = base {
-							return Ok(ResolvedTypeCore::Base {
-								path: ResolvedPath {
-									original: path.clone(),
-									kind: ResolvedPathKind::AssocItem { base: base_sym, member },
-								},
-								generics: resolved_generics,
-							});
-						} else {
-							// Last resort: emit Primitive with just the member name,
-							// not the full "Self::Output" string — at least it degrades
-							// to UnknownType("Output") which is clearer.
-							return Ok(ResolvedTypeCore::Primitive {
-								name: member,
-								generics: resolved_generics,
-							});
-						}
 					}
 				}
 				let resolved_generics: Vec<ResolvedType> = generics
@@ -2422,33 +2428,67 @@ impl<'a> Resolver<'a>
 					}
 				}
 
-				self.resolve_path_full(path, *span).map_or_else(
-					|_| {
-						if matches!(
-							path,
-							Path {
-								segments,
-								glob: false,
-								global: false,
-								span: _
-							} if matches!(
-								&segments[0],
-								PathSegment { name, generics, span: _ }
-									if name == "Self" && generics.is_empty()
-							)
-						) {
-							return ResolvedExpr::AssocSelf {
+				if let Ok(rp) = self.resolve_path_full(path, *span) {
+					ResolvedExpr::Identifier { path: rp, span: *span }
+				} else {
+					if matches!(
+						path,
+						Path {
+							segments,
+							glob: false,
+							global: false,
+							..
+						} if matches!(
+							&segments[0],
+							PathSegment { name, generics, .. }
+								if name == "Self" && generics.is_empty()
+						)
+					) {
+						return Ok(ResolvedExpr::AssocSelf {
+							member: path.segments[1].clone(),
+							span: path.span(),
+						});
+					}
+
+					if !path.global && path.segments.len() == 2 && path.segments[0].generics.is_empty() {
+						let base_name = &path.segments[0].name;
+						let is_generic_param =
+							self.find_in_scope_chain(self.current_scope, base_name)
+								.is_some_and(|(sym_id, _)| {
+									return matches!(self.global.symbol(sym_id).kind, SymbolKind::GenericParam);
+								});
+
+						if is_generic_param
+							&& let Ok(base_path) = self.resolve_path_full(
+								&Path::simple(vec![base_name.clone()], path.segments[0].span),
+								path.segments[0].span,
+							) {
+							return Ok(ResolvedExpr::AssocPath {
+								base: base_path,
 								member: path.segments[1].clone(),
-								span: path.span(),
-							};
+								span: *span,
+							});
 						}
-						return ResolvedExpr::UnresolvedIdentifier {
-							path: path.clone(),
-							span: *span,
-						};
-					},
-					|rp| return ResolvedExpr::Identifier { path: rp, span: *span },
-				)
+					}
+
+					if !path.global && path.segments.len() == 1 {
+						let name = &path.segments[0].name;
+						if let Some(kind_str) = self.find_self_member_kind(name) {
+							return Err(NameResolutionError {
+								span: *span,
+								kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+								context: vec![format!(
+									"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
+								)],
+							});
+						}
+					}
+
+					ResolvedExpr::UnresolvedIdentifier {
+						path: path.clone(),
+						span: *span,
+					}
+				}
 			}
 
 			Expr::Literal { value, span } => ResolvedExpr::Literal {
@@ -2895,17 +2935,16 @@ impl<'a> Resolver<'a>
 		for param in &sig.params {
 			if param.variadic {
 				break;
-				let ty: ResolvedType = self.resolve_type(&param.ty)?;
-				resolved_params.push(ResolvedParam {
-					symbol: SymbolId(usize::MAX),
-					name: String::from("..."),
-					ty,
-					mutable: false,
-					variadic: true,
-					span: param.span(),
-				});
-				unimplemented!("variadic arguments are not yet allowed");
-				// continue;
+				//let ty: ResolvedType = self.resolve_type(&param.ty)?;
+				//resolved_params.push(ResolvedParam {
+				//	symbol: SymbolId(usize::MAX),
+				//	name: String::from("..."),
+				//	ty,
+				//	mutable: false,
+				//	variadic: true,
+				//	span: param.span(),
+				//});
+				//unimplemented!("variadic arguments are not yet allowed");
 			}
 			let (param_name, param_span, param_mutable) = match &param.pattern {
 				parser::Pattern::TypedIdentifier {
@@ -3371,6 +3410,7 @@ impl<'a> Resolver<'a>
 		self.current_scope = body_scope;
 
 		let prev_trait_scope: Option<ScopeId> = self.trait_scope.replace(body_scope);
+		let prev_self_sym: Option<SymbolId> = self.self_sym.replace(resolved_name);
 
 		let super_traits: Vec<ResolvedWhereBound> = t
 			.super_traits
@@ -3397,6 +3437,7 @@ impl<'a> Resolver<'a>
 
 		self.current_scope = prev;
 		self.trait_scope = prev_trait_scope;
+		self.self_sym = prev_self_sym;
 
 		return Ok(ResolvedTraitDecl {
 			resolved_name,
@@ -3514,9 +3555,6 @@ pub fn resolve_names(
 	modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)],
 ) -> Result<ResolvedModule, CompileError>
 {
-	// The global scope ID for this module's root tells us the offset that
-	// merge_symbol_tables applied to every local ScopeId.
-	// symbols.root is always ScopeId(0), so offset = global_root.0.
 	let scope_offset: usize = global.module_roots.get(logical_path).copied().map_or(0, |s| return s.0);
 
 	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, scope_offset);
