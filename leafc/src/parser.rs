@@ -11,7 +11,7 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
-use leaf_proc::Spanned;
+use leaf_proc::{Spanned, diagnostic_builder};
 
 /// Recursive descent parser for the programming language.
 ///
@@ -955,7 +955,6 @@ fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
 				kind: ParseErrorKind::CompileExprError {
 					reason: "typed integers for comptime expressions is not allowed".to_string(),
 				},
-				context: Vec::new(),
 			}
 			.build(),
 		));
@@ -979,10 +978,17 @@ fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
 						kind: ParseErrorKind::CompileExprError {
 							reason: "IntergetOverflow".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				);
+				// ParseError {
+				// 	span: *span,
+				// 	kind: ParseErrorKind::CompileExprError {
+				// 		reason: "IntergetOverflow".to_string(),
+				// 	},
+				//
+				// }
+				// .build(),
 			}
 			std::num::IntErrorKind::NegOverflow => {
 				return Box::new(
@@ -991,7 +997,6 @@ fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
 						kind: ParseErrorKind::CompileExprError {
 							reason: "IntergetUnderflow".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				);
@@ -1014,7 +1019,6 @@ impl Expr
 						kind: ParseErrorKind::NoCompileExpr {
 							reason: "Compile-time expression must evaluate to a boolean".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -1035,7 +1039,6 @@ impl Expr
 								kind: ParseErrorKind::NoCompileExpr {
 									reason: "Type mismatch in compile-time expression".to_string(),
 								},
-								context: Vec::new(),
 							}
 							.build(),
 						));
@@ -1053,7 +1056,6 @@ impl Expr
 									kind: ParseErrorKind::Generic {
 										message: "no string flags are allowed on evals for now".to_string(),
 									},
-									context: Vec::new(),
 								}
 								.build(),
 							));
@@ -1071,7 +1073,6 @@ impl Expr
 							kind: ParseErrorKind::NoCompileExpr {
 								reason: "Type mismatch in compile-time expression".to_string(),
 							},
-							context: Vec::new(),
 						}
 						.build(),
 					));
@@ -1089,7 +1090,6 @@ impl Expr
 							ParseError {
 								span: *span,
 								kind: ParseErrorKind::CompileExprError { reason: err },
-								context: Vec::new(),
 							}
 							.build(),
 						);
@@ -1101,7 +1101,6 @@ impl Expr
 						kind: ParseErrorKind::NoCompileExpr {
 							reason: "Type mismatch in compile-time expression".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -1121,7 +1120,6 @@ impl Expr
 								kind: ParseErrorKind::NoCompileExpr {
 									reason: "Invalid unary operation for given type".to_string(),
 								},
-								context: Vec::new(),
 							}
 							.build(),
 						));
@@ -1145,7 +1143,6 @@ impl Expr
 											kind: ParseErrorKind::NoCompileExpr {
 												reason: "Type mismatch in compile-time expression".to_string(),
 											},
-											context: Vec::new(),
 										}
 										.build(),
 									)),
@@ -1157,7 +1154,6 @@ impl Expr
 									kind: ParseErrorKind::NoCompileExpr {
 										reason: "Type mismatch in compile-time expression".to_string(),
 									},
-									context: Vec::new(),
 								}
 								.build(),
 							))?,
@@ -1178,7 +1174,6 @@ impl Expr
 											kind: ParseErrorKind::NoCompileExpr {
 												reason: "Type mismatch in compile-time expression".to_string(),
 											},
-											context: Vec::new(),
 										}
 										.build(),
 									)),
@@ -1190,7 +1185,6 @@ impl Expr
 									kind: ParseErrorKind::NoCompileExpr {
 										reason: "Type mismatch in compile-time expression".to_string(),
 									},
-									context: Vec::new(),
 								}
 								.build(),
 							)),
@@ -1230,7 +1224,6 @@ impl Expr
 								kind: ParseErrorKind::NoCompileExpr {
 									reason: "Type mismatch in compile-time expression".to_string(),
 								},
-								context: Vec::new(),
 							}
 							.build(),
 						));
@@ -1245,7 +1238,6 @@ impl Expr
 						kind: ParseErrorKind::NoCompileExpr {
 							reason: "Can't use `default()` in an `@if` block".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -1258,7 +1250,6 @@ impl Expr
 						kind: ParseErrorKind::NoCompileExpr {
 							reason: "Expression not allowed in compile-time condition".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -2217,7 +2208,6 @@ pub struct ParseError
 {
 	pub span: Span,
 	pub kind: ParseErrorKind,
-	pub context: Vec<String>,
 }
 
 impl From<ParseError> for CompileError
@@ -2276,10 +2266,6 @@ impl std::fmt::Display for ParseError
 			}
 		}
 
-		if !self.context.is_empty() {
-			write!(f, "\n  while parsing: {}", self.context.join(" → "))?;
-		}
-
 		return Ok(());
 	}
 }
@@ -2289,17 +2275,7 @@ impl ParseError
 {
 	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
 	{
-		return Self {
-			span,
-			kind,
-			context: Vec::new(),
-		};
-	}
-
-	pub fn with_context(mut self, ctx: impl Into<String>) -> Self
-	{
-		self.context.push(ctx.into());
-		return self;
+		return Self { span, kind };
 	}
 
 	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
@@ -2418,10 +2394,6 @@ impl CompileDiagnostic for ParseError
 		};
 
 		diag = diag.primary(self.span, None);
-
-		for ctx in &self.context {
-			diag = diag.note(format!("while parsing: {ctx}"));
-		}
 
 		return diag;
 	}
@@ -2651,7 +2623,6 @@ where
 					ParseError {
 						span: tok.span(),
 						kind: ParseErrorKind::ReservedToken(e),
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -2678,7 +2649,6 @@ where
 					ParseError {
 						span: tok.span(),
 						kind: ParseErrorKind::ReservedToken(e),
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -3502,7 +3472,6 @@ where
 						kind: ParseErrorKind::UseOfNotAllowedInternal {
 							reason: "Internal name is not allowed at this place (the use of `#`)".to_string(),
 						},
-						context: Vec::new(),
 					}
 					.build(),
 				));
@@ -4172,7 +4141,6 @@ where
 										kind: ParseErrorKind::Generic {
 											message: "a sized index on a tuple index is not allowed".to_string(),
 										},
-										context: Vec::new(),
 									}
 									.build(),
 								));
@@ -4184,7 +4152,6 @@ where
 										kind: ParseErrorKind::Generic {
 											message: "a typed index on a tuple index is not allowed".to_string(),
 										},
-										context: Vec::new(),
 									}
 									.build(),
 								));
@@ -4301,7 +4268,6 @@ where
 						ParseError {
 							span,
 							kind: ParseErrorKind::UndefinedStringFlags,
-							context: Vec::new(),
 						}
 						.build(),
 					));
@@ -5747,7 +5713,6 @@ where
 								kind: ParseErrorKind::Generic {
 									message: "Not an allowed heap generic".to_string(),
 								},
-								context: Vec::new(),
 							}
 							.build(),
 						));
@@ -6082,7 +6047,6 @@ where
 											]),
 											found: tok.kind,
 										},
-										context: Vec::new(),
 									}
 									.build(),
 								));

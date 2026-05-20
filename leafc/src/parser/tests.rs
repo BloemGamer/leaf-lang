@@ -1261,11 +1261,8 @@ mod tests
             _ => 0,
         }";
 		let result = parse_expr_from_str(input);
-		match &result {
-			Ok(program) => {
-				println!("{:#?}", program);
-			}
-			Err(_) => {}
+		if let Ok(program) = &result {
+			println!("{:#?}", program);
 		}
 		assert!(result.is_ok());
 		match result.unwrap() {
