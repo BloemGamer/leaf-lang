@@ -2,7 +2,7 @@
 
 mod tests;
 
-use leaf_proc::Spanned;
+use leaf_proc::{Spanned, compiler_bug};
 
 use std::fmt::Debug;
 
@@ -1906,7 +1906,17 @@ impl Desugarer
 			return var_decl;
 		}
 
-		unreachable!("desugar_pattern_to_statements should always return at least one statement");
+		self.diagnostics.push(compiler_bug!(
+			Span::default(),
+			"desugar_pattern_to_statements should always return at least one statement"
+		));
+		return VariableDecl {
+			pattern: Pattern::Wildcard { span, ty: None },
+			init: None,
+			comp_const,
+			docs: None,
+			span,
+		};
 	}
 
 	fn desugar_pattern_to_statements(&mut self, pattern: Pattern, init: Expr, span: Span, comp_const: bool)
@@ -2075,8 +2085,11 @@ impl Desugarer
 				}
 			}
 
-			Pattern::TypedIdentifier { .. } => {
-				unreachable!("TypedIdentifier should be handled in the early return");
+			Pattern::TypedIdentifier { span, .. } => {
+				self.diagnostics.push(compiler_bug!(
+					span,
+					"TypedIdentifier should be handled in the early return"
+				));
 			}
 
 			Pattern::Variant { .. } => {

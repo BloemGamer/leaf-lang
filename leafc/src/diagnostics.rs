@@ -68,6 +68,9 @@ pub enum ErrorCode
 	ModuleFileNotFound,
 	ModuleIoError,
 	ModuleCycle,
+
+	//
+	CompilerBug,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +79,7 @@ pub enum Severity
 	Error,
 	#[allow(unused)]
 	Warning,
+	Bug,
 }
 
 #[derive(Debug, Clone, Spanned)]
@@ -145,6 +149,15 @@ impl DiagnosticBuilder
 	{
 		return Self {
 			severity: Severity::Warning,
+			..Self::error(msg)
+		};
+	}
+
+	#[allow(unused)]
+	pub fn bug<M: Into<Cow<'static, str>>>(msg: M) -> Self
+	{
+		return Self {
+			severity: Severity::Bug,
 			..Self::error(msg)
 		};
 	}
@@ -490,6 +503,7 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 		let severity_label: String = match self.diag.severity {
 			Severity::Error => red("error", self.config),
 			Severity::Warning => yellow("warning", self.config),
+			Severity::Bug => blue("bug", self.config),
 		};
 
 		let Some(primary): Option<&Label> = self

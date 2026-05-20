@@ -113,6 +113,7 @@
 
 use proc_macro::TokenStream;
 
+mod diagnostics;
 mod gen_lex;
 mod spanned;
 
@@ -126,4 +127,16 @@ pub fn generate_lexer(attr: TokenStream, item: TokenStream) -> TokenStream
 pub fn derive_spanned(input: TokenStream) -> TokenStream
 {
 	return spanned::derive_spanned(input);
+}
+
+#[proc_macro]
+pub fn diagnostic_builder(item: TokenStream) -> TokenStream
+{
+	return diagnostics::diagnostic_builder(item);
+}
+
+#[proc_macro]
+pub fn compiler_bug(item: TokenStream) -> TokenStream
+{
+	return diagnostics::compiler_bug(item.into()).into();
 }
