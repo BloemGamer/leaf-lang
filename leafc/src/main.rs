@@ -185,6 +185,8 @@ impl Args
 	}
 }
 
+const STDLIB_PATH: &str = "std/std.leaf";
+
 fn main()
 {
 	const FILE_NAME: &str = "leaf-test/main.leaf";
@@ -230,25 +232,48 @@ fn run(
 ) -> (Result<(), Option<CompileError>>, Vec<DiagnosticBuilder>)
 {
 	let mut diagnostics = Vec::new();
-	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([modules::PendingModule {
-		logical_path: Vec::new(),
-		file_path: filename.into(),
-		declared_at_span: Span {
-			source_index: SourceIndex::new(0),
-			start: 0,
-			end: 0,
-			start_line: 0,
-			start_col: 0,
-			end_line: 0,
-			end_col: 0,
+	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
+		//Stdlib root namespace
+		// modules::PendingModule {
+		// 	logical_path: vec!["std".to_string()],
+		// 	file_path: {
+		// 		let mut tmp = path::PathBuf::from("leaf-test/std.leaf");
+		// 		tmp.pop();
+		// 		tmp.push("std.leaf");
+		// 		tmp
+		// 	},
+		// 	declared_at_span: Span {
+		// 		source_index: SourceIndex::new(0),
+		// 		start: 0,
+		// 		end: 0,
+		// 		start_line: 0,
+		// 		start_col: 0,
+		// 		end_line: 0,
+		// 		end_col: 0,
+		// 	},
+		// },
+		// User entry module
+		modules::PendingModule {
+			logical_path: vec![],
+			file_path: filename.into(),
+			declared_at_span: Span {
+				source_index: SourceIndex::new(0),
+				start: 0,
+				end: 0,
+				start_line: 0,
+				start_col: 0,
+				end_line: 0,
+				end_col: 0,
+			},
 		},
-	}]);
+	]);
 	let mut visited: HashSet<Vec<String>> = HashSet::new();
 
 	// Phase 1: parse, desugar, and collect local symbols for each module
 	let mut pending_modules: Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)> = Vec::new();
 
 	while let Some(pm) = queue.pop_front() {
+		println!("{:#?}", queue);
 		if args.modules {
 			println!("::{}", pm.logical_path.join("::"));
 		}
@@ -312,6 +337,7 @@ fn run(
 				);
 			}
 		});
+		eprintln!("{:#?}", queue);
 
 		let res = desugar::desugar_program(ast);
 		let desugared: DesugaredAST = match res {

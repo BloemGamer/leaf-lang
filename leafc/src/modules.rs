@@ -1,3 +1,5 @@
+#[cfg(test)]
+#[path = "../tests/modules/tests.rs"]
 mod tests;
 
 use std::{

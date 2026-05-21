@@ -2,6 +2,8 @@
 #![allow(clippy::needless_pass_by_ref_mut)]
 #![allow(clippy::unused_self)]
 
+#[cfg(test)]
+#[path = "../tests/name_resolution/tests.rs"]
 mod tests;
 
 use std::fmt;
