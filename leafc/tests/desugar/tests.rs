@@ -1,1360 +1,282 @@
-#[cfg(test)]
-#[allow(clippy::module_inception)]
-mod tests
+use crate::desugar::*;
+use crate::lexer::IntBase;
+use crate::parser::{
+	AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericHeapParam, GenericParam, ImplTarget, Literal, Param, Path,
+	StructDecl, TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
+};
+
+// Helper to create a simple identifier expression
+fn ident(name: &str) -> Expr
 {
-	use crate::desugar::*;
-	use crate::lexer::IntBase;
-	use crate::parser::{
-		AssignOp, BinaryOp, EnumDecl, FunctionSignature, GenericHeapParam, GenericParam, ImplTarget, Literal, Param,
-		Path, StructDecl, TypeAliasDecl, UnaryOp, UnionDecl, VariantDecl,
+	return Expr::Identifier {
+		path: Path::simple(vec![name.to_string()], Span::default()),
+		span: Span::default(),
 	};
+}
 
-	// Helper to create a simple identifier expression
-	fn ident(name: &str) -> Expr
-	{
-		return Expr::Identifier {
+// Helper to create a literal int expression
+fn int_lit(value: i64) -> Expr
+{
+	return Expr::Literal {
+		value: Literal::Int {
+			value: value.to_string(),
+			base: crate::lexer::IntBase::Decimal,
+			ty: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+}
+
+// Helper to create a literal bool expression
+fn bool_lit(value: bool) -> Expr
+{
+	return Expr::Literal {
+		value: Literal::Bool {
+			value,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+}
+
+// Helper to create a simple type
+fn simple_type(name: &str) -> Type
+{
+	return Type {
+		core: Box::new(TypeCore::Base {
 			path: Path::simple(vec![name.to_string()], Span::default()),
-			span: Span::default(),
-		};
-	}
-
-	// Helper to create a literal int expression
-	fn int_lit(value: i64) -> Expr
-	{
-		return Expr::Literal {
-			value: Literal::Int {
-				value: value.to_string(),
-				base: crate::lexer::IntBase::Decimal,
-				ty: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-	}
-
-	// Helper to create a literal bool expression
-	fn bool_lit(value: bool) -> Expr
-	{
-		return Expr::Literal {
-			value: Literal::Bool {
-				value,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-	}
-
-	// Helper to create a simple type
-	fn simple_type(name: &str) -> Type
-	{
-		return Type {
-			core: Box::new(TypeCore::Base {
-				path: Path::simple(vec![name.to_string()], Span::default()),
-				generics: Vec::new(),
-			}),
-			span: Span::default(),
-		};
-	}
-
-	// Helper to create a typed identifier pattern
-	fn typed_ident_pattern(name: &str, type_name: &str) -> Pattern
-	{
-		return Pattern::TypedIdentifier {
-			path: Path::simple(vec![name.to_string()], Span::default()),
-			modifiers: Vec::new(),
-			ty: simple_type(type_name),
-			call_constructor: None,
-			span: Span::default(),
-			mutable: false,
-		};
-	}
-
-	// Helper to create a simple for loop pattern (variant with no args)
-	fn simple_for_pattern(name: &str) -> Pattern
-	{
-		return Pattern::Variant {
-			path: Path::simple(vec![name.to_string()], Span::default()),
-			args: Vec::new(),
-			span: Span::default(),
-		};
-	}
-
-	#[test]
-	fn test_desugar_if_with_else_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::If {
-			cond: bool_lit(true),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: Some(Box::new(Stmt::Block(Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			}))),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::If {
-				else_branch: Some(_), ..
-			} => {}
-			_ => panic!("Expected if with else branch, got {:?}", output),
-		}
-	}
-
-	#[test]
-	fn test_compound_assignment_not_desugared()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::Assignment {
-			target: ident("x"),
-			op: AssignOp::AddAssign,
-			value: int_lit(5),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should keep AddAssign, NOT desugar to Add + Assign
-		match output {
-			Stmt::Assignment {
-				op: AssignOp::AddAssign,
-				..
-			} => {
-				// Success - compound assignment preserved
-			}
-			_ => panic!("Expected AddAssign to be preserved, got {:?}", output),
-		}
-	}
-
-	#[test]
-	fn test_gen_temp_unique()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let temp1 = desugarer.gen_temp("test");
-		let temp2 = desugarer.gen_temp("test");
-		let temp3 = desugarer.gen_temp("test");
-
-		// Should generate unique names
-		assert_ne!(temp1, temp2);
-		assert_ne!(temp2, temp3);
-		assert_ne!(temp1, temp3);
-	}
-
-	#[test]
-	fn test_desugar_if_var()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::IfVar {
-			pattern: typed_ident_pattern("x", "i32"),
-			expr: int_lit(42),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Block(block) => {
-				assert_eq!(block.stmts.len(), 2);
-				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
-				assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Switch { .. })));
-			}
-			_ => panic!("Expected Stmt::Block, got {:?}", output),
-		}
-	}
-
-	#[test]
-	fn test_desugar_while_var_loop()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::WhileVarLoop {
-			label: None,
-			pattern: typed_ident_pattern("x", "i32"),
-			expr: ident("some_value"),
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { body, .. } => {
-				assert_eq!(body.stmts.len(), 2);
-				assert!(matches!(body.stmts[0], Stmt::VariableDecl(_)));
-				assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Switch { .. })));
-			}
-			_ => panic!("Expected desugared loop, got {:?}", output),
-		}
-	}
-
-	fn assert_no_expr_block(stmt: &Stmt)
-	{
-		match stmt {
-			Stmt::Expr(Expr::Block(_)) => {
-				panic!("Found Expr::Block used as statement: {:?}", stmt)
-			}
-
-			Stmt::Block(block) => {
-				for stmt in &block.stmts {
-					assert_no_expr_block(stmt);
-				}
-			}
-
-			Stmt::If {
-				then_block,
-				else_branch,
-				..
-			} => {
-				for stmt in &then_block.stmts {
-					assert_no_expr_block(stmt);
-				}
-				if let Some(else_stmt) = else_branch {
-					assert_no_expr_block(else_stmt);
-				}
-			}
-
-			Stmt::Loop { body, .. } | Stmt::While { body, .. } | Stmt::Unsafe(body) => {
-				for stmt in &body.stmts {
-					assert_no_expr_block(stmt);
-				}
-			}
-
-			_ => {}
-		}
-	}
-
-	#[test]
-	fn test_no_expr_block_in_desugared_if_var()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::IfVar {
-			pattern: Pattern::Wildcard {
-				span: Span::default(),
-				ty: None,
-			},
-			expr: ident("x"),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		assert_no_expr_block(&output);
-	}
-
-	#[test]
-	fn test_desugar_switch_arm_pattern_recursive()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let arm = SwitchArm {
-			pattern: Pattern::Or {
-				patterns: vec![
-					Pattern::Variant {
-						path: Path::simple(vec!["Some".into()], Span::default()),
-						args: vec![Pattern::Wildcard {
-							span: Span::default(),
-							ty: None,
-						}],
-						span: Span::default(),
-					},
-					Pattern::Variant {
-						path: Path::simple(vec!["None".into()], Span::default()),
-						args: Vec::new(),
-						span: Span::default(),
-					},
-				],
-				span: Span::default(),
-			},
-			body: SwitchBody::Block(Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_switch_arm(arm);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output.pattern {
-			Pattern::Or { patterns, .. } => assert_eq!(patterns.len(), 2),
-			_ => panic!("Expected Pattern::Or"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_for_loop_shape()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::For {
-			label: None,
-			pattern: simple_for_pattern("x"),
-			iter: ident("iter"),
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Block(block) => {
-				assert_eq!(block.stmts.len(), 2);
-				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
-				assert!(matches!(block.stmts[1], Stmt::Loop { .. }));
-			}
-			_ => panic!("Expected desugared for-loop block"),
-		}
-	}
-
-	#[test]
-	fn test_nested_if_var_desugar()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::IfVar {
-			pattern: typed_ident_pattern("x", "i32"),
-			expr: ident("value"),
-			then_block: Block {
-				stmts: vec![Stmt::IfVar {
-					pattern: Pattern::Wildcard {
-						span: Span::default(),
-						ty: None,
-					},
-					expr: ident("y"),
-					then_block: Block {
-						stmts: Vec::new(),
-						tail_expr: None,
-						span: Span::default(),
-					},
-					else_branch: None,
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Top-level should be a block with variable decl and switch
-		match output {
-			Stmt::Block(block) => {
-				assert_eq!(block.stmts.len(), 2);
-				if let Stmt::Expr(Expr::Switch { arms, .. }) = &block.stmts[1] {
-					// Then branch also should be desugared
-					match &arms[0].body {
-						SwitchBody::Block(inner_block) => {
-							assert!(matches!(inner_block.stmts[0], Stmt::Block(_)));
-						}
-						SwitchBody::Expr(_) => panic!("Expected inner block in switch arm"),
-					}
-				} else {
-					panic!("Expected Switch expression at top level");
-				}
-			}
-			_ => panic!("Expected Stmt::Block"),
-		}
-	}
-
-	#[test]
-	fn test_for_tuple_pattern()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::For {
-			label: None,
-			pattern: Pattern::Tuple {
-				patterns: vec![simple_for_pattern("x"), simple_for_pattern("y")],
-				span: Span::default(),
-			},
-			iter: ident("iter"),
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Block(block) => {
-				assert_eq!(block.stmts.len(), 2);
-				// Ensure the loop still exists
-				assert!(matches!(block.stmts[1], Stmt::Loop { .. }));
-			}
-			_ => panic!("Expected Stmt::Block"),
-		}
-	}
-
-	#[test]
-	fn test_expr_block_in_call()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Expr::Call {
-			callee: Box::new(ident("foo")),
-			call_type: CallType::Regular,
-			named_generics: Vec::new(),
-			args: vec![Expr::Block(Box::new(Block {
-				stmts: vec![Stmt::VariableDecl(VariableDecl {
-					pattern: typed_ident_pattern("x", "i32"),
-					init: Some(ident("y")),
-					comp_const: false,
-					docs: None,
-					span: Span::default(),
-				})],
-				tail_expr: Some(Box::new(ident("x"))),
-				span: Span::default(),
-			}))],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(input);
-		assert!(desugarer.diagnostics.is_empty());
-
-		if let Expr::Call { args, .. } = output {
-			// Ensure the inner block is desugared into a Block expression
-			assert!(matches!(args[0], Expr::Block(_)));
-		} else {
-			panic!("Expected Expr::Call");
-		}
-	}
-
-	#[test]
-	fn test_desugar_array_literals()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let list_array = ArrayLiteral::List {
-			elements: vec![ident("x"), ident("y")],
-			span: Span::default(),
-		};
-		let repeat_array = ArrayLiteral::Repeat {
-			value: Box::new(ident("z")),
-			count: Box::new(ident("n")),
-			span: Span::default(),
-		};
-
-		let result_list = desugarer.desugar_array_literal(list_array);
-		let desugared_list = result_list;
-
-		let result_repeat = desugarer.desugar_array_literal(repeat_array);
-		let desugared_repeat = result_repeat;
-
-		match desugared_list {
-			ArrayLiteral::List { elements, .. } => assert_eq!(elements.len(), 2),
-			ArrayLiteral::Repeat { .. } => panic!("Expected List variant"),
-		}
-
-		match desugared_repeat {
-			ArrayLiteral::Repeat { .. } => {}
-			ArrayLiteral::List { .. } => panic!("Expected Repeat variant"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_nested_switch_pattern()
-	{
-		let mut desugarer = Desugarer::new();
-		let arm = SwitchArm {
-			pattern: Pattern::Tuple {
-				patterns: vec![
-					Pattern::Variant {
-						path: Path::simple(vec!["Some".into()], Span::default()),
-						args: vec![Pattern::Wildcard {
-							span: Span::default(),
-							ty: None,
-						}],
-						span: Span::default(),
-					},
-					Pattern::Or {
-						patterns: vec![
-							Pattern::Wildcard {
-								span: Span::default(),
-								ty: None,
-							},
-							Pattern::Literal {
-								value: Literal::Int {
-									value: "5".to_string(),
-									base: IntBase::Decimal,
-									ty: None,
-									span: Span::default(),
-								},
-								span: Span::default(),
-							},
-						],
-						span: Span::default(),
-					},
-				],
-				span: Span::default(),
-			},
-			body: SwitchBody::Block(Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_switch_arm(arm);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// The pattern should be expanded to:
-		// (Some(_), _) | (Some(_), 5)
-		match output.pattern {
-			Pattern::Or { patterns, .. } => {
-				assert_eq!(patterns.len(), 2);
-
-				// First pattern: (Some(_), _)
-				match &patterns[0] {
-					Pattern::Tuple {
-						patterns: tuple_patterns,
-						..
-					} => {
-						assert_eq!(tuple_patterns.len(), 2);
-
-						// First element: Some(_)
-						assert!(matches!(
-							&tuple_patterns[0],
-							Pattern::Variant { path, args, .. }
-							if path.segments.len() == 1
-							&& path.segments[0].name == "Some"
-							&& args.len() == 1
-							&& matches!(args[0], Pattern::Wildcard { .. })
-						));
-
-						// Second element: _
-						assert!(matches!(&tuple_patterns[1], Pattern::Wildcard { .. }));
-					}
-					_ => panic!("Expected first pattern to be a Tuple"),
-				}
-
-				// Second pattern: (Some(_), 5)
-				match &patterns[1] {
-					Pattern::Tuple {
-						patterns: tuple_patterns,
-						..
-					} => {
-						assert_eq!(tuple_patterns.len(), 2);
-
-						// First element: Some(_)
-						assert!(matches!(
-							&tuple_patterns[0],
-							Pattern::Variant { path, args, .. }
-							if path.segments.len() == 1
-							&& path.segments[0].name == "Some"
-							&& args.len() == 1
-							&& matches!(args[0], Pattern::Wildcard { .. })
-						));
-
-						// Second element: 5
-						assert!(matches!(
-							&tuple_patterns[1],
-							Pattern::Literal {
-								value: Literal::Int { value, .. },
-								..
-							} if value == "5"
-						));
-					}
-					_ => panic!("Expected second pattern to be a Tuple"),
-				}
-			}
-			_ => panic!(
-				"Expected desugared pattern to be an Or pattern, got: {:?}",
-				output.pattern
-			),
-		}
-	}
-
-	#[test]
-	fn test_desugar_top_level_program()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let program = TopLevelBlock {
-			items: vec![TopLevelDecl::VariableDecl(VariableDecl {
-				pattern: typed_ident_pattern("x", "i32"),
-				init: Some(int_lit(42)),
-				comp_const: true,
-				docs: None,
-				span: Span::default(),
-			})],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_top_level_block(program);
-
-		assert_eq!(output.items.len(), 1);
-	}
-
-	#[test]
-	fn test_desugar_module_recursively()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let ns = ModuleDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["test".into()], Span::default()),
-			kind: ModuleKind::Inline(TopLevelBlock {
-				items: vec![TopLevelDecl::Function(FunctionDecl {
-					signature: FunctionSignature {
-						modifiers: Vec::new(),
-						name: Path::simple(vec!["foo".into()], Span::default()),
-						generics: Vec::new(),
-						params: Vec::new(),
-						return_type: Type::unit(Span::default()),
-						where_clause: Vec::new(),
-						call_type: CallType::Regular,
-						heap_generics: Vec::new(),
-						span: Span::default(),
-					},
-					body: Some(Block {
-						stmts: vec![Stmt::For {
-							label: None,
-							pattern: simple_for_pattern("i"),
-							iter: ident("items"),
-							body: Block {
-								stmts: Vec::new(),
-								tail_expr: None,
-								span: Span::default(),
-							},
-							span: Span::default(),
-						}],
-						tail_expr: None,
-						span: Span::default(),
-					}),
-					span: Span::default(),
-					docs: None,
-				})],
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_module(ns);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Verify the for loop inside was desugared
-		let ModuleKind::Inline(body) = output.kind else {
-			panic!("expected an inline module")
-		};
-		if let TopLevelDecl::Function(func) = &body.items[0]
-			&& let Some(body) = &func.body
-		{
-			// For loop should be desugared to a block
-			assert!(matches!(body.stmts[0], Stmt::Block(_)));
-		}
-	}
-
-	#[test]
-	fn test_desugar_impl_with_functions()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let impl_decl = ImplDecl {
-			modifiers: Vec::new(),
 			generics: Vec::new(),
-			target: ImplTarget {
-				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			},
-			trait_path: None,
-			where_clause: Vec::new(),
-			body: vec![ImplItem::Function(FunctionDecl {
-				signature: FunctionSignature {
-					modifiers: Vec::new(),
-					name: Path::simple(vec!["method".into()], Span::default()),
-					generics: Vec::new(),
-					params: Vec::new(),
-					return_type: Type::unit(Span::default()),
-					where_clause: Vec::new(),
-					call_type: CallType::Regular,
-					heap_generics: Vec::new(),
-					span: Span::default(),
-				},
-				body: Some(Block {
-					stmts: vec![Stmt::WhileVarLoop {
-						label: None,
-						pattern: Pattern::Wildcard {
-							span: Span::default(),
-							ty: None,
-						},
-						expr: ident("x"),
-						body: Block {
-							stmts: Vec::new(),
-							tail_expr: None,
-							span: Span::default(),
-						},
-						span: Span::default(),
-					}],
-					tail_expr: None,
-					span: Span::default(),
-				}),
-				docs: None,
-				span: Span::default(),
-			})],
-			docs: None,
-			span: Span::default(),
-		};
+		}),
+		span: Span::default(),
+	};
+}
 
-		let output = desugarer.desugar_impl(impl_decl);
-		assert!(desugarer.diagnostics.is_empty());
+// Helper to create a typed identifier pattern
+fn typed_ident_pattern(name: &str, type_name: &str) -> Pattern
+{
+	return Pattern::TypedIdentifier {
+		path: Path::simple(vec![name.to_string()], Span::default()),
+		modifiers: Vec::new(),
+		ty: simple_type(type_name),
+		call_constructor: None,
+		span: Span::default(),
+		mutable: false,
+	};
+}
 
-		assert_eq!(output.body.len(), 1);
-	}
+// Helper to create a simple for loop pattern (variant with no args)
+fn simple_for_pattern(name: &str) -> Pattern
+{
+	return Pattern::Variant {
+		path: Path::simple(vec![name.to_string()], Span::default()),
+		args: Vec::new(),
+		span: Span::default(),
+	};
+}
 
-	#[test]
-	fn test_desugar_trait_with_default_impl()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_if_with_else_unchanged()
+{
+	let mut desugarer = Desugarer::new();
 
-		let trait_decl = TraitDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: Vec::new(),
-			super_traits: Vec::new(),
-			items: vec![TraitItem::Function(FunctionDecl {
-				signature: FunctionSignature {
-					modifiers: Vec::new(),
-					name: Path::simple(vec!["method".into()], Span::default()),
-					generics: Vec::new(),
-					params: Vec::new(),
-					return_type: Type::unit(Span::default()),
-					where_clause: Vec::new(),
-					call_type: CallType::Regular,
-					heap_generics: Vec::new(),
-					span: Span::default(),
-				},
-				body: Some(Block {
-					stmts: vec![Stmt::For {
-						label: None,
-						pattern: simple_for_pattern("i"),
-						iter: ident("items"),
-						body: Block {
-							stmts: Vec::new(),
-							tail_expr: None,
-							span: Span::default(),
-						},
-						span: Span::default(),
-					}],
-					tail_expr: None,
-					span: Span::default(),
-				}),
-				docs: None,
-				span: Span::default(),
-			})],
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_trait(trait_decl);
-		assert!(desugarer.diagnostics.is_empty());
-
-		assert_eq!(output.items.len(), 1);
-	}
-
-	#[test]
-	fn test_desugar_return_with_nested_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Return {
-			value: Some(Expr::Binary {
-				op: BinaryOp::Add,
-				lhs: Box::new(Expr::Block(Box::new(Block {
-					stmts: Vec::new(),
-					tail_expr: Some(Box::new(int_lit(1))),
-					span: Span::default(),
-				}))),
-				rhs: Box::new(int_lit(2)),
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Return { value: Some(_), .. } => (),
-			_ => panic!("Expected return statement"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_assignment_with_complex_target()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Assignment {
-			target: Expr::Index {
-				base: Box::new(Expr::Field {
-					base: Box::new(ident("obj")),
-					name: Path::simple(vec!["arr".into()], Span::default()),
-					span: Span::default(),
-				}),
-				index: Box::new(int_lit(0)),
-				span: Span::default(),
-			},
-			op: AssignOp::Assign,
-			value: int_lit(42),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Assignment { .. } => (),
-			_ => panic!("Expected assignment"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_nested_for_in_if()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::If {
-			cond: bool_lit(true),
-			then_block: Block {
-				stmts: vec![Stmt::For {
-					label: None,
-					pattern: simple_for_pattern("x"),
-					iter: ident("items"),
-					body: Block {
-						stmts: Vec::new(),
-						tail_expr: None,
-						span: Span::default(),
-					},
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::If { then_block, .. } => {
-				// For loop inside should be desugared
-				assert!(matches!(then_block.stmts[0], Stmt::Block(_)));
-			}
-			_ => panic!("Expected if statement"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_while_with_complex_condition()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::While {
-			label: None,
-			cond: Expr::Binary {
-				op: BinaryOp::Lt,
-				lhs: Box::new(Expr::Call {
-					callee: Box::new(ident("get_count")),
-					call_type: CallType::Regular,
-					named_generics: Vec::new(),
-					args: Vec::new(),
-					span: Span::default(),
-				}),
-				rhs: Box::new(int_lit(10)),
-				span: Span::default(),
-			},
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// While loops are desugared into loop { if !cond { break } body }
-		match output {
-			Stmt::Loop { body, .. } => {
-				// First statement should be if !cond { break }
-				assert!(matches!(body.stmts[0], Stmt::If { .. }));
-				if let Stmt::If { cond, .. } = &body.stmts[0] {
-					// Condition should be negated (Unary Not)
-					assert!(matches!(cond, Expr::Unary { op: UnaryOp::Not, .. }));
-				}
-			}
-			_ => panic!("Expected loop statement, got {:?}", output),
-		}
-	}
-
-	#[test]
-	fn test_desugar_loop_with_nested_structures()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Loop {
-			label: None,
-			body: Block {
-				stmts: vec![Stmt::IfVar {
-					pattern: Pattern::Wildcard {
-						span: Span::default(),
-						ty: None,
-					},
-					expr: ident("x"),
-					then_block: Block {
-						stmts: vec![Stmt::Break {
-							label: None,
-							value: None,
-							span: Span::default(),
-						}],
-						tail_expr: None,
-						span: Span::default(),
-					},
-					else_branch: None,
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { body, .. } => {
-				assert_eq!(body.stmts.len(), 1);
-				// if var should be desugared inside
-				assert!(matches!(body.stmts[0], Stmt::Block(_)));
-			}
-			_ => panic!("Expected loop statement"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_unsafe_block_with_for()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Unsafe(Block {
-			stmts: vec![Stmt::For {
-				label: None,
-				pattern: simple_for_pattern("i"),
-				iter: ident("range"),
-				body: Block {
-					stmts: Vec::new(),
-					tail_expr: None,
-					span: Span::default(),
-				},
-				span: Span::default(),
-			}],
+	let input = Stmt::If {
+		cond: bool_lit(true),
+		then_block: Block {
+			stmts: Vec::new(),
 			tail_expr: None,
 			span: Span::default(),
-		});
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Unsafe(block) => {
-				// For loop should be desugared inside unsafe block
-				assert!(matches!(block.stmts[0], Stmt::Block(_)));
-			}
-			_ => panic!("Expected unsafe block"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_expr_call_with_if_var_in_args()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Call {
-			callee: Box::new(ident("foo")),
-			call_type: CallType::Regular,
-			named_generics: Vec::new(),
-			args: vec![Expr::Block(Box::new(Block {
-				stmts: Vec::new(),
-				tail_expr: Some(Box::new(int_lit(1))),
-				span: Span::default(),
-			}))],
+		},
+		else_branch: Some(Box::new(Stmt::Block(Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		}))),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::Call { args, .. } => {
-				assert_eq!(args.len(), 1);
-				assert!(matches!(args[0], Expr::Block(_)));
-			}
-			_ => panic!("Expected call expression"),
-		}
+	match output {
+		Stmt::If {
+			else_branch: Some(_), ..
+		} => {}
+		_ => panic!("Expected if with else branch, got {:?}", output),
 	}
+}
 
-	#[test]
-	fn test_desugar_struct_init_with_block_fields()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_compound_assignment_not_desugared()
+{
+	let mut desugarer = Desugarer::new();
 
-		let expr = Expr::StructInit {
-			path: Path::simple(vec!["Point".into()], Span::default()),
-			fields: vec![
-				(
-					"x".into(),
-					Expr::Block(Box::new(Block {
-						stmts: Vec::new(),
-						tail_expr: Some(Box::new(int_lit(1))),
-						span: Span::default(),
-					})),
-				),
-				("y".into(), int_lit(2)),
-			],
-			base: None,
+	let input = Stmt::Assignment {
+		target: ident("x"),
+		op: AssignOp::AddAssign,
+		value: int_lit(5),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should keep AddAssign, NOT desugar to Add + Assign
+	match output {
+		Stmt::Assignment {
+			op: AssignOp::AddAssign,
+			..
+		} => {
+			// Success - compound assignment preserved
+		}
+		_ => panic!("Expected AddAssign to be preserved, got {:?}", output),
+	}
+}
+
+#[test]
+fn test_gen_temp_unique()
+{
+	let mut desugarer = Desugarer::new();
+
+	let temp1 = desugarer.gen_temp("test");
+	let temp2 = desugarer.gen_temp("test");
+	let temp3 = desugarer.gen_temp("test");
+
+	// Should generate unique names
+	assert_ne!(temp1, temp2);
+	assert_ne!(temp2, temp3);
+	assert_ne!(temp1, temp3);
+}
+
+#[test]
+fn test_desugar_if_var()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Stmt::IfVar {
+		pattern: typed_ident_pattern("x", "i32"),
+		expr: int_lit(42),
+		then_block: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-			has_rest: false,
-		};
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::StructInit { fields, .. } => {
-				assert_eq!(fields.len(), 2);
-			}
-			_ => panic!("Expected struct init"),
+	match output {
+		Stmt::Block(block) => {
+			assert_eq!(block.stmts.len(), 2);
+			assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
+			assert!(matches!(block.stmts[1], Stmt::Expr(Expr::Switch { .. })));
 		}
+		_ => panic!("Expected Stmt::Block, got {:?}", output),
 	}
+}
 
-	#[test]
-	fn test_desugar_switch_with_nested_blocks()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_while_var_loop()
+{
+	let mut desugarer = Desugarer::new();
 
-		let expr = Expr::Switch {
-			expr: Box::new(ident("x")),
-			arms: vec![SwitchArm {
-				pattern: Pattern::Wildcard {
-					span: Span::default(),
-					ty: None,
-				},
-				body: SwitchBody::Block(Block {
-					stmts: vec![Stmt::For {
-						label: None,
-						pattern: simple_for_pattern("i"),
-						iter: ident("items"),
-						body: Block {
-							stmts: Vec::new(),
-							tail_expr: None,
-							span: Span::default(),
-						},
-						span: Span::default(),
-					}],
-					tail_expr: None,
-					span: Span::default(),
-				}),
-				span: Span::default(),
-			}],
+	let input = Stmt::WhileVarLoop {
+		label: None,
+		pattern: typed_ident_pattern("x", "i32"),
+		expr: ident("some_value"),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		},
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::Switch { arms, .. } => {
-				match &arms[0].body {
-					SwitchBody::Block(block) => {
-						// For loop should be desugared
-						assert!(matches!(block.stmts[0], Stmt::Block(_)));
-					}
-					SwitchBody::Expr(_) => panic!("Expected block body"),
-				}
-			}
-			_ => panic!("Expected switch expression"),
+	match output {
+		Stmt::Loop { body, .. } => {
+			assert_eq!(body.stmts.len(), 2);
+			assert!(matches!(body.stmts[0], Stmt::VariableDecl(_)));
+			assert!(matches!(body.stmts[1], Stmt::Expr(Expr::Switch { .. })));
 		}
+		_ => panic!("Expected desugared loop, got {:?}", output),
 	}
+}
 
-	#[test]
-	fn test_desugar_array_literal_list()
-	{
-		let mut desugarer = Desugarer::new();
+fn assert_no_expr_block(stmt: &Stmt)
+{
+	match stmt {
+		Stmt::Expr(Expr::Block(_)) => {
+			panic!("Found Expr::Block used as statement: {:?}", stmt)
+		}
 
-		let expr = Expr::Array(ArrayLiteral::List {
-			elements: vec![
-				Expr::Binary {
-					op: BinaryOp::Add,
-					lhs: Box::new(int_lit(1)),
-					rhs: Box::new(int_lit(2)),
-					span: Span::default(),
-				},
-				int_lit(3),
-			],
+		Stmt::Block(block) => {
+			for stmt in &block.stmts {
+				assert_no_expr_block(stmt);
+			}
+		}
+
+		Stmt::If {
+			then_block,
+			else_branch,
+			..
+		} => {
+			for stmt in &then_block.stmts {
+				assert_no_expr_block(stmt);
+			}
+			if let Some(else_stmt) = else_branch {
+				assert_no_expr_block(else_stmt);
+			}
+		}
+
+		Stmt::Loop { body, .. } | Stmt::While { body, .. } | Stmt::Unsafe(body) => {
+			for stmt in &body.stmts {
+				assert_no_expr_block(stmt);
+			}
+		}
+
+		_ => {}
+	}
+}
+
+#[test]
+fn test_no_expr_block_in_desugared_if_var()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::IfVar {
+		pattern: Pattern::Wildcard {
 			span: Span::default(),
-		});
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Array(ArrayLiteral::List { elements, .. }) => {
-				assert_eq!(elements.len(), 2);
-			}
-			_ => panic!("Expected array literal"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_array_repeat_complex()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Array(ArrayLiteral::Repeat {
-			value: Box::new(Expr::Binary {
-				op: BinaryOp::Mul,
-				lhs: Box::new(ident("x")),
-				rhs: Box::new(int_lit(2)),
-				span: Span::default(),
-			}),
-			count: Box::new(int_lit(10)),
+			ty: None,
+		},
+		expr: ident("x"),
+		then_block: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		});
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::Array(ArrayLiteral::Repeat { value, .. }) => {
-				assert!(matches!(*value, Expr::Binary { .. }));
-			}
-			_ => panic!("Expected array repeat"),
-		}
-	}
+	assert_no_expr_block(&output);
+}
 
-	#[test]
-	fn test_desugar_field_access_chain()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_switch_arm_pattern_recursive()
+{
+	let mut desugarer = Desugarer::new();
 
-		let expr = Expr::Field {
-			base: Box::new(Expr::Field {
-				base: Box::new(ident("obj")),
-				name: Path::simple(vec!["inner".into()], Span::default()),
-				span: Span::default(),
-			}),
-			name: Path::simple(vec!["field".into()], Span::default()),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Field { base, .. } => {
-				assert!(matches!(*base, Expr::Field { .. }));
-			}
-			_ => panic!("Expected field access"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_index_with_complex_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Index {
-			base: Box::new(ident("arr")),
-			index: Box::new(Expr::Binary {
-				op: BinaryOp::Add,
-				lhs: Box::new(ident("i")),
-				rhs: Box::new(int_lit(1)),
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Index { index, .. } => {
-				assert!(matches!(*index, Expr::Binary { .. }));
-			}
-			_ => panic!("Expected index expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_tuple_with_blocks()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Tuple {
-			elements: vec![
-				int_lit(1),
-				Expr::Block(Box::new(Block {
-					stmts: Vec::new(),
-					tail_expr: Some(Box::new(int_lit(2))),
-					span: Span::default(),
-				})),
-				int_lit(3),
-			],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Tuple { elements, .. } => {
-				assert_eq!(elements.len(), 3);
-				assert!(matches!(elements[1], Expr::Block(_)));
-			}
-			_ => panic!("Expected tuple"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_cast_with_nested_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Cast {
-			ty: Box::new(simple_type("i64")),
-			expr: Box::new(Expr::Binary {
-				op: BinaryOp::Add,
-				lhs: Box::new(ident("a")),
-				rhs: Box::new(ident("b")),
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Cast { expr, .. } => {
-				assert!(matches!(*expr, Expr::Binary { .. }));
-			}
-			_ => panic!("Expected cast"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_unary_with_nested_binary()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Unary {
-			op: UnaryOp::Neg,
-			expr: Box::new(Expr::Binary {
-				op: BinaryOp::Mul,
-				lhs: Box::new(ident("a")),
-				rhs: Box::new(ident("b")),
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Unary { expr, .. } => {
-				assert!(matches!(*expr, Expr::Binary { .. }));
-			}
-			_ => panic!("Expected unary expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_pattern_variant_with_nested_patterns()
-	{
-		let pattern = Pattern::Variant {
-			path: Path::simple(vec!["Some".into()], Span::default()),
-			args: vec![Pattern::Tuple {
-				patterns: vec![
-					Pattern::Wildcard {
-						span: Span::default(),
-						ty: None,
-					},
-					typed_ident_pattern("x", "i32"),
-				],
-				span: Span::default(),
-			}],
-			span: Span::default(),
-		};
-
-		let output = Desugarer::desugar_pattern(pattern);
-
-		match output {
-			Pattern::Variant { args, .. } => {
-				assert_eq!(args.len(), 1);
-				assert!(matches!(args[0], Pattern::Tuple { .. }));
-			}
-			_ => panic!("Expected variant pattern"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_pattern_or_with_variants()
-	{
-		let pattern = Pattern::Or {
+	let arm = SwitchArm {
+		pattern: Pattern::Or {
 			patterns: vec![
 				Pattern::Variant {
 					path: Path::simple(vec!["Some".into()], Span::default()),
@@ -1371,386 +293,578 @@ mod tests
 				},
 			],
 			span: Span::default(),
-		};
-
-		let output = Desugarer::desugar_pattern(pattern);
-
-		match output {
-			Pattern::Or { patterns, .. } => {
-				assert_eq!(patterns.len(), 2);
-			}
-			_ => panic!("Expected or pattern"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_multiple_sequential_for_loops()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let block = Block {
-			stmts: vec![
-				Stmt::For {
-					label: None,
-					pattern: simple_for_pattern("i"),
-					iter: ident("range1"),
-					body: Block {
-						stmts: Vec::new(),
-						tail_expr: None,
-						span: Span::default(),
-					},
-					span: Span::default(),
-				},
-				Stmt::For {
-					label: None,
-					pattern: simple_for_pattern("j"),
-					iter: ident("range2"),
-					body: Block {
-						stmts: Vec::new(),
-						tail_expr: None,
-						span: Span::default(),
-					},
-					span: Span::default(),
-				},
-			],
+		},
+		body: SwitchBody::Block(Block {
+			stmts: Vec::new(),
 			tail_expr: None,
 			span: Span::default(),
-		};
+		}),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_block(block);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_switch_arm(arm);
+	assert!(desugarer.diagnostics.is_empty());
 
-		assert_eq!(output.stmts.len(), 2);
-		assert!(matches!(output.stmts[0], Stmt::Block(_)));
-		assert!(matches!(output.stmts[1], Stmt::Block(_)));
+	match output.pattern {
+		Pattern::Or { patterns, .. } => assert_eq!(patterns.len(), 2),
+		_ => panic!("Expected Pattern::Or"),
+	}
+}
+
+#[test]
+fn test_desugar_for_loop_shape()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Stmt::For {
+		label: None,
+		pattern: simple_for_pattern("x"),
+		iter: ident("iter"),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Block(block) => {
+			assert_eq!(block.stmts.len(), 2);
+			assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
+			assert!(matches!(block.stmts[1], Stmt::Loop { .. }));
+		}
+		_ => panic!("Expected desugared for-loop block"),
+	}
+}
+
+#[test]
+fn test_nested_if_var_desugar()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Stmt::IfVar {
+		pattern: typed_ident_pattern("x", "i32"),
+		expr: ident("value"),
+		then_block: Block {
+			stmts: vec![Stmt::IfVar {
+				pattern: Pattern::Wildcard {
+					span: Span::default(),
+					ty: None,
+				},
+				expr: ident("y"),
+				then_block: Block {
+					stmts: Vec::new(),
+					tail_expr: None,
+					span: Span::default(),
+				},
+				else_branch: None,
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Top-level should be a block with variable decl and switch
+	match output {
+		Stmt::Block(block) => {
+			assert_eq!(block.stmts.len(), 2);
+			if let Stmt::Expr(Expr::Switch { arms, .. }) = &block.stmts[1] {
+				// Then branch also should be desugared
+				match &arms[0].body {
+					SwitchBody::Block(inner_block) => {
+						assert!(matches!(inner_block.stmts[0], Stmt::Block(_)));
+					}
+					SwitchBody::Expr(_) => panic!("Expected inner block in switch arm"),
+				}
+			} else {
+				panic!("Expected Switch expression at top level");
+			}
+		}
+		_ => panic!("Expected Stmt::Block"),
+	}
+}
+
+#[test]
+fn test_for_tuple_pattern()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Stmt::For {
+		label: None,
+		pattern: Pattern::Tuple {
+			patterns: vec![simple_for_pattern("x"), simple_for_pattern("y")],
+			span: Span::default(),
+		},
+		iter: ident("iter"),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Block(block) => {
+			assert_eq!(block.stmts.len(), 2);
+			// Ensure the loop still exists
+			assert!(matches!(block.stmts[1], Stmt::Loop { .. }));
+		}
+		_ => panic!("Expected Stmt::Block"),
+	}
+}
+
+#[test]
+fn test_expr_block_in_call()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Expr::Call {
+		callee: Box::new(ident("foo")),
+		call_type: CallType::Regular,
+		named_generics: Vec::new(),
+		args: vec![Expr::Block(Box::new(Block {
+			stmts: vec![Stmt::VariableDecl(VariableDecl {
+				pattern: typed_ident_pattern("x", "i32"),
+				init: Some(ident("y")),
+				comp_const: false,
+				docs: None,
+				span: Span::default(),
+			})],
+			tail_expr: Some(Box::new(ident("x"))),
+			span: Span::default(),
+		}))],
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	if let Expr::Call { args, .. } = output {
+		// Ensure the inner block is desugared into a Block expression
+		assert!(matches!(args[0], Expr::Block(_)));
+	} else {
+		panic!("Expected Expr::Call");
+	}
+}
+
+#[test]
+fn test_desugar_array_literals()
+{
+	let mut desugarer = Desugarer::new();
+
+	let list_array = ArrayLiteral::List {
+		elements: vec![ident("x"), ident("y")],
+		span: Span::default(),
+	};
+	let repeat_array = ArrayLiteral::Repeat {
+		value: Box::new(ident("z")),
+		count: Box::new(ident("n")),
+		span: Span::default(),
+	};
+
+	let result_list = desugarer.desugar_array_literal(list_array);
+	let desugared_list = result_list;
+
+	let result_repeat = desugarer.desugar_array_literal(repeat_array);
+	let desugared_repeat = result_repeat;
+
+	match desugared_list {
+		ArrayLiteral::List { elements, .. } => assert_eq!(elements.len(), 2),
+		ArrayLiteral::Repeat { .. } => panic!("Expected List variant"),
 	}
 
-	#[test]
-	fn test_desugar_variable_decl_with_pattern()
-	{
-		let mut desugarer = Desugarer::new();
+	match desugared_repeat {
+		ArrayLiteral::Repeat { .. } => {}
+		ArrayLiteral::List { .. } => panic!("Expected Repeat variant"),
+	}
+}
 
-		let var = VariableDecl {
-			pattern: Pattern::Tuple {
-				patterns: vec![
-					typed_ident_pattern("x", "i32"),
-					Pattern::Wildcard {
+#[test]
+fn test_desugar_nested_switch_pattern()
+{
+	let mut desugarer = Desugarer::new();
+	let arm = SwitchArm {
+		pattern: Pattern::Tuple {
+			patterns: vec![
+				Pattern::Variant {
+					path: Path::simple(vec!["Some".into()], Span::default()),
+					args: vec![Pattern::Wildcard {
 						span: Span::default(),
 						ty: None,
-					},
-				],
-				span: Span::default(),
-			},
-			init: Some(int_lit(42)),
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output.pattern {
-			Pattern::Tuple { patterns, .. } => {
-				assert_eq!(patterns.len(), 2);
-			}
-			_ => panic!("Expected tuple pattern"),
-		}
-	}
-
-	#[test]
-	fn test_gen_temp_with_different_names()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let temp1 = desugarer.gen_temp("loop");
-		let temp2 = desugarer.gen_temp("ifvar");
-		let temp3 = desugarer.gen_temp("whilevar");
-
-		assert!(temp1.starts_with("#__tmp_"));
-		assert!(temp2.starts_with("#__tmp_"));
-		assert!(temp3.starts_with("#__tmp_"));
-		assert_ne!(temp1, temp2);
-		assert_ne!(temp2, temp3);
-	}
-
-	#[test]
-	fn test_desugar_if_var_with_complex_pattern()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::IfVar {
-			pattern: Pattern::Struct {
-				path: Path::simple(vec!["Point".into()], Span::default()),
-				fields: vec![("x".into(), typed_ident_pattern("x_val", "i32"))],
-				has_rest: false,
-				span: Span::default(),
-			},
-			expr: ident("point"),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Block(block) => {
-				assert_eq!(block.stmts.len(), 2);
-			}
-			_ => panic!("Expected block"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_while_var_with_nested_pattern()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::WhileVarLoop {
-			label: None,
-			pattern: Pattern::Variant {
-				path: Path::simple(vec!["Ok".into()], Span::default()),
-				args: vec![Pattern::Tuple {
+					}],
+					span: Span::default(),
+				},
+				Pattern::Or {
 					patterns: vec![
 						Pattern::Wildcard {
 							span: Span::default(),
 							ty: None,
 						},
-						typed_ident_pattern("val", "i32"),
+						Pattern::Literal {
+							value: Literal::Int {
+								value: "5".to_string(),
+								base: IntBase::Decimal,
+								ty: None,
+								span: Span::default(),
+							},
+							span: Span::default(),
+						},
 					],
 					span: Span::default(),
-				}],
-				span: Span::default(),
-			},
-			expr: ident("result"),
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
+				},
+			],
 			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { body, .. } => {
-				assert_eq!(body.stmts.len(), 2);
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_labeled_for_loop()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let input = Stmt::For {
-			label: Some("outer".into()),
-			pattern: simple_for_pattern("x"),
-			iter: ident("iter"),
-			body: Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			},
+		},
+		body: SwitchBody::Block(Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		}),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_switch_arm(arm);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Stmt::Block(block) => {
-				// Second statement should be the loop with the label
-				if let Stmt::Loop { label, .. } = &block.stmts[1] {
-					assert_eq!(label, &Some("outer".into()));
-				} else {
-					panic!("Expected labeled loop");
+	// The pattern should be expanded to:
+	// (Some(_), _) | (Some(_), 5)
+	match output.pattern {
+		Pattern::Or { patterns, .. } => {
+			assert_eq!(patterns.len(), 2);
+
+			// First pattern: (Some(_), _)
+			match &patterns[0] {
+				Pattern::Tuple {
+					patterns: tuple_patterns,
+					..
+				} => {
+					assert_eq!(tuple_patterns.len(), 2);
+
+					// First element: Some(_)
+					assert!(matches!(
+						&tuple_patterns[0],
+						Pattern::Variant { path, args, .. }
+						if path.segments.len() == 1
+						&& path.segments[0].name == "Some"
+						&& args.len() == 1
+						&& matches!(args[0], Pattern::Wildcard { .. })
+					));
+
+					// Second element: _
+					assert!(matches!(&tuple_patterns[1], Pattern::Wildcard { .. }));
 				}
+				_ => panic!("Expected first pattern to be a Tuple"),
 			}
-			_ => panic!("Expected block"),
+
+			// Second pattern: (Some(_), 5)
+			match &patterns[1] {
+				Pattern::Tuple {
+					patterns: tuple_patterns,
+					..
+				} => {
+					assert_eq!(tuple_patterns.len(), 2);
+
+					// First element: Some(_)
+					assert!(matches!(
+						&tuple_patterns[0],
+						Pattern::Variant { path, args, .. }
+						if path.segments.len() == 1
+						&& path.segments[0].name == "Some"
+						&& args.len() == 1
+						&& matches!(args[0], Pattern::Wildcard { .. })
+					));
+
+					// Second element: 5
+					assert!(matches!(
+						&tuple_patterns[1],
+						Pattern::Literal {
+							value: Literal::Int { value, .. },
+							..
+						} if value == "5"
+					));
+				}
+				_ => panic!("Expected second pattern to be a Tuple"),
+			}
 		}
+		_ => panic!(
+			"Expected desugared pattern to be an Or pattern, got: {:?}",
+			output.pattern
+		),
 	}
+}
 
-	#[test]
-	fn test_desugar_break_with_value()
+#[test]
+fn test_desugar_top_level_program()
+{
+	let mut desugarer = Desugarer::new();
+
+	let program = TopLevelBlock {
+		items: vec![TopLevelDecl::VariableDecl(VariableDecl {
+			pattern: typed_ident_pattern("x", "i32"),
+			init: Some(int_lit(42)),
+			comp_const: true,
+			docs: None,
+			span: Span::default(),
+		})],
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_top_level_block(program);
+
+	assert_eq!(output.items.len(), 1);
+}
+
+#[test]
+fn test_desugar_module_recursively()
+{
+	let mut desugarer = Desugarer::new();
+
+	let ns = ModuleDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["test".into()], Span::default()),
+		kind: ModuleKind::Inline(TopLevelBlock {
+			items: vec![TopLevelDecl::Function(FunctionDecl {
+				signature: FunctionSignature {
+					modifiers: Vec::new(),
+					name: Path::simple(vec!["foo".into()], Span::default()),
+					generics: Vec::new(),
+					params: Vec::new(),
+					return_type: Type::unit(Span::default()),
+					where_clause: Vec::new(),
+					call_type: CallType::Regular,
+					heap_generics: Vec::new(),
+					span: Span::default(),
+				},
+				body: Some(Block {
+					stmts: vec![Stmt::For {
+						label: None,
+						pattern: simple_for_pattern("i"),
+						iter: ident("items"),
+						body: Block {
+							stmts: Vec::new(),
+							tail_expr: None,
+							span: Span::default(),
+						},
+						span: Span::default(),
+					}],
+					tail_expr: None,
+					span: Span::default(),
+				}),
+				span: Span::default(),
+				docs: None,
+			})],
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_module(ns);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Verify the for loop inside was desugared
+	let ModuleKind::Inline(body) = output.kind else {
+		panic!("expected an inline module")
+	};
+	if let TopLevelDecl::Function(func) = &body.items[0]
+		&& let Some(body) = &func.body
 	{
-		let mut desugarer = Desugarer::new();
+		// For loop should be desugared to a block
+		assert!(matches!(body.stmts[0], Stmt::Block(_)));
+	}
+}
 
-		let stmt = Stmt::Loop {
-			label: None,
-			body: Block {
-				stmts: vec![Stmt::Break {
+#[test]
+fn test_desugar_impl_with_functions()
+{
+	let mut desugarer = Desugarer::new();
+
+	let impl_decl = ImplDecl {
+		modifiers: Vec::new(),
+		generics: Vec::new(),
+		target: ImplTarget {
+			path: Path::simple(vec!["MyType".into()], Span::default()),
+			generics: Vec::new(),
+			span: Span::default(),
+		},
+		trait_path: None,
+		where_clause: Vec::new(),
+		body: vec![ImplItem::Function(FunctionDecl {
+			signature: FunctionSignature {
+				modifiers: Vec::new(),
+				name: Path::simple(vec!["method".into()], Span::default()),
+				generics: Vec::new(),
+				params: Vec::new(),
+				return_type: Type::unit(Span::default()),
+				where_clause: Vec::new(),
+				call_type: CallType::Regular,
+				heap_generics: Vec::new(),
+				span: Span::default(),
+			},
+			body: Some(Block {
+				stmts: vec![Stmt::WhileVarLoop {
 					label: None,
-					value: Some(int_lit(42)),
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { body, .. } => {
-				if let Stmt::Break { value, .. } = &body.stmts[0] {
-					assert!(value.is_some());
-				} else {
-					panic!("Expected break statement");
-				}
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_continue_with_label()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Loop {
-			label: Some("outer".into()),
-			body: Block {
-				stmts: vec![Stmt::Continue {
-					label: Some("outer".into()),
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { body, .. } => {
-				if let Stmt::Continue { label, .. } = &body.stmts[0] {
-					assert_eq!(label, &Some("outer".into()));
-				} else {
-					panic!("Expected continue statement");
-				}
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_if_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::If {
-			cond: Box::new(bool_lit(true)),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: Some(Box::new(int_lit(1))),
-				span: Span::default(),
-			},
-			else_branch: Some(Box::new(Expr::Block(Box::new(Block {
-				stmts: Vec::new(),
-				tail_expr: Some(Box::new(int_lit(2))),
-				span: Span::default(),
-			})))),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::If { .. } => (),
-			_ => panic!("Expected if expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_if_var_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::IfVar {
-			pattern: Pattern::Variant {
-				path: Path::simple(vec!["Some".into()], Span::default()),
-				args: vec![typed_ident_pattern("x", "i32")],
-				span: Span::default(),
-			},
-			expr: Box::new(ident("opt")),
-			then_block: Block {
-				stmts: Vec::new(),
-				tail_expr: Some(Box::new(ident("x"))),
-				span: Span::default(),
-			},
-			else_branch: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Block(block) => {
-				assert_eq!(block.stmts.len(), 1);
-				assert!(block.tail_expr.is_some());
-			}
-			_ => panic!("Expected block expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_loop_expr()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Loop {
-			label: Some("outer".into()),
-			body: Box::new(Block {
-				stmts: vec![Stmt::Break {
-					label: Some("outer".into()),
-					value: Some(int_lit(42)),
+					pattern: Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
+					expr: ident("x"),
+					body: Block {
+						stmts: Vec::new(),
+						tail_expr: None,
+						span: Span::default(),
+					},
 					span: Span::default(),
 				}],
 				tail_expr: None,
 				span: Span::default(),
 			}),
+			docs: None,
 			span: Span::default(),
-		};
+		})],
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_impl(impl_decl);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::Loop { label, body, .. } => {
-				assert_eq!(label, Some("outer".into()));
-				assert_eq!(body.stmts.len(), 1);
-			}
-			_ => panic!("Expected loop expression"),
-		}
+	assert_eq!(output.body.len(), 1);
+}
+
+#[test]
+fn test_desugar_trait_with_default_impl()
+{
+	let mut desugarer = Desugarer::new();
+
+	let trait_decl = TraitDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyTrait".into()], Span::default()),
+		generics: Vec::new(),
+		super_traits: Vec::new(),
+		items: vec![TraitItem::Function(FunctionDecl {
+			signature: FunctionSignature {
+				modifiers: Vec::new(),
+				name: Path::simple(vec!["method".into()], Span::default()),
+				generics: Vec::new(),
+				params: Vec::new(),
+				return_type: Type::unit(Span::default()),
+				where_clause: Vec::new(),
+				call_type: CallType::Regular,
+				heap_generics: Vec::new(),
+				span: Span::default(),
+			},
+			body: Some(Block {
+				stmts: vec![Stmt::For {
+					label: None,
+					pattern: simple_for_pattern("i"),
+					iter: ident("items"),
+					body: Block {
+						stmts: Vec::new(),
+						tail_expr: None,
+						span: Span::default(),
+					},
+					span: Span::default(),
+				}],
+				tail_expr: None,
+				span: Span::default(),
+			}),
+			docs: None,
+			span: Span::default(),
+		})],
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_trait(trait_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	assert_eq!(output.items.len(), 1);
+}
+
+#[test]
+fn test_desugar_return_with_nested_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Return {
+		value: Some(Expr::Binary {
+			op: BinaryOp::Add,
+			lhs: Box::new(Expr::Block(Box::new(Block {
+				stmts: Vec::new(),
+				tail_expr: Some(Box::new(int_lit(1))),
+				span: Span::default(),
+			}))),
+			rhs: Box::new(int_lit(2)),
+			span: Span::default(),
+		}),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Return { value: Some(_), .. } => (),
+		_ => panic!("Expected return statement"),
 	}
+}
 
-	#[test]
-	fn test_desugar_unsafe_block_expr()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_assignment_with_complex_target()
+{
+	let mut desugarer = Desugarer::new();
 
-		let expr = Expr::UnsafeBlock(Box::new(Block {
+	let stmt = Stmt::Assignment {
+		target: Expr::Index {
+			base: Box::new(Expr::Field {
+				base: Box::new(ident("obj")),
+				name: Path::simple(vec!["arr".into()], Span::default()),
+				span: Span::default(),
+			}),
+			index: Box::new(int_lit(0)),
+			span: Span::default(),
+		},
+		op: AssignOp::Assign,
+		value: int_lit(42),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Assignment { .. } => (),
+		_ => panic!("Expected assignment"),
+	}
+}
+
+#[test]
+fn test_desugar_nested_for_in_if()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::If {
+		cond: bool_lit(true),
+		then_block: Block {
 			stmts: vec![Stmt::For {
 				label: None,
-				pattern: simple_for_pattern("i"),
-				iter: ident("range"),
+				pattern: simple_for_pattern("x"),
+				iter: ident("items"),
 				body: Block {
 					stmts: Vec::new(),
 					tail_expr: None,
@@ -1760,283 +874,225 @@ mod tests
 			}],
 			tail_expr: None,
 			span: Span::default(),
-		}));
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Expr::UnsafeBlock(block) => {
-				// For loop should be desugared
-				assert!(matches!(block.stmts[0], Stmt::Block(_)));
-			}
-			_ => panic!("Expected unsafe block expression"),
+	match output {
+		Stmt::If { then_block, .. } => {
+			// For loop inside should be desugared
+			assert!(matches!(then_block.stmts[0], Stmt::Block(_)));
 		}
+		_ => panic!("Expected if statement"),
 	}
+}
 
-	#[test]
-	fn test_unlabeled_while_gets_label()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_while_with_complex_condition()
+{
+	let mut desugarer = Desugarer::new();
 
-		let stmt = Stmt::While {
-			label: None,
-			cond: bool_lit(true),
-			body: Block {
-				stmts: vec![Stmt::Continue {
-					label: None,
-					span: Span::default(),
-				}],
-				tail_expr: None,
+	let stmt = Stmt::While {
+		label: None,
+		cond: Expr::Binary {
+			op: BinaryOp::Lt,
+			lhs: Box::new(Expr::Call {
+				callee: Box::new(ident("get_count")),
+				call_type: CallType::Regular,
+				named_generics: Vec::new(),
+				args: Vec::new(),
 				span: Span::default(),
-			},
+			}),
+			rhs: Box::new(int_lit(10)),
 			span: Span::default(),
-		};
+		},
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// While loops are desugared into loop statements
-		match output {
-			Stmt::Loop { label, body, .. } => {
-				// Loop should have a generated label
-				assert!(label.is_some());
-				let loop_label = label.unwrap();
-				assert!(loop_label.starts_with("#__loop_"));
-
-				// Continue should have the same label
-				// It's in the body statements after the if-break
-				if let Stmt::Continue { label, .. } = &body.stmts[1] {
-					assert_eq!(label, &Some(loop_label));
-				} else {
-					panic!("Expected continue statement");
-				}
+	// While loops are desugared into loop { if !cond { break } body }
+	match output {
+		Stmt::Loop { body, .. } => {
+			// First statement should be if !cond { break }
+			assert!(matches!(body.stmts[0], Stmt::If { .. }));
+			if let Stmt::If { cond, .. } = &body.stmts[0] {
+				// Condition should be negated (Unary Not)
+				assert!(matches!(cond, Expr::Unary { op: UnaryOp::Not, .. }));
 			}
-			_ => panic!("Expected loop, got {:?}", output),
 		}
+		_ => panic!("Expected loop statement, got {:?}", output),
 	}
+}
 
-	#[test]
-	fn test_labeled_loop_preserves_label()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_loop_with_nested_structures()
+{
+	let mut desugarer = Desugarer::new();
 
-		let stmt = Stmt::Loop {
-			label: Some("my_loop".into()),
-			body: Block {
-				stmts: vec![Stmt::Break {
-					label: None,
-					value: None,
+	let stmt = Stmt::Loop {
+		label: None,
+		body: Block {
+			stmts: vec![Stmt::IfVar {
+				pattern: Pattern::Wildcard {
 					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { label, body, .. } => {
-				// Should preserve the user-provided label
-				assert_eq!(label, Some("my_loop".into()));
-
-				// Break should get the same label
-				if let Stmt::Break { label, .. } = &body.stmts[0] {
-					assert_eq!(label, &Some("my_loop".into()));
-				}
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
-	fn test_break_with_explicit_label_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Loop {
-			label: Some("outer".into()),
-			body: Block {
-				stmts: vec![Stmt::Loop {
-					label: None,
-					body: Block {
-						stmts: vec![Stmt::Break {
-							label: Some("outer".into()),
-							value: None,
-							span: Span::default(),
-						}],
-						tail_expr: None,
+					ty: None,
+				},
+				expr: ident("x"),
+				then_block: Block {
+					stmts: vec![Stmt::Break {
+						label: None,
+						value: None,
 						span: Span::default(),
-					},
+					}],
+					tail_expr: None,
 					span: Span::default(),
-				}],
-				tail_expr: None,
+				},
+				else_branch: None,
 				span: Span::default(),
-			},
+			}],
+			tail_expr: None,
 			span: Span::default(),
-		};
+		},
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Stmt::Loop {
-				label: outer_label,
-				body: outer_body,
-				..
-			} => {
-				assert_eq!(outer_label, Some("outer".into()));
-
-				if let Stmt::Loop { body: inner_body, .. } = &outer_body.stmts[0] {
-					// Break should still reference the outer loop
-					if let Stmt::Break { label, .. } = &inner_body.stmts[0] {
-						assert_eq!(label, &Some("outer".into()));
-					}
-				}
-			}
-			_ => panic!("Expected outer loop"),
+	match output {
+		Stmt::Loop { body, .. } => {
+			assert_eq!(body.stmts.len(), 1);
+			// if var should be desugared inside
+			assert!(matches!(body.stmts[0], Stmt::Block(_)));
 		}
+		_ => panic!("Expected loop statement"),
 	}
+}
 
-	#[test]
-	fn test_for_loop_gets_label()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_unsafe_block_with_for()
+{
+	let mut desugarer = Desugarer::new();
 
-		let input = Stmt::For {
+	let stmt = Stmt::Unsafe(Block {
+		stmts: vec![Stmt::For {
 			label: None,
-			pattern: simple_for_pattern("x"),
-			iter: ident("iter"),
+			pattern: simple_for_pattern("i"),
+			iter: ident("range"),
 			body: Block {
-				stmts: vec![Stmt::Break {
-					label: None,
-					value: None,
-					span: Span::default(),
-				}],
+				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
 			span: Span::default(),
-		};
+		}],
+		tail_expr: None,
+		span: Span::default(),
+	});
 
-		let output = desugarer.desugar_stmt(input);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Stmt::Block(block) => {
-				// Second statement should be the desugared loop
-				if let Stmt::Loop { label, .. } = &block.stmts[1] {
-					assert!(label.is_some());
-					let loop_label = label.as_ref().unwrap();
-					assert!(loop_label.starts_with("#__loop_"));
-				} else {
-					panic!("Expected loop");
-				}
-			}
-			_ => panic!("Expected block"),
+	match output {
+		Stmt::Unsafe(block) => {
+			// For loop should be desugared inside unsafe block
+			assert!(matches!(block.stmts[0], Stmt::Block(_)));
 		}
+		_ => panic!("Expected unsafe block"),
 	}
+}
 
-	#[test]
-	fn test_while_var_gets_label()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_expr_call_with_if_var_in_args()
+{
+	let mut desugarer = Desugarer::new();
 
-		let stmt = Stmt::WhileVarLoop {
-			label: None,
+	let expr = Expr::Call {
+		callee: Box::new(ident("foo")),
+		call_type: CallType::Regular,
+		named_generics: Vec::new(),
+		args: vec![Expr::Block(Box::new(Block {
+			stmts: Vec::new(),
+			tail_expr: Some(Box::new(int_lit(1))),
+			span: Span::default(),
+		}))],
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Call { args, .. } => {
+			assert_eq!(args.len(), 1);
+			assert!(matches!(args[0], Expr::Block(_)));
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_struct_init_with_block_fields()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::StructInit {
+		path: Path::simple(vec!["Point".into()], Span::default()),
+		fields: vec![
+			(
+				"x".into(),
+				Expr::Block(Box::new(Block {
+					stmts: Vec::new(),
+					tail_expr: Some(Box::new(int_lit(1))),
+					span: Span::default(),
+				})),
+			),
+			("y".into(), int_lit(2)),
+		],
+		base: None,
+		span: Span::default(),
+		has_rest: false,
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::StructInit { fields, .. } => {
+			assert_eq!(fields.len(), 2);
+		}
+		_ => panic!("Expected struct init"),
+	}
+}
+
+#[test]
+fn test_desugar_switch_with_nested_blocks()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Switch {
+		expr: Box::new(ident("x")),
+		arms: vec![SwitchArm {
 			pattern: Pattern::Wildcard {
 				span: Span::default(),
 				ty: None,
 			},
-			expr: ident("x"),
-			body: Block {
-				stmts: vec![Stmt::Continue {
+			body: SwitchBody::Block(Block {
+				stmts: vec![Stmt::For {
 					label: None,
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			},
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Stmt::Loop { label, body, .. } => {
-				assert!(label.is_some());
-				let loop_label = label.unwrap();
-
-				if let Stmt::Expr(Expr::Switch { arms, .. }) = &body.stmts[1]
-					&& let SwitchBody::Block(match_block) = &arms[0].body
-					&& let Some(Stmt::Continue { label, .. }) = match_block.stmts.first()
-				{
-					assert_eq!(label, &Some(loop_label));
-				}
-			}
-			_ => panic!("Expected loop"),
-		}
-	}
-
-	#[test]
-	fn test_loop_expr_gets_label()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Loop {
-			label: None,
-			body: Box::new(Block {
-				stmts: vec![Stmt::Break {
-					label: None,
-					value: Some(int_lit(42)),
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Loop { label, body, .. } => {
-				assert!(label.is_some());
-				let loop_label = label.unwrap();
-
-				if let Stmt::Break { label: break_label, .. } = &body.stmts[0] {
-					assert_eq!(break_label, &Some(loop_label));
-				}
-			}
-			_ => panic!("Expected loop expression"),
-		}
-	}
-
-	#[test]
-	fn test_multiple_functions_reset_loop_counter()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let func1 = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["func1".into()], Span::default()),
-				generics: Vec::new(),
-				params: Vec::new(),
-				return_type: Type::unit(Span::default()),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
-				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: vec![Stmt::Loop {
-					label: None,
+					pattern: simple_for_pattern("i"),
+					iter: ident("items"),
 					body: Block {
 						stmts: Vec::new(),
 						tail_expr: None,
@@ -2047,1519 +1103,1059 @@ mod tests
 				tail_expr: None,
 				span: Span::default(),
 			}),
-			docs: None,
 			span: Span::default(),
-		};
+		}],
+		span: Span::default(),
+	};
 
-		let func2 = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["func2".into()], Span::default()),
-				generics: Vec::new(),
-				params: Vec::new(),
-				return_type: Type::unit(Span::default()),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
-				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: vec![Stmt::Loop {
-					label: None,
-					body: Block {
-						stmts: Vec::new(),
-						tail_expr: None,
-						span: Span::default(),
-					},
-					span: Span::default(),
-				}],
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
 
-		let _: FunctionDecl = desugarer.desugar_function(func1);
-
-		let _: FunctionDecl = desugarer.desugar_function(func2);
-
-		assert!(desugarer.diagnostics.is_empty());
-		// Just verify it doesn't panic - loop stack should be properly managed
-	}
-
-	#[test]
-	fn test_desugar_var_with_constructor_call()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["Point".to_string()], Span::default()),
-						generics: Vec::new(),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should have generated Point::new() as the initializer
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { callee, args, .. } => {
-				match *callee {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["Point", "create"]
-						);
-					}
-					_ => panic!("Expected identifier in callee"),
+	match output {
+		Expr::Switch { arms, .. } => {
+			match &arms[0].body {
+				SwitchBody::Block(block) => {
+					// For loop should be desugared
+					assert!(matches!(block.stmts[0], Stmt::Block(_)));
 				}
-				assert_eq!(args.len(), 0); // create() takes no arguments
-			}
-			_ => panic!("Expected call expression"),
-		}
-
-		// call_constructor should be set to false after processing
-		match output.pattern {
-			Pattern::TypedIdentifier { call_constructor, .. } => {
-				assert!(call_constructor.is_none());
-			}
-			_ => panic!("Expected TypedIdentifier pattern"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_var_with_constructor_and_existing_init()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// If there's already an initializer, call_constructor should be ignored
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: simple_type("Point"),
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: Some(Expr::Literal {
-				value: Literal::Int {
-					value: "42".to_string(),
-					base: IntBase::Decimal,
-					ty: None,
-					span: Span::default(),
-				},
-				span: Span::default(),
-			}),
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should keep the existing initializer
-		match output.init.unwrap() {
-			Expr::Literal {
-				value: Literal::Int { value, .. },
-				..
-			} if value == "42" => (),
-			_ => panic!("Expected original initializer to be preserved"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_var_with_generic_type_constructor()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["vec".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["Vec".to_string()], Span::default()),
-						generics: vec![Type {
-							core: Box::new(TypeCore::Base {
-								path: Path::simple(vec!["i32".to_string()], Span::default()),
-								generics: Vec::new(),
-							}),
-							span: Span::default(),
-						}],
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate Vec::create()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { callee, .. } => match *callee {
-				Expr::Identifier { path, .. } => {
-					assert_eq!(
-						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["Vec", "create"]
-					);
-				}
-				_ => panic!("Expected Vec::new identifier"),
-			},
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_const_with_constructor()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: simple_type("Config"),
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: true, // const instead of var
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should still generate Config::new()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { callee, .. } => match *callee {
-				Expr::Identifier { path, .. } => {
-					assert_eq!(
-						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["Config", "create"]
-					);
-				}
-				_ => panic!("Expected Config::create identifier"),
-			},
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_qualified_type_constructor()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["cfg".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(
-							vec!["std".to_string(), "config".to_string(), "Config".to_string()],
-							Span::default(),
-						),
-						generics: Vec::new(),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate std::config::Config::new()
-		match output.init.unwrap() {
-			Expr::Call { callee, .. } => match *callee {
-				Expr::Identifier { path, .. } => {
-					assert_eq!(
-						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "config", "Config", "create"]
-					);
-				}
-				_ => panic!("Expected qualified path"),
-			},
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_var_without_constructor_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Normal variable without constructor syntax
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: simple_type("i32"),
-				call_constructor: None,
-				span: Span::default(),
-				mutable: false,
-			},
-			init: Some(int_lit(42)),
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should keep original initializer
-		match output.init.unwrap() {
-			Expr::Literal {
-				value: Literal::Int { value, .. },
-				..
-			} if value == "42" => (),
-			_ => panic!("Expected original initializer"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_multiple_vars_with_constructors()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let program = TopLevelBlock {
-			items: vec![
-				TopLevelDecl::VariableDecl(VariableDecl {
-					pattern: Pattern::TypedIdentifier {
-						path: Path::simple(vec!["a".to_string()], Span::default()),
-						modifiers: Vec::new(),
-						ty: simple_type("Point"),
-						call_constructor: Some(CallType::Regular),
-						span: Span::default(),
-						mutable: false,
-					},
-					init: None,
-					comp_const: false,
-					docs: None,
-					span: Span::default(),
-				}),
-				TopLevelDecl::VariableDecl(VariableDecl {
-					pattern: Pattern::TypedIdentifier {
-						path: Path::simple(vec!["b".to_string()], Span::default()),
-						modifiers: Vec::new(),
-						ty: simple_type("Config"),
-						call_constructor: Some(CallType::Regular),
-						span: Span::default(),
-						mutable: false,
-					},
-					init: None,
-					comp_const: false,
-					docs: None,
-					span: Span::default(),
-				}),
-			],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_top_level_block(program);
-
-		// Both should have generated constructor calls
-		assert_eq!(output.items.len(), 2);
-
-		for item in &output.items {
-			match item {
-				TopLevelDecl::VariableDecl(var) => {
-					assert!(var.init.is_some());
-					match &var.init {
-						Some(Expr::Call { .. }) => (),
-						_ => panic!("Expected constructor call"),
-					}
-				}
-				_ => panic!("Expected variable declaration"),
+				SwitchBody::Expr(_) => panic!("Expected block body"),
 			}
 		}
+		_ => panic!("Expected switch expression"),
 	}
+}
 
-	#[test]
-	fn test_desugar_constructor_in_function()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_array_literal_list()
+{
+	let mut desugarer = Desugarer::new();
 
-		let func = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: Vec::new(),
-				params: Vec::new(),
-				return_type: Type::unit(Span::default()),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
-				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: vec![Stmt::VariableDecl(VariableDecl {
-					pattern: Pattern::TypedIdentifier {
-						path: Path::simple(vec!["local".to_string()], Span::default()),
-						modifiers: Vec::new(),
-						ty: simple_type("LocalType"),
-						call_constructor: Some(CallType::Regular),
-						span: Span::default(),
-						mutable: false,
-					},
-					init: None,
-					comp_const: false,
-					docs: None,
-					span: Span::default(),
-				})],
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function(func);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Check the variable inside the function
-		let body = output.body.unwrap();
-		match &body.stmts[0] {
-			Stmt::VariableDecl(var) => {
-				assert!(var.init.is_some());
-				match &var.init {
-					Some(Expr::Call { callee, .. }) => match callee.as_ref() {
-						Expr::Identifier { path, .. } => {
-							assert_eq!(
-								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-								vec!["LocalType", "create"]
-							);
-						}
-						_ => panic!("Expected identifier callee"),
-					},
-					_ => panic!("Expected constructor call"),
-				}
-			}
-			_ => panic!("Expected variable declaration"),
-		}
-	}
-
-	#[test]
-	fn test_constructor_call_preserves_type_info()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let original_ty = Type {
-			core: Box::new(TypeCore::Base {
-				path: Path::simple(vec!["MyType".to_string()], Span::default()),
-				generics: vec![Type {
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["String".to_string()], Span::default()),
-						generics: Vec::new(),
-					}),
-					span: Span::default(),
-				}],
-			}),
-			span: Span::default(),
-		};
-
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: original_ty,
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Pattern should still have the type information
-		match &output.pattern {
-			Pattern::TypedIdentifier { ty, .. } => {
-				// Type should be preserved
-				match ty.core.as_ref() {
-					TypeCore::Base { path, generics } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["MyType"]
-						);
-						assert_eq!(generics.len(), 1);
-					}
-					_ => panic!("Expected base type"),
-				}
-			}
-			_ => panic!("Expected TypedIdentifier pattern"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_full()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test a..b (exclusive end)
-		let range = RangeExpr {
-			start: Some(Box::new(int_lit(1))),
-			end: Some(Box::new(int_lit(10))),
-			inclusive: false,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become Range::new(1, 10)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "Range", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 2);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_inclusive()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test a..=b (inclusive end)
-		let range = RangeExpr {
-			start: Some(Box::new(int_lit(1))),
-			end: Some(Box::new(int_lit(10))),
-			inclusive: true,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become RangeInclusive::new(1, 10)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "RangeInclusive", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 2);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_from()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test a.. (no end)
-		let range = RangeExpr {
-			start: Some(Box::new(int_lit(5))),
-			end: None,
-			inclusive: false,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become RangeFrom::new(5)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "RangeFrom", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 1);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_to()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test ..b (no start, exclusive end)
-		let range = RangeExpr {
-			start: None,
-			end: Some(Box::new(int_lit(10))),
-			inclusive: false,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become RangeTo::new(10)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "RangeTo", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 1);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_to_inclusive()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test ..=b (no start, inclusive end)
-		let range = RangeExpr {
-			start: None,
-			end: Some(Box::new(int_lit(10))),
-			inclusive: true,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become RangeToInclusive::new(10)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "RangeToInclusive", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 1);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_full_unbounded()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test .. (no start, no end)
-		let range = RangeExpr {
-			start: None,
-			end: None,
-			inclusive: false,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should become RangeFull::new()
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "RangeFull", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 0);
-			}
-			_ => panic!("Expected call expression"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_range_with_complex_expressions()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Test (a + 1)..(b * 2)
-		let range = RangeExpr {
-			start: Some(Box::new(Expr::Binary {
+	let expr = Expr::Array(ArrayLiteral::List {
+		elements: vec![
+			Expr::Binary {
 				op: BinaryOp::Add,
-				lhs: Box::new(ident("a")),
-				rhs: Box::new(int_lit(1)),
-				span: Span::default(),
-			})),
-			end: Some(Box::new(Expr::Binary {
-				op: BinaryOp::Mul,
-				lhs: Box::new(ident("b")),
+				lhs: Box::new(int_lit(1)),
 				rhs: Box::new(int_lit(2)),
 				span: Span::default(),
+			},
+			int_lit(3),
+		],
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Array(ArrayLiteral::List { elements, .. }) => {
+			assert_eq!(elements.len(), 2);
+		}
+		_ => panic!("Expected array literal"),
+	}
+}
+
+#[test]
+fn test_desugar_array_repeat_complex()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Array(ArrayLiteral::Repeat {
+		value: Box::new(Expr::Binary {
+			op: BinaryOp::Mul,
+			lhs: Box::new(ident("x")),
+			rhs: Box::new(int_lit(2)),
+			span: Span::default(),
+		}),
+		count: Box::new(int_lit(10)),
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Array(ArrayLiteral::Repeat { value, .. }) => {
+			assert!(matches!(*value, Expr::Binary { .. }));
+		}
+		_ => panic!("Expected array repeat"),
+	}
+}
+
+#[test]
+fn test_desugar_field_access_chain()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Field {
+		base: Box::new(Expr::Field {
+			base: Box::new(ident("obj")),
+			name: Path::simple(vec!["inner".into()], Span::default()),
+			span: Span::default(),
+		}),
+		name: Path::simple(vec!["field".into()], Span::default()),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Field { base, .. } => {
+			assert!(matches!(*base, Expr::Field { .. }));
+		}
+		_ => panic!("Expected field access"),
+	}
+}
+
+#[test]
+fn test_desugar_index_with_complex_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Index {
+		base: Box::new(ident("arr")),
+		index: Box::new(Expr::Binary {
+			op: BinaryOp::Add,
+			lhs: Box::new(ident("i")),
+			rhs: Box::new(int_lit(1)),
+			span: Span::default(),
+		}),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Index { index, .. } => {
+			assert!(matches!(*index, Expr::Binary { .. }));
+		}
+		_ => panic!("Expected index expression"),
+	}
+}
+
+#[test]
+fn test_desugar_tuple_with_blocks()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Tuple {
+		elements: vec![
+			int_lit(1),
+			Expr::Block(Box::new(Block {
+				stmts: Vec::new(),
+				tail_expr: Some(Box::new(int_lit(2))),
+				span: Span::default(),
 			})),
-			inclusive: false,
-			span: Span::default(),
-		};
+			int_lit(3),
+		],
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// Should become Range::new(a + 1, b * 2)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "Range", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 2);
-				// Both args should be binary expressions
-				assert!(matches!(args[0], Expr::Binary { .. }));
-				assert!(matches!(args[1], Expr::Binary { .. }));
-			}
-			_ => panic!("Expected call expression"),
+	match output {
+		Expr::Tuple { elements, .. } => {
+			assert_eq!(elements.len(), 3);
+			assert!(matches!(elements[1], Expr::Block(_)));
 		}
+		_ => panic!("Expected tuple"),
 	}
+}
 
-	#[test]
-	fn test_desugar_range_with_identifiers()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_cast_with_nested_expr()
+{
+	let mut desugarer = Desugarer::new();
 
-		// Test start..end
-		let range = RangeExpr {
-			start: Some(Box::new(ident("start"))),
-			end: Some(Box::new(ident("end"))),
-			inclusive: false,
+	let expr = Expr::Cast {
+		ty: Box::new(simple_type("i64")),
+		expr: Box::new(Expr::Binary {
+			op: BinaryOp::Add,
+			lhs: Box::new(ident("a")),
+			rhs: Box::new(ident("b")),
 			span: Span::default(),
-		};
+		}),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_range(range);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// Should become Range::new(start, end)
-		match output {
-			Expr::Call { callee, args, .. } => {
-				match callee.as_ref() {
-					Expr::Identifier { path, .. } => {
-						assert_eq!(
-							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "Range", "new"]
-						);
-					}
-					_ => panic!("Expected identifier callee"),
-				}
-				assert_eq!(args.len(), 2);
-				assert!(matches!(args[0], Expr::Identifier { .. }));
-				assert!(matches!(args[1], Expr::Identifier { .. }));
-			}
-			_ => panic!("Expected call expression"),
+	match output {
+		Expr::Cast { expr, .. } => {
+			assert!(matches!(*expr, Expr::Binary { .. }));
 		}
+		_ => panic!("Expected cast"),
 	}
+}
 
-	#[test]
-	fn test_desugar_range_in_for_loop()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_desugar_unary_with_nested_binary()
+{
+	let mut desugarer = Desugarer::new();
 
-		// Test for i in 0..10 { }
-		let stmt = Stmt::For {
+	let expr = Expr::Unary {
+		op: UnaryOp::Neg,
+		expr: Box::new(Expr::Binary {
+			op: BinaryOp::Mul,
+			lhs: Box::new(ident("a")),
+			rhs: Box::new(ident("b")),
+			span: Span::default(),
+		}),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Unary { expr, .. } => {
+			assert!(matches!(*expr, Expr::Binary { .. }));
+		}
+		_ => panic!("Expected unary expression"),
+	}
+}
+
+#[test]
+fn test_desugar_pattern_variant_with_nested_patterns()
+{
+	let pattern = Pattern::Variant {
+		path: Path::simple(vec!["Some".into()], Span::default()),
+		args: vec![Pattern::Tuple {
+			patterns: vec![
+				Pattern::Wildcard {
+					span: Span::default(),
+					ty: None,
+				},
+				typed_ident_pattern("x", "i32"),
+			],
+			span: Span::default(),
+		}],
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::Variant { args, .. } => {
+			assert_eq!(args.len(), 1);
+			assert!(matches!(args[0], Pattern::Tuple { .. }));
+		}
+		_ => panic!("Expected variant pattern"),
+	}
+}
+
+#[test]
+fn test_desugar_pattern_or_with_variants()
+{
+	let pattern = Pattern::Or {
+		patterns: vec![
+			Pattern::Variant {
+				path: Path::simple(vec!["Some".into()], Span::default()),
+				args: vec![Pattern::Wildcard {
+					span: Span::default(),
+					ty: None,
+				}],
+				span: Span::default(),
+			},
+			Pattern::Variant {
+				path: Path::simple(vec!["None".into()], Span::default()),
+				args: Vec::new(),
+				span: Span::default(),
+			},
+		],
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::Or { patterns, .. } => {
+			assert_eq!(patterns.len(), 2);
+		}
+		_ => panic!("Expected or pattern"),
+	}
+}
+
+#[test]
+fn test_desugar_multiple_sequential_for_loops()
+{
+	let mut desugarer = Desugarer::new();
+
+	let block = Block {
+		stmts: vec![
+			Stmt::For {
+				label: None,
+				pattern: simple_for_pattern("i"),
+				iter: ident("range1"),
+				body: Block {
+					stmts: Vec::new(),
+					tail_expr: None,
+					span: Span::default(),
+				},
+				span: Span::default(),
+			},
+			Stmt::For {
+				label: None,
+				pattern: simple_for_pattern("j"),
+				iter: ident("range2"),
+				body: Block {
+					stmts: Vec::new(),
+					tail_expr: None,
+					span: Span::default(),
+				},
+				span: Span::default(),
+			},
+		],
+		tail_expr: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_block(block);
+	assert!(desugarer.diagnostics.is_empty());
+
+	assert_eq!(output.stmts.len(), 2);
+	assert!(matches!(output.stmts[0], Stmt::Block(_)));
+	assert!(matches!(output.stmts[1], Stmt::Block(_)));
+}
+
+#[test]
+fn test_desugar_variable_decl_with_pattern()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::Tuple {
+			patterns: vec![
+				typed_ident_pattern("x", "i32"),
+				Pattern::Wildcard {
+					span: Span::default(),
+					ty: None,
+				},
+			],
+			span: Span::default(),
+		},
+		init: Some(int_lit(42)),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output.pattern {
+		Pattern::Tuple { patterns, .. } => {
+			assert_eq!(patterns.len(), 2);
+		}
+		_ => panic!("Expected tuple pattern"),
+	}
+}
+
+#[test]
+fn test_gen_temp_with_different_names()
+{
+	let mut desugarer = Desugarer::new();
+
+	let temp1 = desugarer.gen_temp("loop");
+	let temp2 = desugarer.gen_temp("ifvar");
+	let temp3 = desugarer.gen_temp("whilevar");
+
+	assert!(temp1.starts_with("#__tmp_"));
+	assert!(temp2.starts_with("#__tmp_"));
+	assert!(temp3.starts_with("#__tmp_"));
+	assert_ne!(temp1, temp2);
+	assert_ne!(temp2, temp3);
+}
+
+#[test]
+fn test_desugar_if_var_with_complex_pattern()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::IfVar {
+		pattern: Pattern::Struct {
+			path: Path::simple(vec!["Point".into()], Span::default()),
+			fields: vec![("x".into(), typed_ident_pattern("x_val", "i32"))],
+			has_rest: false,
+			span: Span::default(),
+		},
+		expr: ident("point"),
+		then_block: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Block(block) => {
+			assert_eq!(block.stmts.len(), 2);
+		}
+		_ => panic!("Expected block"),
+	}
+}
+
+#[test]
+fn test_desugar_while_var_with_nested_pattern()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::WhileVarLoop {
+		label: None,
+		pattern: Pattern::Variant {
+			path: Path::simple(vec!["Ok".into()], Span::default()),
+			args: vec![Pattern::Tuple {
+				patterns: vec![
+					Pattern::Wildcard {
+						span: Span::default(),
+						ty: None,
+					},
+					typed_ident_pattern("val", "i32"),
+				],
+				span: Span::default(),
+			}],
+			span: Span::default(),
+		},
+		expr: ident("result"),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop { body, .. } => {
+			assert_eq!(body.stmts.len(), 2);
+		}
+		_ => panic!("Expected loop"),
+	}
+}
+
+#[test]
+fn test_desugar_labeled_for_loop()
+{
+	let mut desugarer = Desugarer::new();
+
+	let input = Stmt::For {
+		label: Some("outer".into()),
+		pattern: simple_for_pattern("x"),
+		iter: ident("iter"),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Block(block) => {
+			// Second statement should be the loop with the label
+			if let Stmt::Loop { label, .. } = &block.stmts[1] {
+				assert_eq!(label, &Some("outer".into()));
+			} else {
+				panic!("Expected labeled loop");
+			}
+		}
+		_ => panic!("Expected block"),
+	}
+}
+
+#[test]
+fn test_desugar_break_with_value()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Loop {
+		label: None,
+		body: Block {
+			stmts: vec![Stmt::Break {
+				label: None,
+				value: Some(int_lit(42)),
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop { body, .. } => {
+			if let Stmt::Break { value, .. } = &body.stmts[0] {
+				assert!(value.is_some());
+			} else {
+				panic!("Expected break statement");
+			}
+		}
+		_ => panic!("Expected loop"),
+	}
+}
+
+#[test]
+fn test_desugar_continue_with_label()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Loop {
+		label: Some("outer".into()),
+		body: Block {
+			stmts: vec![Stmt::Continue {
+				label: Some("outer".into()),
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop { body, .. } => {
+			if let Stmt::Continue { label, .. } = &body.stmts[0] {
+				assert_eq!(label, &Some("outer".into()));
+			} else {
+				panic!("Expected continue statement");
+			}
+		}
+		_ => panic!("Expected loop"),
+	}
+}
+
+#[test]
+fn test_desugar_if_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::If {
+		cond: Box::new(bool_lit(true)),
+		then_block: Block {
+			stmts: Vec::new(),
+			tail_expr: Some(Box::new(int_lit(1))),
+			span: Span::default(),
+		},
+		else_branch: Some(Box::new(Expr::Block(Box::new(Block {
+			stmts: Vec::new(),
+			tail_expr: Some(Box::new(int_lit(2))),
+			span: Span::default(),
+		})))),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::If { .. } => (),
+		_ => panic!("Expected if expression"),
+	}
+}
+
+#[test]
+fn test_desugar_if_var_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::IfVar {
+		pattern: Pattern::Variant {
+			path: Path::simple(vec!["Some".into()], Span::default()),
+			args: vec![typed_ident_pattern("x", "i32")],
+			span: Span::default(),
+		},
+		expr: Box::new(ident("opt")),
+		then_block: Block {
+			stmts: Vec::new(),
+			tail_expr: Some(Box::new(ident("x"))),
+			span: Span::default(),
+		},
+		else_branch: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Block(block) => {
+			assert_eq!(block.stmts.len(), 1);
+			assert!(block.tail_expr.is_some());
+		}
+		_ => panic!("Expected block expression"),
+	}
+}
+
+#[test]
+fn test_desugar_loop_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Loop {
+		label: Some("outer".into()),
+		body: Box::new(Block {
+			stmts: vec![Stmt::Break {
+				label: Some("outer".into()),
+				value: Some(int_lit(42)),
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Loop { label, body, .. } => {
+			assert_eq!(label, Some("outer".into()));
+			assert_eq!(body.stmts.len(), 1);
+		}
+		_ => panic!("Expected loop expression"),
+	}
+}
+
+#[test]
+fn test_desugar_unsafe_block_expr()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::UnsafeBlock(Box::new(Block {
+		stmts: vec![Stmt::For {
 			label: None,
 			pattern: simple_for_pattern("i"),
-			iter: Expr::Range(RangeExpr {
-				start: Some(Box::new(int_lit(0))),
-				end: Some(Box::new(int_lit(10))),
-				inclusive: false,
-				span: Span::default(),
-			}),
+			iter: ident("range"),
 			body: Block {
 				stmts: Vec::new(),
 				tail_expr: None,
 				span: Span::default(),
 			},
 			span: Span::default(),
-		};
+		}],
+		tail_expr: None,
+		span: Span::default(),
+	}));
 
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// The for loop should be desugared and the range should become Range::new(0, 10)
-		match output {
-			Stmt::Block(block) => {
-				// First statement should be the iterator variable declaration
-				if let Stmt::VariableDecl(var_decl) = &block.stmts[0] {
-					// The init should be the desugared range
-					match &var_decl.init {
-						Some(Expr::Call { callee, args, .. }) => {
-							match callee.as_ref() {
-								Expr::Identifier { path, .. } => {
-									assert_eq!(
-										path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-										vec!["std", "Range", "new"]
-									);
-								}
-								_ => panic!("Expected Range::new identifier"),
-							}
-							assert_eq!(args.len(), 2);
-						}
-						_ => panic!("Expected Range::new call"),
-					}
-				} else {
-					panic!("Expected variable declaration");
+	match output {
+		Expr::UnsafeBlock(block) => {
+			// For loop should be desugared
+			assert!(matches!(block.stmts[0], Stmt::Block(_)));
+		}
+		_ => panic!("Expected unsafe block expression"),
+	}
+}
+
+#[test]
+fn test_unlabeled_while_gets_label()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::While {
+		label: None,
+		cond: bool_lit(true),
+		body: Block {
+			stmts: vec![Stmt::Continue {
+				label: None,
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// While loops are desugared into loop statements
+	match output {
+		Stmt::Loop { label, body, .. } => {
+			// Loop should have a generated label
+			assert!(label.is_some());
+			let loop_label = label.unwrap();
+			assert!(loop_label.starts_with("#__loop_"));
+
+			// Continue should have the same label
+			// It's in the body statements after the if-break
+			if let Stmt::Continue { label, .. } = &body.stmts[1] {
+				assert_eq!(label, &Some(loop_label));
+			} else {
+				panic!("Expected continue statement");
+			}
+		}
+		_ => panic!("Expected loop, got {:?}", output),
+	}
+}
+
+#[test]
+fn test_labeled_loop_preserves_label()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Loop {
+		label: Some("my_loop".into()),
+		body: Block {
+			stmts: vec![Stmt::Break {
+				label: None,
+				value: None,
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop { label, body, .. } => {
+			// Should preserve the user-provided label
+			assert_eq!(label, Some("my_loop".into()));
+
+			// Break should get the same label
+			if let Stmt::Break { label, .. } = &body.stmts[0] {
+				assert_eq!(label, &Some("my_loop".into()));
+			}
+		}
+		_ => panic!("Expected loop"),
+	}
+}
+
+#[test]
+fn test_break_with_explicit_label_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Loop {
+		label: Some("outer".into()),
+		body: Block {
+			stmts: vec![Stmt::Loop {
+				label: None,
+				body: Block {
+					stmts: vec![Stmt::Break {
+						label: Some("outer".into()),
+						value: None,
+						span: Span::default(),
+					}],
+					tail_expr: None,
+					span: Span::default(),
+				},
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop {
+			label: outer_label,
+			body: outer_body,
+			..
+		} => {
+			assert_eq!(outer_label, Some("outer".into()));
+
+			if let Stmt::Loop { body: inner_body, .. } = &outer_body.stmts[0] {
+				// Break should still reference the outer loop
+				if let Stmt::Break { label, .. } = &inner_body.stmts[0] {
+					assert_eq!(label, &Some("outer".into()));
 				}
 			}
-			_ => panic!("Expected block"),
 		}
+		_ => panic!("Expected outer loop"),
 	}
+}
 
-	#[test]
-	fn test_desugar_range_in_array_index()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_for_loop_gets_label()
+{
+	let mut desugarer = Desugarer::new();
 
-		// Test arr[0..5]
-		let expr = Expr::Index {
-			base: Box::new(ident("arr")),
-			index: Box::new(Expr::Range(RangeExpr {
-				start: Some(Box::new(int_lit(0))),
-				end: Some(Box::new(int_lit(5))),
-				inclusive: false,
-				span: Span::default(),
-			})),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// The range should be desugared to Range::new(0, 5)
-		match output {
-			Expr::Index { index, .. } => match index.as_ref() {
-				Expr::Call { callee, args, .. } => {
-					match callee.as_ref() {
-						Expr::Identifier { path, .. } => {
-							assert_eq!(
-								path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-								vec!["std", "Range", "new"]
-							);
-						}
-						_ => panic!("Expected Range::new"),
-					}
-					assert_eq!(args.len(), 2);
-				}
-				_ => panic!("Expected call expression"),
-			},
-			_ => panic!("Expected index expression"),
-		}
-	}
-
-	// Add this module to your existing tests file
-
-	// Helper to create a simple generic parameter
-	fn generic_param(name: &str, bounds: Vec<WhereBound>) -> GenericParam
-	{
-		return GenericParam {
-			name: name.to_string(),
-			bounds,
-			span: Span::default(),
-		};
-	}
-
-	// Helper to create a simple where bound (trait bound)
-	fn trait_bound(trait_name: &str) -> WhereBound
-	{
-		return WhereBound::Path {
-			path: Path::simple(vec![trait_name.to_string()], Span::default()),
-			args: Vec::new(),
-		};
-	}
-
-	// Helper to create a where constraint
-	fn where_constraint(type_name: &str, bounds: Vec<WhereBound>, type_args: Vec<Type>) -> WhereConstraint
-	{
-		return WhereConstraint {
-			ty: Path::simple(vec![type_name.to_string()], Span::default()),
-			bounds,
-			type_args,
-			span: Span::default(),
-		};
-	}
-
-	#[test]
-	fn test_desugar_simple_generic_bound()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>()
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: Vec::new(),
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// After desugaring:
-		// 1. Generic parameter should have no bounds
-		assert!(
-			output.generics[0].bounds.is_empty(),
-			"Generic should have no bounds after desugaring"
-		);
-
-		// 2. Where clause should contain T: Clone
-		assert_eq!(output.where_clause.len(), 1, "Should have one where constraint");
-		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
-		assert_eq!(output.where_clause[0].bounds.len(), 1);
-		assert!(output.where_clause[0].type_args.is_empty());
-	}
-
-	#[test]
-	fn test_desugar_multiple_bounds()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone + Send + Debug>()
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param(
-				"T",
-				vec![trait_bound("Clone"), trait_bound("Send"), trait_bound("Debug")],
-			)],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: Vec::new(),
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Generic should have no bounds
-		assert!(output.generics[0].bounds.is_empty());
-
-		// Where clause should have T: Clone + Send + Debug
-		assert_eq!(output.where_clause.len(), 1);
-		assert_eq!(output.where_clause[0].bounds.len(), 3);
-	}
-
-	#[test]
-	fn test_desugar_multiple_generics()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone, U: Send, V>()
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![
-				generic_param("T", vec![trait_bound("Clone")]),
-				generic_param("U", vec![trait_bound("Send")]),
-				generic_param("V", Vec::new()), // No bounds
-			],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: Vec::new(),
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// All generics should have no bounds
-		assert!(output.generics[0].bounds.is_empty());
-		assert!(output.generics[1].bounds.is_empty());
-		assert!(output.generics[2].bounds.is_empty());
-
-		// Where clause should have T: Clone and U: Send (but not V)
-		assert_eq!(output.where_clause.len(), 2);
-
-		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
-		assert_eq!(output.where_clause[0].bounds.len(), 1);
-
-		assert_eq!(output.where_clause[1].ty.segments.len(), 1);
-		assert_eq!(output.where_clause[1].ty.segments[0].name, "U");
-		assert_eq!(output.where_clause[1].bounds.len(), 1);
-	}
-
-	#[test]
-	fn test_error_on_duplicate_simple_constraint()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>() where T: Send
-		// ERROR: T appears in both places
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
-		}
-
-		let _: FunctionSignature = output;
-
-		// match output {
-		// 	Err(e) => {
-		// 		// Verify error message mentions the duplicate
-		// 		let error_str = format!("{}", e);
-		// 		assert!(error_str.contains('T'), "Error should mention type parameter T");
-		// 		assert!(error_str.contains("bounds"), "Error should mention bounds");
-		// 	}
-		// 	_ => panic!("Expected DesugarError"),
-		// }
-		//TODO
-	}
-
-	#[test]
-	fn test_error_on_complex_type_using_bounded_param()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>() where Vec<T>: Send
-		// ERROR: T appears in where clause
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![where_constraint(
-				"Vec",
-				vec![trait_bound("Send")],
-				vec![simple_type("T")],
-			)],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
-		}
-
-		let _: FunctionSignature = output;
-
-		// match output {
-		// 	Err(e) => {
-		// 		let error_str = format!("{}", e);
-		// 		assert!(error_str.contains('T'), "Error should mention T");
-		// 	}
-		// 	_ => panic!("Expected DesugarError"),
-		// }
-		// TODO
-	}
-
-	#[test]
-	fn test_ok_different_params_in_where()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone, U>() where Vec<U>: Send
-		// OK: T has bounds, but where clause only mentions U
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![
-				generic_param("T", vec![trait_bound("Clone")]),
-				generic_param("U", Vec::new()),
-			],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![where_constraint(
-				"Vec",
-				vec![trait_bound("Send")],
-				vec![simple_type("U")],
-			)],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// T's bounds should be moved to where clause
-		assert!(output.generics[0].bounds.is_empty());
-		assert!(output.generics[1].bounds.is_empty());
-
-		// Should have two where constraints: T: Clone and Vec<U>: Send
-		assert_eq!(output.where_clause.len(), 2);
-	}
-
-	#[test]
-	fn test_no_bounds_no_where()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T, U>()
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", Vec::new()), generic_param("U", vec![])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: Vec::new(),
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// No bounds should be moved
-		assert!(output.where_clause.is_empty());
-		assert!(output.generics[0].bounds.is_empty());
-		assert!(output.generics[1].bounds.is_empty());
-	}
-
-	#[test]
-	fn test_only_where_clause_no_generic_bounds()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T>() where Vec<T>: Clone
-		// OK: T has no bounds in generic list
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", Vec::new())],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![where_constraint(
-				"Vec",
-				vec![trait_bound("Clone")],
-				vec![simple_type("T")],
-			)],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Where clause should be unchanged
-		assert_eq!(output.where_clause.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments[0].name, "Vec");
-	}
-
-	#[test]
-	fn test_heap_generics_bounds()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn!<A: Alloc> foo<T: Clone>()
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: Vec::new(),
-			call_type: CallType::UserHeap,
-			heap_generics: vec![GenericHeapParam {
-				name: "Alloc".to_string(),
-				kind: crate::parser::HeapGenericKind::Forwarded,
+	let input = Stmt::For {
+		label: None,
+		pattern: simple_for_pattern("x"),
+		iter: ident("iter"),
+		body: Block {
+			stmts: vec![Stmt::Break {
+				label: None,
+				value: None,
 				span: Span::default(),
 			}],
+			tail_expr: None,
 			span: Span::default(),
-		};
+		},
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_function_signature(sig);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_stmt(input);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// Both regular and heap generics should have no bounds
-		assert!(output.generics[0].bounds.is_empty());
-
-		// Where clause should have both T: Clone
-		assert_eq!(output.where_clause.len(), 1);
-
-		// Check that both constraints are present (order doesn't matter)
-		let has_t_clone = output
-			.where_clause
-			.iter()
-			.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "T" && w.bounds.len() == 1);
-
-		assert!(has_t_clone, "Should have T: Clone in where clause");
-	}
-
-	#[test]
-	fn test_nested_type_args()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
-		// ERROR: T appears nested in where clause
-		let vec_t = Type {
-			core: Box::new(TypeCore::Base {
-				path: Path::simple(vec!["Vec".to_string()], Span::default()),
-				generics: vec![simple_type("T")],
-			}),
-			span: Span::default(),
-		};
-
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![where_constraint(
-				"HashMap",
-				vec![trait_bound("Debug")],
-				vec![simple_type("K"), vec_t],
-			)],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
+	match output {
+		Stmt::Block(block) => {
+			// Second statement should be the desugared loop
+			if let Stmt::Loop { label, .. } = &block.stmts[1] {
+				assert!(label.is_some());
+				let loop_label = label.as_ref().unwrap();
+				assert!(loop_label.starts_with("#__loop_"));
+			} else {
+				panic!("Expected loop");
+			}
 		}
-		let _: FunctionSignature = output;
-		//TODO assert!(output.is_err(), "Should error when T appears nested in Vec<T>");
+		_ => panic!("Expected block"),
 	}
+}
 
-	#[test]
-	fn test_tuple_type_with_bounded_param()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_while_var_gets_label()
+{
+	let mut desugarer = Desugarer::new();
 
-		// fn foo<T: Clone>() where (T, U): Debug
-		// ERROR: T appears in tuple
-		let tuple_type = Type {
-			core: Box::new(TypeCore::Tuple(vec![simple_type("T"), simple_type("U")])),
+	let stmt = Stmt::WhileVarLoop {
+		label: None,
+		pattern: Pattern::Wildcard {
 			span: Span::default(),
-		};
-
-		// Note: This test assumes your where_constraint helper can handle non-simple types
-		// You might need to construct the WhereConstraint manually
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![WhereConstraint {
-				ty: Path::simple(vec!["tuple".to_string()], Span::default()), // placeholder
-				bounds: vec![trait_bound("Debug")],
-				type_args: vec![tuple_type],
+			ty: None,
+		},
+		expr: ident("x"),
+		body: Block {
+			stmts: vec![Stmt::Continue {
+				label: None,
 				span: Span::default(),
 			}],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		},
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Loop { label, body, .. } => {
+			assert!(label.is_some());
+			let loop_label = label.unwrap();
+
+			if let Stmt::Expr(Expr::Switch { arms, .. }) = &body.stmts[1]
+				&& let SwitchBody::Block(match_block) = &arms[0].body
+				&& let Some(Stmt::Continue { label, .. }) = match_block.stmts.first()
+			{
+				assert_eq!(label, &Some(loop_label));
+			}
 		}
-		let _: FunctionSignature = output;
-		//TODO assert!(output.is_err(), "Should error when T appears in tuple type");
+		_ => panic!("Expected loop"),
 	}
+}
 
-	#[test]
-	fn test_desugar_impl_generics()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_loop_expr_gets_label()
+{
+	let mut desugarer = Desugarer::new();
 
-		// impl<T: Clone> MyTrait for MyType<T> { }
-		let impl_decl = ImplDecl {
+	let expr = Expr::Loop {
+		label: None,
+		body: Box::new(Block {
+			stmts: vec![Stmt::Break {
+				label: None,
+				value: Some(int_lit(42)),
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Loop { label, body, .. } => {
+			assert!(label.is_some());
+			let loop_label = label.unwrap();
+
+			if let Stmt::Break { label: break_label, .. } = &body.stmts[0] {
+				assert_eq!(break_label, &Some(loop_label));
+			}
+		}
+		_ => panic!("Expected loop expression"),
+	}
+}
+
+#[test]
+fn test_multiple_functions_reset_loop_counter()
+{
+	let mut desugarer = Desugarer::new();
+
+	let func1 = FunctionDecl {
+		signature: FunctionSignature {
 			modifiers: Vec::new(),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			target: ImplTarget {
-				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			},
-			trait_path: Some(ImplTarget {
-				path: Path::simple(vec!["MyTrait".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			}),
+			name: Path::simple(vec!["func1".into()], Span::default()),
+			generics: Vec::new(),
+			params: Vec::new(),
+			return_type: Type::unit(Span::default()),
 			where_clause: Vec::new(),
-			body: Vec::new(),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_impl(impl_decl);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Generic should have no bounds
-		println!("{:#?}", output);
-		assert!(output.generics[0].bounds.is_empty());
-
-		// Where clause should have T: Clone
-		assert_eq!(output.where_clause.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments.len(), 1);
-		assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
-	}
-
-	#[test]
-	fn test_error_impl_generic_in_where()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// impl<T: Clone> MyType<T> where T: Send { }
-		// ERROR: T has bounds in generic list and appears in where clause
-		let impl_decl = ImplDecl {
-			modifiers: Vec::new(),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			target: ImplTarget {
-				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			},
-			trait_path: None,
-			where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
-			body: Vec::new(),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_impl(impl_decl);
-		if !desugarer.diagnostics.is_empty() {
-			return;
-		}
-		let _: ImplDecl = output;
-		//TODO assert!(output.is_err(), "Should error on duplicate constraint in impl");
-	}
-
-	#[test]
-	fn test_reference_type_with_bounded_param()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>() where &T: Debug
-		// ERROR: T appears in reference type
-		let ref_type = Type {
-			core: Box::new(TypeCore::Reference {
-				mutable: false,
-				inner: Box::new(TypeCore::Base {
-					path: Path::simple(vec!["T".to_string()], Span::default()),
-					generics: Vec::new(),
-				}),
-			}),
-			span: Span::default(),
-		};
-
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![WhereConstraint {
-				ty: Path::simple(vec!["ref".to_string()], Span::default()),
-				bounds: vec![trait_bound("Debug")],
-				type_args: vec![ref_type],
-				span: Span::default(),
-			}],
 			call_type: CallType::Regular,
 			heap_generics: Vec::new(),
 			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
-		}
-		let _: FunctionSignature = output;
-		//TODO assert!(output.is_err(), "Should error when T appears in &T");
-	}
-
-	#[test]
-	fn test_complete_function_desugaring()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone + Send>(x: T) -> T { x }
-		let func = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["foo".into()], Span::default()),
-				generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
-				params: vec![Param {
-					ty: simple_type("T"),
-					pattern: Pattern::TypedIdentifier {
-						path: Path::simple(vec!["x".into()], Span::default()),
-						modifiers: Vec::new(),
-						ty: simple_type("T"),
-						call_constructor: None,
-						span: Span::default(),
-						mutable: false,
-					},
-					variadic: false,
+		},
+		body: Some(Block {
+			stmts: vec![Stmt::Loop {
+				label: None,
+				body: Block {
+					stmts: Vec::new(),
+					tail_expr: None,
 					span: Span::default(),
-				}],
-				return_type: simple_type("T"),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
-				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: Vec::new(),
-				tail_expr: Some(Box::new(ident("x"))),
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function(func);
-		assert!(desugarer.diagnostics.is_empty());
-
-		assert!(output.signature.generics[0].bounds.is_empty());
-		assert_eq!(output.signature.where_clause.len(), 1);
-		assert_eq!(output.signature.where_clause[0].ty.segments.len(), 1);
-		assert_eq!(output.signature.where_clause[0].ty.segments[0].name, "T");
-		assert_eq!(output.signature.where_clause[0].bounds.len(), 2);
-	}
-
-	#[test]
-	fn test_array_type_with_bounded_param()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<T: Clone>() where [T; 10]: Debug
-		// ERROR: T appears in array type
-		let array_type = Type {
-			core: Box::new(TypeCore::Array {
-				inner: Box::new(TypeCore::Base {
-					path: Path::simple(vec!["T".to_string()], Span::default()),
-					generics: Vec::new(),
-				}),
-				size: Some(Box::new(int_lit(10))),
-			}),
-			span: Span::default(),
-		};
-
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![generic_param("T", vec![trait_bound("Clone")])],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![WhereConstraint {
-				ty: Path::simple(vec!["array".to_string()], Span::default()),
-				bounds: vec![trait_bound("Debug")],
-				type_args: vec![array_type],
+				},
 				span: Span::default(),
 			}],
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let func2 = FunctionDecl {
+		signature: FunctionSignature {
+			modifiers: Vec::new(),
+			name: Path::simple(vec!["func2".into()], Span::default()),
+			generics: Vec::new(),
+			params: Vec::new(),
+			return_type: Type::unit(Span::default()),
+			where_clause: Vec::new(),
 			call_type: CallType::Regular,
 			heap_generics: Vec::new(),
 			span: Span::default(),
-		};
+		},
+		body: Some(Block {
+			stmts: vec![Stmt::Loop {
+				label: None,
+				body: Block {
+					stmts: Vec::new(),
+					tail_expr: None,
+					span: Span::default(),
+				},
+				span: Span::default(),
+			}],
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_function_signature(sig);
-		if !desugarer.diagnostics.is_empty() {
-			return;
+	let _: FunctionDecl = desugarer.desugar_function(func1);
+
+	let _: FunctionDecl = desugarer.desugar_function(func2);
+
+	assert!(desugarer.diagnostics.is_empty());
+	// Just verify it doesn't panic - loop stack should be properly managed
+}
+
+#[test]
+fn test_desugar_var_with_constructor_call()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["Point".to_string()], Span::default()),
+					generics: Vec::new(),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should have generated Point::new() as the initializer
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { callee, args, .. } => {
+			match *callee {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["Point", "create"]
+					);
+				}
+				_ => panic!("Expected identifier in callee"),
+			}
+			assert_eq!(args.len(), 0); // create() takes no arguments
 		}
-		let _: FunctionSignature = output;
-		//TODO assert!(output.is_err(), "Should error when T appears in [T; 10]");
+		_ => panic!("Expected call expression"),
 	}
-	// ========== Pattern Desugaring Tests ==========
 
-	#[test]
-	fn test_desugar_pattern_literal()
-	{
-		let pattern = Pattern::Literal {
+	// call_constructor should be set to false after processing
+	match output.pattern {
+		Pattern::TypedIdentifier { call_constructor, .. } => {
+			assert!(call_constructor.is_none());
+		}
+		_ => panic!("Expected TypedIdentifier pattern"),
+	}
+}
+
+#[test]
+fn test_desugar_var_with_constructor_and_existing_init()
+{
+	let mut desugarer = Desugarer::new();
+
+	// If there's already an initializer, call_constructor should be ignored
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: simple_type("Point"),
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: Some(Expr::Literal {
 			value: Literal::Int {
 				value: "42".to_string(),
 				base: IntBase::Decimal,
@@ -3567,1554 +2163,2953 @@ mod tests
 				span: Span::default(),
 			},
 			span: Span::default(),
-		};
+		}),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = Desugarer::desugar_pattern(pattern);
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Pattern::Literal {
-				value: Literal::Int { value, .. },
-				..
-			} if value == "42" => (),
-			_ => panic!("Expected literal pattern to be unchanged"),
+	// Should keep the existing initializer
+	match output.init.unwrap() {
+		Expr::Literal {
+			value: Literal::Int { value, .. },
+			..
+		} if value == "42" => (),
+		_ => panic!("Expected original initializer to be preserved"),
+	}
+}
+
+#[test]
+fn test_desugar_var_with_generic_type_constructor()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["vec".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["Vec".to_string()], Span::default()),
+					generics: vec![Type {
+						core: Box::new(TypeCore::Base {
+							path: Path::simple(vec!["i32".to_string()], Span::default()),
+							generics: Vec::new(),
+						}),
+						span: Span::default(),
+					}],
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate Vec::create()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { callee, .. } => match *callee {
+			Expr::Identifier { path, .. } => {
+				assert_eq!(
+					path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+					vec!["Vec", "create"]
+				);
+			}
+			_ => panic!("Expected Vec::new identifier"),
+		},
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_const_with_constructor()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["CONFIG".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: simple_type("Config"),
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: true, // const instead of var
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should still generate Config::new()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { callee, .. } => match *callee {
+			Expr::Identifier { path, .. } => {
+				assert_eq!(
+					path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+					vec!["Config", "create"]
+				);
+			}
+			_ => panic!("Expected Config::create identifier"),
+		},
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_qualified_type_constructor()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["cfg".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(
+						vec!["std".to_string(), "config".to_string(), "Config".to_string()],
+						Span::default(),
+					),
+					generics: Vec::new(),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate std::config::Config::new()
+	match output.init.unwrap() {
+		Expr::Call { callee, .. } => match *callee {
+			Expr::Identifier { path, .. } => {
+				assert_eq!(
+					path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+					vec!["std", "config", "Config", "create"]
+				);
+			}
+			_ => panic!("Expected qualified path"),
+		},
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_var_without_constructor_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Normal variable without constructor syntax
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: simple_type("i32"),
+			call_constructor: None,
+			span: Span::default(),
+			mutable: false,
+		},
+		init: Some(int_lit(42)),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should keep original initializer
+	match output.init.unwrap() {
+		Expr::Literal {
+			value: Literal::Int { value, .. },
+			..
+		} if value == "42" => (),
+		_ => panic!("Expected original initializer"),
+	}
+}
+
+#[test]
+fn test_desugar_multiple_vars_with_constructors()
+{
+	let mut desugarer = Desugarer::new();
+
+	let program = TopLevelBlock {
+		items: vec![
+			TopLevelDecl::VariableDecl(VariableDecl {
+				pattern: Pattern::TypedIdentifier {
+					path: Path::simple(vec!["a".to_string()], Span::default()),
+					modifiers: Vec::new(),
+					ty: simple_type("Point"),
+					call_constructor: Some(CallType::Regular),
+					span: Span::default(),
+					mutable: false,
+				},
+				init: None,
+				comp_const: false,
+				docs: None,
+				span: Span::default(),
+			}),
+			TopLevelDecl::VariableDecl(VariableDecl {
+				pattern: Pattern::TypedIdentifier {
+					path: Path::simple(vec!["b".to_string()], Span::default()),
+					modifiers: Vec::new(),
+					ty: simple_type("Config"),
+					call_constructor: Some(CallType::Regular),
+					span: Span::default(),
+					mutable: false,
+				},
+				init: None,
+				comp_const: false,
+				docs: None,
+				span: Span::default(),
+			}),
+		],
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_top_level_block(program);
+
+	// Both should have generated constructor calls
+	assert_eq!(output.items.len(), 2);
+
+	for item in &output.items {
+		match item {
+			TopLevelDecl::VariableDecl(var) => {
+				assert!(var.init.is_some());
+				match &var.init {
+					Some(Expr::Call { .. }) => (),
+					_ => panic!("Expected constructor call"),
+				}
+			}
+			_ => panic!("Expected variable declaration"),
 		}
 	}
+}
 
-	#[test]
-	fn test_desugar_pattern_range()
-	{
-		let pattern = Pattern::Range(RangeExpr {
-			start: Some(Box::new(int_lit(1))),
+#[test]
+fn test_desugar_constructor_in_function()
+{
+	let mut desugarer = Desugarer::new();
+
+	let func = FunctionDecl {
+		signature: FunctionSignature {
+			modifiers: Vec::new(),
+			name: Path::simple(vec!["test".into()], Span::default()),
+			generics: Vec::new(),
+			params: Vec::new(),
+			return_type: Type::unit(Span::default()),
+			where_clause: Vec::new(),
+			call_type: CallType::Regular,
+			heap_generics: Vec::new(),
+			span: Span::default(),
+		},
+		body: Some(Block {
+			stmts: vec![Stmt::VariableDecl(VariableDecl {
+				pattern: Pattern::TypedIdentifier {
+					path: Path::simple(vec!["local".to_string()], Span::default()),
+					modifiers: Vec::new(),
+					ty: simple_type("LocalType"),
+					call_constructor: Some(CallType::Regular),
+					span: Span::default(),
+					mutable: false,
+				},
+				init: None,
+				comp_const: false,
+				docs: None,
+				span: Span::default(),
+			})],
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function(func);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Check the variable inside the function
+	let body = output.body.unwrap();
+	match &body.stmts[0] {
+		Stmt::VariableDecl(var) => {
+			assert!(var.init.is_some());
+			match &var.init {
+				Some(Expr::Call { callee, .. }) => match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["LocalType", "create"]
+						);
+					}
+					_ => panic!("Expected identifier callee"),
+				},
+				_ => panic!("Expected constructor call"),
+			}
+		}
+		_ => panic!("Expected variable declaration"),
+	}
+}
+
+#[test]
+fn test_constructor_call_preserves_type_info()
+{
+	let mut desugarer = Desugarer::new();
+
+	let original_ty = Type {
+		core: Box::new(TypeCore::Base {
+			path: Path::simple(vec!["MyType".to_string()], Span::default()),
+			generics: vec![Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["String".to_string()], Span::default()),
+					generics: Vec::new(),
+				}),
+				span: Span::default(),
+			}],
+		}),
+		span: Span::default(),
+	};
+
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: original_ty,
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Pattern should still have the type information
+	match &output.pattern {
+		Pattern::TypedIdentifier { ty, .. } => {
+			// Type should be preserved
+			match ty.core.as_ref() {
+				TypeCore::Base { path, generics } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["MyType"]
+					);
+					assert_eq!(generics.len(), 1);
+				}
+				_ => panic!("Expected base type"),
+			}
+		}
+		_ => panic!("Expected TypedIdentifier pattern"),
+	}
+}
+
+#[test]
+fn test_desugar_range_full()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test a..b (exclusive end)
+	let range = RangeExpr {
+		start: Some(Box::new(int_lit(1))),
+		end: Some(Box::new(int_lit(10))),
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become Range::new(1, 10)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "Range", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 2);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_inclusive()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test a..=b (inclusive end)
+	let range = RangeExpr {
+		start: Some(Box::new(int_lit(1))),
+		end: Some(Box::new(int_lit(10))),
+		inclusive: true,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become RangeInclusive::new(1, 10)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "RangeInclusive", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 2);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_from()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test a.. (no end)
+	let range = RangeExpr {
+		start: Some(Box::new(int_lit(5))),
+		end: None,
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become RangeFrom::new(5)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "RangeFrom", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 1);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_to()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test ..b (no start, exclusive end)
+	let range = RangeExpr {
+		start: None,
+		end: Some(Box::new(int_lit(10))),
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become RangeTo::new(10)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "RangeTo", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 1);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_to_inclusive()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test ..=b (no start, inclusive end)
+	let range = RangeExpr {
+		start: None,
+		end: Some(Box::new(int_lit(10))),
+		inclusive: true,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become RangeToInclusive::new(10)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "RangeToInclusive", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 1);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_full_unbounded()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test .. (no start, no end)
+	let range = RangeExpr {
+		start: None,
+		end: None,
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become RangeFull::new()
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "RangeFull", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 0);
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_with_complex_expressions()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test (a + 1)..(b * 2)
+	let range = RangeExpr {
+		start: Some(Box::new(Expr::Binary {
+			op: BinaryOp::Add,
+			lhs: Box::new(ident("a")),
+			rhs: Box::new(int_lit(1)),
+			span: Span::default(),
+		})),
+		end: Some(Box::new(Expr::Binary {
+			op: BinaryOp::Mul,
+			lhs: Box::new(ident("b")),
+			rhs: Box::new(int_lit(2)),
+			span: Span::default(),
+		})),
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become Range::new(a + 1, b * 2)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "Range", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 2);
+			// Both args should be binary expressions
+			assert!(matches!(args[0], Expr::Binary { .. }));
+			assert!(matches!(args[1], Expr::Binary { .. }));
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_with_identifiers()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test start..end
+	let range = RangeExpr {
+		start: Some(Box::new(ident("start"))),
+		end: Some(Box::new(ident("end"))),
+		inclusive: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_range(range);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should become Range::new(start, end)
+	match output {
+		Expr::Call { callee, args, .. } => {
+			match callee.as_ref() {
+				Expr::Identifier { path, .. } => {
+					assert_eq!(
+						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+						vec!["std", "Range", "new"]
+					);
+				}
+				_ => panic!("Expected identifier callee"),
+			}
+			assert_eq!(args.len(), 2);
+			assert!(matches!(args[0], Expr::Identifier { .. }));
+			assert!(matches!(args[1], Expr::Identifier { .. }));
+		}
+		_ => panic!("Expected call expression"),
+	}
+}
+
+#[test]
+fn test_desugar_range_in_for_loop()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test for i in 0..10 { }
+	let stmt = Stmt::For {
+		label: None,
+		pattern: simple_for_pattern("i"),
+		iter: Expr::Range(RangeExpr {
+			start: Some(Box::new(int_lit(0))),
 			end: Some(Box::new(int_lit(10))),
 			inclusive: false,
 			span: Span::default(),
-		});
-
-		let output = Desugarer::desugar_pattern(pattern);
-
-		match output {
-			Pattern::Range(_) => (),
-			_ => panic!("Expected range pattern to be unchanged"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_pattern_single_tuple_unwraps()
-	{
-		// Single element tuple should unwrap to just the element
-		let pattern = Pattern::Tuple {
-			patterns: vec![typed_ident_pattern("x", "i32")],
+		}),
+		body: Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		},
+		span: Span::default(),
+	};
 
-		let output = Desugarer::desugar_pattern(pattern);
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Pattern::TypedIdentifier { .. } => (),
-			_ => panic!("Single element tuple should unwrap"),
+	// The for loop should be desugared and the range should become Range::new(0, 10)
+	match output {
+		Stmt::Block(block) => {
+			// First statement should be the iterator variable declaration
+			if let Stmt::VariableDecl(var_decl) = &block.stmts[0] {
+				// The init should be the desugared range
+				match &var_decl.init {
+					Some(Expr::Call { callee, args, .. }) => {
+						match callee.as_ref() {
+							Expr::Identifier { path, .. } => {
+								assert_eq!(
+									path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+									vec!["std", "Range", "new"]
+								);
+							}
+							_ => panic!("Expected Range::new identifier"),
+						}
+						assert_eq!(args.len(), 2);
+					}
+					_ => panic!("Expected Range::new call"),
+				}
+			} else {
+				panic!("Expected variable declaration");
+			}
 		}
+		_ => panic!("Expected block"),
 	}
+}
 
-	#[test]
-	fn test_desugar_pattern_single_or_unwraps()
-	{
-		// Single pattern in Or should unwrap
-		let pattern = Pattern::Or {
-			patterns: vec![typed_ident_pattern("x", "i32")],
+#[test]
+fn test_desugar_range_in_array_index()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Test arr[0..5]
+	let expr = Expr::Index {
+		base: Box::new(ident("arr")),
+		index: Box::new(Expr::Range(RangeExpr {
+			start: Some(Box::new(int_lit(0))),
+			end: Some(Box::new(int_lit(5))),
+			inclusive: false,
 			span: Span::default(),
-		};
+		})),
+		span: Span::default(),
+	};
 
-		let output = Desugarer::desugar_pattern(pattern);
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Pattern::TypedIdentifier { .. } => (),
-			_ => panic!("Single Or pattern should unwrap"),
-		}
+	// The range should be desugared to Range::new(0, 5)
+	match output {
+		Expr::Index { index, .. } => match index.as_ref() {
+			Expr::Call { callee, args, .. } => {
+				match callee.as_ref() {
+					Expr::Identifier { path, .. } => {
+						assert_eq!(
+							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+							vec!["std", "Range", "new"]
+						);
+					}
+					_ => panic!("Expected Range::new"),
+				}
+				assert_eq!(args.len(), 2);
+			}
+			_ => panic!("Expected call expression"),
+		},
+		_ => panic!("Expected index expression"),
+	}
+}
+
+// Add this module to your existing tests file
+
+// Helper to create a simple generic parameter
+fn generic_param(name: &str, bounds: Vec<WhereBound>) -> GenericParam
+{
+	return GenericParam {
+		name: name.to_string(),
+		bounds,
+		span: Span::default(),
+	};
+}
+
+// Helper to create a simple where bound (trait bound)
+fn trait_bound(trait_name: &str) -> WhereBound
+{
+	return WhereBound::Path {
+		path: Path::simple(vec![trait_name.to_string()], Span::default()),
+		args: Vec::new(),
+	};
+}
+
+// Helper to create a where constraint
+fn where_constraint(type_name: &str, bounds: Vec<WhereBound>, type_args: Vec<Type>) -> WhereConstraint
+{
+	return WhereConstraint {
+		ty: Path::simple(vec![type_name.to_string()], Span::default()),
+		bounds,
+		type_args,
+		span: Span::default(),
+	};
+}
+
+#[test]
+fn test_desugar_simple_generic_bound()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>()
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: Vec::new(),
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// After desugaring:
+	// 1. Generic parameter should have no bounds
+	assert!(
+		output.generics[0].bounds.is_empty(),
+		"Generic should have no bounds after desugaring"
+	);
+
+	// 2. Where clause should contain T: Clone
+	assert_eq!(output.where_clause.len(), 1, "Should have one where constraint");
+	assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
+	assert_eq!(output.where_clause[0].bounds.len(), 1);
+	assert!(output.where_clause[0].type_args.is_empty());
+}
+
+#[test]
+fn test_desugar_multiple_bounds()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone + Send + Debug>()
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param(
+			"T",
+			vec![trait_bound("Clone"), trait_bound("Send"), trait_bound("Debug")],
+		)],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: Vec::new(),
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Generic should have no bounds
+	assert!(output.generics[0].bounds.is_empty());
+
+	// Where clause should have T: Clone + Send + Debug
+	assert_eq!(output.where_clause.len(), 1);
+	assert_eq!(output.where_clause[0].bounds.len(), 3);
+}
+
+#[test]
+fn test_desugar_multiple_generics()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone, U: Send, V>()
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![
+			generic_param("T", vec![trait_bound("Clone")]),
+			generic_param("U", vec![trait_bound("Send")]),
+			generic_param("V", Vec::new()), // No bounds
+		],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: Vec::new(),
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// All generics should have no bounds
+	assert!(output.generics[0].bounds.is_empty());
+	assert!(output.generics[1].bounds.is_empty());
+	assert!(output.generics[2].bounds.is_empty());
+
+	// Where clause should have T: Clone and U: Send (but not V)
+	assert_eq!(output.where_clause.len(), 2);
+
+	assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
+	assert_eq!(output.where_clause[0].bounds.len(), 1);
+
+	assert_eq!(output.where_clause[1].ty.segments.len(), 1);
+	assert_eq!(output.where_clause[1].ty.segments[0].name, "U");
+	assert_eq!(output.where_clause[1].bounds.len(), 1);
+}
+
+#[test]
+fn test_error_on_duplicate_simple_constraint()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where T: Send
+	// ERROR: T appears in both places
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
 	}
 
-	#[test]
-	fn test_expand_or_in_struct_pattern()
-	{
-		// struct Point { x: (A | B), y: i32 }
-		let pattern = Pattern::Struct {
+	let _: FunctionSignature = output;
+
+	// match output {
+	// 	Err(e) => {
+	// 		// Verify error message mentions the duplicate
+	// 		let error_str = format!("{}", e);
+	// 		assert!(error_str.contains('T'), "Error should mention type parameter T");
+	// 		assert!(error_str.contains("bounds"), "Error should mention bounds");
+	// 	}
+	// 	_ => panic!("Expected DesugarError"),
+	// }
+	//TODO
+}
+
+#[test]
+fn test_error_on_complex_type_using_bounded_param()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where Vec<T>: Send
+	// ERROR: T appears in where clause
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![where_constraint(
+			"Vec",
+			vec![trait_bound("Send")],
+			vec![simple_type("T")],
+		)],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+
+	let _: FunctionSignature = output;
+
+	// match output {
+	// 	Err(e) => {
+	// 		let error_str = format!("{}", e);
+	// 		assert!(error_str.contains('T'), "Error should mention T");
+	// 	}
+	// 	_ => panic!("Expected DesugarError"),
+	// }
+	// TODO
+}
+
+#[test]
+fn test_ok_different_params_in_where()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone, U>() where Vec<U>: Send
+	// OK: T has bounds, but where clause only mentions U
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![
+			generic_param("T", vec![trait_bound("Clone")]),
+			generic_param("U", Vec::new()),
+		],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![where_constraint(
+			"Vec",
+			vec![trait_bound("Send")],
+			vec![simple_type("U")],
+		)],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// T's bounds should be moved to where clause
+	assert!(output.generics[0].bounds.is_empty());
+	assert!(output.generics[1].bounds.is_empty());
+
+	// Should have two where constraints: T: Clone and Vec<U>: Send
+	assert_eq!(output.where_clause.len(), 2);
+}
+
+#[test]
+fn test_no_bounds_no_where()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T, U>()
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", Vec::new()), generic_param("U", vec![])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: Vec::new(),
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// No bounds should be moved
+	assert!(output.where_clause.is_empty());
+	assert!(output.generics[0].bounds.is_empty());
+	assert!(output.generics[1].bounds.is_empty());
+}
+
+#[test]
+fn test_only_where_clause_no_generic_bounds()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T>() where Vec<T>: Clone
+	// OK: T has no bounds in generic list
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", Vec::new())],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![where_constraint(
+			"Vec",
+			vec![trait_bound("Clone")],
+			vec![simple_type("T")],
+		)],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Where clause should be unchanged
+	assert_eq!(output.where_clause.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments[0].name, "Vec");
+}
+
+#[test]
+fn test_heap_generics_bounds()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn!<A: Alloc> foo<T: Clone>()
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: Vec::new(),
+		call_type: CallType::UserHeap,
+		heap_generics: vec![GenericHeapParam {
+			name: "Alloc".to_string(),
+			kind: crate::parser::HeapGenericKind::Forwarded,
+			span: Span::default(),
+		}],
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Both regular and heap generics should have no bounds
+	assert!(output.generics[0].bounds.is_empty());
+
+	// Where clause should have both T: Clone
+	assert_eq!(output.where_clause.len(), 1);
+
+	// Check that both constraints are present (order doesn't matter)
+	let has_t_clone = output
+		.where_clause
+		.iter()
+		.any(|w| return w.ty.segments.len() == 1 && w.ty.segments[0].name == "T" && w.bounds.len() == 1);
+
+	assert!(has_t_clone, "Should have T: Clone in where clause");
+}
+
+#[test]
+fn test_nested_type_args()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where HashMap<K, Vec<T>>: Debug
+	// ERROR: T appears nested in where clause
+	let vec_t = Type {
+		core: Box::new(TypeCore::Base {
+			path: Path::simple(vec!["Vec".to_string()], Span::default()),
+			generics: vec![simple_type("T")],
+		}),
+		span: Span::default(),
+	};
+
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![where_constraint(
+			"HashMap",
+			vec![trait_bound("Debug")],
+			vec![simple_type("K"), vec_t],
+		)],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+	let _: FunctionSignature = output;
+	//TODO assert!(output.is_err(), "Should error when T appears nested in Vec<T>");
+}
+
+#[test]
+fn test_tuple_type_with_bounded_param()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where (T, U): Debug
+	// ERROR: T appears in tuple
+	let tuple_type = Type {
+		core: Box::new(TypeCore::Tuple(vec![simple_type("T"), simple_type("U")])),
+		span: Span::default(),
+	};
+
+	// Note: This test assumes your where_constraint helper can handle non-simple types
+	// You might need to construct the WhereConstraint manually
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![WhereConstraint {
+			ty: Path::simple(vec!["tuple".to_string()], Span::default()), // placeholder
+			bounds: vec![trait_bound("Debug")],
+			type_args: vec![tuple_type],
+			span: Span::default(),
+		}],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+	let _: FunctionSignature = output;
+	//TODO assert!(output.is_err(), "Should error when T appears in tuple type");
+}
+
+#[test]
+fn test_desugar_impl_generics()
+{
+	let mut desugarer = Desugarer::new();
+
+	// impl<T: Clone> MyTrait for MyType<T> { }
+	let impl_decl = ImplDecl {
+		modifiers: Vec::new(),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		target: ImplTarget {
+			path: Path::simple(vec!["MyType".into()], Span::default()),
+			generics: Vec::new(),
+			span: Span::default(),
+		},
+		trait_path: Some(ImplTarget {
+			path: Path::simple(vec!["MyTrait".into()], Span::default()),
+			generics: Vec::new(),
+			span: Span::default(),
+		}),
+		where_clause: Vec::new(),
+		body: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_impl(impl_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Generic should have no bounds
+	println!("{:#?}", output);
+	assert!(output.generics[0].bounds.is_empty());
+
+	// Where clause should have T: Clone
+	assert_eq!(output.where_clause.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments.len(), 1);
+	assert_eq!(output.where_clause[0].ty.segments[0].name, "T");
+}
+
+#[test]
+fn test_error_impl_generic_in_where()
+{
+	let mut desugarer = Desugarer::new();
+
+	// impl<T: Clone> MyType<T> where T: Send { }
+	// ERROR: T has bounds in generic list and appears in where clause
+	let impl_decl = ImplDecl {
+		modifiers: Vec::new(),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		target: ImplTarget {
+			path: Path::simple(vec!["MyType".into()], Span::default()),
+			generics: Vec::new(),
+			span: Span::default(),
+		},
+		trait_path: None,
+		where_clause: vec![where_constraint("T", vec![trait_bound("Send")], Vec::new())],
+		body: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_impl(impl_decl);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+	let _: ImplDecl = output;
+	//TODO assert!(output.is_err(), "Should error on duplicate constraint in impl");
+}
+
+#[test]
+fn test_reference_type_with_bounded_param()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where &T: Debug
+	// ERROR: T appears in reference type
+	let ref_type = Type {
+		core: Box::new(TypeCore::Reference {
+			mutable: false,
+			inner: Box::new(TypeCore::Base {
+				path: Path::simple(vec!["T".to_string()], Span::default()),
+				generics: Vec::new(),
+			}),
+		}),
+		span: Span::default(),
+	};
+
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![WhereConstraint {
+			ty: Path::simple(vec!["ref".to_string()], Span::default()),
+			bounds: vec![trait_bound("Debug")],
+			type_args: vec![ref_type],
+			span: Span::default(),
+		}],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+	let _: FunctionSignature = output;
+	//TODO assert!(output.is_err(), "Should error when T appears in &T");
+}
+
+#[test]
+fn test_complete_function_desugaring()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone + Send>(x: T) -> T { x }
+	let func = FunctionDecl {
+		signature: FunctionSignature {
+			modifiers: Vec::new(),
+			name: Path::simple(vec!["foo".into()], Span::default()),
+			generics: vec![generic_param("T", vec![trait_bound("Clone"), trait_bound("Send")])],
+			params: vec![Param {
+				ty: simple_type("T"),
+				pattern: Pattern::TypedIdentifier {
+					path: Path::simple(vec!["x".into()], Span::default()),
+					modifiers: Vec::new(),
+					ty: simple_type("T"),
+					call_constructor: None,
+					span: Span::default(),
+					mutable: false,
+				},
+				variadic: false,
+				span: Span::default(),
+			}],
+			return_type: simple_type("T"),
+			where_clause: Vec::new(),
+			call_type: CallType::Regular,
+			heap_generics: Vec::new(),
+			span: Span::default(),
+		},
+		body: Some(Block {
+			stmts: Vec::new(),
+			tail_expr: Some(Box::new(ident("x"))),
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function(func);
+	assert!(desugarer.diagnostics.is_empty());
+
+	assert!(output.signature.generics[0].bounds.is_empty());
+	assert_eq!(output.signature.where_clause.len(), 1);
+	assert_eq!(output.signature.where_clause[0].ty.segments.len(), 1);
+	assert_eq!(output.signature.where_clause[0].ty.segments[0].name, "T");
+	assert_eq!(output.signature.where_clause[0].bounds.len(), 2);
+}
+
+#[test]
+fn test_array_type_with_bounded_param()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<T: Clone>() where [T; 10]: Debug
+	// ERROR: T appears in array type
+	let array_type = Type {
+		core: Box::new(TypeCore::Array {
+			inner: Box::new(TypeCore::Base {
+				path: Path::simple(vec!["T".to_string()], Span::default()),
+				generics: Vec::new(),
+			}),
+			size: Some(Box::new(int_lit(10))),
+		}),
+		span: Span::default(),
+	};
+
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![generic_param("T", vec![trait_bound("Clone")])],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![WhereConstraint {
+			ty: Path::simple(vec!["array".to_string()], Span::default()),
+			bounds: vec![trait_bound("Debug")],
+			type_args: vec![array_type],
+			span: Span::default(),
+		}],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_function_signature(sig);
+	if !desugarer.diagnostics.is_empty() {
+		return;
+	}
+	let _: FunctionSignature = output;
+	//TODO assert!(output.is_err(), "Should error when T appears in [T; 10]");
+}
+// ========== Pattern Desugaring Tests ==========
+
+#[test]
+fn test_desugar_pattern_literal()
+{
+	let pattern = Pattern::Literal {
+		value: Literal::Int {
+			value: "42".to_string(),
+			base: IntBase::Decimal,
+			ty: None,
+			span: Span::default(),
+		},
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::Literal {
+			value: Literal::Int { value, .. },
+			..
+		} if value == "42" => (),
+		_ => panic!("Expected literal pattern to be unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_pattern_range()
+{
+	let pattern = Pattern::Range(RangeExpr {
+		start: Some(Box::new(int_lit(1))),
+		end: Some(Box::new(int_lit(10))),
+		inclusive: false,
+		span: Span::default(),
+	});
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::Range(_) => (),
+		_ => panic!("Expected range pattern to be unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_pattern_single_tuple_unwraps()
+{
+	// Single element tuple should unwrap to just the element
+	let pattern = Pattern::Tuple {
+		patterns: vec![typed_ident_pattern("x", "i32")],
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::TypedIdentifier { .. } => (),
+		_ => panic!("Single element tuple should unwrap"),
+	}
+}
+
+#[test]
+fn test_desugar_pattern_single_or_unwraps()
+{
+	// Single pattern in Or should unwrap
+	let pattern = Pattern::Or {
+		patterns: vec![typed_ident_pattern("x", "i32")],
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	match output {
+		Pattern::TypedIdentifier { .. } => (),
+		_ => panic!("Single Or pattern should unwrap"),
+	}
+}
+
+#[test]
+fn test_expand_or_in_struct_pattern()
+{
+	// struct Point { x: (A | B), y: i32 }
+	let pattern = Pattern::Struct {
+		path: Path::simple(vec!["Point".into()], Span::default()),
+		fields: vec![
+			(
+				"x".into(),
+				Pattern::Or {
+					patterns: vec![
+						Pattern::Variant {
+							path: Path::simple(vec!["A".into()], Span::default()),
+							args: Vec::new(),
+							span: Span::default(),
+						},
+						Pattern::Variant {
+							path: Path::simple(vec!["B".into()], Span::default()),
+							args: Vec::new(),
+							span: Span::default(),
+						},
+					],
+					span: Span::default(),
+				},
+			),
+			("y".into(), typed_ident_pattern("y_val", "i32")),
+		],
+		has_rest: false,
+		span: Span::default(),
+	};
+
+	let output = Desugarer::desugar_pattern(pattern);
+
+	// Should expand to: Point { x: A, y } | Point { x: B, y }
+	match output {
+		Pattern::Or { patterns, .. } => {
+			assert_eq!(patterns.len(), 2);
+			for p in patterns {
+				assert!(matches!(p, Pattern::Struct { .. }));
+			}
+		}
+		_ => panic!("Expected Or pattern with expanded struct patterns"),
+	}
+}
+
+// ========== Statement Desugaring Tests ==========
+
+#[test]
+fn test_desugar_delete_statement()
+{
+	let mut desugarer = Desugarer::new();
+
+	let stmt = Stmt::Delete {
+		expr: ident("x"),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Delete { .. } => (),
+		_ => panic!("Expected delete statement"),
+	}
+}
+
+// ========== Assignment Desugaring Tests ==========
+
+#[test]
+fn test_desugar_struct_assignment()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Point { x, y } = value
+	let stmt = Stmt::Assignment {
+		target: Expr::StructInit {
+			path: Path::simple(vec!["Point".into()], Span::default()),
+			fields: vec![("x".into(), ident("x")), ("y".into(), ident("y"))],
+			base: None,
+			has_rest: false,
+			span: Span::default(),
+		},
+		op: AssignOp::Assign,
+		value: ident("point"),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should create a temp variable and individual field assignments
+	match output {
+		Stmt::Block(block) => {
+			assert!(block.stmts.len() > 1);
+			assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
+		}
+		_ => panic!("Expected block with temp and assignments"),
+	}
+}
+
+#[test]
+fn test_desugar_tuple_assignment()
+{
+	let mut desugarer = Desugarer::new();
+
+	// (a, b) = value
+	let stmt = Stmt::Assignment {
+		target: Expr::Tuple {
+			elements: vec![ident("a"), ident("b")],
+			span: Span::default(),
+		},
+		op: AssignOp::Assign,
+		value: ident("tuple"),
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_stmt(stmt);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Stmt::Block(block) => {
+			// Should have temp decl + individual assignments
+			assert!(block.stmts.len() >= 2);
+		}
+		_ => panic!("Expected block"),
+	}
+}
+
+// ========== Variable Declaration Tests ==========
+
+#[test]
+fn test_desugar_var_decl_struct_pattern()
+{
+	let mut desugarer = Desugarer::new();
+
+	let var = VariableDecl {
+		pattern: Pattern::Struct {
 			path: Path::simple(vec!["Point".into()], Span::default()),
 			fields: vec![
-				(
-					"x".into(),
-					Pattern::Or {
-						patterns: vec![
-							Pattern::Variant {
-								path: Path::simple(vec!["A".into()], Span::default()),
-								args: Vec::new(),
-								span: Span::default(),
-							},
-							Pattern::Variant {
-								path: Path::simple(vec!["B".into()], Span::default()),
-								args: Vec::new(),
-								span: Span::default(),
-							},
-						],
-						span: Span::default(),
-					},
-				),
+				("x".into(), typed_ident_pattern("x_val", "i32")),
 				("y".into(), typed_ident_pattern("y_val", "i32")),
 			],
 			has_rest: false,
 			span: Span::default(),
-		};
+		},
+		init: Some(ident("point")),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = Desugarer::desugar_pattern(pattern);
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-		// Should expand to: Point { x: A, y } | Point { x: B, y }
-		match output {
-			Pattern::Or { patterns, .. } => {
-				assert_eq!(patterns.len(), 2);
-				for p in patterns {
-					assert!(matches!(p, Pattern::Struct { .. }));
-				}
-			}
-			_ => panic!("Expected Or pattern with expanded struct patterns"),
-		}
-	}
+#[test]
+fn test_desugar_var_decl_wildcard_with_type()
+{
+	let mut desugarer = Desugarer::new();
 
-	// ========== Statement Desugaring Tests ==========
-
-	#[test]
-	fn test_desugar_delete_statement()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let stmt = Stmt::Delete {
-			expr: ident("x"),
+	let var = VariableDecl {
+		pattern: Pattern::Wildcard {
+			ty: Some(simple_type("i32")),
 			span: Span::default(),
-		};
+		},
+		init: Some(int_lit(42)),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-		match output {
-			Stmt::Delete { .. } => (),
-			_ => panic!("Expected delete statement"),
-		}
-	}
+#[test]
+fn test_desugar_pattern_to_statements_variant_error()
+{
+	let mut desugarer = Desugarer::new();
 
-	// ========== Assignment Desugaring Tests ==========
+	let pattern = Pattern::Variant {
+		path: Path::simple(vec!["Some".into()], Span::default()),
+		args: vec![typed_ident_pattern("x", "i32")],
+		span: Span::default(),
+	};
 
-	#[test]
-	fn test_desugar_struct_assignment()
-	{
-		let mut desugarer = Desugarer::new();
+	let output = desugarer.desugar_pattern_to_statements(pattern, ident("value"), Span::default(), false);
+	let _: Vec<Stmt> = output;
+	assert!(!desugarer.diagnostics.is_empty());
 
-		// Point { x, y } = value
-		let stmt = Stmt::Assignment {
-			target: Expr::StructInit {
-				path: Path::simple(vec!["Point".into()], Span::default()),
-				fields: vec![("x".into(), ident("x")), ("y".into(), ident("y"))],
-				base: None,
-				has_rest: false,
+	//TODO assert!(output.is_err(), "Variant patterns in var bindings should error");
+}
+
+// ========== Function Parameter Tests ==========
+
+#[test]
+fn test_desugar_function_with_variadic_param()
+{
+	let mut desugarer = Desugarer::new();
+
+	let func = FunctionDecl {
+		signature: FunctionSignature {
+			modifiers: Vec::new(),
+			name: Path::simple(vec!["test".into()], Span::default()),
+			generics: Vec::new(),
+			params: vec![Param {
+				pattern: typed_ident_pattern("args", "Array"),
+				ty: simple_type("Array"),
+				variadic: true,
 				span: Span::default(),
-			},
-			op: AssignOp::Assign,
-			value: ident("point"),
+			}],
+			return_type: Type::unit(Span::default()),
+			where_clause: Vec::new(),
+			call_type: CallType::Regular,
+			heap_generics: Vec::new(),
 			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should create a temp variable and individual field assignments
-		match output {
-			Stmt::Block(block) => {
-				assert!(block.stmts.len() > 1);
-				assert!(matches!(block.stmts[0], Stmt::VariableDecl(_)));
-			}
-			_ => panic!("Expected block with temp and assignments"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_tuple_assignment()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// (a, b) = value
-		let stmt = Stmt::Assignment {
-			target: Expr::Tuple {
-				elements: vec![ident("a"), ident("b")],
-				span: Span::default(),
-			},
-			op: AssignOp::Assign,
-			value: ident("tuple"),
+		},
+		body: Some(Block {
+			stmts: Vec::new(),
+			tail_expr: None,
 			span: Span::default(),
-		};
+		}),
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_stmt(stmt);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_function(func);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			Stmt::Block(block) => {
-				// Should have temp decl + individual assignments
-				assert!(block.stmts.len() >= 2);
-			}
-			_ => panic!("Expected block"),
-		}
-	}
+	assert_eq!(output.signature.params.len(), 1);
+	assert!(output.signature.params[0].variadic);
+}
 
-	// ========== Variable Declaration Tests ==========
+#[test]
+fn test_desugar_function_with_pattern_param()
+{
+	let mut desugarer = Desugarer::new();
 
-	#[test]
-	fn test_desugar_var_decl_struct_pattern()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::Struct {
-				path: Path::simple(vec!["Point".into()], Span::default()),
-				fields: vec![
-					("x".into(), typed_ident_pattern("x_val", "i32")),
-					("y".into(), typed_ident_pattern("y_val", "i32")),
-				],
-				has_rest: false,
-				span: Span::default(),
-			},
-			init: Some(ident("point")),
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
-
-	#[test]
-	fn test_desugar_var_decl_wildcard_with_type()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::Wildcard {
-				ty: Some(simple_type("i32")),
-				span: Span::default(),
-			},
-			init: Some(int_lit(42)),
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
-
-	#[test]
-	fn test_desugar_pattern_to_statements_variant_error()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let pattern = Pattern::Variant {
-			path: Path::simple(vec!["Some".into()], Span::default()),
-			args: vec![typed_ident_pattern("x", "i32")],
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_pattern_to_statements(pattern, ident("value"), Span::default(), false);
-		let _: Vec<Stmt> = output;
-		assert!(!desugarer.diagnostics.is_empty());
-
-		//TODO assert!(output.is_err(), "Variant patterns in var bindings should error");
-	}
-
-	// ========== Function Parameter Tests ==========
-
-	#[test]
-	fn test_desugar_function_with_variadic_param()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let func = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: Vec::new(),
-				params: vec![Param {
-					pattern: typed_ident_pattern("args", "Array"),
-					ty: simple_type("Array"),
-					variadic: true,
+	// fn test((x, y): (i32, i32)) { }
+	let func = FunctionDecl {
+		signature: FunctionSignature {
+			modifiers: Vec::new(),
+			name: Path::simple(vec!["test".into()], Span::default()),
+			generics: Vec::new(),
+			params: vec![Param {
+				pattern: Pattern::Tuple {
+					patterns: vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
 					span: Span::default(),
-				}],
-				return_type: Type::unit(Span::default()),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
-				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function(func);
-		assert!(desugarer.diagnostics.is_empty());
-
-		assert_eq!(output.signature.params.len(), 1);
-		assert!(output.signature.params[0].variadic);
-	}
-
-	#[test]
-	fn test_desugar_function_with_pattern_param()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn test((x, y): (i32, i32)) { }
-		let func = FunctionDecl {
-			signature: FunctionSignature {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["test".into()], Span::default()),
-				generics: Vec::new(),
-				params: vec![Param {
-					pattern: Pattern::Tuple {
-						patterns: vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
-						span: Span::default(),
-					},
-					ty: Type {
-						core: Box::new(TypeCore::Tuple(vec![simple_type("i32"), simple_type("i32")])),
-						span: Span::default(),
-					},
-					variadic: false,
+				},
+				ty: Type {
+					core: Box::new(TypeCore::Tuple(vec![simple_type("i32"), simple_type("i32")])),
 					span: Span::default(),
-				}],
-				return_type: Type::unit(Span::default()),
-				where_clause: Vec::new(),
-				call_type: CallType::Regular,
-				heap_generics: Vec::new(),
+				},
+				variadic: false,
 				span: Span::default(),
-			},
-			body: Some(Block {
-				stmts: Vec::new(),
-				tail_expr: None,
-				span: Span::default(),
-			}),
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_function(func);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should create a temp param and destructure in body
-		assert_eq!(output.signature.params.len(), 1);
-		assert!(matches!(
-			output.signature.params[0].pattern,
-			Pattern::TypedIdentifier { .. }
-		));
-
-		// Body should have the destructuring
-		if let Some(body) = output.body {
-			assert!(!body.stmts.is_empty());
-		}
-	}
-
-	// ========== Expression Tests ==========
-
-	#[test]
-	fn test_desugar_expr_default()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::Default {
-			heap_call: CallType::Regular,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::Default { .. } => (),
-			_ => panic!("Default should remain unchanged"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_struct_init_with_base()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let expr = Expr::StructInit {
-			path: Path::simple(vec!["Point".into()], Span::default()),
-			fields: vec![("x".into(), int_lit(5))],
-			base: Some(Box::new(ident("base_point"))),
-			has_rest: false,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			Expr::StructInit { base, .. } => {
-				assert!(base.is_some());
-			}
-			_ => panic!("Expected struct init"),
-		}
-	}
-
-	// ========== TopLevel Declarations Tests ==========
-
-	#[test]
-	fn test_desugar_struct_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let struct_decl = TopLevelDecl::Struct(StructDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["Point".into()], Span::default()),
-			generics: Vec::new(),
-			fields: Vec::new(),
+			}],
+			return_type: Type::unit(Span::default()),
 			where_clause: Vec::new(),
-			docs: None,
+			call_type: CallType::Regular,
+			heap_generics: Vec::new(),
 			span: Span::default(),
-		});
+		},
+		body: Some(Block {
+			stmts: Vec::new(),
+			tail_expr: None,
+			span: Span::default(),
+		}),
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_top_level_decl(struct_decl);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_function(func);
+	assert!(desugarer.diagnostics.is_empty());
 
-		match output {
-			TopLevelDecl::Struct(_) => (),
-			_ => panic!("Struct should remain unchanged"),
-		}
+	// Should create a temp param and destructure in body
+	assert_eq!(output.signature.params.len(), 1);
+	assert!(matches!(
+		output.signature.params[0].pattern,
+		Pattern::TypedIdentifier { .. }
+	));
+
+	// Body should have the destructuring
+	if let Some(body) = output.body {
+		assert!(!body.stmts.is_empty());
 	}
+}
 
-	#[test]
-	fn test_desugar_union_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
+// ========== Expression Tests ==========
 
-		let union_decl = TopLevelDecl::Union(UnionDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyUnion".into()], Span::default()),
+#[test]
+fn test_desugar_expr_default()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::Default {
+		heap_call: CallType::Regular,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::Default { .. } => (),
+		_ => panic!("Default should remain unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_struct_init_with_base()
+{
+	let mut desugarer = Desugarer::new();
+
+	let expr = Expr::StructInit {
+		path: Path::simple(vec!["Point".into()], Span::default()),
+		fields: vec![("x".into(), int_lit(5))],
+		base: Some(Box::new(ident("base_point"))),
+		has_rest: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		Expr::StructInit { base, .. } => {
+			assert!(base.is_some());
+		}
+		_ => panic!("Expected struct init"),
+	}
+}
+
+// ========== TopLevel Declarations Tests ==========
+
+#[test]
+fn test_desugar_struct_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let struct_decl = TopLevelDecl::Struct(StructDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["Point".into()], Span::default()),
+		generics: Vec::new(),
+		fields: Vec::new(),
+		where_clause: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_top_level_decl(struct_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		TopLevelDecl::Struct(_) => (),
+		_ => panic!("Struct should remain unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_union_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let union_decl = TopLevelDecl::Union(UnionDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyUnion".into()], Span::default()),
+		generics: Vec::new(),
+		fields: Vec::new(),
+		where_clause: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_top_level_decl(union_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		TopLevelDecl::Union(_) => (),
+		_ => panic!("Union should remain unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_enum_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let enum_decl = TopLevelDecl::Enum(EnumDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyEnum".into()], Span::default()),
+		generics: Vec::new(),
+		variants: Vec::new(),
+		where_clause: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_top_level_decl(enum_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		TopLevelDecl::Enum(_) => (),
+		_ => panic!("Enum should remain unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_variant_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let variant_decl = TopLevelDecl::Variant(VariantDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyVariant".into()], Span::default()),
+		generics: Vec::new(),
+		variants: Vec::new(),
+		where_clause: Vec::new(),
+		docs: None,
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_top_level_decl(variant_decl);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		TopLevelDecl::Variant(_) => (),
+		_ => panic!("Variant should remain unchanged"),
+	}
+}
+
+#[test]
+fn test_desugar_type_alias_unchanged()
+{
+	let mut desugarer = Desugarer::new();
+
+	let alias = TopLevelDecl::TypeAlias(TypeAliasDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyType".into()], Span::default()),
+		generics: Vec::new(),
+		ty: simple_type("i32"),
+		docs: None,
+		span: Span::default(),
+	});
+
+	let output = desugarer.desugar_top_level_decl(alias);
+	assert!(desugarer.diagnostics.is_empty());
+
+	match output {
+		TopLevelDecl::TypeAlias(_) => (),
+		_ => panic!("TypeAlias should remain unchanged"),
+	}
+}
+
+// ========== Impl Tests ==========
+
+#[test]
+fn test_desugar_impl_type_alias()
+{
+	let mut desugarer = Desugarer::new();
+
+	let impl_decl = ImplDecl {
+		modifiers: Vec::new(),
+		generics: Vec::new(),
+		target: ImplTarget {
+			path: Path::simple(vec!["MyType".into()], Span::default()),
 			generics: Vec::new(),
-			fields: Vec::new(),
-			where_clause: Vec::new(),
-			docs: None,
 			span: Span::default(),
-		});
-
-		let output = desugarer.desugar_top_level_decl(union_decl);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			TopLevelDecl::Union(_) => (),
-			_ => panic!("Union should remain unchanged"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_enum_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let enum_decl = TopLevelDecl::Enum(EnumDecl {
+		},
+		trait_path: None,
+		where_clause: Vec::new(),
+		body: vec![ImplItem::TypeAlias(TypeAliasDecl {
 			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyEnum".into()], Span::default()),
-			generics: Vec::new(),
-			variants: Vec::new(),
-			where_clause: Vec::new(),
-			docs: None,
-			span: Span::default(),
-		});
-
-		let output = desugarer.desugar_top_level_decl(enum_decl);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			TopLevelDecl::Enum(_) => (),
-			_ => panic!("Enum should remain unchanged"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_variant_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let variant_decl = TopLevelDecl::Variant(VariantDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyVariant".into()], Span::default()),
-			generics: Vec::new(),
-			variants: Vec::new(),
-			where_clause: Vec::new(),
-			docs: None,
-			span: Span::default(),
-		});
-
-		let output = desugarer.desugar_top_level_decl(variant_decl);
-		assert!(desugarer.diagnostics.is_empty());
-
-		match output {
-			TopLevelDecl::Variant(_) => (),
-			_ => panic!("Variant should remain unchanged"),
-		}
-	}
-
-	#[test]
-	fn test_desugar_type_alias_unchanged()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let alias = TopLevelDecl::TypeAlias(TypeAliasDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyType".into()], Span::default()),
+			name: Path::simple(vec!["AssocType".into()], Span::default()),
 			generics: Vec::new(),
 			ty: simple_type("i32"),
 			docs: None,
 			span: Span::default(),
-		});
+		})],
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_top_level_decl(alias);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_impl(impl_decl);
+	let _: ImplDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-		match output {
-			TopLevelDecl::TypeAlias(_) => (),
-			_ => panic!("TypeAlias should remain unchanged"),
-		}
-	}
+#[test]
+fn test_desugar_impl_const()
+{
+	let mut desugarer = Desugarer::new();
 
-	// ========== Impl Tests ==========
-
-	#[test]
-	fn test_desugar_impl_type_alias()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let impl_decl = ImplDecl {
-			modifiers: Vec::new(),
+	let impl_decl = ImplDecl {
+		modifiers: Vec::new(),
+		generics: Vec::new(),
+		target: ImplTarget {
+			path: Path::simple(vec!["MyType".into()], Span::default()),
 			generics: Vec::new(),
-			target: ImplTarget {
-				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			},
-			trait_path: None,
-			where_clause: Vec::new(),
-			body: vec![ImplItem::TypeAlias(TypeAliasDecl {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["AssocType".into()], Span::default()),
-				generics: Vec::new(),
-				ty: simple_type("i32"),
-				docs: None,
-				span: Span::default(),
-			})],
+			span: Span::default(),
+		},
+		trait_path: None,
+		where_clause: Vec::new(),
+		body: vec![ImplItem::Const(VariableDecl {
+			pattern: typed_ident_pattern("CONST", "i32"),
+			init: Some(int_lit(42)),
+			comp_const: true,
 			docs: None,
 			span: Span::default(),
-		};
+		})],
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_impl(impl_decl);
-		let _: ImplDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
+	let output = desugarer.desugar_impl(impl_decl);
+	let _: ImplDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-	#[test]
-	fn test_desugar_impl_const()
-	{
-		let mut desugarer = Desugarer::new();
+// ========== Trait Tests ==========
 
-		let impl_decl = ImplDecl {
+#[test]
+fn test_desugar_trait_type_alias()
+{
+	let mut desugarer = Desugarer::new();
+
+	let trait_decl = TraitDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyTrait".into()], Span::default()),
+		generics: Vec::new(),
+		super_traits: Vec::new(),
+		items: vec![TraitItem::TypeAlias(TypeAliasDecl {
 			modifiers: Vec::new(),
+			name: Path::simple(vec!["AssocType".into()], Span::default()),
 			generics: Vec::new(),
-			target: ImplTarget {
-				path: Path::simple(vec!["MyType".into()], Span::default()),
-				generics: Vec::new(),
-				span: Span::default(),
-			},
-			trait_path: None,
-			where_clause: Vec::new(),
-			body: vec![ImplItem::Const(VariableDecl {
-				pattern: typed_ident_pattern("CONST", "i32"),
-				init: Some(int_lit(42)),
-				comp_const: true,
-				docs: None,
-				span: Span::default(),
+			ty: simple_type("i32"),
+			docs: None,
+			span: Span::default(),
+		})],
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_trait(trait_decl);
+	let _: TraitDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
+
+#[test]
+fn test_desugar_trait_const()
+{
+	let mut desugarer = Desugarer::new();
+
+	let trait_decl = TraitDecl {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["MyTrait".into()], Span::default()),
+		generics: Vec::new(),
+		super_traits: Vec::new(),
+		items: vec![TraitItem::Const(VariableDecl {
+			pattern: typed_ident_pattern("CONST", "i32"),
+			init: Some(int_lit(42)),
+			comp_const: true,
+			docs: None,
+			span: Span::default(),
+		})],
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_trait(trait_decl);
+	let _: TraitDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
+
+// ========== Where Clause Tests ==========
+
+#[test]
+fn test_where_clause_with_func_bound()
+{
+	let mut desugarer = Desugarer::new();
+
+	// fn foo<F>() where F: Fn(i32) -> i32
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![crate::parser::GenericParam {
+			name: "F".to_string(),
+			bounds: Vec::new(),
+			span: Span::default(),
+		}],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![WhereConstraint {
+			ty: Path::simple(vec!["F".to_string()], Span::default()),
+			bounds: vec![WhereBound::Func(FuncBound::Fn {
+				args: vec![simple_type("i32")],
+				ret: Some(simple_type("i32")),
 			})],
-			docs: None,
+			type_args: Vec::new(),
 			span: Span::default(),
-		};
+		}],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_impl(impl_decl);
-		let _: ImplDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
+	let output = desugarer.desugar_function_signature(sig);
+	let _: FunctionSignature = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-	// ========== Trait Tests ==========
+#[test]
+fn test_where_clause_with_generic_args()
+{
+	let mut desugarer = Desugarer::new();
 
-	#[test]
-	fn test_desugar_trait_type_alias()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let trait_decl = TraitDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: Vec::new(),
-			super_traits: Vec::new(),
-			items: vec![TraitItem::TypeAlias(TypeAliasDecl {
-				modifiers: Vec::new(),
-				name: Path::simple(vec!["AssocType".into()], Span::default()),
-				generics: Vec::new(),
-				ty: simple_type("i32"),
-				docs: None,
-				span: Span::default(),
-			})],
-			docs: None,
+	// fn foo<T>() where Vec<T>: Clone
+	let sig = FunctionSignature {
+		modifiers: Vec::new(),
+		name: Path::simple(vec!["foo".into()], Span::default()),
+		generics: vec![crate::parser::GenericParam {
+			name: "T".to_string(),
+			bounds: Vec::new(),
 			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_trait(trait_decl);
-		let _: TraitDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
-
-	#[test]
-	fn test_desugar_trait_const()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let trait_decl = TraitDecl {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["MyTrait".into()], Span::default()),
-			generics: Vec::new(),
-			super_traits: Vec::new(),
-			items: vec![TraitItem::Const(VariableDecl {
-				pattern: typed_ident_pattern("CONST", "i32"),
-				init: Some(int_lit(42)),
-				comp_const: true,
-				docs: None,
-				span: Span::default(),
-			})],
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_trait(trait_decl);
-		let _: TraitDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
-
-	// ========== Where Clause Tests ==========
-
-	#[test]
-	fn test_where_clause_with_func_bound()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// fn foo<F>() where F: Fn(i32) -> i32
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![crate::parser::GenericParam {
-				name: "F".to_string(),
-				bounds: Vec::new(),
-				span: Span::default(),
+		}],
+		params: Vec::new(),
+		return_type: Type::unit(Span::default()),
+		where_clause: vec![WhereConstraint {
+			ty: Path::simple(vec!["Vec".to_string()], Span::default()),
+			bounds: vec![WhereBound::Path {
+				path: Path::simple(vec!["Clone".to_string()], Span::default()),
+				args: vec![GenericArg::Type(simple_type("i32"))],
 			}],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![WhereConstraint {
-				ty: Path::simple(vec!["F".to_string()], Span::default()),
-				bounds: vec![WhereBound::Func(FuncBound::Fn {
-					args: vec![simple_type("i32")],
-					ret: Some(simple_type("i32")),
-				})],
-				type_args: Vec::new(),
-				span: Span::default(),
-			}],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
+			type_args: vec![simple_type("T")],
 			span: Span::default(),
-		};
+		}],
+		call_type: CallType::Regular,
+		heap_generics: Vec::new(),
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_function_signature(sig);
-		let _: FunctionSignature = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
+	let output = desugarer.desugar_function_signature(sig);
+	let _: FunctionSignature = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-	#[test]
-	fn test_where_clause_with_generic_args()
-	{
-		let mut desugarer = Desugarer::new();
+// ========== Helper Function Tests ==========
 
-		// fn foo<T>() where Vec<T>: Clone
-		let sig = FunctionSignature {
-			modifiers: Vec::new(),
-			name: Path::simple(vec!["foo".into()], Span::default()),
-			generics: vec![crate::parser::GenericParam {
-				name: "T".to_string(),
-				bounds: Vec::new(),
-				span: Span::default(),
-			}],
-			params: Vec::new(),
-			return_type: Type::unit(Span::default()),
-			where_clause: vec![WhereConstraint {
-				ty: Path::simple(vec!["Vec".to_string()], Span::default()),
-				bounds: vec![WhereBound::Path {
-					path: Path::simple(vec!["Clone".to_string()], Span::default()),
-					args: vec![GenericArg::Type(simple_type("i32"))],
-				}],
-				type_args: vec![simple_type("T")],
-				span: Span::default(),
-			}],
-			call_type: CallType::Regular,
-			heap_generics: Vec::new(),
+#[test]
+fn test_has_nested_patterns_false()
+{
+	let patterns = vec![
+		typed_ident_pattern("x", "i32"),
+		Pattern::Wildcard {
+			ty: None,
 			span: Span::default(),
-		};
+		},
+	];
 
-		let output = desugarer.desugar_function_signature(sig);
-		let _: FunctionSignature = output;
-		assert!(desugarer.diagnostics.is_empty());
-	}
+	assert!(!Desugarer::has_nested_patterns(&patterns));
+}
 
-	// ========== Helper Function Tests ==========
-
-	#[test]
-	fn test_has_nested_patterns_false()
-	{
-		let patterns = vec![
-			typed_ident_pattern("x", "i32"),
-			Pattern::Wildcard {
-				ty: None,
-				span: Span::default(),
-			},
-		];
-
-		assert!(!Desugarer::has_nested_patterns(&patterns));
-	}
-
-	#[test]
-	fn test_has_nested_patterns_true()
-	{
-		let patterns = vec![
-			typed_ident_pattern("x", "i32"),
-			Pattern::Tuple {
-				patterns: vec![typed_ident_pattern("y", "i32")],
-				span: Span::default(),
-			},
-		];
-
-		assert!(Desugarer::has_nested_patterns(&patterns));
-	}
-
-	// ========== Cartesian Product Tests ==========
-
-	#[test]
-	fn test_cartesian_product_patterns_empty()
-	{
-		// let mut desugarer= Desugarer::new();
-		let output = Desugarer::cartesian_product_patterns(Vec::new());
-		assert_eq!(output.len(), 1);
-		assert_eq!(output[0].len(), 0);
-	}
-
-	#[test]
-	fn test_cartesian_product_patterns_single()
-	{
-		// let mut desugarer= Desugarer::new();
-		let lists = vec![vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")]];
-
-		let output = Desugarer::cartesian_product_patterns(lists);
-		assert_eq!(output.len(), 2);
-		assert_eq!(output[0].len(), 1);
-		assert_eq!(output[1].len(), 1);
-	}
-
-	#[test]
-	fn test_cartesian_product_patterns_multiple()
-	{
-		// let mut desugarer= Desugarer::new();
-		let lists = vec![
-			vec![typed_ident_pattern("a", "i32"), typed_ident_pattern("b", "i32")],
-			vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
-		];
-
-		let output = Desugarer::cartesian_product_patterns(lists);
-		// 2 x 2 = 4 combinations
-		assert_eq!(output.len(), 4);
-		for combo in output {
-			assert_eq!(combo.len(), 2);
-		}
-	}
-
-	// ========== Edge Cases ==========
-
-	#[test]
-	fn test_desugar_nested_tuple_in_struct()
-	{
-		let mut desugarer = Desugarer::new();
-
-		let var = VariableDecl {
-			pattern: Pattern::Struct {
-				path: Path::simple(vec!["Point".into()], Span::default()),
-				fields: vec![(
-					"coords".into(),
-					Pattern::Tuple {
-						patterns: vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
-						span: Span::default(),
-					},
-				)],
-				has_rest: false,
-				span: Span::default(),
-			},
-			init: Some(ident("point")),
-			comp_const: false,
-			docs: None,
+#[test]
+fn test_has_nested_patterns_true()
+{
+	let patterns = vec![
+		typed_ident_pattern("x", "i32"),
+		Pattern::Tuple {
+			patterns: vec![typed_ident_pattern("y", "i32")],
 			span: Span::default(),
-		};
+		},
+	];
 
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(desugarer.diagnostics.is_empty());
+	assert!(Desugarer::has_nested_patterns(&patterns));
+}
+
+// ========== Cartesian Product Tests ==========
+
+#[test]
+fn test_cartesian_product_patterns_empty()
+{
+	// let mut desugarer= Desugarer::new();
+	let output = Desugarer::cartesian_product_patterns(Vec::new());
+	assert_eq!(output.len(), 1);
+	assert_eq!(output[0].len(), 0);
+}
+
+#[test]
+fn test_cartesian_product_patterns_single()
+{
+	// let mut desugarer= Desugarer::new();
+	let lists = vec![vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")]];
+
+	let output = Desugarer::cartesian_product_patterns(lists);
+	assert_eq!(output.len(), 2);
+	assert_eq!(output[0].len(), 1);
+	assert_eq!(output[1].len(), 1);
+}
+
+#[test]
+fn test_cartesian_product_patterns_multiple()
+{
+	// let mut desugarer= Desugarer::new();
+	let lists = vec![
+		vec![typed_ident_pattern("a", "i32"), typed_ident_pattern("b", "i32")],
+		vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
+	];
+
+	let output = Desugarer::cartesian_product_patterns(lists);
+	// 2 x 2 = 4 combinations
+	assert_eq!(output.len(), 4);
+	for combo in output {
+		assert_eq!(combo.len(), 2);
 	}
+}
 
-	#[test]
-	fn test_loop_stack_management()
-	{
-		let mut desugarer = Desugarer::new();
+// ========== Edge Cases ==========
 
-		// Push and pop loops
-		let label1 = desugarer.push_loop(Some("outer".into()));
-		assert_eq!(label1, "outer");
-		assert_eq!(desugarer.current_loop(), Some(&"outer".to_string()));
+#[test]
+fn test_desugar_nested_tuple_in_struct()
+{
+	let mut desugarer = Desugarer::new();
 
-		let label2 = desugarer.push_loop(None);
-		assert!(label2.starts_with("#__loop_"));
-		assert_eq!(desugarer.current_loop(), Some(&label2));
-
-		desugarer.pop_loop();
-		assert_eq!(desugarer.current_loop(), Some(&"outer".to_string()));
-
-		desugarer.pop_loop();
-		assert_eq!(desugarer.current_loop(), None);
-	}
-
-	#[test]
-	fn test_desugar_error_display()
-	{
-		let error = DesugarError::generic(Span::default(), "test error");
-
-		let display = format!("{}", error);
-		assert!(display.contains("test error"));
-	}
-
-	#[test]
-	fn test_desugar_error_with_context()
-	{
-		let error = DesugarError::generic(Span::default(), "test error").with_context("while desugaring function");
-
-		let display = format!("{}", error);
-		assert!(display.contains("while desugaring function"));
-	}
-
-	// Add these tests to your test file
-
-	// ========== Struct Init with Rest Pattern Tests ==========
-
-	#[test]
-	fn test_desugar_struct_init_without_rest()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// Point { x: 1, y: 2 } - no rest, should not wrap
-		let expr = Expr::StructInit {
+	let var = VariableDecl {
+		pattern: Pattern::Struct {
 			path: Path::simple(vec!["Point".into()], Span::default()),
-			fields: vec![("x".into(), int_lit(1)), ("y".into(), int_lit(2))],
-			base: None,
+			fields: vec![(
+				"coords".into(),
+				Pattern::Tuple {
+					patterns: vec![typed_ident_pattern("x", "i32"), typed_ident_pattern("y", "i32")],
+					span: Span::default(),
+				},
+			)],
 			has_rest: false,
 			span: Span::default(),
-		};
+		},
+		init: Some(ident("point")),
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_expr(expr);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(desugarer.diagnostics.is_empty());
+}
 
-		// Should NOT be wrapped in a block
-		match output {
-			Expr::StructInit { fields, has_rest, .. } => {
-				assert_eq!(fields.len(), 2);
-				assert!(!has_rest);
-			}
-			_ => panic!("Expected unwrapped struct init"),
+#[test]
+fn test_loop_stack_management()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Push and pop loops
+	let label1 = desugarer.push_loop(Some("outer".into()));
+	assert_eq!(label1, "outer");
+	assert_eq!(desugarer.current_loop(), Some(&"outer".to_string()));
+
+	let label2 = desugarer.push_loop(None);
+	assert!(label2.starts_with("#__loop_"));
+	assert_eq!(desugarer.current_loop(), Some(&label2));
+
+	desugarer.pop_loop();
+	assert_eq!(desugarer.current_loop(), Some(&"outer".to_string()));
+
+	desugarer.pop_loop();
+	assert_eq!(desugarer.current_loop(), None);
+}
+
+#[test]
+fn test_desugar_error_display()
+{
+	let error = DesugarError::generic(Span::default(), "test error");
+
+	let display = format!("{}", error);
+	assert!(display.contains("test error"));
+}
+
+#[test]
+fn test_desugar_error_with_context()
+{
+	let error = DesugarError::generic(Span::default(), "test error").with_context("while desugaring function");
+
+	let display = format!("{}", error);
+	assert!(display.contains("while desugaring function"));
+}
+
+// Add these tests to your test file
+
+// ========== Struct Init with Rest Pattern Tests ==========
+
+#[test]
+fn test_desugar_struct_init_without_rest()
+{
+	let mut desugarer = Desugarer::new();
+
+	// Point { x: 1, y: 2 } - no rest, should not wrap
+	let expr = Expr::StructInit {
+		path: Path::simple(vec!["Point".into()], Span::default()),
+		fields: vec![("x".into(), int_lit(1)), ("y".into(), int_lit(2))],
+		base: None,
+		has_rest: false,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_expr(expr);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should NOT be wrapped in a block
+	match output {
+		Expr::StructInit { fields, has_rest, .. } => {
+			assert_eq!(fields.len(), 2);
+			assert!(!has_rest);
 		}
+		_ => panic!("Expected unwrapped struct init"),
 	}
+}
 
-	#[test]
-	fn test_idempotent_desugaring_struct_init()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_idempotent_desugaring_struct_init()
+{
+	let mut desugarer = Desugarer::new();
 
-		let expr = Expr::StructInit {
-			path: Path::simple(vec!["Point".into()], Span::default()),
-			fields: vec![("x".into(), int_lit(1))],
-			base: None,
-			has_rest: true,
-			span: Span::default(),
-		};
+	let expr = Expr::StructInit {
+		path: Path::simple(vec!["Point".into()], Span::default()),
+		fields: vec![("x".into(), int_lit(1))],
+		base: None,
+		has_rest: true,
+		span: Span::default(),
+	};
 
-		// First desugaring
-		let result1 = desugarer.desugar_expr(expr);
+	// First desugaring
+	let result1 = desugarer.desugar_expr(expr);
 
-		// Second desugaring should produce the same result
-		let result2 = desugarer.desugar_expr(result1.clone());
+	// Second desugaring should produce the same result
+	let result2 = desugarer.desugar_expr(result1.clone());
 
-		println!("{}\n----------------\n{}", result1, result2);
-		// They should be equal (desugaring should be idempotent)
-		assert_eq!(result1, result2, "Desugaring should be idempotent");
-	}
+	println!("{}\n----------------\n{}", result1, result2);
+	// They should be equal (desugaring should be idempotent)
+	assert_eq!(result1, result2, "Desugaring should be idempotent");
+}
 
-	// Add these tests to your existing test file
+// Add these tests to your existing test file
 
-	// ========== Constructor Call Tests ==========
+// ========== Constructor Call Tests ==========
 
-	#[test]
-	fn test_constructor_tuple_type()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_constructor_tuple_type()
+{
+	let mut desugarer = Desugarer::new();
 
-		// var x: (Point, Config)();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
+	// var x: (Point, Config)();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
 				span: Span::default(),
-				mutable: false,
 			},
-			init: None,
-			comp_const: false,
-			docs: None,
+			call_constructor: Some(CallType::Regular),
 			span: Span::default(),
-		};
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// Should generate (Point::create(), Config::create())
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Tuple { elements, .. } => {
-				assert_eq!(elements.len(), 2);
-				// Both elements should be constructor calls
-				for elem in elements {
-					assert!(matches!(elem, Expr::Call { .. }));
+	// Should generate (Point::create(), Config::create())
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Tuple { elements, .. } => {
+			assert_eq!(elements.len(), 2);
+			// Both elements should be constructor calls
+			for elem in elements {
+				assert!(matches!(elem, Expr::Call { .. }));
+			}
+		}
+		other => panic!("Expected tuple expression, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_array_type()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var arr: [Point; 5]();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["arr".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Array {
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+					size: Some(Box::new(int_lit(5))),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate [Point::create(); 5]
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+			// Value should be Point::create()
+			assert!(matches!(*value, Expr::Call { .. }));
+			// Count should be 5
+			assert!(matches!(
+				*count,
+				Expr::Literal {
+					value: Literal::Int { value, .. },
+					..
+				} if value == "5"
+			));
+		}
+		other => panic!("Expected array repeat expression, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_unsized_array()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var arr: [Point]();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["arr".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Array {
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+					size: None,
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate [] (empty array)
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Array(ArrayLiteral::List { elements, .. }) => {
+			assert_eq!(elements.len(), 0);
+		}
+		other => panic!("Expected empty array list, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_mut_type()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: mut Point();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Mutable {
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate Point::create() (mut wrapper is transparent)
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { callee, .. } => match *callee {
+			Expr::Identifier { path, .. } => {
+				assert_eq!(
+					path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
+					vec!["Point", "create"]
+				);
+			}
+			_ => panic!("Expected identifier callee"),
+		},
+		other => panic!("Expected call expression, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_reference_error()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: &Point(); - should error
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Reference {
+					mutable: false,
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(!desugarer.diagnostics.is_empty());
+	//TODO assert!(output.is_err(), "Should error on reference constructor");
+
+	// match output {
+	// 	Err(e) => {
+	// 		let error_str = format!("{}", e);
+	// 		assert!(error_str.contains("reference"), "Error should mention references");
+	// 	}
+	// 	_ => panic!("Expected DesugarError for reference constructor"),
+	// }
+}
+
+#[test]
+fn test_constructor_mut_reference_error()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: &mut Point(); - should error
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Reference {
+					mutable: true,
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(!desugarer.diagnostics.is_empty());
+	//TODO assert!(output.is_err(), "Should error on mutable reference constructor");
+
+	// match output {
+	// 	Err(e) => {
+	// 		let error_str = format!("{}", e);
+	// 		assert!(error_str.contains("reference"), "Error should mention references");
+	// 	}
+	// 	_ => panic!("Expected DesugarError for mut reference constructor"),
+	// }
+}
+
+#[test]
+fn test_constructor_pointer_error()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: Point*(); - should error
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Pointer {
+					mutable: false,
+					inner: Box::new(TypeCore::Base {
+						path: Path::simple(vec!["Point".to_string()], Span::default()),
+						generics: Vec::new(),
+					}),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	let _: VariableDecl = output;
+	assert!(!desugarer.diagnostics.is_empty());
+	//TODO assert!(output.is_err(), "Should error on pointer constructor");
+
+	// match output {
+	// 	Err(e) => {
+	// 		let error_str = format!("{}", e);
+	// 		assert!(error_str.contains("pointer"), "Error should mention pointers");
+	// 	}
+	// 	_ => panic!("Expected DesugarError for pointer constructor"),
+	// }
+}
+
+#[test]
+fn test_constructor_impl_trait_error()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: impl Trait(); - should error
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::ImplTrait {
+					bounds: vec![trait_bound("Trait")],
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(!desugarer.diagnostics.is_empty());
+
+	let _: VariableDecl = output;
+
+	// match output {
+	// 	Err(e) => {
+	// 		let error_str = format!("{}", e);
+	// 		assert!(
+	// 			error_str.contains("impl Trait") || error_str.contains("abstract"),
+	// 			"Error should mention impl trait or abstract types"
+	// 		);
+	// 	}
+	// 	_ => panic!("Expected DesugarError for impl trait constructor"),
+	// }
+	// TODO
+}
+
+#[test]
+fn test_constructor_nested_tuple_array()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: [(Point, Config); 3]();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Array {
+					inner: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
+					size: Some(Box::new(int_lit(3))),
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate [(Point::create(), Config::create()); 3]
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+			// Value should be a tuple of constructor calls
+			match *value {
+				Expr::Tuple { elements, .. } => {
+					assert_eq!(elements.len(), 2);
+					assert!(matches!(elements[0], Expr::Call { .. }));
+					assert!(matches!(elements[1], Expr::Call { .. }));
 				}
+				_ => panic!("Expected tuple in array repeat"),
 			}
-			other => panic!("Expected tuple expression, got {:?}", other),
+			// Count should be 3
+			assert!(matches!(
+				*count,
+				Expr::Literal {
+					value: Literal::Int { value, .. },
+					..
+				} if value == "3"
+			));
 		}
+		other => panic!("Expected array repeat, got {:?}", other),
 	}
+}
 
-	#[test]
-	fn test_constructor_array_type()
-	{
-		let mut desugarer = Desugarer::new();
+#[test]
+fn test_constructor_empty_tuple()
+{
+	let mut desugarer = Desugarer::new();
 
-		// var arr: [Point; 5]();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["arr".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Array {
+	// var x: ()(); - unit type
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Tuple(Vec::new())),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate ()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Tuple { elements, .. } => {
+			assert_eq!(elements.len(), 0);
+		}
+		other => panic!("Expected empty tuple, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_heap_call_type()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: Point!();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: simple_type("Point"),
+			call_constructor: Some(CallType::UserHeap),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate Point::create!()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { call_type, .. } => {
+			assert_eq!(call_type, CallType::UserHeap);
+		}
+		other => panic!("Expected heap call, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_maybe_heap_call_type()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: Point?();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: simple_type("Point"),
+			call_constructor: Some(CallType::UserMaybeHeap),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate Point::create?()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { call_type, .. } => {
+			assert_eq!(call_type, CallType::UserMaybeHeap);
+		}
+		other => panic!("Expected maybe heap call, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_with_generics_preserves_generics()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: Vec<String>();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Base {
+					path: Path::simple(vec!["Vec".to_string()], Span::default()),
+					generics: vec![simple_type("String")],
+				}),
+				span: Span::default(),
+			},
+			call_constructor: Some(CallType::Regular),
+			span: Span::default(),
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
+
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
+
+	// Should generate Vec::<String>::create()
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Call { callee, .. } => match *callee {
+			Expr::Identifier { path, .. } => {
+				// Should be Vec::create with String generic on Vec segment
+				assert_eq!(path.segments.len(), 2);
+				assert_eq!(path.segments[0].name, "Vec");
+				assert_eq!(path.segments[0].generics.len(), 1, "{path}");
+				assert_eq!(path.segments[1].name, "create");
+			}
+			_ => panic!("Expected identifier callee"),
+		},
+		other => panic!("Expected call expression, got {:?}", other),
+	}
+}
+
+#[test]
+fn test_constructor_nested_arrays()
+{
+	let mut desugarer = Desugarer::new();
+
+	// var x: [[Point; 2]; 3]();
+	let var = VariableDecl {
+		pattern: Pattern::TypedIdentifier {
+			path: Path::simple(vec!["x".to_string()], Span::default()),
+			modifiers: Vec::new(),
+			ty: Type {
+				core: Box::new(TypeCore::Array {
+					inner: Box::new(TypeCore::Array {
 						inner: Box::new(TypeCore::Base {
 							path: Path::simple(vec!["Point".to_string()], Span::default()),
 							generics: Vec::new(),
 						}),
-						size: Some(Box::new(int_lit(5))),
+						size: Some(Box::new(int_lit(2))),
 					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
+					size: Some(Box::new(int_lit(3))),
+				}),
 				span: Span::default(),
-				mutable: false,
 			},
-			init: None,
-			comp_const: false,
-			docs: None,
+			call_constructor: Some(CallType::Regular),
 			span: Span::default(),
-		};
+			mutable: false,
+		},
+		init: None,
+		comp_const: false,
+		docs: None,
+		span: Span::default(),
+	};
 
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
+	let output = desugarer.desugar_variable_decl(var);
+	assert!(desugarer.diagnostics.is_empty());
 
-		// Should generate [Point::create(); 5]
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
-				// Value should be Point::create()
-				assert!(matches!(*value, Expr::Call { .. }));
-				// Count should be 5
-				assert!(matches!(
-					*count,
-					Expr::Literal {
-						value: Literal::Int { value, .. },
-						..
-					} if value == "5"
-				));
-			}
-			other => panic!("Expected array repeat expression, got {:?}", other),
-		}
-	}
+	// Should generate [[Point::create(); 2]; 3]
+	assert!(output.init.is_some());
+	match output.init.unwrap() {
+		Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
+			// Outer count should be 3
+			assert!(matches!(
+				*count,
+				Expr::Literal {
+					value: Literal::Int { value, .. },
+					..
+				} if value == "3"
+			));
 
-	#[test]
-	fn test_constructor_unsized_array()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var arr: [Point]();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["arr".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Array {
-						inner: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: Vec::new(),
-						}),
-						size: None,
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate [] (empty array)
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Array(ArrayLiteral::List { elements, .. }) => {
-				assert_eq!(elements.len(), 0);
-			}
-			other => panic!("Expected empty array list, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_mut_type()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: mut Point();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Mutable {
-						inner: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: Vec::new(),
-						}),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate Point::create() (mut wrapper is transparent)
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { callee, .. } => match *callee {
-				Expr::Identifier { path, .. } => {
-					assert_eq!(
-						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["Point", "create"]
-					);
+			// Value should be inner array [Point::create(); 2]
+			match *value {
+				Expr::Array(ArrayLiteral::Repeat {
+					value: inner_value,
+					count: inner_count,
+					..
+				}) => {
+					assert!(matches!(
+						*inner_count,
+						Expr::Literal {
+							value: Literal::Int { value, .. },
+							..
+						} if value == "2"
+					));
+					assert!(matches!(*inner_value, Expr::Call { .. }));
 				}
-				_ => panic!("Expected identifier callee"),
-			},
-			other => panic!("Expected call expression, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_reference_error()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: &Point(); - should error
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Reference {
-						mutable: false,
-						inner: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: Vec::new(),
-						}),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(!desugarer.diagnostics.is_empty());
-		//TODO assert!(output.is_err(), "Should error on reference constructor");
-
-		// match output {
-		// 	Err(e) => {
-		// 		let error_str = format!("{}", e);
-		// 		assert!(error_str.contains("reference"), "Error should mention references");
-		// 	}
-		// 	_ => panic!("Expected DesugarError for reference constructor"),
-		// }
-	}
-
-	#[test]
-	fn test_constructor_mut_reference_error()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: &mut Point(); - should error
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Reference {
-						mutable: true,
-						inner: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: Vec::new(),
-						}),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(!desugarer.diagnostics.is_empty());
-		//TODO assert!(output.is_err(), "Should error on mutable reference constructor");
-
-		// match output {
-		// 	Err(e) => {
-		// 		let error_str = format!("{}", e);
-		// 		assert!(error_str.contains("reference"), "Error should mention references");
-		// 	}
-		// 	_ => panic!("Expected DesugarError for mut reference constructor"),
-		// }
-	}
-
-	#[test]
-	fn test_constructor_pointer_error()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: Point*(); - should error
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Pointer {
-						mutable: false,
-						inner: Box::new(TypeCore::Base {
-							path: Path::simple(vec!["Point".to_string()], Span::default()),
-							generics: Vec::new(),
-						}),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		let _: VariableDecl = output;
-		assert!(!desugarer.diagnostics.is_empty());
-		//TODO assert!(output.is_err(), "Should error on pointer constructor");
-
-		// match output {
-		// 	Err(e) => {
-		// 		let error_str = format!("{}", e);
-		// 		assert!(error_str.contains("pointer"), "Error should mention pointers");
-		// 	}
-		// 	_ => panic!("Expected DesugarError for pointer constructor"),
-		// }
-	}
-
-	#[test]
-	fn test_constructor_impl_trait_error()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: impl Trait(); - should error
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::ImplTrait {
-						bounds: vec![trait_bound("Trait")],
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(!desugarer.diagnostics.is_empty());
-
-		let _: VariableDecl = output;
-
-		// match output {
-		// 	Err(e) => {
-		// 		let error_str = format!("{}", e);
-		// 		assert!(
-		// 			error_str.contains("impl Trait") || error_str.contains("abstract"),
-		// 			"Error should mention impl trait or abstract types"
-		// 		);
-		// 	}
-		// 	_ => panic!("Expected DesugarError for impl trait constructor"),
-		// }
-		// TODO
-	}
-
-	#[test]
-	fn test_constructor_nested_tuple_array()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: [(Point, Config); 3]();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Array {
-						inner: Box::new(TypeCore::Tuple(vec![simple_type("Point"), simple_type("Config")])),
-						size: Some(Box::new(int_lit(3))),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate [(Point::create(), Config::create()); 3]
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
-				// Value should be a tuple of constructor calls
-				match *value {
-					Expr::Tuple { elements, .. } => {
-						assert_eq!(elements.len(), 2);
-						assert!(matches!(elements[0], Expr::Call { .. }));
-						assert!(matches!(elements[1], Expr::Call { .. }));
-					}
-					_ => panic!("Expected tuple in array repeat"),
-				}
-				// Count should be 3
-				assert!(matches!(
-					*count,
-					Expr::Literal {
-						value: Literal::Int { value, .. },
-						..
-					} if value == "3"
-				));
+				_ => panic!("Expected nested array repeat"),
 			}
-			other => panic!("Expected array repeat, got {:?}", other),
 		}
-	}
-
-	#[test]
-	fn test_constructor_empty_tuple()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: ()(); - unit type
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Tuple(Vec::new())),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate ()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Tuple { elements, .. } => {
-				assert_eq!(elements.len(), 0);
-			}
-			other => panic!("Expected empty tuple, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_heap_call_type()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: Point!();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: simple_type("Point"),
-				call_constructor: Some(CallType::UserHeap),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate Point::create!()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { call_type, .. } => {
-				assert_eq!(call_type, CallType::UserHeap);
-			}
-			other => panic!("Expected heap call, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_maybe_heap_call_type()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: Point?();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: simple_type("Point"),
-				call_constructor: Some(CallType::UserMaybeHeap),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate Point::create?()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { call_type, .. } => {
-				assert_eq!(call_type, CallType::UserMaybeHeap);
-			}
-			other => panic!("Expected maybe heap call, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_with_generics_preserves_generics()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: Vec<String>();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Base {
-						path: Path::simple(vec!["Vec".to_string()], Span::default()),
-						generics: vec![simple_type("String")],
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate Vec::<String>::create()
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Call { callee, .. } => match *callee {
-				Expr::Identifier { path, .. } => {
-					// Should be Vec::create with String generic on Vec segment
-					assert_eq!(path.segments.len(), 2);
-					assert_eq!(path.segments[0].name, "Vec");
-					assert_eq!(path.segments[0].generics.len(), 1, "{path}");
-					assert_eq!(path.segments[1].name, "create");
-				}
-				_ => panic!("Expected identifier callee"),
-			},
-			other => panic!("Expected call expression, got {:?}", other),
-		}
-	}
-
-	#[test]
-	fn test_constructor_nested_arrays()
-	{
-		let mut desugarer = Desugarer::new();
-
-		// var x: [[Point; 2]; 3]();
-		let var = VariableDecl {
-			pattern: Pattern::TypedIdentifier {
-				path: Path::simple(vec!["x".to_string()], Span::default()),
-				modifiers: Vec::new(),
-				ty: Type {
-					core: Box::new(TypeCore::Array {
-						inner: Box::new(TypeCore::Array {
-							inner: Box::new(TypeCore::Base {
-								path: Path::simple(vec!["Point".to_string()], Span::default()),
-								generics: Vec::new(),
-							}),
-							size: Some(Box::new(int_lit(2))),
-						}),
-						size: Some(Box::new(int_lit(3))),
-					}),
-					span: Span::default(),
-				},
-				call_constructor: Some(CallType::Regular),
-				span: Span::default(),
-				mutable: false,
-			},
-			init: None,
-			comp_const: false,
-			docs: None,
-			span: Span::default(),
-		};
-
-		let output = desugarer.desugar_variable_decl(var);
-		assert!(desugarer.diagnostics.is_empty());
-
-		// Should generate [[Point::create(); 2]; 3]
-		assert!(output.init.is_some());
-		match output.init.unwrap() {
-			Expr::Array(ArrayLiteral::Repeat { value, count, .. }) => {
-				// Outer count should be 3
-				assert!(matches!(
-					*count,
-					Expr::Literal {
-						value: Literal::Int { value, .. },
-						..
-					} if value == "3"
-				));
-
-				// Value should be inner array [Point::create(); 2]
-				match *value {
-					Expr::Array(ArrayLiteral::Repeat {
-						value: inner_value,
-						count: inner_count,
-						..
-					}) => {
-						assert!(matches!(
-							*inner_count,
-							Expr::Literal {
-								value: Literal::Int { value, .. },
-								..
-							} if value == "2"
-						));
-						assert!(matches!(*inner_value, Expr::Call { .. }));
-					}
-					_ => panic!("Expected nested array repeat"),
-				}
-			}
-			other => panic!("Expected outer array repeat, got {:?}", other),
-		}
+		other => panic!("Expected outer array repeat, got {:?}", other),
 	}
 }
