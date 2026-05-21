@@ -3491,6 +3491,12 @@ impl<'a> Resolver<'a>
 
 	fn resolve_impl_decl(&mut self, i: &ImplDecl) -> Result<ResolvedImplDecl, NameResolutionError>
 	{
+		let body_scope: Option<ScopeId> = self.next_anon_scope();
+		let prev: ScopeId = self.current_scope;
+		if let Some(sc) = body_scope {
+			self.current_scope = sc;
+		}
+
 		let resolved_target: ResolvedPath = self.resolve_path_or_primitive(&i.target.path, i.target.span())?;
 		let resolved_trait: Option<ResolvedPath> = i
 			.trait_path
@@ -3503,12 +3509,6 @@ impl<'a> Resolver<'a>
 			ResolvedPathKind::AssocItem { base, .. } => self.self_sym.replace(*base),
 			ResolvedPathKind::Primitive(_) => self.self_sym.take(),
 		};
-
-		let body_scope: Option<ScopeId> = self.next_anon_scope();
-		let prev: ScopeId = self.current_scope;
-		if let Some(sc) = body_scope {
-			self.current_scope = sc;
-		}
 
 		let where_clause: Vec<ResolvedWhereConstraint> = i
 			.where_clause
