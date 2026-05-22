@@ -1730,6 +1730,41 @@ pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTab
 		})
 		.collect();
 
+	for (path, &root) in &module_roots {
+		if path.is_empty() {
+			continue;
+		}
+
+		let parent_scope: ScopeId = if path.len() == 1 {
+			global_root
+		} else {
+			let parent_path: &[String] = &path[..path.len() - 1];
+			match module_roots.get(parent_path) {
+				Some(&s) => s,
+				None => global_root,
+			}
+		};
+
+		let name: &String = path.last().expect("non-empty path");
+
+		let already_exists: bool = global_scopes[parent_scope.0]
+			.symbols
+			.iter()
+			.any(|&sid| return global_syms[sid.0].name == *name);
+
+		if !already_exists {
+			let sym_id: SymbolId = SymbolId(global_syms.len());
+			global_syms.push(Symbol {
+				name: name.clone(),
+				kind: SymbolKind::Module,
+				def_span: Span::default(),
+				scope: parent_scope,
+				introduced_scope: Some(root),
+				visibility: Visibility::Public,
+			});
+			global_scopes[parent_scope.0].symbols.push(sym_id);
+		}
+	}
 	return GlobalSymbolTable {
 		scopes: global_scopes,
 		symbols: global_syms,
