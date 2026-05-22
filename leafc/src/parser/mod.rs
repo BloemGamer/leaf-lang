@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[path = "../tests/parser/tests.rs"]
+#[path = "../../tests/parser/tests.rs"]
 mod tests;
 
 use std::{cmp::Ordering, iter::Peekable, marker::PhantomData};

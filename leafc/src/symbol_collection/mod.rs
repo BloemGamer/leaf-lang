@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[path = "../tests/symbol_collection/tests.rs"]
+#[path = "../../tests/symbol_collection/tests.rs"]
 mod tests;
 
 use std::{collections::HashMap, fmt};

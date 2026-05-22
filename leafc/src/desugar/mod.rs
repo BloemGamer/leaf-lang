@@ -1,7 +1,7 @@
 #![allow(clippy::unused_self)]
 
 #[cfg(test)]
-#[path = "../tests/desugar/tests.rs"]
+#[path = "../../tests/desugar/tests.rs"]
 mod tests;
 
 use leaf_proc::{Spanned, compiler_bug};

@@ -1,7 +1,7 @@
 pub mod expander;
 
 #[cfg(test)]
-#[path = "../tests/lexer/tests.rs"]
+#[path = "../../tests/lexer/tests.rs"]
 mod tests;
 
 use std::marker::PhantomData;
