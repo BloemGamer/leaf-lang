@@ -1668,6 +1668,9 @@ impl<'a> Resolver<'a>
 	fn resolve_use_glob(&self, target_path: &[String], name: &str) -> Option<SymbolId>
 	{
 		if let Some(&root) = self.global.module_roots.get(target_path) {
+			if let Some(sym_id) = self.find_sym_in_global_scope(root, name) {
+				return Some(sym_id);
+			}
 			return self.resolve_in_module_surface(target_path, root, name, 8);
 		}
 
@@ -3045,6 +3048,31 @@ impl<'a> Resolver<'a>
 
 	fn resolve_variable_decl(&mut self, var: &VariableDecl) -> Result<ResolvedVariableDecl, NameResolutionError>
 	{
+		if let parser::Pattern::Wildcard { ty, span } = &var.pattern {
+			let ty = match ty {
+				Some(t) => self.resolve_type(t)?,
+				None => ResolvedType {
+					core: Box::new(ResolvedTypeCore::Primitive {
+						name: "_".to_string(),
+						generics: Vec::new(),
+					}),
+					span: *span,
+				},
+			};
+			let init = var.init.as_ref().map(|e| self.resolve_expr(e)).transpose()?;
+			return Ok(ResolvedVariableDecl {
+				resolved_name: SymbolId(usize::MAX),
+				name: "_".to_string(),
+				ty,
+				init,
+				comp_const: var.comp_const,
+				mutable: false,
+				modifiers: Vec::new(),
+				docs: var.docs.clone(),
+				span: var.span(),
+			});
+		}
+
 		let (name_str, var_span, mutable) = match &var.pattern {
 			parser::Pattern::TypedIdentifier {
 				path, span, mutable, ..

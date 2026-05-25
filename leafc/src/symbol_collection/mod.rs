@@ -935,6 +935,13 @@ impl Collector
 
 	fn collect_variable_decl(&mut self, var: &VariableDecl) -> Result<(), SymbolCollectionError>
 	{
+		if let Pattern::Wildcard { .. } = &var.pattern {
+			if let Some(init) = &var.init {
+				self.collect_expr(init)?;
+			}
+			return Ok(());
+		}
+
 		let Pattern::TypedIdentifier {
 			path, span, modifiers, ..
 		} = &var.pattern
@@ -1765,6 +1772,60 @@ pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTab
 			global_scopes[parent_scope.0].symbols.push(sym_id);
 		}
 	}
+
+	let mut changed: bool = true;
+	while changed {
+		changed = false;
+		for (i, (_, _, table)) in modules.iter().enumerate() {
+			let scope_off: usize = scope_offsets[i];
+			let sym_off: usize = sym_offsets[i];
+
+			for (local_sym_idx, sym) in table.symbols.iter().enumerate() {
+				if !matches!(sym.kind, SymbolKind::Module) {
+					continue;
+				}
+				let Some(introduced) = sym.introduced_scope else {
+					continue;
+				};
+				let global_introduced = ScopeId(introduced.0 + scope_off);
+
+				let parent_path: Option<Vec<String>> = module_roots.iter().find_map(|(path, &root_scope)| {
+					let sym_scope: ScopeId = ScopeId(sym.scope.0 + scope_off);
+					let mut s: ScopeId = sym_scope;
+					loop {
+						if s == root_scope {
+							return Some(path.clone());
+						}
+						match global_scopes[s.0].parent {
+							Some(p) if p != global_root => s = p,
+							_ => break,
+						}
+					}
+					return None;
+				});
+
+				let Some(mut full_path) = parent_path else { continue };
+				full_path.push(sym.name.clone());
+
+				if !module_roots.contains_key(&full_path) {
+					module_roots.insert(full_path.clone(), global_introduced);
+					let global_sym_id: SymbolId = SymbolId(local_sym_idx + sym_off);
+					let parent_scope_id: ScopeId = *module_roots
+						.get(&full_path[..full_path.len() - 1])
+						.unwrap_or(&global_root);
+					let already: bool = global_scopes[parent_scope_id.0]
+						.symbols
+						.iter()
+						.any(|&sid| return global_syms[sid.0].name == sym.name);
+					if !already {
+						global_scopes[parent_scope_id.0].symbols.push(global_sym_id);
+					}
+					changed = true;
+				}
+			}
+		}
+	}
+
 	return GlobalSymbolTable {
 		scopes: global_scopes,
 		symbols: global_syms,

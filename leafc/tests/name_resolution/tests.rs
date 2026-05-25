@@ -95,7 +95,7 @@ fn build_pending(
 			)),
 			source_map,
 		);
-		let ast: AST = Parser::from(ExpandedLexer::new(lexer)).parse_program().unwrap();
+		let (ast, _) = Parser::from(ExpandedLexer::new(lexer)).parse_program().unwrap();
 		let res = crate::desugar::desugar_program(ast);
 		assert!(res.is_ok());
 		let desugared = res.unwrap();

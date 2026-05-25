@@ -237,7 +237,7 @@ fn run(
 		modules::PendingModule {
 			logical_path: vec!["std".to_string()],
 			file_path: {
-				let mut tmp = path::PathBuf::from("leaf-test/std.leaf");
+				let mut tmp = path::PathBuf::from(STDLIB_PATH);
 				tmp.pop();
 				tmp.push("std.leaf");
 				tmp
@@ -273,7 +273,6 @@ fn run(
 	let mut pending_modules: Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)> = Vec::new();
 
 	while let Some(pm) = queue.pop_front() {
-		println!("{:#?}", queue);
 		if args.modules {
 			println!("::{}", pm.logical_path.join("::"));
 		}
@@ -313,9 +312,12 @@ fn run(
 		parser.allow_type_inference = true;
 		let res = parser.parse_program();
 		let ast: AST = match res {
-			Ok(ast) => ast,
+			Ok((ast, diags)) => {
+				diagnostics.extend(diags);
+				ast
+			}
 			Err(err) => {
-				diagnostics.push(*err);
+				diagnostics.extend(err);
 				return (Err(None), diagnostics);
 			}
 		};
@@ -337,7 +339,6 @@ fn run(
 				);
 			}
 		});
-		eprintln!("{:#?}", queue);
 
 		let res = desugar::desugar_program(ast);
 		let desugared: DesugaredAST = match res {

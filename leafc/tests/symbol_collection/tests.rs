@@ -14,8 +14,8 @@ fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, SymbolCollectionE
 	let config = Config::default();
 	let source_index = SourceIndex::new(0);
 	let lexer = Lexer::new(&config, source, source_index);
-	let mut parser = Parser::from(lexer);
-	let program = parser.parse_program().unwrap();
+	let parser = Parser::from(lexer);
+	let (program, _) = parser.parse_program().unwrap();
 
 	let res = crate::desugar::desugar_program(program);
 	assert!(res.is_ok());

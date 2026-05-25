@@ -1,3 +1,5 @@
+// The parser does not try to recover it's state, and just errors, this will maybe change in the future, but not for now
+
 pub mod display;
 #[cfg(test)]
 #[path = "../../tests/parser/tests.rs"]
@@ -14,7 +16,7 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
-use leaf_proc::{Spanned, diagnostic_builder};
+use leaf_proc::Spanned;
 
 /// Recursive descent parser for the programming language.
 ///
@@ -51,6 +53,7 @@ where
 	/// Type inference is a specific feature the language does not opt in for
 	/// The only reason this option is even here is for testing purposes
 	pub allow_type_inference: bool,
+	diagnostics: Vec<DiagnosticBuilder>,
 
 	_marker: PhantomData<&'source ()>,
 }
@@ -91,6 +94,7 @@ where
 			last_span: Span::default(),
 			buffered_token: None,
 			allow_type_inference: false,
+			diagnostics: Vec::new(),
 			_marker: PhantomData,
 		};
 	}
@@ -2720,14 +2724,23 @@ where
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn parse_program(&mut self) -> Result<AST, Box<DiagnosticBuilder>>
+	pub fn parse_program(mut self) -> Result<(AST, Vec<DiagnosticBuilder>), Vec<DiagnosticBuilder>>
 	{
-		let top_level_block: TopLevelBlock = self.parse_top_level_block()?;
+		let top_level_block: TopLevelBlock = match self.parse_top_level_block() {
+			Ok(tb) => tb,
+			Err(e) => {
+				self.diagnostics.push(*e);
+				return Err(self.diagnostics);
+			}
+		};
 
-		return Ok(AST {
-			top_level_block,
-			source_index: self.source_index,
-		});
+		return Ok((
+			AST {
+				top_level_block,
+				source_index: self.source_index,
+			},
+			self.diagnostics.clone(),
+		));
 	}
 
 	fn parse_top_level_block(&mut self) -> Result<TopLevelBlock, Box<DiagnosticBuilder>>
