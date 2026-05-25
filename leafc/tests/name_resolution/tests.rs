@@ -100,8 +100,8 @@ fn build_pending(
 		assert!(res.is_ok());
 		let desugared = res.unwrap();
 		println!("{}", desugared.0);
-		let local = symbol_collection::collect_symbols(&desugared.0, logical.clone())?;
-		pending.push((logical, desugared.0, local));
+		let local = symbol_collection::collect_symbols(&desugared.0, logical.clone()).unwrap();
+		pending.push((logical, desugared.0, local.0));
 	}
 	return Ok(pending);
 }

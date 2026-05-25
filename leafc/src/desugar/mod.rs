@@ -2426,7 +2426,7 @@ pub fn desugar_program(program: AST) -> Result<(DesugaredAST, Vec<DiagnosticBuil
 	if desugarer
 		.diagnostics
 		.iter()
-		.any(|d| return d.severity == Severity::Error)
+		.any(|d| return d.severity.should_stop_compiling())
 	{
 		return Err(desugarer.diagnostics);
 	}

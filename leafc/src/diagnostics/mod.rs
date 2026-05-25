@@ -82,6 +82,14 @@ pub enum Severity
 	Bug,
 }
 
+impl Severity
+{
+	pub fn should_stop_compiling(&self) -> bool
+	{
+		matches!(self, Severity::Error | Self::Bug)
+	}
+}
+
 #[derive(Debug, Clone, Spanned)]
 pub struct Label
 {

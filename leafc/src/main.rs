@@ -362,14 +362,13 @@ fn run(
 		// Pass logical_path so the local table knows which module it belongs to
 		let ret = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone());
 		let local_symbols: LocalSymbolTable = match ret {
-			Ok(ls) => ls,
-			e @ Err(_) => {
-				return (
-					e.map(|_| ())
-						.map_err(CompileError::SymbolCollection)
-						.map_err(Option::Some),
-					diagnostics,
-				);
+			Ok((ls, mut diags)) => {
+				diagnostics.append(&mut diags);
+				ls
+			}
+			Err(mut diags) => {
+				diagnostics.append(&mut diags);
+				return (Err(None), diagnostics);
 			}
 		};
 		if args.symbols {

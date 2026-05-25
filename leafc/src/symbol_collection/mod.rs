@@ -51,6 +51,11 @@ pub struct ScopeNodeId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub usize);
 
+impl SymbolId
+{
+	const DUMMY: SymbolId = SymbolId(usize::MAX);
+}
+
 /// The kind of symbol and its associated metadata.
 ///
 /// Different symbol kinds represent different language constructs and may have
@@ -611,6 +616,7 @@ struct Collector
 	table: LocalSymbolTable,
 	current_scope: ScopeId,
 	next_node_id: usize,
+	diagnostics: Vec<DiagnosticBuilder>,
 }
 
 impl Collector
@@ -637,6 +643,7 @@ impl Collector
 			},
 			current_scope: ScopeId(0),
 			next_node_id: 1,
+			diagnostics: Vec::new(),
 		};
 	}
 
@@ -696,9 +703,9 @@ impl Collector
 		return (scope_id, node_id);
 	}
 
-	fn in_scope<F, R>(&mut self, scope: ScopeId, f: F) -> Result<R, SymbolCollectionError>
+	fn in_scope<F, R>(&mut self, scope: ScopeId, f: F) -> R
 	where
-		F: FnOnce(&mut Self) -> Result<R, SymbolCollectionError>,
+		F: FnOnce(&mut Self) -> R,
 	{
 		let prev = self.current_scope;
 		self.current_scope = scope;
@@ -714,21 +721,25 @@ impl Collector
 		kind: SymbolKind,
 		def_span: Span,
 		visibility: Visibility,
-	) -> Result<SymbolId, SymbolCollectionError>
+	) -> SymbolId
 	{
 		if !matches!(kind, SymbolKind::Label) {
 			for &sid in &self.table.scopes[scope.0].symbols {
 				let existing: &Symbol = &self.table.symbols[sid.0];
 				if existing.name == name && !matches!(existing.kind, SymbolKind::Label) {
-					return Err(SymbolCollectionError {
-						span: def_span,
-						context: Vec::new(),
-						kind: SymbolCollectionErrorKind::DuplicateDefinition {
-							name,
-							first_definition: existing.def_span,
-							scope,
-						},
-					});
+					self.diagnostics.push(
+						SymbolCollectionError {
+							span: def_span,
+							context: Vec::new(),
+							kind: SymbolCollectionErrorKind::DuplicateDefinition {
+								name,
+								first_definition: existing.def_span,
+								scope,
+							},
+						}
+						.build(),
+					);
+					return SymbolId::DUMMY;
 				}
 			}
 		}
@@ -743,16 +754,10 @@ impl Collector
 			visibility,
 		});
 		self.table.scopes[scope.0].symbols.push(id);
-		return Ok(id);
+		return id;
 	}
 
-	fn define(
-		&mut self,
-		name: Ident,
-		kind: SymbolKind,
-		def_span: Span,
-		visibility: Visibility,
-	) -> Result<SymbolId, SymbolCollectionError>
+	fn define(&mut self, name: Ident, kind: SymbolKind, def_span: Span, visibility: Visibility) -> SymbolId
 	{
 		let scope = self.current_scope;
 		return self.insert_symbol(scope, name, kind, def_span, visibility);
@@ -760,51 +765,57 @@ impl Collector
 
 	fn set_introduced_scope(&mut self, sym_id: SymbolId, scope_id: ScopeId)
 	{
+		if sym_id == SymbolId::DUMMY {
+			return;
+		}
 		self.table.symbols[sym_id.0].introduced_scope = Some(scope_id);
 	}
 
-	fn validate_simple_path(&self, path: &Path, declaration_type: &str) -> Result<(), SymbolCollectionError>
+	fn validate_simple_path(&mut self, path: &Path, declaration_type: &str)
 	{
 		if path.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				kind: SymbolCollectionErrorKind::InvalidPath {
-					declaration_type: declaration_type.to_string(),
-					reason: PathErrorReason::MultipleSegments,
-					scope: self.current_scope,
-				},
-			});
+			return self.diagnostics.push(
+				SymbolCollectionError {
+					span: path.span(),
+					context: Vec::new(),
+					kind: SymbolCollectionErrorKind::InvalidPath {
+						declaration_type: declaration_type.to_string(),
+						reason: PathErrorReason::MultipleSegments,
+						scope: self.current_scope,
+					},
+				}
+				.build(),
+			);
 		}
 		if !path.segments[0].generics.is_empty() {
-			return Err(SymbolCollectionError {
-				span: path.span(),
-				context: Vec::new(),
-				kind: SymbolCollectionErrorKind::InvalidPath {
-					declaration_type: declaration_type.to_string(),
-					reason: PathErrorReason::HasGenerics,
-					scope: self.current_scope,
-				},
-			});
+			self.diagnostics.push(
+				SymbolCollectionError {
+					span: path.span(),
+					context: Vec::new(),
+					kind: SymbolCollectionErrorKind::InvalidPath {
+						declaration_type: declaration_type.to_string(),
+						reason: PathErrorReason::HasGenerics,
+						scope: self.current_scope,
+					},
+				}
+				.build(),
+			);
 		}
-		return Ok(());
 	}
 
-	fn collect_program(&mut self, program: &DesugaredAST) -> Result<(), SymbolCollectionError>
+	fn collect_program(&mut self, program: &DesugaredAST)
 	{
-		self.collect_top_level_block(&program.top_level_block)?;
-		return Ok(());
+		self.collect_top_level_block(&program.top_level_block);
 	}
 
-	fn collect_top_level_block(&mut self, top_level_block: &TopLevelBlock) -> Result<(), SymbolCollectionError>
+	fn collect_top_level_block(&mut self, top_level_block: &TopLevelBlock)
 	{
 		for item in &top_level_block.items {
-			self.collect_top_level_decl(item)?;
+			self.collect_top_level_decl(item);
 		}
-		return Ok(());
 	}
 
-	fn collect_top_level_decl(&mut self, decl: &TopLevelDecl) -> Result<(), SymbolCollectionError>
+	fn collect_top_level_decl(&mut self, decl: &TopLevelDecl)
 	{
 		return match decl {
 			TopLevelDecl::Function(f) => self.collect_function_decl(f),
@@ -821,30 +832,32 @@ impl Collector
 		};
 	}
 
-	fn collect_block(&mut self, block: &Block) -> Result<(), SymbolCollectionError>
+	fn collect_block(&mut self, block: &Block)
 	{
 		for item in &block.stmts {
-			self.collect_stmt(item)?;
+			self.collect_stmt(item);
 		}
 		if let Some(expr) = &block.tail_expr {
-			self.collect_expr(expr)?;
+			self.collect_expr(expr);
 		}
-		return Ok(());
 	}
 
-	fn collect_function_decl(&mut self, func: &FunctionDecl) -> Result<(), SymbolCollectionError>
+	fn collect_function_decl(&mut self, func: &FunctionDecl)
 	{
 		let sig: &FunctionSignature = &func.signature;
 
 		if sig.name.segments.len() != 1 {
-			return Err(SymbolCollectionError {
-				span: sig.name.span(),
-				context: Vec::new(),
-				kind: SymbolCollectionErrorKind::Generic {
-					message: "A function signature can't be a path, and only can have one segment".to_string(),
-					scope: self.current_scope,
-				},
-			});
+			self.diagnostics.push(
+				SymbolCollectionError {
+					span: sig.name.span(),
+					context: Vec::new(),
+					kind: SymbolCollectionErrorKind::Generic {
+						message: "A function signature can't be a path, and only can have one segment".to_string(),
+						scope: self.current_scope,
+					},
+				}
+				.build(),
+			);
 		}
 
 		let name: String = sig
@@ -863,7 +876,7 @@ impl Collector
 			},
 			sig.span(),
 			get_visibility(&func.signature.modifiers),
-		)?;
+		);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::FunctionBody, func.span());
 		self.set_introduced_scope(sym_id, body_scope);
@@ -875,7 +888,7 @@ impl Collector
 					SymbolKind::GenericParam,
 					generic.span(),
 					Visibility::Private,
-				)?;
+				);
 			}
 
 			if sig.call_type == CallType::Regular {
@@ -893,7 +906,7 @@ impl Collector
 							.find(|g| return g.name == *ge)
 							.map_or_else(|| return sig.span(), |g| return g.span()),
 						Visibility::Private,
-					)?;
+					);
 				}
 			}
 
@@ -904,7 +917,7 @@ impl Collector
 				let Pattern::TypedIdentifier { path, span, .. } = &param.pattern else {
 					unreachable!("Desugarer should have handled this");
 				};
-				c.validate_simple_path(path, "function")?;
+				c.validate_simple_path(path, "function");
 
 				let Pattern::TypedIdentifier { mutable, .. } = param.pattern else {
 					unreachable!("Should be handled by the desugarer");
@@ -920,26 +933,22 @@ impl Collector
 					},
 					*span,
 					Visibility::Private,
-				)?;
+				);
 			}
 
 			if let Some(body) = &func.body {
-				c.collect_block(body)?;
+				c.collect_block(body);
 			}
-
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_variable_decl(&mut self, var: &VariableDecl) -> Result<(), SymbolCollectionError>
+	fn collect_variable_decl(&mut self, var: &VariableDecl)
 	{
-		if let Pattern::Wildcard { .. } = &var.pattern {
-			if let Some(init) = &var.init {
-				self.collect_expr(init)?;
-			}
-			return Ok(());
+		if let Pattern::Wildcard { .. } = &var.pattern
+			&& let Some(init) = &var.init
+		{
+			self.collect_expr(init);
+			return;
 		}
 
 		let Pattern::TypedIdentifier {
@@ -949,7 +958,7 @@ impl Collector
 			unreachable!("Desugarer should have handled this");
 		};
 
-		self.validate_simple_path(path, "variable")?;
+		self.validate_simple_path(path, "variable");
 
 		let Pattern::TypedIdentifier { mutable, .. } = var.pattern else {
 			unreachable!("Should be handled by the desugarer");
@@ -971,26 +980,24 @@ impl Collector
 			},
 			*span,
 			get_visibility(modifiers),
-		)?;
+		);
 
 		if let Some(init) = &var.init {
-			self.collect_expr(init)?;
+			self.collect_expr(init);
 		}
-
-		return Ok(());
 	}
 
-	fn collect_struct_decl(&mut self, s: &StructDecl) -> Result<(), SymbolCollectionError>
+	fn collect_struct_decl(&mut self, s: &StructDecl)
 	{
 		let path: &Path = &s.name;
-		self.validate_simple_path(path, "struct")?;
+		self.validate_simple_path(path, "struct");
 
 		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Struct,
 			s.span(),
 			get_visibility(&s.modifiers),
-		)?;
+		);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::StructFields, s.span());
 		self.set_introduced_scope(sym_id, body_scope);
@@ -1002,25 +1009,22 @@ impl Collector
 					SymbolKind::Field,
 					f.span(),
 					get_visibility(&f.modifiers),
-				)?;
+				);
 			}
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_union_decl(&mut self, u: &parser::UnionDecl) -> Result<(), SymbolCollectionError>
+	fn collect_union_decl(&mut self, u: &parser::UnionDecl)
 	{
 		let path: &Path = &u.name;
-		self.validate_simple_path(path, "union")?;
+		self.validate_simple_path(path, "union");
 
 		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Union,
 			u.span(),
 			get_visibility(&u.modifiers),
-		)?;
+		);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::UnionFields, u.span());
 		self.set_introduced_scope(sym_id, body_scope);
@@ -1032,97 +1036,84 @@ impl Collector
 					SymbolKind::Field,
 					f.span(),
 					get_visibility(&f.modifiers),
-				)?;
+				);
 			}
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_enum_decl(&mut self, e: &parser::EnumDecl) -> Result<(), SymbolCollectionError>
+	fn collect_enum_decl(&mut self, e: &parser::EnumDecl)
 	{
 		let path: &Path = &e.name;
-		self.validate_simple_path(path, "enum")?;
+		self.validate_simple_path(path, "enum");
 
 		let visibility: Visibility = get_visibility(&e.modifiers);
-		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility)?;
+		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Enum, e.span(), visibility);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::EnumVariants, e.span());
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &e.variants {
-				c.define(f.name.clone(), SymbolKind::EnumVariant, f.span(), visibility)?;
+				c.define(f.name.clone(), SymbolKind::EnumVariant, f.span(), visibility);
 			}
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_variant_decl(&mut self, v: &parser::VariantDecl) -> Result<(), SymbolCollectionError>
+	fn collect_variant_decl(&mut self, v: &parser::VariantDecl)
 	{
 		let path: &Path = &v.name;
-		self.validate_simple_path(path, "variant")?;
+		self.validate_simple_path(path, "variant");
 
 		let visibility: Visibility = get_visibility(&v.modifiers);
-		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility)?;
+		let sym_id: SymbolId = self.define(path.segments[0].name.clone(), SymbolKind::Variant, v.span(), visibility);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::VariantMembers, v.span());
 		self.set_introduced_scope(sym_id, body_scope);
 
 		self.in_scope(body_scope, |c| {
 			for f in &v.variants {
-				c.define(f.name.clone(), SymbolKind::VariantMember, f.span(), visibility)?;
+				c.define(f.name.clone(), SymbolKind::VariantMember, f.span(), visibility);
 			}
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_type_alias_decl(&mut self, t: &parser::TypeAliasDecl) -> Result<(), SymbolCollectionError>
+	fn collect_type_alias_decl(&mut self, t: &parser::TypeAliasDecl)
 	{
 		let path: &Path = &t.name;
-		self.validate_simple_path(path, "type")?;
+		self.validate_simple_path(path, "type");
 
 		self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::TypeAlias,
 			path.span(),
 			get_visibility(&t.modifiers),
-		)?;
-
-		return Ok(());
+		);
 	}
 
-	fn collect_assoc_type_decl(&mut self, t: &parser::AssocTypeDecl) -> Result<(), SymbolCollectionError>
+	fn collect_assoc_type_decl(&mut self, t: &parser::AssocTypeDecl)
 	{
 		let path: &Path = &t.name;
-		self.validate_simple_path(path, "type")?;
+		self.validate_simple_path(path, "type");
 
 		self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::AssocType,
 			path.span(),
 			get_visibility(&t.modifiers),
-		)?;
-
-		return Ok(());
+		);
 	}
 
-	fn collect_trait_decl(&mut self, t: &TraitDecl) -> Result<(), SymbolCollectionError>
+	fn collect_trait_decl(&mut self, t: &TraitDecl)
 	{
 		let path: &Path = &t.name;
-		self.validate_simple_path(path, "trait")?;
+		self.validate_simple_path(path, "trait");
 
 		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Trait,
 			path.span(),
 			get_visibility(&t.modifiers),
-		)?;
+		);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::TraitBody, t.span());
 		self.set_introduced_scope(sym_id, body_scope);
@@ -1134,7 +1125,7 @@ impl Collector
 					SymbolKind::GenericParam,
 					generic.span(),
 					Visibility::Private,
-				)?;
+				);
 			}
 
 			for item in &t.items {
@@ -1143,42 +1134,33 @@ impl Collector
 					TraitItem::AssocType(ty) => c.collect_assoc_type_decl(ty),
 					TraitItem::Function(func) => c.collect_function_decl(func),
 					TraitItem::Const(var) => c.collect_variable_decl(var),
-				}?;
+				}
 			}
-
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_module_decl(&mut self, m: &ModuleDecl) -> Result<(), SymbolCollectionError>
+	fn collect_module_decl(&mut self, m: &ModuleDecl)
 	{
 		let path: &Path = &m.name;
-		self.validate_simple_path(path, "module")?;
+		self.validate_simple_path(path, "module");
 
 		let sym_id: SymbolId = self.define(
 			path.segments[0].name.clone(),
 			SymbolKind::Module,
 			path.span(),
 			get_visibility(&m.modifiers),
-		)?;
+		);
 
 		let (body_scope, _) = self.alloc_scope(ScopeKind::ModuleInline, m.span());
 		self.set_introduced_scope(sym_id, body_scope);
 
-		self.in_scope(body_scope, |c| {
-			match &m.kind {
-				ModuleKind::Inline(body) => c.collect_top_level_block(body)?,
-				ModuleKind::External => {}
-			}
-			return Ok(());
-		})?;
-
-		return Ok(());
+		self.in_scope(body_scope, |c| match &m.kind {
+			ModuleKind::Inline(body) => c.collect_top_level_block(body),
+			ModuleKind::External => {}
+		});
 	}
 
-	fn collect_impl_decl(&mut self, i: &ImplDecl) -> Result<(), SymbolCollectionError>
+	fn collect_impl_decl(&mut self, i: &ImplDecl)
 	{
 		let (body_scope, _) = self.alloc_scope(ScopeKind::ImplBody, i.span());
 
@@ -1189,7 +1171,7 @@ impl Collector
 					SymbolKind::GenericParam,
 					generic.span(),
 					Visibility::Private,
-				)?;
+				);
 			}
 
 			for item in &i.body {
@@ -1198,23 +1180,19 @@ impl Collector
 					ImplItem::AssocType(ty) => c.collect_assoc_type_decl(ty),
 					ImplItem::Function(func) => c.collect_function_decl(func),
 					ImplItem::Const(var) => c.collect_variable_decl(var),
-				}?;
+				}
 			}
-
-			return Ok(());
-		})?;
-
-		return Ok(());
+		});
 	}
 
-	fn collect_stmt(&mut self, stmt: &Stmt) -> Result<(), SymbolCollectionError>
+	fn collect_stmt(&mut self, stmt: &Stmt)
 	{
 		match stmt {
 			Stmt::For { .. } | Stmt::While { .. } | Stmt::WhileVarLoop { .. } | Stmt::IfVar { .. } => {
 				unreachable!("this should be filtered out by the desugarer")
 			}
 			Stmt::Directive(d) => {
-				self.collect_directive(d)?;
+				self.collect_directive(d);
 			}
 			Stmt::Continue { .. } => {}
 			Stmt::Loop {
@@ -1225,55 +1203,53 @@ impl Collector
 				let Some(label) = labelv.as_ref() else {
 					unreachable!("desugarer should have added a label")
 				};
-				self.define(label.clone(), SymbolKind::Label, *span, Visibility::Private)?;
+				self.define(label.clone(), SymbolKind::Label, *span, Visibility::Private);
 
 				let (body_scope, _) = self.alloc_scope(ScopeKind::LoopBody, *span);
 
 				self.in_scope(body_scope, |c| {
 					for item in &body.stmts {
-						c.collect_stmt(item)?;
+						c.collect_stmt(item);
 					}
 					if let Some(expr) = &body.tail_expr {
-						c.collect_expr(expr)?;
+						c.collect_expr(expr);
 					}
-					return Ok(());
-				})?;
+				});
 			}
 			Stmt::Block(block) | Stmt::Unsafe(block) => {
 				let (body_scope, _) = self.alloc_scope(ScopeKind::Block, block.span());
 				self.in_scope(body_scope, |c| {
 					for item in &block.stmts {
-						c.collect_stmt(item)?;
+						c.collect_stmt(item);
 					}
 					if let Some(expr) = &block.tail_expr {
-						c.collect_expr(expr)?;
+						c.collect_expr(expr);
 					}
-					return Ok(());
-				})?;
+				});
 			}
-			Stmt::VariableDecl(var) => self.collect_variable_decl(var)?,
+			Stmt::VariableDecl(var) => self.collect_variable_decl(var),
 			Stmt::Assignment {
 				target,
 				op: _,
 				value,
 				span: _,
 			} => {
-				self.collect_expr(target)?;
-				self.collect_expr(value)?;
+				self.collect_expr(target);
+				self.collect_expr(value);
 			}
 			Stmt::Delete { expr, span: _ } | Stmt::Expr(expr) => {
-				self.collect_expr(expr)?;
+				self.collect_expr(expr);
 			}
 			Stmt::Return { value, span: _ } => {
 				if let Some(expr) = value {
-					self.collect_expr(expr)?;
+					self.collect_expr(expr);
 				}
 			}
 			Stmt::Break { value, label, span: _ } => {
 				debug_assert!(label.is_some());
 
 				if let Some(expr) = value {
-					self.collect_expr(expr)?;
+					self.collect_expr(expr);
 				}
 			}
 			Stmt::If {
@@ -1282,18 +1258,17 @@ impl Collector
 				else_branch,
 				span: _,
 			} => {
-				self.collect_expr(cond)?;
+				self.collect_expr(cond);
 
 				let (then_scope, _) = self.alloc_scope(ScopeKind::IfThen, then_block.span());
 				self.in_scope(then_scope, |c| {
 					for item in &then_block.stmts {
-						c.collect_stmt(item)?;
+						c.collect_stmt(item);
 					}
 					if let Some(expr) = &then_block.tail_expr {
-						c.collect_expr(expr)?;
+						c.collect_expr(expr);
 					}
-					return Ok(());
-				})?;
+				});
 
 				if let Some(el) = else_branch {
 					let (else_scope, _) = self.alloc_scope(ScopeKind::ElseBlock, el.span());
@@ -1301,86 +1276,84 @@ impl Collector
 						Stmt::Block(block) => {
 							self.in_scope(else_scope, |c| {
 								for item in &block.stmts {
-									c.collect_stmt(item)?;
+									c.collect_stmt(item);
 								}
 								if let Some(expr) = &block.tail_expr {
-									c.collect_expr(expr)?;
+									c.collect_expr(expr);
 								}
-								return Ok(());
-							})?;
+							});
 						}
-						Stmt::If { .. } => self.in_scope(else_scope, |c| return c.collect_stmt(el))?,
+						Stmt::If { .. } => self.in_scope(else_scope, |c| return c.collect_stmt(el)),
 						_ => unreachable!(),
 					}
 				}
 			}
 		}
-		return Ok(());
 	}
 
-	fn collect_expr(&mut self, expr: &Expr) -> Result<(), SymbolCollectionError>
+	fn collect_expr(&mut self, expr: &Expr)
 	{
 		match expr {
 			Expr::Identifier { .. } | Expr::Literal { .. } | Expr::Default { .. } => {}
 
 			Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
-				self.collect_expr(expr)?;
+				self.collect_expr(expr);
 			}
 
 			Expr::Binary { lhs, rhs, .. } => {
-				self.collect_expr(lhs)?;
-				self.collect_expr(rhs)?;
+				self.collect_expr(lhs);
+				self.collect_expr(rhs);
 			}
 
 			Expr::Call { callee, args, .. } => {
-				self.collect_expr(callee)?;
+				self.collect_expr(callee);
 				for arg in args {
-					self.collect_expr(arg)?;
+					self.collect_expr(arg);
 				}
 			}
 
 			Expr::Field { base, .. } => {
-				self.collect_expr(base)?;
+				self.collect_expr(base);
 			}
 
 			Expr::Index { base, index, .. } => {
-				self.collect_expr(base)?;
-				self.collect_expr(index)?;
+				self.collect_expr(base);
+				self.collect_expr(index);
 			}
 
 			Expr::Range(RangeExpr { start, end, .. }) => {
 				if let Some(s) = start {
-					self.collect_expr(s)?;
+					self.collect_expr(s);
 				}
 				if let Some(e) = end {
-					self.collect_expr(e)?;
+					self.collect_expr(e);
 				}
 			}
 
 			Expr::Tuple { elements, .. } => {
 				for elem in elements {
-					self.collect_expr(elem)?;
+					self.collect_expr(elem);
 				}
 			}
 
 			Expr::Array(array_lit) => match array_lit {
 				ArrayLiteral::List { elements, .. } => {
 					for elem in elements {
-						self.collect_expr(elem)?;
+						self.collect_expr(elem);
 					}
 				}
 				ArrayLiteral::Repeat { value, count, .. } => {
-					self.collect_expr(value)?;
-					self.collect_expr(count)?;
+					self.collect_expr(value);
+					self.collect_expr(count);
 				}
 			},
 
 			Expr::StructInit { fields, base, .. } => {
 				for (_, field_expr) in fields {
-					self.collect_expr(field_expr)?;
+					self.collect_expr(field_expr);
 				}
 				if let Some(base_expr) = base {
-					self.collect_expr(base_expr)?;
+					self.collect_expr(base_expr);
 				}
 			}
 
@@ -1388,36 +1361,34 @@ impl Collector
 				let (block_scope, _) = self.alloc_scope(ScopeKind::Block, block.span());
 				self.in_scope(block_scope, |c| {
 					for stmt in &block.stmts {
-						c.collect_stmt(stmt)?;
+						c.collect_stmt(stmt);
 					}
 					if let Some(tail) = &block.tail_expr {
-						c.collect_expr(tail)?;
+						c.collect_expr(tail);
 					}
-					return Ok(());
-				})?;
+				});
 			}
 
 			Expr::Switch { expr, arms, .. } => {
-				self.collect_expr(expr)?;
+				self.collect_expr(expr);
 
 				for arm in arms {
 					let (arm_scope, _) = self.alloc_scope(ScopeKind::SwitchArm, arm.span());
 					self.in_scope(arm_scope, |c| {
-						c.collect_pattern_bindings(&arm.pattern)?;
+						c.collect_pattern_bindings(&arm.pattern);
 
 						match &arm.body {
-							SwitchBody::Expr(e) => c.collect_expr(e)?,
+							SwitchBody::Expr(e) => c.collect_expr(e),
 							SwitchBody::Block(block) => {
 								for stmt in &block.stmts {
-									c.collect_stmt(stmt)?;
+									c.collect_stmt(stmt);
 								}
 								if let Some(tail) = &block.tail_expr {
-									c.collect_expr(tail)?;
+									c.collect_expr(tail);
 								}
 							}
 						}
-						return Ok(());
-					})?;
+					});
 				}
 			}
 
@@ -1427,22 +1398,21 @@ impl Collector
 				else_branch,
 				..
 			} => {
-				self.collect_expr(cond)?;
+				self.collect_expr(cond);
 
 				let (then_scope, _) = self.alloc_scope(ScopeKind::IfThen, then_block.span());
 				self.in_scope(then_scope, |c| {
 					for stmt in &then_block.stmts {
-						c.collect_stmt(stmt)?;
+						c.collect_stmt(stmt);
 					}
 					if let Some(tail) = &then_block.tail_expr {
-						c.collect_expr(tail)?;
+						c.collect_expr(tail);
 					}
-					return Ok(());
-				})?;
+				});
 
 				if let Some(else_expr) = else_branch {
 					let (else_scope, _) = self.alloc_scope(ScopeKind::ElseBlock, else_expr.span());
-					self.in_scope(else_scope, |c| return c.collect_expr(else_expr))?;
+					self.in_scope(else_scope, |c| return c.collect_expr(else_expr));
 				}
 			}
 
@@ -1455,25 +1425,22 @@ impl Collector
 					unreachable!("desugarer should have added a label")
 				};
 
-				self.define(label_str.clone(), SymbolKind::Label, *span, Visibility::Private)?;
+				self.define(label_str.clone(), SymbolKind::Label, *span, Visibility::Private);
 
 				let (loop_scope, _) = self.alloc_scope(ScopeKind::LoopBody, body.span());
 				self.in_scope(loop_scope, |c| {
 					for stmt in &body.stmts {
-						c.collect_stmt(stmt)?;
+						c.collect_stmt(stmt);
 					}
 					if let Some(tail) = &body.tail_expr {
-						c.collect_expr(tail)?;
+						c.collect_expr(tail);
 					}
-					return Ok(());
-				})?;
+				});
 			}
 		}
-
-		return Ok(());
 	}
 
-	fn collect_pattern_bindings(&mut self, pattern: &parser::Pattern) -> Result<(), SymbolCollectionError>
+	fn collect_pattern_bindings(&mut self, pattern: &parser::Pattern)
 	{
 		match pattern {
 			Pattern::Wildcard { .. } | Pattern::Literal { .. } => {}
@@ -1486,7 +1453,7 @@ impl Collector
 				ty: _,
 				call_constructor: _,
 			} => {
-				self.validate_simple_path(path, "pattern")?;
+				self.validate_simple_path(path, "pattern");
 
 				self.define(
 					path.segments[0].name.clone(),
@@ -1499,18 +1466,18 @@ impl Collector
 					},
 					*span,
 					get_visibility(modifiers),
-				)?;
+				);
 			}
 
 			Pattern::Variant { args, path: _, span: _ } => {
 				for arg_pattern in args {
-					self.collect_pattern_bindings(arg_pattern)?;
+					self.collect_pattern_bindings(arg_pattern);
 				}
 			}
 
 			Pattern::Tuple { patterns, span: _ } | Pattern::Or { patterns, span: _ } => {
 				for pat in patterns {
-					self.collect_pattern_bindings(pat)?;
+					self.collect_pattern_bindings(pat);
 				}
 			}
 
@@ -1521,7 +1488,7 @@ impl Collector
 				has_rest: _,
 			} => {
 				for (_, field_pattern) in fields {
-					self.collect_pattern_bindings(field_pattern)?;
+					self.collect_pattern_bindings(field_pattern);
 				}
 			}
 
@@ -1532,18 +1499,16 @@ impl Collector
 				inclusive: _,
 			}) => {
 				if let Some(start_expr) = start {
-					self.collect_expr(start_expr)?;
+					self.collect_expr(start_expr);
 				}
 				if let Some(end_expr) = end {
-					self.collect_expr(end_expr)?;
+					self.collect_expr(end_expr);
 				}
 			}
 		}
-
-		return Ok(());
 	}
 
-	fn collect_directive(&mut self, directive: &DirectiveNode) -> Result<(), SymbolCollectionError>
+	fn collect_directive(&mut self, directive: &DirectiveNode)
 	{
 		match &directive.directive {
 			Directive::Use { .. }
@@ -1554,11 +1519,10 @@ impl Collector
 				has_rest: _,
 			} => {}
 			Directive::ValidateType { ty: _, expr } => {
-				self.collect_expr(expr)?;
+				self.collect_expr(expr);
 			}
 			Directive::Custom { .. } => unimplemented!("For now, directives are not stable for standalone things"),
 		}
-		return Ok(());
 	}
 }
 
@@ -1612,13 +1576,20 @@ impl Collector
 pub fn collect_symbols(
 	program: &DesugaredAST,
 	module_path: Vec<String>,
-) -> Result<LocalSymbolTable, SymbolCollectionError>
+) -> Result<(LocalSymbolTable, Vec<DiagnosticBuilder>), Vec<DiagnosticBuilder>>
 {
 	let mut collector: Collector = Collector::new();
 	collector.table.module_path = module_path;
 	collector.table.scopes[collector.table.root.0].span = program.span();
-	collector.collect_program(program)?;
-	return Ok(collector.table);
+	collector.collect_program(program);
+	if collector
+		.diagnostics
+		.iter()
+		.any(|e| return e.severity.should_stop_compiling())
+	{
+		return Err(collector.diagnostics);
+	}
+	return Ok((collector.table, collector.diagnostics));
 }
 
 pub fn merge_symbol_tables(modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)]) -> GlobalSymbolTable

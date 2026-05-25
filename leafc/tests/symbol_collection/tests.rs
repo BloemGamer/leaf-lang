@@ -1,5 +1,6 @@
 use crate::{
 	Config,
+	diagnostics::{DiagnosticBuilder, Severity},
 	lexer::Lexer,
 	parser::Parser,
 	source_map::SourceIndex,
@@ -9,7 +10,7 @@ use crate::{
 	},
 };
 
-fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, SymbolCollectionError>
+fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, Vec<DiagnosticBuilder>>
 {
 	let config = Config::default();
 	let source_index = SourceIndex::new(0);
@@ -22,7 +23,7 @@ fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, SymbolCollectionE
 	let desugared = res.unwrap().0;
 	println!("{}", desugared);
 
-	return collect_symbols(&desugared, Vec::new());
+	return collect_symbols(&desugared, Vec::new()).map(|s| s.0);
 }
 
 fn find_symbol_by_name<'a>(table: &'a LocalSymbolTable, name: &str) -> Option<(SymbolId, &'a Symbol)>
@@ -608,9 +609,17 @@ fn test_duplicate_definition_error()
 	assert!(result.is_err());
 
 	if let Err(err) = result {
+		eprintln!("{:?}", err);
 		assert!(matches!(
-			err.kind,
-			crate::symbol_collection::SymbolCollectionErrorKind::DuplicateDefinition { .. }
+			err.iter()
+				.find_map(|e| return if e.severity == Severity::Error {
+					Some(e.code.unwrap())
+				} else {
+					None
+				})
+				.unwrap(), /*kind*/
+			// crate::symbol_collection::SymbolCollectionErrorKind::DuplicateDefinition { .. }
+			crate::diagnostics::ErrorCode::SymbolDuplicateDefinition
 		));
 	}
 }
