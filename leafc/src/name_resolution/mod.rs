@@ -1034,6 +1034,7 @@ struct Resolver<'a>
 	anon_scope_idx: usize,
 	scope_offset: usize,
 	self_sym: Option<SymbolId>,
+	diagnostics: Vec<DiagnosticBuilder>,
 	in_expr_context: bool,
 }
 
@@ -1073,6 +1074,7 @@ impl<'a> Resolver<'a>
 			anon_scope_idx: 0,
 			scope_offset,
 			self_sym: None,
+			diagnostics: Vec::new(),
 			in_expr_context: false,
 		};
 	}
@@ -1522,11 +1524,11 @@ impl<'a> Resolver<'a>
 		return Ok(ResolvedPathResult::Full(current_sym_id));
 	}
 
-	fn resolve_path_or_primitive(&self, path: &Path, span: Span) -> Result<ResolvedPath, NameResolutionError>
+	fn resolve_path_or_primitive(&mut self, path: &Path, span: Span) -> ResolvedPath
 	{
 		if !path.global && path.segments.len() == 1 {
 			match self.resolve_path_full(path, span) {
-				Ok(rp) => return Ok(rp),
+				Ok(rp) => return rp,
 				Err(e) => {
 					let name = &path.segments[0].name;
 					if matches!(
@@ -1539,19 +1541,32 @@ impl<'a> Resolver<'a>
 							| "f64" | "isize" | "usize"
 							| "str" | "()" | "!"
 					) {
-						return Ok(ResolvedPath {
+						return ResolvedPath {
 							original: path.clone(),
 							kind: ResolvedPathKind::Primitive(
 								Ty::from_primitive_name(name)
 									.expect("the function before should have filtered this out"),
 							),
-						});
+						};
 					}
-					return Err(e);
+					self.diagnostics.push(e.build());
+					return ResolvedPath {
+						original: path.clone(),
+						kind: ResolvedPathKind::Resolved(SymbolId(usize::MAX)),
+					};
 				}
 			}
 		}
-		return self.resolve_path_full(path, span);
+		return match self.resolve_path_full(path, span) {
+			Ok(p) => p,
+			Err(e) => {
+				self.diagnostics.push(e.build());
+				ResolvedPath {
+					original: path.clone(),
+					kind: ResolvedPathKind::Resolved(SymbolId(usize::MAX)),
+				}
+			}
+		};
 	}
 
 	fn resolve_path_full(&self, path: &Path, span: Span) -> Result<ResolvedPath, NameResolutionError>
@@ -2082,96 +2097,92 @@ impl<'a> Resolver<'a>
 		return None;
 	}
 
-	fn resolve_top_level_block(
-		&mut self,
-		block: &parser::TopLevelBlock,
-	) -> Result<ResolvedTopLevelBlock, NameResolutionError>
+	fn resolve_top_level_block(&mut self, block: &parser::TopLevelBlock) -> ResolvedTopLevelBlock
 	{
-		self.collect_use_directives(&block.items)?;
+		// Ignore error from collect_use_directives; diagnostics are pushed inside
+		let _ = self.collect_use_directives(&block.items);
 
 		let mut items: Vec<ResolvedTopLevelDecl> = Vec::new();
 		for decl in &block.items {
-			items.push(self.resolve_top_level_decl(decl)?);
+			items.push(self.resolve_top_level_decl(decl));
 		}
-		return Ok(ResolvedTopLevelBlock {
+		return ResolvedTopLevelBlock {
 			items,
 			span: block.span,
-		});
+		};
 	}
 
-	fn resolve_top_level_decl(&mut self, decl: &TopLevelDecl) -> Result<ResolvedTopLevelDecl, NameResolutionError>
+	fn resolve_top_level_decl(&mut self, decl: &TopLevelDecl) -> ResolvedTopLevelDecl
 	{
-		return Ok(match decl {
-			TopLevelDecl::Function(f) => ResolvedTopLevelDecl::Function(self.resolve_function_decl(f)?),
-			TopLevelDecl::VariableDecl(v) => ResolvedTopLevelDecl::VariableDecl(self.resolve_variable_decl(v)?),
-			TopLevelDecl::Struct(s) => ResolvedTopLevelDecl::Struct(self.resolve_struct_decl(s)?),
-			TopLevelDecl::Union(u) => ResolvedTopLevelDecl::Union(self.resolve_union_decl(u)?),
-			TopLevelDecl::Enum(e) => ResolvedTopLevelDecl::Enum(self.resolve_enum_decl(e)?),
-			TopLevelDecl::Variant(v) => ResolvedTopLevelDecl::Variant(self.resolve_variant_decl(v)?),
-			TopLevelDecl::TypeAlias(t) => ResolvedTopLevelDecl::TypeAlias(self.resolve_type_alias_decl(t)?),
-			TopLevelDecl::Trait(t) => ResolvedTopLevelDecl::Trait(self.resolve_trait_decl(t)?),
-			TopLevelDecl::Module(m) => ResolvedTopLevelDecl::Module(self.resolve_module_decl(m)?),
-			TopLevelDecl::Impl(i) => ResolvedTopLevelDecl::Impl(self.resolve_impl_decl(i)?),
-			TopLevelDecl::Directive(d) => ResolvedTopLevelDecl::Directive(self.resolve_directive_node(d)?),
-		});
+		return match decl {
+			TopLevelDecl::Function(f) => ResolvedTopLevelDecl::Function(self.resolve_function_decl(f)),
+			TopLevelDecl::VariableDecl(v) => ResolvedTopLevelDecl::VariableDecl(self.resolve_variable_decl(v)),
+			TopLevelDecl::Struct(s) => ResolvedTopLevelDecl::Struct(self.resolve_struct_decl(s)),
+			TopLevelDecl::Union(u) => ResolvedTopLevelDecl::Union(self.resolve_union_decl(u)),
+			TopLevelDecl::Enum(e) => ResolvedTopLevelDecl::Enum(self.resolve_enum_decl(e)),
+			TopLevelDecl::Variant(v) => ResolvedTopLevelDecl::Variant(self.resolve_variant_decl(v)),
+			TopLevelDecl::TypeAlias(t) => ResolvedTopLevelDecl::TypeAlias(self.resolve_type_alias_decl(t)),
+			TopLevelDecl::Trait(t) => ResolvedTopLevelDecl::Trait(self.resolve_trait_decl(t)),
+			TopLevelDecl::Module(m) => ResolvedTopLevelDecl::Module(self.resolve_module_decl(m)),
+			TopLevelDecl::Impl(i) => ResolvedTopLevelDecl::Impl(self.resolve_impl_decl(i)),
+			TopLevelDecl::Directive(d) => ResolvedTopLevelDecl::Directive(self.resolve_directive_node(d)),
+		};
 	}
 
-	fn resolve_type(&mut self, ty: &parser::Type) -> Result<ResolvedType, NameResolutionError>
+	fn resolve_type(&mut self, ty: &parser::Type) -> ResolvedType
 	{
-		let core = self.resolve_type_core(ty.core.as_ref(), ty.span)?;
-		return Ok(ResolvedType {
+		let core = self.resolve_type_core(ty.core.as_ref(), ty.span);
+		return ResolvedType {
 			core: Box::new(core),
 			span: ty.span,
-		});
+		};
 	}
 
-	fn resolve_type_core(&mut self, core: &TypeCore, span: Span) -> Result<ResolvedTypeCore, NameResolutionError>
+	fn resolve_type_core(&mut self, core: &TypeCore, span: Span) -> ResolvedTypeCore
 	{
-		return Ok(match core {
+		return match core {
 			TypeCore::Base { path, generics } => {
 				if path.len() == 1 && path.segments[0].name == "Self" {
-					return Ok(ResolvedTypeCore::Primitive {
+					return ResolvedTypeCore::Primitive {
 						name: "Self".to_string(),
 						generics: Vec::new(),
-					});
+					};
 				}
 				if !path.global && path.segments.len() == 1 {
 					let name = &path.segments[0].name;
 					if name != "Self"
 						&& let Some(kind_str) = self.find_self_member_kind(name)
 					{
-						return Err(NameResolutionError {
-							span,
-							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-							context: vec![format!(
-								"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
-							)],
-						});
+						self.diagnostics.push(
+							NameResolutionError {
+								span,
+								kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+								context: vec![format!(
+									"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
+								)],
+							}
+							.build(),
+						);
 					}
 				}
 				if !path.global && path.segments.len() >= 2 && path.segments[0].name == "Self" {
-					let resolved_generics = generics
-						.iter()
-						.map(|g| return self.resolve_type(g))
-						.collect::<Result<_, _>>()?;
+					let resolved_generics = generics.iter().map(|g| return self.resolve_type(g)).collect();
 					let member = path.segments[1].name.clone();
 					if let Some(self_sym) = self.self_sym {
-						return Ok(ResolvedTypeCore::Base {
+						return ResolvedTypeCore::Base {
 							path: ResolvedPath {
 								original: path.clone(),
 								kind: ResolvedPathKind::AssocItem { base: self_sym, member },
 							},
 							generics: resolved_generics,
-						});
+						};
 					}
 				}
-				let resolved_generics: Vec<ResolvedType> = generics
-					.iter()
-					.map(|g| return self.resolve_type(g))
-					.collect::<Result<_, _>>()?;
+				let resolved_generics: Vec<ResolvedType> =
+					generics.iter().map(|g| return self.resolve_type(g)).collect();
 
 				if path.segments.len() > 1 || path.global {
-					let rp = self.resolve_path_full(path, span)?;
+					let rp = self.resolve_path_or_primitive(path, span);
 					ResolvedTypeCore::Base {
 						path: rp,
 						generics: resolved_generics,
@@ -2191,54 +2202,45 @@ impl<'a> Resolver<'a>
 			}
 			TypeCore::Reference { mutable, inner } => ResolvedTypeCore::Reference {
 				mutable: *mutable,
-				inner: Box::new(self.resolve_type_core(inner, span)?),
+				inner: Box::new(self.resolve_type_core(inner, span)),
 			},
 			TypeCore::Mutable { inner } => ResolvedTypeCore::Mutable {
-				inner: Box::new(self.resolve_type_core(inner, span)?),
+				inner: Box::new(self.resolve_type_core(inner, span)),
 			},
 			TypeCore::Pointer { mutable, inner } => ResolvedTypeCore::Pointer {
 				mutable: *mutable,
-				inner: Box::new(self.resolve_type_core(inner, span)?),
+				inner: Box::new(self.resolve_type_core(inner, span)),
 			},
 			TypeCore::Array { inner, size } => {
-				let resolved_inner = self.resolve_type_core(inner, span)?;
-				let resolved_size = size.as_ref().map(|e| return self.resolve_expr(e)).transpose()?;
+				let resolved_inner = self.resolve_type_core(inner, span);
+				let resolved_size = size.as_ref().map(|e| return self.resolve_expr(e));
 				ResolvedTypeCore::Array {
 					inner: Box::new(resolved_inner),
 					size: resolved_size.map(Box::new),
 				}
 			}
-			TypeCore::Tuple(types) => ResolvedTypeCore::Tuple(
-				types
-					.iter()
-					.map(|t| return self.resolve_type(t))
-					.collect::<Result<_, _>>()?,
-			),
+			TypeCore::Tuple(types) => {
+				ResolvedTypeCore::Tuple(types.iter().map(|t| return self.resolve_type(t)).collect())
+			}
 			TypeCore::ImplTrait { bounds } => ResolvedTypeCore::ImplTrait {
-				bounds: bounds
-					.iter()
-					.map(|b| return self.resolve_where_bound(b))
-					.collect::<Result<_, _>>()?,
+				bounds: bounds.iter().map(|b| return self.resolve_where_bound(b)).collect(),
 			},
-		});
+		};
 	}
 
-	fn resolve_where_constraint(
-		&mut self,
-		constraint: &WhereConstraint,
-	) -> Result<ResolvedWhereConstraint, NameResolutionError>
+	fn resolve_where_constraint(&mut self, constraint: &WhereConstraint) -> ResolvedWhereConstraint
 	{
 		let bounds = constraint
 			.bounds
 			.iter()
 			.map(|b| return self.resolve_where_bound(b))
-			.collect::<Result<_, _>>()?;
+			.collect();
 		let type_args = constraint
 			.type_args
 			.iter()
 			.map(|t| return self.resolve_type(t))
-			.collect::<Result<_, _>>()?;
-		return Ok(ResolvedWhereConstraint {
+			.collect();
+		return ResolvedWhereConstraint {
 			ty: constraint
 				.ty
 				.segments
@@ -2249,29 +2251,25 @@ impl<'a> Resolver<'a>
 			bounds,
 			type_args,
 			span: constraint.span,
-		});
+		};
 	}
 
-	fn resolve_where_bound(&mut self, bound: &WhereBound) -> Result<ResolvedWhereBound, NameResolutionError>
+	fn resolve_where_bound(&mut self, bound: &WhereBound) -> ResolvedWhereBound
 	{
-		return Ok(match bound {
+		return match bound {
 			WhereBound::Path { path, args } => {
-				let rp = self.resolve_path_full(path, path.span())?;
+				let rp = self.resolve_path_or_primitive(path, path.span());
 				let resolved_args = args
 					.iter()
 					.map(|arg| match arg {
-						GenericArg::Type(ty) => return self.resolve_type(ty).map(ResolvedGenericArg::Type),
-						GenericArg::Binding { name, ty, span } => {
-							return self.resolve_type(ty).map(|rty| {
-								return ResolvedGenericArg::Binding {
-									name: name.clone(),
-									ty: rty,
-									span: *span,
-								};
-							});
-						}
+						GenericArg::Type(ty) => ResolvedGenericArg::Type(self.resolve_type(ty)),
+						GenericArg::Binding { name, ty, span } => ResolvedGenericArg::Binding {
+							name: name.clone(),
+							ty: self.resolve_type(ty),
+							span: *span,
+						},
 					})
-					.collect::<Result<_, _>>()?;
+					.collect();
 				ResolvedWhereBound::Path {
 					path: rp,
 					args: resolved_args,
@@ -2281,23 +2279,20 @@ impl<'a> Resolver<'a>
 				use parser::FuncBound;
 				match fb {
 					FuncBound::Fn { args, ret } => {
-						let rargs = args
-							.iter()
-							.map(|t| return self.resolve_type(t))
-							.collect::<Result<_, _>>()?;
-						let rret = ret.as_ref().map(|t| return self.resolve_type(t)).transpose()?;
+						let rargs = args.iter().map(|t| return self.resolve_type(t)).collect();
+						let rret = ret.as_ref().map(|t| return self.resolve_type(t));
 						ResolvedWhereBound::Func(ResolvedFuncBound::Fn { args: rargs, ret: rret })
 					}
 				}
 			}
-		});
+		};
 	}
 
-	fn resolve_pattern(&mut self, pattern: &parser::Pattern) -> Result<ResolvedPattern, NameResolutionError>
+	fn resolve_pattern(&mut self, pattern: &parser::Pattern) -> ResolvedPattern
 	{
-		return Ok(match pattern {
+		return match pattern {
 			parser::Pattern::Wildcard { ty, span } => ResolvedPattern::Wildcard {
-				ty: ty.as_ref().map(|t| return self.resolve_type(t)).transpose()?,
+				ty: ty.as_ref().map(|t| return self.resolve_type(t)),
 				span: *span,
 			},
 
@@ -2316,15 +2311,19 @@ impl<'a> Resolver<'a>
 				let name: String = path.segments[0].name.clone();
 				let symbol: SymbolId = self
 					.find_in_scope_chain(self.current_scope, &name)
-					.map(|(id, _)| return id)
-					.ok_or_else(|| {
-						return NameResolutionError {
-							span: *span,
-							kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-							context: Vec::new(),
-						};
-					})?;
-				let resolved_ty = self.resolve_type(ty)?;
+					.map(|(id, _)| id)
+					.unwrap_or_else(|| {
+						self.diagnostics.push(
+							NameResolutionError {
+								span: *span,
+								kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+								context: Vec::new(),
+							}
+							.build(),
+						);
+						SymbolId(usize::MAX)
+					});
+				let resolved_ty = self.resolve_type(ty);
 				ResolvedPattern::TypedIdentifier {
 					symbol,
 					name,
@@ -2335,11 +2334,8 @@ impl<'a> Resolver<'a>
 			}
 
 			parser::Pattern::Variant { path, args, span } => {
-				let rp: ResolvedPath = self.resolve_path_full(path, *span)?;
-				let rargs: Vec<ResolvedPattern> = args
-					.iter()
-					.map(|p| return self.resolve_pattern(p))
-					.collect::<Result<_, _>>()?;
+				let rp: ResolvedPath = self.resolve_path_or_primitive(path, *span);
+				let rargs: Vec<ResolvedPattern> = args.iter().map(|p| return self.resolve_pattern(p)).collect();
 				ResolvedPattern::Variant {
 					path: rp,
 					args: rargs,
@@ -2348,10 +2344,7 @@ impl<'a> Resolver<'a>
 			}
 
 			parser::Pattern::Tuple { patterns, span } => {
-				let rp: Vec<ResolvedPattern> = patterns
-					.iter()
-					.map(|p| return self.resolve_pattern(p))
-					.collect::<Result<_, _>>()?;
+				let rp: Vec<ResolvedPattern> = patterns.iter().map(|p| return self.resolve_pattern(p)).collect();
 				ResolvedPattern::Tuple {
 					patterns: rp,
 					span: *span,
@@ -2364,11 +2357,11 @@ impl<'a> Resolver<'a>
 				has_rest,
 				span,
 			} => {
-				let rp: ResolvedPath = self.resolve_path_full(path, *span)?;
+				let rp: ResolvedPath = self.resolve_path_or_primitive(path, *span);
 				let rfields: Vec<(String, ResolvedPattern)> = fields
 					.iter()
-					.map(|(name, pat)| return self.resolve_pattern(pat).map(|rp| return (name.clone(), rp)))
-					.collect::<Result<_, _>>()?;
+					.map(|(name, pat)| (name.clone(), self.resolve_pattern(pat)))
+					.collect();
 				ResolvedPattern::Struct {
 					path: rp,
 					fields: rfields,
@@ -2377,42 +2370,29 @@ impl<'a> Resolver<'a>
 				}
 			}
 
-			parser::Pattern::Range(re) => ResolvedPattern::Range(self.resolve_range_expr(re)?),
+			parser::Pattern::Range(re) => ResolvedPattern::Range(self.resolve_range_expr(re)),
 
 			parser::Pattern::Or { patterns, span } => {
-				let rp: Vec<ResolvedPattern> = patterns
-					.iter()
-					.map(|p| return self.resolve_pattern(p))
-					.collect::<Result<_, _>>()?;
+				let rp: Vec<ResolvedPattern> = patterns.iter().map(|p| return self.resolve_pattern(p)).collect();
 				ResolvedPattern::Or {
 					patterns: rp,
 					span: *span,
 				}
 			}
-		});
+		};
 	}
 
-	fn resolve_range_expr(&mut self, re: &RangeExpr) -> Result<ResolvedRangeExpr, NameResolutionError>
+	fn resolve_range_expr(&mut self, re: &RangeExpr) -> ResolvedRangeExpr
 	{
-		return Ok(ResolvedRangeExpr {
-			start: re
-				.start
-				.as_ref()
-				.map(|e| return self.resolve_expr(e))
-				.transpose()?
-				.map(Box::new),
-			end: re
-				.end
-				.as_ref()
-				.map(|e| return self.resolve_expr(e))
-				.transpose()?
-				.map(Box::new),
+		return ResolvedRangeExpr {
+			start: re.start.as_ref().map(|e| return self.resolve_expr(e)).map(Box::new),
+			end: re.end.as_ref().map(|e| return self.resolve_expr(e)).map(Box::new),
 			inclusive: re.inclusive,
 			span: re.span,
-		});
+		};
 	}
 
-	fn resolve_expr(&mut self, expr: &parser::Expr) -> Result<ResolvedExpr, NameResolutionError>
+	fn resolve_expr(&mut self, expr: &parser::Expr) -> ResolvedExpr
 	{
 		let prev_in_expr = self.in_expr_context;
 		self.in_expr_context = true;
@@ -2421,16 +2401,16 @@ impl<'a> Resolver<'a>
 		return result;
 	}
 
-	fn resolve_expr_inner(&mut self, expr: &parser::Expr) -> Result<ResolvedExpr, NameResolutionError>
+	fn resolve_expr_inner(&mut self, expr: &parser::Expr) -> ResolvedExpr
 	{
 		use parser::{ArrayLiteral, Expr};
 
-		return Ok(match expr {
+		return match expr {
 			Expr::Identifier { path, span } => {
 				if !path.global && path.segments.len() == 1 && path.segments[0].name.starts_with('#') {
 					let name: &String = &path.segments[0].name;
 					if let Some(intrinsic) = Intrinsic::from_name(name) {
-						return Ok(ResolvedExpr::InternalCall { intrinsic, span: *span });
+						return ResolvedExpr::InternalCall { intrinsic, span: *span };
 					}
 				}
 
@@ -2450,10 +2430,10 @@ impl<'a> Resolver<'a>
 								if name == "Self" && generics.is_empty()
 						)
 					) {
-						return Ok(ResolvedExpr::AssocSelf {
+						return ResolvedExpr::AssocSelf {
 							member: path.segments[1].clone(),
 							span: path.span(),
-						});
+						};
 					}
 
 					if !path.global && path.segments.len() == 2 && path.segments[0].generics.is_empty() {
@@ -2469,24 +2449,27 @@ impl<'a> Resolver<'a>
 								&Path::simple(vec![base_name.clone()], path.segments[0].span),
 								path.segments[0].span,
 							) {
-							return Ok(ResolvedExpr::AssocPath {
+							return ResolvedExpr::AssocPath {
 								base: base_path,
 								member: path.segments[1].clone(),
 								span: *span,
-							});
+							};
 						}
 					}
 
 					if !path.global && path.segments.len() == 1 {
 						let name = &path.segments[0].name;
 						if let Some(kind_str) = self.find_self_member_kind(name) {
-							return Err(NameResolutionError {
-								span: *span,
-								kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-								context: vec![format!(
-									"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
-								)],
-							});
+							self.diagnostics.push(
+								NameResolutionError {
+									span: *span,
+									kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+									context: vec![format!(
+										"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
+									)],
+								}
+								.build(),
+							);
 						}
 					}
 
@@ -2509,20 +2492,20 @@ impl<'a> Resolver<'a>
 
 			Expr::Unary { op, expr, span } => ResolvedExpr::Unary {
 				op: op.clone(),
-				expr: Box::new(self.resolve_expr(expr)?),
+				expr: Box::new(self.resolve_expr(expr)),
 				span: *span,
 			},
 
 			Expr::Binary { op, lhs, rhs, span } => ResolvedExpr::Binary {
 				op: op.clone(),
-				lhs: Box::new(self.resolve_expr(lhs)?),
-				rhs: Box::new(self.resolve_expr(rhs)?),
+				lhs: Box::new(self.resolve_expr(lhs)),
+				rhs: Box::new(self.resolve_expr(rhs)),
 				span: *span,
 			},
 
 			Expr::Cast { ty, expr, span } => ResolvedExpr::Cast {
-				ty: self.resolve_type(ty)?,
-				expr: Box::new(self.resolve_expr(expr)?),
+				ty: self.resolve_type(ty),
+				expr: Box::new(self.resolve_expr(expr)),
 				span: *span,
 			},
 
@@ -2533,15 +2516,12 @@ impl<'a> Resolver<'a>
 				args,
 				span,
 			} => {
-				let rcallee: ResolvedExpr = self.resolve_expr(callee)?;
+				let rcallee: ResolvedExpr = self.resolve_expr(callee);
 				let rng: Vec<(String, ResolvedType)> = named_generics
 					.iter()
-					.map(|(name, ty)| return self.resolve_type(ty).map(|rt| return (name.clone(), rt)))
-					.collect::<Result<_, _>>()?;
-				let rargs = args
-					.iter()
-					.map(|a| return self.resolve_expr(a))
-					.collect::<Result<_, _>>()?;
+					.map(|(name, ty)| (name.clone(), self.resolve_type(ty)))
+					.collect();
+				let rargs = args.iter().map(|a| return self.resolve_expr(a)).collect();
 				ResolvedExpr::Call {
 					callee: Box::new(rcallee),
 					call_type: *call_type,
@@ -2559,39 +2539,33 @@ impl<'a> Resolver<'a>
 					.collect::<Vec<_>>()
 					.join("::");
 				ResolvedExpr::Field {
-					base: Box::new(self.resolve_expr(base)?),
+					base: Box::new(self.resolve_expr(base)),
 					name: field_name,
 					span: *span,
 				}
 			}
 
 			Expr::Index { base, index, span } => ResolvedExpr::Index {
-				base: Box::new(self.resolve_expr(base)?),
-				index: Box::new(self.resolve_expr(index)?),
+				base: Box::new(self.resolve_expr(base)),
+				index: Box::new(self.resolve_expr(index)),
 				span: *span,
 			},
 
-			Expr::Range(re) => ResolvedExpr::Range(self.resolve_range_expr(re)?),
+			Expr::Range(re) => ResolvedExpr::Range(self.resolve_range_expr(re)),
 
 			Expr::Tuple { elements, span } => ResolvedExpr::Tuple {
-				elements: elements
-					.iter()
-					.map(|e| return self.resolve_expr(e))
-					.collect::<Result<_, _>>()?,
+				elements: elements.iter().map(|e| return self.resolve_expr(e)).collect(),
 				span: *span,
 			},
 
 			Expr::Array(arr) => ResolvedExpr::Array(match arr {
 				ArrayLiteral::List { elements, span } => ResolvedArrayLiteral::List {
-					elements: elements
-						.iter()
-						.map(|e| return self.resolve_expr(e))
-						.collect::<Result<_, _>>()?,
+					elements: elements.iter().map(|e| return self.resolve_expr(e)).collect(),
 					span: *span,
 				},
 				ArrayLiteral::Repeat { value, count, span } => ResolvedArrayLiteral::Repeat {
-					value: Box::new(self.resolve_expr(value)?),
-					count: Box::new(self.resolve_expr(count)?),
+					value: Box::new(self.resolve_expr(value)),
+					count: Box::new(self.resolve_expr(count)),
 					span: *span,
 				},
 			}),
@@ -2603,16 +2577,12 @@ impl<'a> Resolver<'a>
 				has_rest,
 				span,
 			} => {
-				let rp: ResolvedPath = self.resolve_path_full(path, *span)?;
+				let rp: ResolvedPath = self.resolve_path_or_primitive(path, *span);
 				let rfields: Vec<(String, ResolvedExpr)> = fields
 					.iter()
-					.map(|(name, e)| return self.resolve_expr(e).map(|re| return (name.clone(), re)))
-					.collect::<Result<_, _>>()?;
-				let rbase = base
-					.as_ref()
-					.map(|e| return self.resolve_expr(e))
-					.transpose()?
-					.map(Box::new);
+					.map(|(name, e)| (name.clone(), self.resolve_expr(e)))
+					.collect();
+				let rbase = base.as_ref().map(|e| Box::new(self.resolve_expr(e)));
 				ResolvedExpr::StructInit {
 					path: rp,
 					fields: rfields,
@@ -2622,12 +2592,12 @@ impl<'a> Resolver<'a>
 				}
 			}
 
-			Expr::Block(block) => ResolvedExpr::Block(Box::new(self.resolve_scoped_block(block)?)),
+			Expr::Block(block) => ResolvedExpr::Block(Box::new(self.resolve_scoped_block(block))),
 
-			Expr::UnsafeBlock(block) => ResolvedExpr::UnsafeBlock(Box::new(self.resolve_scoped_block(block)?)),
+			Expr::UnsafeBlock(block) => ResolvedExpr::UnsafeBlock(Box::new(self.resolve_scoped_block(block))),
 
 			Expr::Switch { expr, arms, span } => {
-				let rexpr: ResolvedExpr = self.resolve_expr(expr)?;
+				let rexpr: ResolvedExpr = self.resolve_expr(expr);
 				let mut rarms: Vec<ResolvedSwitchArm> = Vec::new();
 				for arm in arms {
 					let arm_scope: Option<ScopeId> = self.next_anon_scope();
@@ -2635,11 +2605,11 @@ impl<'a> Resolver<'a>
 					if let Some(sc) = arm_scope {
 						self.current_scope = sc;
 					}
-					let rpat = self.resolve_pattern(&arm.pattern)?;
+					let rpat = self.resolve_pattern(&arm.pattern);
 					let rbody = match &arm.body {
-						parser::SwitchBody::Expr(e) => ResolvedSwitchBody::Expr(self.resolve_expr(e)?),
+						parser::SwitchBody::Expr(e) => ResolvedSwitchBody::Expr(self.resolve_expr(e)),
 						parser::SwitchBody::Block(b) => {
-							let block = self.resolve_block_contents(b)?;
+							let block = self.resolve_block_contents(b);
 							ResolvedSwitchBody::Block(block)
 						}
 					};
@@ -2663,13 +2633,13 @@ impl<'a> Resolver<'a>
 				else_branch,
 				span,
 			} => {
-				let rcond: ResolvedExpr = self.resolve_expr(cond)?;
+				let rcond: ResolvedExpr = self.resolve_expr(cond);
 				let then_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = then_scope {
 					self.current_scope = sc;
 				}
-				let rthen: ResolvedBlock = self.resolve_block_contents(then_block)?;
+				let rthen: ResolvedBlock = self.resolve_block_contents(then_block);
 				self.current_scope = prev;
 
 				let relse: Option<Box<ResolvedExpr>> = if let Some(e) = else_branch {
@@ -2681,7 +2651,7 @@ impl<'a> Resolver<'a>
 					if let Some(sc) = else_scope {
 						self.current_scope = sc;
 					}
-					let re: ResolvedExpr = self.resolve_expr(e)?;
+					let re: ResolvedExpr = self.resolve_expr(e);
 					self.current_scope = prev;
 					Some(Box::new(re))
 				} else {
@@ -2705,7 +2675,7 @@ impl<'a> Resolver<'a>
 				if let Some(sc) = loop_scope {
 					self.current_scope = sc;
 				}
-				let rbody: ResolvedBlock = self.resolve_block_contents(body)?;
+				let rbody: ResolvedBlock = self.resolve_block_contents(body);
 				self.current_scope = prev;
 				ResolvedExpr::Loop {
 					label: label.clone(),
@@ -2713,50 +2683,46 @@ impl<'a> Resolver<'a>
 					span: *span,
 				}
 			}
-		});
+		};
 	}
 
-	fn resolve_block_contents(&mut self, block: &parser::Block) -> Result<ResolvedBlock, NameResolutionError>
+	fn resolve_block_contents(&mut self, block: &parser::Block) -> ResolvedBlock
 	{
 		let mut stmts: Vec<ResolvedStmt> = Vec::new();
 		for stmt in &block.stmts {
-			stmts.push(self.resolve_stmt(stmt)?);
+			stmts.push(self.resolve_stmt(stmt));
 		}
-		let tail: Option<ResolvedExpr> = block
-			.tail_expr
-			.as_ref()
-			.map(|e| return self.resolve_expr(e))
-			.transpose()?;
-		return Ok(ResolvedBlock {
+		let tail: Option<ResolvedExpr> = block.tail_expr.as_ref().map(|e| return self.resolve_expr(e));
+		return ResolvedBlock {
 			stmts,
 			tail_expr: tail.map(Box::new),
 			span: block.span,
-		});
+		};
 	}
 
-	fn resolve_scoped_block(&mut self, block: &parser::Block) -> Result<ResolvedBlock, NameResolutionError>
+	fn resolve_scoped_block(&mut self, block: &parser::Block) -> ResolvedBlock
 	{
 		let prev: ScopeId = self.current_scope;
 		let found = self.next_anon_scope();
 		if let Some(sc) = found {
 			self.current_scope = sc;
 		}
-		let result: ResolvedBlock = self.resolve_block_contents(block)?;
+		let result: ResolvedBlock = self.resolve_block_contents(block);
 		self.current_scope = prev;
-		return Ok(result);
+		return result;
 	}
 
-	fn resolve_function_body(&mut self, block: &parser::Block) -> Result<ResolvedBlock, NameResolutionError>
+	fn resolve_function_body(&mut self, block: &parser::Block) -> ResolvedBlock
 	{
 		return self.resolve_block_contents(block);
 	}
 
-	fn resolve_stmt(&mut self, stmt: &parser::Stmt) -> Result<ResolvedStmt, NameResolutionError>
+	fn resolve_stmt(&mut self, stmt: &parser::Stmt) -> ResolvedStmt
 	{
 		use parser::Stmt;
 
-		return Ok(match stmt {
-			Stmt::VariableDecl(var) => ResolvedStmt::VariableDecl(self.resolve_variable_decl(var)?),
+		return match stmt {
+			Stmt::VariableDecl(var) => ResolvedStmt::VariableDecl(self.resolve_variable_decl(var)),
 
 			Stmt::Assignment {
 				target,
@@ -2764,22 +2730,22 @@ impl<'a> Resolver<'a>
 				value,
 				span,
 			} => ResolvedStmt::Assignment {
-				target: self.resolve_expr(target)?,
+				target: self.resolve_expr(target),
 				op: op.clone(),
-				value: self.resolve_expr(value)?,
+				value: self.resolve_expr(value),
 				span: *span,
 			},
 
 			Stmt::Return { value, span } => ResolvedStmt::Return {
-				value: value.as_ref().map(|e| return self.resolve_expr(e)).transpose()?,
+				value: value.as_ref().map(|e| return self.resolve_expr(e)),
 				span: *span,
 			},
 
-			Stmt::Expr(e) => ResolvedStmt::Expr(self.resolve_expr(e)?),
+			Stmt::Expr(e) => ResolvedStmt::Expr(self.resolve_expr(e)),
 
 			Stmt::Break { label, value, span } => ResolvedStmt::Break {
 				label: label.clone(),
-				value: value.as_ref().map(|e| return self.resolve_expr(e)).transpose()?,
+				value: value.as_ref().map(|e| return self.resolve_expr(e)),
 				span: *span,
 			},
 
@@ -2788,7 +2754,7 @@ impl<'a> Resolver<'a>
 				span: *span,
 			},
 
-			Stmt::Directive(d) => ResolvedStmt::Directive(self.resolve_directive_node(d)?),
+			Stmt::Directive(d) => ResolvedStmt::Directive(self.resolve_directive_node(d)),
 
 			Stmt::If {
 				cond,
@@ -2796,14 +2762,14 @@ impl<'a> Resolver<'a>
 				else_branch,
 				span,
 			} => {
-				let rcond: ResolvedExpr = self.resolve_expr(cond)?;
+				let rcond: ResolvedExpr = self.resolve_expr(cond);
 
 				let then_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = then_scope {
 					self.current_scope = sc;
 				}
-				let rthen: ResolvedBlock = self.resolve_block_contents(then_block)?;
+				let rthen: ResolvedBlock = self.resolve_block_contents(then_block);
 				self.current_scope = prev;
 
 				let relse: Option<Box<ResolvedStmt>> = if let Some(el) = else_branch {
@@ -2815,7 +2781,7 @@ impl<'a> Resolver<'a>
 					if let Some(sc) = else_scope {
 						self.current_scope = sc;
 					}
-					let rs: ResolvedStmt = self.resolve_stmt(el)?;
+					let rs: ResolvedStmt = self.resolve_stmt(el);
 					self.current_scope = prev;
 					Some(Box::new(rs))
 				} else {
@@ -2840,7 +2806,7 @@ impl<'a> Resolver<'a>
 				if let Some(sc) = loop_scope {
 					self.current_scope = sc;
 				}
-				let rbody: ResolvedBlock = self.resolve_block_contents(body)?;
+				let rbody: ResolvedBlock = self.resolve_block_contents(body);
 				self.current_scope = prev;
 				ResolvedStmt::Loop {
 					label: label.clone(),
@@ -2850,19 +2816,16 @@ impl<'a> Resolver<'a>
 			}
 
 			Stmt::Delete { expr, span } => ResolvedStmt::Delete {
-				expr: self.resolve_expr(expr)?,
+				expr: self.resolve_expr(expr),
 				span: *span,
 			},
 
-			Stmt::Unsafe(block) => ResolvedStmt::Unsafe(self.resolve_scoped_block(block)?),
-			Stmt::Block(block) => ResolvedStmt::Block(self.resolve_scoped_block(block)?),
-		});
+			Stmt::Unsafe(block) => ResolvedStmt::Unsafe(self.resolve_scoped_block(block)),
+			Stmt::Block(block) => ResolvedStmt::Block(self.resolve_scoped_block(block)),
+		};
 	}
 
-	fn resolve_directive_node(
-		&mut self,
-		node: &parser::DirectiveNode,
-	) -> Result<ResolvedDirectiveNode, NameResolutionError>
+	fn resolve_directive_node(&mut self, node: &parser::DirectiveNode) -> ResolvedDirectiveNode
 	{
 		if node.body.is_some() {
 			unimplemented!("directive bodies are not yet supported in name resolution");
@@ -2888,7 +2851,7 @@ impl<'a> Resolver<'a>
 				pattern_fields,
 				has_rest,
 			} => {
-				let rp = self.resolve_path_full(struct_path, struct_path.span())?;
+				let rp = self.resolve_path_or_primitive(struct_path, struct_path.span());
 				ResolvedDirective::ValidateStructPattern {
 					struct_path: rp,
 					pattern_fields: pattern_fields.clone(),
@@ -2896,22 +2859,19 @@ impl<'a> Resolver<'a>
 				}
 			}
 			parser::Directive::ValidateType { ty, expr } => ResolvedDirective::ValidateType {
-				ty: self.resolve_type(ty)?,
-				expr: self.resolve_expr(expr)?,
+				ty: self.resolve_type(ty),
+				expr: self.resolve_expr(expr),
 			},
 		};
 
-		return Ok(ResolvedDirectiveNode {
+		return ResolvedDirectiveNode {
 			directive,
 			body: None,
 			span: node.span,
-		});
+		};
 	}
 
-	fn resolve_function_decl(
-		&mut self,
-		func: &parser::FunctionDecl,
-	) -> Result<ResolvedFunctionDecl, NameResolutionError>
+	fn resolve_function_decl(&mut self, func: &parser::FunctionDecl) -> ResolvedFunctionDecl
 	{
 		let sig: &FunctionSignature = &func.signature;
 		let name_str: &str = sig
@@ -2924,14 +2884,18 @@ impl<'a> Resolver<'a>
 
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: sig.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: sig.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: sig.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: sig.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -2941,16 +2905,6 @@ impl<'a> Resolver<'a>
 		for param in &sig.params {
 			if param.variadic {
 				break;
-				//let ty: ResolvedType = self.resolve_type(&param.ty)?;
-				//resolved_params.push(ResolvedParam {
-				//	symbol: SymbolId(usize::MAX),
-				//	name: String::from("..."),
-				//	ty,
-				//	mutable: false,
-				//	variadic: true,
-				//	span: param.span(),
-				//});
-				//unimplemented!("variadic arguments are not yet allowed");
 			}
 			let (param_name, param_span, param_mutable) = match &param.pattern {
 				parser::Pattern::TypedIdentifier {
@@ -2958,16 +2912,20 @@ impl<'a> Resolver<'a>
 				} => (path.segments[0].name.clone(), *span, *mutable),
 				_ => unreachable!("desugarer guarantees TypedIdentifier for params"),
 			};
-			let param_sym: SymbolId = self.find_in_scope(body_scope, &param_name).ok_or_else(|| {
-				return NameResolutionError {
-					span: param_span,
-					kind: NameResolutionErrorKind::UnresolvedPath {
-						path: Path::simple(vec![param_name.clone()], param_span),
-					},
-					context: Vec::new(),
-				};
-			})?;
-			let ty: ResolvedType = self.resolve_type(&param.ty)?;
+			let param_sym: SymbolId = self.find_in_scope(body_scope, &param_name).unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: param_span,
+						kind: NameResolutionErrorKind::UnresolvedPath {
+							path: Path::simple(vec![param_name.clone()], param_span),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
+			let ty: ResolvedType = self.resolve_type(&param.ty);
 			resolved_params.push(ResolvedParam {
 				symbol: param_sym,
 				name: param_name,
@@ -2978,12 +2936,12 @@ impl<'a> Resolver<'a>
 			});
 		}
 
-		let return_type: ResolvedType = self.resolve_type(&sig.return_type)?;
+		let return_type: ResolvedType = self.resolve_type(&sig.return_type);
 		let where_clause: Vec<ResolvedWhereConstraint> = sig
 			.where_clause
 			.iter()
 			.map(|c| return self.resolve_where_constraint(c))
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		let heap_generics: Vec<ResolvedGenericHeapParam> = sig
 			.heap_generics
@@ -2991,15 +2949,15 @@ impl<'a> Resolver<'a>
 			.map(|hp| {
 				let kind = match &hp.kind {
 					parser::HeapGenericKind::Forwarded => ResolvedGenericHeapKind::Forwarded,
-					parser::HeapGenericKind::Forced(ty) => ResolvedGenericHeapKind::Forced(self.resolve_type(ty)?),
+					parser::HeapGenericKind::Forced(ty) => ResolvedGenericHeapKind::Forced(self.resolve_type(ty)),
 				};
-				return Ok(ResolvedGenericHeapParam {
+				ResolvedGenericHeapParam {
 					name: hp.name.clone(),
 					kind,
 					span: hp.span,
-				});
+				}
 			})
-			.collect::<Result<_, NameResolutionError>>()?;
+			.collect();
 
 		let resolved_sig: ResolvedFunctionSignature = ResolvedFunctionSignature {
 			resolved_name,
@@ -3029,28 +2987,24 @@ impl<'a> Resolver<'a>
 			span: sig.span(),
 		};
 
-		let body: Option<ResolvedBlock> = func
-			.body
-			.as_ref()
-			.map(|b| return self.resolve_function_body(b))
-			.transpose()?;
+		let body: Option<ResolvedBlock> = func.body.as_ref().map(|b| return self.resolve_function_body(b));
 
 		self.current_scope = prev;
 
-		return Ok(ResolvedFunctionDecl {
+		return ResolvedFunctionDecl {
 			resolved_name,
 			signature: resolved_sig,
 			body,
 			docs: func.docs.clone(),
 			span: func.span(),
-		});
+		};
 	}
 
-	fn resolve_variable_decl(&mut self, var: &VariableDecl) -> Result<ResolvedVariableDecl, NameResolutionError>
+	fn resolve_variable_decl(&mut self, var: &VariableDecl) -> ResolvedVariableDecl
 	{
 		if let parser::Pattern::Wildcard { ty, span } = &var.pattern {
 			let ty = match ty {
-				Some(t) => self.resolve_type(t)?,
+				Some(t) => self.resolve_type(t),
 				None => ResolvedType {
 					core: Box::new(ResolvedTypeCore::Primitive {
 						name: "_".to_string(),
@@ -3059,8 +3013,8 @@ impl<'a> Resolver<'a>
 					span: *span,
 				},
 			};
-			let init = var.init.as_ref().map(|e| self.resolve_expr(e)).transpose()?;
-			return Ok(ResolvedVariableDecl {
+			let init = var.init.as_ref().map(|e| self.resolve_expr(e));
+			return ResolvedVariableDecl {
 				resolved_name: SymbolId(usize::MAX),
 				name: "_".to_string(),
 				ty,
@@ -3070,7 +3024,7 @@ impl<'a> Resolver<'a>
 				modifiers: Vec::new(),
 				docs: var.docs.clone(),
 				span: var.span(),
-			});
+			};
 		}
 
 		let (name_str, var_span, mutable) = match &var.pattern {
@@ -3102,14 +3056,17 @@ impl<'a> Resolver<'a>
 			let threshold: usize = if check_scope == self.current_scope { 2 } else { 1 };
 
 			if count.len() >= threshold {
-				return Err(NameResolutionError {
-					span: var_span,
-					kind: NameResolutionErrorKind::ShadowedVariable {
-						name: name_str,
-						first_definition: self.global.symbol(count[threshold - 1]).def_span,
-					},
-					context: Vec::new(),
-				});
+				self.diagnostics.push(
+					NameResolutionError {
+						span: var_span,
+						kind: NameResolutionErrorKind::ShadowedVariable {
+							name: name_str.clone(),
+							first_definition: self.global.symbol(count[threshold - 1]).def_span,
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				);
 			}
 
 			match self.global.scope(check_scope).parent {
@@ -3119,7 +3076,7 @@ impl<'a> Resolver<'a>
 		}
 
 		let ty: ResolvedType = match &var.pattern {
-			parser::Pattern::TypedIdentifier { ty, .. } => self.resolve_type(ty)?,
+			parser::Pattern::TypedIdentifier { ty, .. } => self.resolve_type(ty),
 			_ => unreachable!(),
 		};
 
@@ -3128,22 +3085,26 @@ impl<'a> Resolver<'a>
 			_ => unreachable!(),
 		};
 
-		let init: Option<ResolvedExpr> = var.init.as_ref().map(|e| return self.resolve_expr(e)).transpose()?;
+		let init: Option<ResolvedExpr> = var.init.as_ref().map(|e| return self.resolve_expr(e));
 
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, &name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: var_span,
-					kind: NameResolutionErrorKind::UnresolvedPath {
-						path: Path::simple(vec![name_str.clone()], var_span),
-					},
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: var_span,
+						kind: NameResolutionErrorKind::UnresolvedPath {
+							path: Path::simple(vec![name_str.clone()], var_span),
+						},
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
-		return Ok(ResolvedVariableDecl {
+		return ResolvedVariableDecl {
 			resolved_name,
 			name: name_str,
 			ty,
@@ -3153,22 +3114,26 @@ impl<'a> Resolver<'a>
 			modifiers,
 			docs: var.docs.clone(),
 			span: var.span(),
-		});
+		};
 	}
 
-	fn resolve_struct_decl(&mut self, s: &StructDecl) -> Result<ResolvedStructDecl, NameResolutionError>
+	fn resolve_struct_decl(&mut self, s: &StructDecl) -> ResolvedStructDecl
 	{
 		let name_str: &str = s.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: s.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: s.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: s.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: s.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev = self.current_scope;
@@ -3178,32 +3143,28 @@ impl<'a> Resolver<'a>
 			.fields
 			.iter()
 			.map(|f| {
-				let ty = self.resolve_type(&f.ty)?;
-				let default_value = f
-					.default_value
-					.as_ref()
-					.map(|e| return self.resolve_expr(e))
-					.transpose()?;
-				return Ok(ResolvedStructField {
+				let ty = self.resolve_type(&f.ty);
+				let default_value = f.default_value.as_ref().map(|e| self.resolve_expr(e));
+				ResolvedStructField {
 					name: f.name.clone(),
 					ty,
 					default_value,
 					modifiers: f.modifiers.clone(),
 					docs: f.docs.clone(),
 					span: f.span(),
-				});
+				}
 			})
-			.collect::<Result<_, NameResolutionError>>()?;
+			.collect();
 
 		let where_clause: Vec<ResolvedWhereConstraint> = s
 			.where_clause
 			.iter()
 			.map(|c| return self.resolve_where_constraint(c))
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		self.current_scope = prev;
 
-		return Ok(ResolvedStructDecl {
+		return ResolvedStructDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: s.modifiers.clone(),
@@ -3212,22 +3173,26 @@ impl<'a> Resolver<'a>
 			where_clause,
 			docs: s.docs.clone(),
 			span: s.span(),
-		});
+		};
 	}
 
-	fn resolve_union_decl(&mut self, u: &UnionDecl) -> Result<ResolvedUnionDecl, NameResolutionError>
+	fn resolve_union_decl(&mut self, u: &UnionDecl) -> ResolvedUnionDecl
 	{
 		let name_str: &str = u.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: u.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: u.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: u.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: u.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3237,26 +3202,26 @@ impl<'a> Resolver<'a>
 			.fields
 			.iter()
 			.map(|f| {
-				let ty = self.resolve_type(&f.ty)?;
-				return Ok(ResolvedUnionField {
+				let ty = self.resolve_type(&f.ty);
+				ResolvedUnionField {
 					name: f.name.clone(),
 					ty,
 					modifiers: f.modifiers.clone(),
 					docs: f.docs.clone(),
 					span: f.span(),
-				});
+				}
 			})
-			.collect::<Result<_, NameResolutionError>>()?;
+			.collect();
 
 		let where_clause: Vec<ResolvedWhereConstraint> = u
 			.where_clause
 			.iter()
 			.map(|c| return self.resolve_where_constraint(c))
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		self.current_scope = prev;
 
-		return Ok(ResolvedUnionDecl {
+		return ResolvedUnionDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: u.modifiers.clone(),
@@ -3265,22 +3230,26 @@ impl<'a> Resolver<'a>
 			where_clause,
 			docs: u.docs.clone(),
 			span: u.span(),
-		});
+		};
 	}
 
-	fn resolve_enum_decl(&mut self, e: &EnumDecl) -> Result<ResolvedEnumDecl, NameResolutionError>
+	fn resolve_enum_decl(&mut self, e: &EnumDecl) -> ResolvedEnumDecl
 	{
 		let name_str: &str = e.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: e.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: e.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: e.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: e.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3290,23 +3259,19 @@ impl<'a> Resolver<'a>
 			.variants
 			.iter()
 			.map(|v| {
-				let value = v
-					.value
-					.as_ref()
-					.map(|expr| return self.resolve_expr(expr))
-					.transpose()?;
-				return Ok(ResolvedEnumVariant {
+				let value = v.value.as_ref().map(|expr| self.resolve_expr(expr));
+				ResolvedEnumVariant {
 					name: v.name.clone(),
 					value,
 					docs: v.docs.clone(),
 					span: v.span(),
-				});
+				}
 			})
-			.collect::<Result<_, NameResolutionError>>()?;
+			.collect();
 
 		self.current_scope = prev;
 
-		return Ok(ResolvedEnumDecl {
+		return ResolvedEnumDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: e.modifiers.clone(),
@@ -3314,22 +3279,26 @@ impl<'a> Resolver<'a>
 			variants,
 			docs: e.docs.clone(),
 			span: e.span(),
-		});
+		};
 	}
 
-	fn resolve_variant_decl(&mut self, v: &parser::VariantDecl) -> Result<ResolvedVariantDecl, NameResolutionError>
+	fn resolve_variant_decl(&mut self, v: &parser::VariantDecl) -> ResolvedVariantDecl
 	{
 		let name_str: &str = v.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: v.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: v.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: v.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: v.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3339,21 +3308,21 @@ impl<'a> Resolver<'a>
 			.variants
 			.iter()
 			.map(|m| {
-				let ty = m.ty.as_ref().map(|t| return self.resolve_type(t)).transpose()?;
-				let value = m.value.as_ref().map(|e| return self.resolve_expr(e)).transpose()?;
-				return Ok(ResolvedVariantMember {
+				let ty = m.ty.as_ref().map(|t| self.resolve_type(t));
+				let value = m.value.as_ref().map(|e| self.resolve_expr(e));
+				ResolvedVariantMember {
 					name: m.name.clone(),
 					ty,
 					value,
 					docs: m.docs.clone(),
 					span: m.span(),
-				});
+				}
 			})
-			.collect::<Result<_, NameResolutionError>>()?;
+			.collect();
 
 		self.current_scope = prev;
 
-		return Ok(ResolvedVariantDecl {
+		return ResolvedVariantDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: v.modifiers.clone(),
@@ -3361,57 +3330,30 @@ impl<'a> Resolver<'a>
 			variants,
 			docs: v.docs.clone(),
 			span: v.span(),
-		});
-	}
-
-	fn resolve_type_alias_decl(&mut self, t: &TypeAliasDecl) -> Result<ResolvedTypeAliasDecl, NameResolutionError>
-	{
-		let name_str: &str = t.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: t.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
-
-		let ty: ResolvedType = self.resolve_type(&t.ty)?;
-
-		return Ok(ResolvedTypeAliasDecl {
-			resolved_name,
-			name: name_str.to_owned(),
-			modifiers: t.modifiers.clone(),
-			generics: t.generics.clone(),
-			ty,
-			docs: t.docs.clone(),
-			span: t.span(),
-		});
-	}
-
-	fn resolve_assoc_type_decl(&mut self, t: &AssocTypeDecl) -> Result<ResolvedAssocTypeDecl, NameResolutionError>
-	{
-		let name_str: &str = t.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: t.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
-
-		let ty: Option<ResolvedType> = if let Some(pty) = &t.ty {
-			Some(self.resolve_type(pty)?)
-		} else {
-			None
 		};
+	}
 
-		return Ok(ResolvedAssocTypeDecl {
+	fn resolve_type_alias_decl(&mut self, t: &TypeAliasDecl) -> ResolvedTypeAliasDecl
+	{
+		let name_str: &str = t.name.segments[0].name.as_str();
+		let resolved_name: SymbolId = self
+			.find_in_scope_chain(self.current_scope, name_str)
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: t.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
+
+		let ty: ResolvedType = self.resolve_type(&t.ty);
+
+		return ResolvedTypeAliasDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: t.modifiers.clone(),
@@ -3419,22 +3361,57 @@ impl<'a> Resolver<'a>
 			ty,
 			docs: t.docs.clone(),
 			span: t.span(),
-		});
+		};
 	}
 
-	fn resolve_trait_decl(&mut self, t: &TraitDecl) -> Result<ResolvedTraitDecl, NameResolutionError>
+	fn resolve_assoc_type_decl(&mut self, t: &AssocTypeDecl) -> ResolvedAssocTypeDecl
 	{
 		let name_str: &str = t.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: t.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: t.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
+
+		let ty: Option<ResolvedType> = t.ty.as_ref().map(|pty| self.resolve_type(pty));
+
+		return ResolvedAssocTypeDecl {
+			resolved_name,
+			name: name_str.to_owned(),
+			modifiers: t.modifiers.clone(),
+			generics: t.generics.clone(),
+			ty,
+			docs: t.docs.clone(),
+			span: t.span(),
+		};
+	}
+
+	fn resolve_trait_decl(&mut self, t: &TraitDecl) -> ResolvedTraitDecl
+	{
+		let name_str: &str = t.name.segments[0].name.as_str();
+		let resolved_name: SymbolId = self
+			.find_in_scope_chain(self.current_scope, name_str)
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: t.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: t.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3447,30 +3424,24 @@ impl<'a> Resolver<'a>
 			.super_traits
 			.iter()
 			.map(|b| return self.resolve_where_bound(b))
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		let items: Vec<ResolvedTraitItem> = t
 			.items
 			.iter()
 			.map(|item| match item {
-				parser::TraitItem::Function(f) => {
-					return self.resolve_function_decl(f).map(ResolvedTraitItem::Function);
-				}
-				parser::TraitItem::TypeAlias(ta) => {
-					return self.resolve_type_alias_decl(ta).map(ResolvedTraitItem::TypeAlias);
-				}
-				parser::TraitItem::AssocType(ta) => {
-					return self.resolve_assoc_type_decl(ta).map(ResolvedTraitItem::AssocType);
-				}
-				parser::TraitItem::Const(var) => return self.resolve_variable_decl(var).map(ResolvedTraitItem::Const),
+				parser::TraitItem::Function(f) => ResolvedTraitItem::Function(self.resolve_function_decl(f)),
+				parser::TraitItem::TypeAlias(ta) => ResolvedTraitItem::TypeAlias(self.resolve_type_alias_decl(ta)),
+				parser::TraitItem::AssocType(ta) => ResolvedTraitItem::AssocType(self.resolve_assoc_type_decl(ta)),
+				parser::TraitItem::Const(var) => ResolvedTraitItem::Const(self.resolve_variable_decl(var)),
 			})
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		self.current_scope = prev;
 		self.trait_scope = prev_trait_scope;
 		self.self_sym = prev_self_sym;
 
-		return Ok(ResolvedTraitDecl {
+		return ResolvedTraitDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: t.modifiers.clone(),
@@ -3479,22 +3450,26 @@ impl<'a> Resolver<'a>
 			items,
 			docs: t.docs.clone(),
 			span: t.span(),
-		});
+		};
 	}
 
-	fn resolve_module_decl(&mut self, m: &ModuleDecl) -> Result<ResolvedModuleDecl, NameResolutionError>
+	fn resolve_module_decl(&mut self, m: &ModuleDecl) -> ResolvedModuleDecl
 	{
 		let name_str: &str = m.name.segments[0].name.as_str();
 		let resolved_name: SymbolId = self
 			.find_in_scope_chain(self.current_scope, name_str)
-			.ok_or_else(|| {
-				return NameResolutionError {
-					span: m.name.span(),
-					kind: NameResolutionErrorKind::UnresolvedPath { path: m.name.clone() },
-					context: Vec::new(),
-				};
-			})?
-			.0;
+			.map(|(id, _)| id)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(
+					NameResolutionError {
+						span: m.name.span(),
+						kind: NameResolutionErrorKind::UnresolvedPath { path: m.name.clone() },
+						context: Vec::new(),
+					}
+					.build(),
+				);
+				SymbolId(usize::MAX)
+			});
 
 		let resolved_body: Option<ResolvedTopLevelBlock> = match &m.kind {
 			ModuleKind::Inline(body) => {
@@ -3502,7 +3477,7 @@ impl<'a> Resolver<'a>
 				let saved_imports: Vec<UseImport> = std::mem::take(&mut self.use_imports);
 				let prev: ScopeId = self.current_scope;
 				self.current_scope = body_scope;
-				let resolved: ResolvedTopLevelBlock = self.resolve_top_level_block(body)?;
+				let resolved: ResolvedTopLevelBlock = self.resolve_top_level_block(body);
 				self.current_scope = prev;
 				self.use_imports = saved_imports;
 				Some(resolved)
@@ -3510,17 +3485,17 @@ impl<'a> Resolver<'a>
 			ModuleKind::External => None,
 		};
 
-		return Ok(ResolvedModuleDecl {
+		return ResolvedModuleDecl {
 			resolved_name,
 			name: name_str.to_owned(),
 			modifiers: m.modifiers.clone(),
 			resolved_body,
 			docs: m.docs.clone(),
 			span: m.span(),
-		});
+		};
 	}
 
-	fn resolve_impl_decl(&mut self, i: &ImplDecl) -> Result<ResolvedImplDecl, NameResolutionError>
+	fn resolve_impl_decl(&mut self, i: &ImplDecl) -> ResolvedImplDecl
 	{
 		let body_scope: Option<ScopeId> = self.next_anon_scope();
 		let prev: ScopeId = self.current_scope;
@@ -3528,12 +3503,11 @@ impl<'a> Resolver<'a>
 			self.current_scope = sc;
 		}
 
-		let resolved_target: ResolvedPath = self.resolve_path_or_primitive(&i.target.path, i.target.span())?;
+		let resolved_target: ResolvedPath = self.resolve_path_or_primitive(&i.target.path, i.target.span());
 		let resolved_trait: Option<ResolvedPath> = i
 			.trait_path
 			.as_ref()
-			.map(|tp| return self.resolve_path_or_primitive(&tp.path, tp.span()))
-			.transpose()?;
+			.map(|tp| return self.resolve_path_or_primitive(&tp.path, tp.span()));
 
 		let prev_self_sym: Option<SymbolId> = match &resolved_target.kind {
 			ResolvedPathKind::Resolved(id) => self.self_sym.replace(*id),
@@ -3545,27 +3519,23 @@ impl<'a> Resolver<'a>
 			.where_clause
 			.iter()
 			.map(|c| return self.resolve_where_constraint(c))
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		let items: Vec<ResolvedImplItem> = i
 			.body
 			.iter()
 			.map(|item| match item {
-				parser::ImplItem::Function(f) => return self.resolve_function_decl(f).map(ResolvedImplItem::Function),
-				parser::ImplItem::TypeAlias(ta) => {
-					return self.resolve_type_alias_decl(ta).map(ResolvedImplItem::TypeAlias);
-				}
-				parser::ImplItem::AssocType(ta) => {
-					return self.resolve_assoc_type_decl(ta).map(ResolvedImplItem::AssocType);
-				}
-				parser::ImplItem::Const(var) => return self.resolve_variable_decl(var).map(ResolvedImplItem::Const),
+				parser::ImplItem::Function(f) => ResolvedImplItem::Function(self.resolve_function_decl(f)),
+				parser::ImplItem::TypeAlias(ta) => ResolvedImplItem::TypeAlias(self.resolve_type_alias_decl(ta)),
+				parser::ImplItem::AssocType(ta) => ResolvedImplItem::AssocType(self.resolve_assoc_type_decl(ta)),
+				parser::ImplItem::Const(var) => ResolvedImplItem::Const(self.resolve_variable_decl(var)),
 			})
-			.collect::<Result<_, _>>()?;
+			.collect();
 
 		self.current_scope = prev;
 		self.self_sym = prev_self_sym;
 
-		return Ok(ResolvedImplDecl {
+		return ResolvedImplDecl {
 			resolved_target,
 			resolved_trait,
 			modifiers: i.modifiers.clone(),
@@ -3574,7 +3544,7 @@ impl<'a> Resolver<'a>
 			items,
 			docs: i.docs.clone(),
 			span: i.span(),
-		});
+		};
 	}
 }
 
@@ -3584,25 +3554,34 @@ pub fn resolve_names(
 	symbols: &LocalSymbolTable,
 	global: &GlobalSymbolTable,
 	modules: &[(Vec<String>, DesugaredAST, LocalSymbolTable)],
-) -> Result<ResolvedModule, CompileError>
+) -> Result<(ResolvedModule, Vec<DiagnosticBuilder>), Vec<DiagnosticBuilder>>
 {
 	let scope_offset: usize = global.module_roots.get(logical_path).copied().map_or(0, |s| return s.0);
 
 	let mut resolver: Resolver<'_> = Resolver::new(global, modules, symbols, scope_offset);
 
-	let resolved_block: ResolvedTopLevelBlock = resolver
-		.resolve_top_level_block(&ast.top_level_block)
-		.map_err(CompileError::NameResolution)?;
+	let resolved_block: ResolvedTopLevelBlock = resolver.resolve_top_level_block(&ast.top_level_block);
 
 	let span: Span = resolved_block.span;
 
-	return Ok(ResolvedModule {
-		path: logical_path.to_vec(),
-		ast: ResolvedAST {
-			span,
-			top_level_block: resolved_block,
-			source_index: ast.source_index,
+	if resolver
+		.diagnostics
+		.iter()
+		.any(|d| return d.severity.should_stop_compiling())
+	{
+		return Err(resolver.diagnostics);
+	}
+
+	return Ok((
+		ResolvedModule {
+			path: logical_path.to_vec(),
+			ast: ResolvedAST {
+				span,
+				top_level_block: resolved_block,
+				source_index: ast.source_index,
+			},
+			symbols: symbols.clone(),
 		},
-		symbols: symbols.clone(),
-	});
+		resolver.diagnostics,
+	));
 }

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use crate::{
 	CompileDiagnostic, CompileError, Config,
 	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, OldStyleRenderer},
+	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, ErrorCode, OldStyleRenderer, Severity},
 	lexer::{Lexer, expander::ExpandedLexer},
 	name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
 	parser::{AST, Parser},
@@ -45,7 +45,7 @@ const STDLIB_SRC: &str = r"
 // Helper
 // -------------------------------------------------------------------------
 
-fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModule, CompileError>
+fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModule, Vec<DiagnosticBuilder>>
 {
 	let config = Config::default();
 	let mut source_map = SourceMap::default();
@@ -57,18 +57,22 @@ fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModu
 	// The user's module is always last in pending (stdlib is first)
 	let (logical, desugared, local) = pending.last().unwrap();
 
-	return name_resolution::resolve_names(logical, desugared, local, &global, &pending).inspect_err(|e| {
-		let diag = e.to_diagnostic();
-		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
-		eprintln!("{}", renderer);
-	});
+	return name_resolution::resolve_names(logical, desugared, local, &global, &pending)
+		.inspect_err(|e| {
+			for d in e {
+				let diag = d.clone().finish();
+				let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
+				eprintln!("{}", renderer);
+			}
+		})
+		.map(|x| x.0);
 }
 
 fn build_pending(
 	modules: &[(&[&str], &str)],
 	config: &Config,
 	source_map: &mut SourceMap,
-) -> Result<Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)>, CompileError>
+) -> Result<Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)>, Vec<DiagnosticBuilder>>
 {
 	let mut pending = Vec::new();
 
@@ -146,7 +150,7 @@ fn error_on_unresolved_function_call()
 	// in expression position (they become UnresolvedIdentifier nodes).
 	// The pass itself should still succeed without a hard error here.
 	// Adjust this assertion if your resolver is stricter.
-	let _: Result<ResolvedModule, CompileError> = parse_and_resolve(src, &[]);
+	let _: Result<ResolvedModule, Vec<DiagnosticBuilder>> = parse_and_resolve(src, &[]);
 }
 
 // -------------------------------------------------------------------------
@@ -652,7 +656,7 @@ fn error_on_private_symbol_access_across_modules()
 	// `hidden` is private — accessing it from outside the module should
 	// either produce a PrivateSymbol error or leave it as UnresolvedIdentifier.
 	// We just confirm the pipeline doesn't panic.
-	let _: Result<ResolvedModule, CompileError> = parse_and_resolve(src, &[]);
+	let _: Result<ResolvedModule, Vec<DiagnosticBuilder>> = parse_and_resolve(src, &[]);
 }
 
 #[test]
@@ -680,17 +684,34 @@ fn error_kind_is_unresolved_path_for_missing_type()
             fn foo(x: DoesNotExist) {}
         ";
 	match parse_and_resolve(src, &[]) {
-		Err(CompileError::NameResolution(e)) => {
-			assert!(
-				matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }),
-				"expected UnresolvedPath, got {:?}",
-				e.kind
-			);
-		}
+		// Err(CompileError::NameResolution(e)) => {
+		// 	assert!(
+		// 		matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }),
+		// 		"expected UnresolvedPath, got {:?}",
+		// 		e.kind
+		// 	);
+		// }
 		// Primitive fallback means a single-segment unknown type is tolerated
 		// as a Primitive — if your resolver does that, this is also acceptable.
 		Ok(_) => {}
-		Err(other) => panic!("unexpected error variant: {:?}", other),
+		Err(other) => {
+			if matches!(
+				other
+					.iter()
+					.find_map(|e| {
+						if e.severity == Severity::Error {
+							Some(e.code.unwrap())
+						} else {
+							None
+						}
+					})
+					.unwrap(),
+				ErrorCode::NameResolutionUnresolvedPath
+			) {
+				return;
+			}
+			panic!("unexpected error variant: {:?}", other)
+		}
 	}
 }
 
@@ -706,17 +727,34 @@ fn error_kind_is_private_symbol()
             }
         ";
 	match parse_and_resolve(src, &[]) {
-		Err(CompileError::NameResolution(e)) => {
-			assert!(
-				matches!(e.kind, NameResolutionErrorKind::PrivateSymbol { .. }),
-				"expected PrivateSymbol, got {:?}",
-				e.kind
-			);
-		}
+		// Err(CompileError::NameResolution(e)) => {
+		// 	assert!(
+		// 		matches!(e.kind, NameResolutionErrorKind::PrivateSymbol { .. }),
+		// 		"expected PrivateSymbol, got {:?}",
+		// 		e.kind
+		// 	);
+		// }
 		// Some resolvers leave this as an unresolved identifier rather than
 		// a hard error — treat Ok as a known-lenient behaviour.
 		Ok(_) => {}
-		Err(other) => panic!("unexpected error: {:?}", other),
+		Err(other) => {
+			if matches!(
+				other
+					.iter()
+					.find_map(|e| {
+						if e.severity == Severity::Error {
+							Some(e.code.unwrap())
+						} else {
+							None
+						}
+					})
+					.unwrap(),
+				ErrorCode::NameResolutionPrivateSymbol
+			) {
+				return;
+			}
+			panic!("unexpected error variant: {:?}", other)
+		}
 	}
 }
 
@@ -732,17 +770,34 @@ fn error_on_shadow()
             }
         ";
 	match parse_and_resolve(src, &[]) {
-		Err(CompileError::NameResolution(e)) => {
-			assert!(
-				matches!(e.kind, NameResolutionErrorKind::ShadowedVariable { .. }),
-				"expected ShadowedVarialbe, got {:?}",
-				e.kind
-			);
-		}
+		// Err(CompileError::NameResolution(e)) => {
+		// 	assert!(
+		// 		matches!(e.kind, NameResolutionErrorKind::ShadowedVariable { .. }),
+		// 		"expected ShadowedVarialbe, got {:?}",
+		// 		e.kind
+		// 	);
+		// }
 		Ok(_) => {
 			panic!("expected ShadowedVarialbe, got no error")
 		}
-		Err(other) => panic!("unexpected error: {:?}", other),
+		Err(other) => {
+			if matches!(
+				other
+					.iter()
+					.find_map(|e| {
+						if e.severity == Severity::Error {
+							Some(e.code.unwrap())
+						} else {
+							None
+						}
+					})
+					.unwrap(),
+				ErrorCode::NameResolutionShadowedVariable
+			) {
+				return;
+			}
+			panic!("unexpected error variant: {:?}", other)
+		}
 	}
 }
 
@@ -781,7 +836,7 @@ fn resolved_ast_display_does_not_panic()
 ///
 /// `modules` is a slice of `(logical_path_segments, source_text)` pairs.
 /// The first entry is treated as the root module being resolved.
-fn parse_and_resolve_multi(modules: &[(&[&str], &str)]) -> Result<Vec<ResolvedModule>, CompileError>
+fn parse_and_resolve_multi(modules: &[(&[&str], &str)]) -> Result<Vec<ResolvedModule>, Vec<DiagnosticBuilder>>
 {
 	let config = Config::default();
 	let mut source_map = SourceMap::default();
@@ -792,7 +847,7 @@ fn parse_and_resolve_multi(modules: &[(&[&str], &str)]) -> Result<Vec<ResolvedMo
 
 	let mut resolved = Vec::new();
 	for (path, desugared, local) in &pending {
-		let r = name_resolution::resolve_names(path, desugared, local, &global, &pending)?;
+		let (r, _) = name_resolution::resolve_names(path, desugared, local, &global, &pending)?;
 		resolved.push(r);
 	}
 	return Ok(resolved);
@@ -1036,11 +1091,28 @@ fn integration_error_unresolved_in_multi_module()
 	// resolve to an UnresolvedIdentifier — it must not silently succeed with
 	// a fully-resolved symbol.
 	match &result {
-		Err(CompileError::NameResolution(e)) => {
-			assert!(matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }));
-		}
+		// Err(CompileError::NameResolution(e)) => {
+		// 	assert!(matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }));
+		// }
 		// Tolerate if the resolver leaves it as UnresolvedIdentifier (no hard error).
 		Ok(_) => {}
-		Err(other) => panic!("unexpected error: {:?}", other),
+		Err(other) => {
+			if matches!(
+				other
+					.iter()
+					.find_map(|e| {
+						return if e.severity == Severity::Error {
+							Some(e.code.unwrap())
+						} else {
+							None
+						};
+					})
+					.unwrap(),
+				ErrorCode::NameResolutionUnresolvedPath
+			) {
+				return;
+			}
+			panic!("unexpected error variant: {:?}", other)
+		}
 	}
 }

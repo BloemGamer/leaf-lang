@@ -404,8 +404,14 @@ fn run(
 	for (path, desugared, symbols) in &pending_modules {
 		let ret = name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules);
 		let resolved: ResolvedModule = match ret {
-			Ok(r) => r,
-			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
+			Ok((rm, mut diags)) => {
+				diagnostics.append(&mut diags);
+				rm
+			}
+			Err(mut diags) => {
+				diagnostics.append(&mut diags);
+				return (Err(None), diagnostics);
+			}
 		};
 		resolved_modules.push(resolved);
 	}
