@@ -858,7 +858,7 @@ pub enum Expr
 	{
 		callee: Box<Expr>,
 		call_type: CallType,
-		named_generics: Vec<(Ident, Type)>, // used for heap and allocators
+		named_generics: Vec<(Ident, Expr)>, // used for heap and allocators
 		args: Vec<Expr>,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -2466,16 +2466,24 @@ pub enum ModuleKind
 struct Restrictions
 {
 	no_struct_literal: bool,
+	no_greater_than: bool,
 }
 
 impl Restrictions
 {
 	const NONE: Self = Self {
 		no_struct_literal: false,
+		no_greater_than: false,
 	};
 
 	const NO_STRUCT_LITERAL: Self = Self {
 		no_struct_literal: true,
+		no_greater_than: false,
+	};
+
+	const NO_GREATER_THAN: Self = Self {
+		no_struct_literal: false,
+		no_greater_than: true,
 	};
 }
 
@@ -3882,12 +3890,21 @@ where
 		let mut lhs: Expr = self.parse_shift(restrictions)?;
 
 		loop {
-			let op: BinaryOp = match self.peek_kind()? {
-				TokenKind::LessThan => BinaryOp::Lt,
-				TokenKind::GreaterThan => BinaryOp::Gt,
-				TokenKind::LessEquals => BinaryOp::Le,
-				TokenKind::GreaterEquals => BinaryOp::Ge,
-				_ => break,
+			let op: BinaryOp = if restrictions.no_greater_than {
+				match self.peek_kind()? {
+					TokenKind::LessThan => BinaryOp::Lt,
+					TokenKind::LessEquals => BinaryOp::Le,
+					TokenKind::GreaterEquals => BinaryOp::Ge,
+					_ => break,
+				}
+			} else {
+				match self.peek_kind()? {
+					TokenKind::LessThan => BinaryOp::Lt,
+					TokenKind::GreaterThan => BinaryOp::Gt,
+					TokenKind::LessEquals => BinaryOp::Le,
+					TokenKind::GreaterEquals => BinaryOp::Ge,
+					_ => break,
+				}
 			};
 
 			self.next()?;
@@ -4187,8 +4204,8 @@ where
 						unreachable!()
 					};
 
-					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan)? {
-						self.parse_named_generics()?
+					let named_generics: Vec<(Ident, Expr)> = if self.at(&TokenKind::LessThan)? {
+						self.parse_heap_generics()?
 					} else {
 						Vec::new()
 					};
@@ -4334,8 +4351,8 @@ where
 				};
 
 				if let Some(ct) = call_type {
-					let named_generics: Vec<(Ident, Type)> = if self.at(&TokenKind::LessThan)? {
-						self.parse_named_generics()?
+					let named_generics: Vec<(Ident, Expr)> = if self.at(&TokenKind::LessThan)? {
+						self.parse_heap_generics()?
 					} else {
 						Vec::new()
 					};
@@ -6576,13 +6593,13 @@ where
 		return Ok(generics);
 	}
 
-	fn parse_named_generics(&mut self) -> Result<Vec<(Ident, Type)>, Box<DiagnosticBuilder>>
+	fn parse_heap_generics(&mut self) -> Result<Vec<(Ident, Expr)>, Box<DiagnosticBuilder>>
 	{
 		if !self.consume(&TokenKind::LessThan)? {
 			return Ok(Vec::new());
 		}
 
-		let mut named_generics: Vec<(Ident, Type)> = Vec::new();
+		let mut named_generics: Vec<(Ident, Expr)> = Vec::new();
 
 		if self.consume_greater_than()? {
 			return Ok(named_generics);
@@ -6598,9 +6615,9 @@ where
 
 			self.expect(&TokenKind::Arrow)?;
 
-			let ty: Type = self.parse_type()?;
+			let expr: Expr = self.parse_expr_with_restrictions(Restrictions::NO_GREATER_THAN)?;
 
-			named_generics.push((name, ty));
+			named_generics.push((name, expr));
 
 			if self.consume_greater_than()? {
 				break;

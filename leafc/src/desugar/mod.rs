@@ -1377,7 +1377,12 @@ impl Desugarer
 			} => Expr::Call {
 				callee: Box::new(self.desugar_expr(*callee)),
 				call_type,
-				named_generics,
+				named_generics: {
+					named_generics
+						.into_iter()
+						.map(|(n, e)| (n, self.desugar_expr(e)))
+						.collect()
+				},
 				args: args
 					.into_iter()
 					.map(|arg| return self.desugar_expr(arg))

@@ -318,7 +318,7 @@ pub enum ResolvedExpr
 	{
 		callee: Box<ResolvedExpr>,
 		call_type: CallType,
-		named_generics: Vec<(String, ResolvedType)>,
+		named_generics: Vec<(String, ResolvedExpr)>,
 		args: Vec<ResolvedExpr>,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -2517,9 +2517,9 @@ impl<'a> Resolver<'a>
 				span,
 			} => {
 				let rcallee: ResolvedExpr = self.resolve_expr(callee);
-				let rng: Vec<(String, ResolvedType)> = named_generics
+				let rng: Vec<(String, ResolvedExpr)> = named_generics
 					.iter()
-					.map(|(name, ty)| (name.clone(), self.resolve_type(ty)))
+					.map(|(name, expr)| (name.clone(), self.resolve_expr(expr)))
 					.collect();
 				let rargs = args.iter().map(|a| return self.resolve_expr(a)).collect();
 				ResolvedExpr::Call {
@@ -3515,6 +3515,8 @@ impl<'a> Resolver<'a>
 			ResolvedPathKind::Primitive(_) => self.self_sym.take(),
 		};
 
+		let prev_trait_scope: Option<ScopeId> = self.trait_scope.replace(body_scope.unwrap_or(prev));
+
 		let where_clause: Vec<ResolvedWhereConstraint> = i
 			.where_clause
 			.iter()
@@ -3524,16 +3526,19 @@ impl<'a> Resolver<'a>
 		let items: Vec<ResolvedImplItem> = i
 			.body
 			.iter()
-			.map(|item| match item {
-				parser::ImplItem::Function(f) => ResolvedImplItem::Function(self.resolve_function_decl(f)),
-				parser::ImplItem::TypeAlias(ta) => ResolvedImplItem::TypeAlias(self.resolve_type_alias_decl(ta)),
-				parser::ImplItem::AssocType(ta) => ResolvedImplItem::AssocType(self.resolve_assoc_type_decl(ta)),
-				parser::ImplItem::Const(var) => ResolvedImplItem::Const(self.resolve_variable_decl(var)),
+			.map(|item| {
+				return match item {
+					parser::ImplItem::Function(f) => ResolvedImplItem::Function(self.resolve_function_decl(f)),
+					parser::ImplItem::TypeAlias(ta) => ResolvedImplItem::TypeAlias(self.resolve_type_alias_decl(ta)),
+					parser::ImplItem::AssocType(ta) => ResolvedImplItem::AssocType(self.resolve_assoc_type_decl(ta)),
+					parser::ImplItem::Const(var) => ResolvedImplItem::Const(self.resolve_variable_decl(var)),
+				};
 			})
 			.collect();
 
 		self.current_scope = prev;
 		self.self_sym = prev_self_sym;
+		self.trait_scope = prev_trait_scope;
 
 		return ResolvedImplDecl {
 			resolved_target,

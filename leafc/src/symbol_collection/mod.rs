@@ -1305,10 +1305,18 @@ impl Collector
 				self.collect_expr(rhs);
 			}
 
-			Expr::Call { callee, args, .. } => {
+			Expr::Call {
+				callee,
+				args,
+				named_generics,
+				..
+			} => {
 				self.collect_expr(callee);
 				for arg in args {
 					self.collect_expr(arg);
+				}
+				for (_, e) in named_generics {
+					self.collect_expr(e);
 				}
 			}
 
