@@ -89,16 +89,6 @@ impl fmt::Display for Primitive
 				sign: IntSign::Unsigned,
 				bits: IntSize::Size,
 			}) => write!(f, "usize"),
-			Primitive::Int(IntType {
-				sign,
-				bits: IntSize::Generic(name),
-			}) => {
-				let prefix = match sign {
-					IntSign::Signed => 'i',
-					IntSign::Unsigned => 'u',
-				};
-				write!(f, "{prefix}<{name}>")
-			}
 			Primitive::F32 => write!(f, "f32"),
 			Primitive::F64 => write!(f, "f64"),
 			Primitive::Str => write!(f, "str"),

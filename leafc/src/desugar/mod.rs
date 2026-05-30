@@ -9,7 +9,7 @@ use leaf_proc::{Spanned, compiler_bug};
 use std::fmt::Debug;
 
 use crate::{
-	diagnostics::{CompileDiagnostic, DiagnosticBuilder, ErrorCode, Severity},
+	diagnostics::{CompileDiagnostic, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
 	parser::{
 		AST, ArrayLiteral, AssignOp, Block, BlockContent, CallType, Directive, DirectiveNode, Expr, FuncBound,
@@ -1380,7 +1380,7 @@ impl Desugarer
 				named_generics: {
 					named_generics
 						.into_iter()
-						.map(|(n, e)| (n, self.desugar_expr(e)))
+						.map(|(n, e)| return (n, self.desugar_expr(e)))
 						.collect()
 				},
 				args: args

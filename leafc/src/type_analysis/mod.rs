@@ -1721,7 +1721,7 @@ struct BlockInferState<'src>
 
 impl<'src> BlockInferState<'src>
 {
-	fn fresh_id(&mut self) -> InferExprId
+	const fn fresh_id(&mut self) -> InferExprId
 	{
 		let id = InferExprId(self.next_id);
 		self.next_id += 1;
@@ -2683,6 +2683,7 @@ impl<'a> Checker<'a>
 		let self_ty: Ty = match &i.resolved_target.kind {
 			ResolvedPathKind::Resolved(id) => {
 				let sym = self.global.symbol(*id);
+				#[allow(clippy::redundant_else)] // clippy does weird things
 				if matches!(sym.kind, SymbolKind::GenericParam) {
 					self.generic_scope.lookup(&sym.name).cloned().unwrap_or_else(|| {
 						return Ty::Generic {
@@ -3519,6 +3520,7 @@ impl<'a> Checker<'a>
 		let self_ty: Ty = match &i.resolved_target.kind {
 			ResolvedPathKind::Resolved(id) => {
 				let sym = self.global.symbol(*id);
+				#[allow(clippy::redundant_else)] // clippy does weird things
 				if matches!(sym.kind, SymbolKind::GenericParam) {
 					self.generic_scope.lookup(&sym.name).cloned().unwrap_or_else(|| {
 						return Ty::Generic {
@@ -7816,13 +7818,6 @@ fn substitute_generics(ty: &Ty, subs: &HashMap<String, Ty>) -> Ty
 			symbol: *symbol,
 			generics: generics.iter().map(|g| return substitute_generics(g, subs)).collect(),
 		},
-
-		Ty::Primitive(Primitive::Int(IntType {
-			bits: IntSize::Generic(name),
-			sign: _,
-		})) => subs
-			.get(name)
-			.map_or_else(|| return ty.clone(), |concrete| return concrete.clone()),
 
 		Ty::Reference { mutable, inner } => Ty::Reference {
 			mutable: *mutable,

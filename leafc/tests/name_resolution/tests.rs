@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
 use crate::{
-	CompileDiagnostic, CompileError, Config,
+	Config,
 	desugar::DesugaredAST,
 	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, ErrorCode, OldStyleRenderer, Severity},
 	lexer::{Lexer, expander::ExpandedLexer},
-	name_resolution::{self, NameResolutionErrorKind, ResolvedModule},
-	parser::{AST, Parser},
+	name_resolution::{self, ResolvedModule},
+	parser::Parser,
 	source_map::SourceMap,
 	symbol_collection::{self, LocalSymbolTable},
 };
@@ -65,7 +65,7 @@ fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModu
 				eprintln!("{}", renderer);
 			}
 		})
-		.map(|x| x.0);
+		.map(|x| return x.0);
 }
 
 fn build_pending(
@@ -700,10 +700,9 @@ fn error_kind_is_unresolved_path_for_missing_type()
 					.iter()
 					.find_map(|e| {
 						if e.severity == Severity::Error {
-							Some(e.code.unwrap())
-						} else {
-							None
+							return Some(e.code.unwrap());
 						}
+						return None;
 					})
 					.unwrap(),
 				ErrorCode::NameResolutionUnresolvedPath
@@ -743,10 +742,9 @@ fn error_kind_is_private_symbol()
 					.iter()
 					.find_map(|e| {
 						if e.severity == Severity::Error {
-							Some(e.code.unwrap())
-						} else {
-							None
+							return Some(e.code.unwrap());
 						}
+						return None;
 					})
 					.unwrap(),
 				ErrorCode::NameResolutionPrivateSymbol
@@ -786,10 +784,9 @@ fn error_on_shadow()
 					.iter()
 					.find_map(|e| {
 						if e.severity == Severity::Error {
-							Some(e.code.unwrap())
-						} else {
-							None
+							return Some(e.code.unwrap());
 						}
+						return None;
 					})
 					.unwrap(),
 				ErrorCode::NameResolutionShadowedVariable

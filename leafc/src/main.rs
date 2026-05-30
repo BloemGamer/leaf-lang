@@ -142,6 +142,7 @@ use self::{
 
 mod desugar;
 mod lexer;
+mod mir;
 mod modules;
 mod name_resolution;
 mod parser;

@@ -423,7 +423,6 @@ pub enum IntSize
 {
 	Size,
 	Fixed(u16),
-	Generic(String),
 }
 
 impl std::fmt::Display for IntType
@@ -445,7 +444,6 @@ impl std::fmt::Display for IntSize
 		return match self {
 			IntSize::Size => write!(f, "size"),
 			IntSize::Fixed(bits) => write!(f, "{bits}"),
-			IntSize::Generic(generic) => write!(f, "<{generic}>"),
 		};
 	}
 }

@@ -5,8 +5,7 @@ use crate::{
 	parser::Parser,
 	source_map::SourceIndex,
 	symbol_collection::{
-		LocalSymbolTable, Mutability, ScopeKind, Symbol, SymbolCollectionError, SymbolId, SymbolKind, Visibility,
-		collect_symbols,
+		LocalSymbolTable, Mutability, ScopeKind, Symbol, SymbolId, SymbolKind, Visibility, collect_symbols,
 	},
 };
 
@@ -23,7 +22,7 @@ fn parse_and_collect(source: &str) -> Result<LocalSymbolTable, Vec<DiagnosticBui
 	let desugared = res.unwrap().0;
 	println!("{}", desugared);
 
-	return collect_symbols(&desugared, Vec::new()).map(|s| s.0);
+	return collect_symbols(&desugared, Vec::new()).map(|s| return s.0);
 }
 
 fn find_symbol_by_name<'a>(table: &'a LocalSymbolTable, name: &str) -> Option<(SymbolId, &'a Symbol)>

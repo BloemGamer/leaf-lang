@@ -5710,9 +5710,9 @@ where
 		};
 
 		let heap_generics = if call_type.is_heap_call() {
+			#[allow(clippy::redundant_else)] // clippy does weird things
 			if self.at(&TokenKind::LessThan)? {
 				let parsed = self.get_heap_generics()?;
-				// validate names are in ALLOWED_HEAP_GENERICS
 				for g in &parsed {
 					if !ALLOWED_HEAP_GENERICS.contains(&g.name.as_str()) {
 						return Err(Box::new(
@@ -5726,7 +5726,6 @@ where
 						));
 					}
 				}
-				// fill in any missing ones as Forwarded
 				ALLOWED_HEAP_GENERICS
 					.iter()
 					.map(|&name| {
@@ -5744,7 +5743,6 @@ where
 					})
 					.collect()
 			} else {
-				// no angle brackets = forward everything
 				ALLOWED_HEAP_GENERICS
 					.iter()
 					.map(|&name| {

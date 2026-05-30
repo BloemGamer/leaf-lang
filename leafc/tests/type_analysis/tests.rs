@@ -325,32 +325,32 @@ fn cannot_infer_bare_untyped_literal()
 #[test]
 fn struct_init_arrow_syntax()
 {
-	ok(r#"
+	ok(r"
 			struct Point { x: i64, y: i64 }
 			fn! main() { var p: Point = Point{ x -> 1i64, y -> 2i64 }; }
-		"#);
+		");
 }
 
 #[test]
 fn struct_field_access()
 {
-	ok(r#"
+	ok(r"
 			struct Point { x: i64, y: i64 }
 			fn! main() {
 				var p: Point = Point{ x -> 1i64, y -> 2i64 };
 				var _: i64 = p.x;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn struct_init_wrong_field_type_is_error()
 {
 	err(
-		r#"
+		r"
 			struct Foo { x: i64 }
 			fn! main() { var _ = Foo{ x -> true }; }
-		"#,
+		",
 		"field `x`",
 	);
 }
@@ -359,10 +359,10 @@ fn struct_init_wrong_field_type_is_error()
 fn struct_init_unknown_field_is_error()
 {
 	err(
-		r#"
+		r"
 			struct Foo { x: i64 }
 			fn! main() { var _ = Foo{ x -> 1i64, ghost -> 99i64 }; }
-		"#,
+		",
 		"no field",
 	);
 }
@@ -371,10 +371,10 @@ fn struct_init_unknown_field_is_error()
 fn struct_unknown_field_read_is_error()
 {
 	err(
-		r#"
+		r"
 			struct Point { x: i64 }
 			fn! main() { var p: _ = Point{ x -> 1i64 }; var _ = p.z; }
-		"#,
+		",
 		"no field",
 	);
 }
@@ -384,7 +384,7 @@ fn struct_unknown_field_read_is_error()
 #[test]
 fn method_call_on_self()
 {
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			impl A {
 				fn get(self) -> i64 { return self.a; }
@@ -394,13 +394,13 @@ fn method_call_on_self()
 				var a: A = A{ a -> 1i64 };
 				var _: i64 = a.double();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn self_struct_init_in_method()
 {
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			impl A {
 				fn make(self) -> Self {
@@ -411,19 +411,19 @@ fn self_struct_init_in_method()
 				var a: A = A{ a -> 1i64 };
 				var _: A = a.make();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn method_return_type_mismatch_is_error()
 {
 	err(
-		r#"
+		r"
 			struct A { a: i64 }
 			impl A {
 				fn bad(self) -> i64 { return true; }
 			}
-		"#,
+		",
 		"return type mismatch",
 	);
 }
@@ -435,7 +435,7 @@ fn type_alias_shares_methods()
 {
 	// From the sample: `type B = A` and then `impl B` adds methods;
 	// both `A::t7` and `B::t7` should resolve.
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl A { fn t7() {} }
@@ -443,20 +443,20 @@ fn type_alias_shares_methods()
 				A::t7();
 				B::t7();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn type_alias_cast()
 {
 	// `(A)B{ a -> 0 }` — cast from alias B back to A
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			fn! main() {
 				var z: A = (A)B{ a -> 0i64 };
 			}
-		"#);
+		");
 }
 
 // ── traits ───────────────────────────────────────────────────────────────
@@ -465,7 +465,7 @@ fn type_alias_cast()
 fn trait_default_method_calls_required()
 {
 	// `tr_f2` has a default body that calls `Self::tr_f1`
-	ok(r#"
+	ok(r"
 			trait Tr {
 				fn tr_f1(i: i64);
 				fn tr_f2(i: i64) { Self::tr_f1(i); }
@@ -476,18 +476,18 @@ fn trait_default_method_calls_required()
 				A::tr_f1(1i64);
 				A::tr_f2(1i64);
 			}
-		"#);
+		");
 }
 
 #[test]
 fn missing_required_trait_method_is_error()
 {
 	err(
-		r#"
+		r"
 			trait Tr { fn tr_f1(i: i64); }
 			struct A { a: i64 }
 			impl Tr for A { }
-		"#,
+		",
 		"required trait function",
 	);
 }
@@ -496,14 +496,14 @@ fn missing_required_trait_method_is_error()
 fn extra_method_not_in_trait_is_error()
 {
 	err(
-		r#"
+		r"
 			trait Tr { fn tr_f1(i: i64); }
 			struct A { a: i64 }
 			impl Tr for A {
 				fn tr_f1(i: i64) {}
 				fn extra(i: i64) {}
 			}
-		"#,
+		",
 		"not a member of the trait",
 	);
 }
@@ -512,11 +512,11 @@ fn extra_method_not_in_trait_is_error()
 fn trait_impl_return_type_mismatch_is_error()
 {
 	err(
-		r#"
+		r"
 			trait HasValue { fn value(self) -> i64; }
 			struct Num { }
 			impl HasValue for Num { fn value(self) -> bool { return true; } }
-		"#,
+		",
 		"return type mismatch",
 	);
 }
@@ -527,7 +527,7 @@ fn trait_impl_return_type_mismatch_is_error()
 fn add_operator_via_trait()
 {
 	// mirrors `impl std::ops::Add<B> for B` from the sample
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl std::ops::Add<B> for B {
@@ -539,20 +539,20 @@ fn add_operator_via_trait()
 				var y: B = B{ a -> 2i64 };
 				var _: B = x + y;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn add_on_type_without_impl_is_error()
 {
 	err(
-		r#"
+		r"
 			struct NoAdd { v: i64 }
 			fn! main() {
 				var x: NoAdd = NoAdd{ v -> 1i64 };
 				var _ = x + x;
 			}
-		"#,
+		",
 		"cannot be applied",
 	);
 }
@@ -562,20 +562,20 @@ fn add_on_type_without_impl_is_error()
 #[test]
 fn simple_free_function_call()
 {
-	ok(r#"
+	ok(r"
 			fn helper(x: i64) -> i64 { return x; }
 			fn! main() { var _: i64 = helper(1i64); }
-		"#);
+		");
 }
 
 #[test]
 fn too_few_args_is_error()
 {
 	err(
-		r#"
+		r"
 			fn add(a: i64, b: i64) -> i64 { return a; }
 			fn! main() { add(1i64); }
-		"#,
+		",
 		"wrong number of arguments",
 	);
 }
@@ -584,10 +584,10 @@ fn too_few_args_is_error()
 fn too_many_args_is_error()
 {
 	err(
-		r#"
+		r"
 			fn add(a: i64, b: i64) -> i64 { return a; }
 			fn! main() { add(1i64, 2i64, 3i64); }
-		"#,
+		",
 		"wrong number of arguments",
 	);
 }
@@ -615,43 +615,43 @@ fn void_function_no_return_ok()
 #[test]
 fn heap_fn_with_explicit_allocator()
 {
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> heap_fn() {
 				var _: i64 = 0i64;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn heap_fn_calling_other_heap_fn()
 {
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> inner() {}
 			fn!<Alloc -> std::CAlloc> outer() { inner!(); }
-		"#);
+		");
 }
 
 #[test]
 fn heap_fn_in_call()
 {
-	ok(r#"
+	ok(r"
 			fn! inner() {}
 			fn! outer() { inner!<Alloc -> Alloc>(); }
-		"#);
+		");
 }
 
 #[test]
 fn heap_fn_in_call_no_alloc_trait()
 {
 	err(
-		r#"
+		r"
 			struct Foo {}
 			fn! inner() {}
 			fn! outer() {
 				var f: Foo = Foo{};
 				inner!<Alloc -> f>();
 			}
-		"#,
+		",
 		"",
 	);
 }
@@ -661,30 +661,30 @@ fn heap_fn_in_call_no_alloc_trait()
 #[test]
 fn generic_function_inferred_type_param()
 {
-	ok(r#"
+	ok(r"
 			fn identity<T>(x: T) -> T { return x; }
 			fn! main() { var _: i64 = identity(5i64); }
-		"#);
+		");
 }
 
 #[test]
 fn generic_struct_explicit_param()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var r: Range<i64> = std::Range::new(1i64, 10i64);
 			}
-		"#);
+		");
 }
 
 #[test]
 fn generic_struct_i32()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var r: Range<i32> = std::Range::new(1, 2);
 			}
-		"#);
+		");
 }
 
 // ── where clauses ────────────────────────────────────────────────────────
@@ -692,25 +692,25 @@ fn generic_struct_i32()
 #[test]
 fn where_clause_satisfied_ok()
 {
-	ok(r#"
+	ok(r"
 			trait Numeric {}
 			struct MyNum {}
 			impl Numeric for MyNum {}
 			fn requires<T>(_x: T) where T: Numeric {}
 			fn! main() { requires(MyNum{}); }
-		"#);
+		");
 }
 
 #[test]
 fn where_clause_not_satisfied_is_error()
 {
 	err(
-		r#"
+		r"
 			trait Numeric {}
 			struct NotNumeric {}
 			fn requires<T>(_x: T) where T: Numeric {}
 			fn! main() { requires(NotNumeric{}); }
-		"#,
+		",
 		"does not implement",
 	);
 }
@@ -718,18 +718,18 @@ fn where_clause_not_satisfied_is_error()
 #[test]
 fn generic_the_same_generic_var()
 {
-	ok(r#"
+	ok(r"
 			fn! f<T: Create>(input: T) { var b: T = T::create(); }
-		"#);
+		");
 }
 
 #[test]
 fn generic_not_the_same_generic_var()
 {
 	err(
-		r#"
+		r"
 			fn! f<T: Iterator<Item = i64>>(input: T) { var b: Range<i64> = input; }
-		"#,
+		",
 		"",
 	);
 }
@@ -738,9 +738,9 @@ fn generic_not_the_same_generic_var()
 fn generic_not_the_same_generic_change_input()
 {
 	err(
-		r#"
+		r"
 			fn! f<T: Iterator<Item = i64>>(input: &mut T) { *input = 0..10; }
-		"#,
+		",
 		"",
 	);
 }
@@ -751,22 +751,22 @@ fn generic_not_the_same_generic_change_input()
 fn impl_trait_local_variable()
 {
 	// mirrors `var mut aa: impl Int = 0i64` from the sample
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn impl_trait_var_reassign_same_concrete_type()
 {
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 				var mut ab: impl Int = aa;
 			}
-		"#);
+		");
 }
 
 #[test]
@@ -775,11 +775,11 @@ fn impl_trait_parameter_stays_opaque()
 	// The parameter `i: impl Int` must not be reassignable to a different type.
 	// Matches test3_should_fail in the sample.
 	err(
-		r#"
+		r"
 			fn!<Alloc -> std::CAlloc> test(i: impl Int) {
 				i = 1i64;
 			}
-		"#,
+		",
 		"",
 	);
 }
@@ -788,11 +788,11 @@ fn impl_trait_parameter_stays_opaque()
 fn impl_trait_var_wrong_concrete_type_is_error()
 {
 	err(
-		r#"
+		r"
 			trait Marker { fn mark(self); }
 			struct A {}
 			fn! main() { var _: impl Marker = A{}; }
-		"#,
+		",
 		"does not implement",
 	);
 }
@@ -803,24 +803,24 @@ fn impl_trait_var_wrong_concrete_type_is_error()
 fn range_assigned_to_impl_iterator()
 {
 	// `var mut a: impl Iterator<Item = i64> = 0..10`
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> test() {
 				var mut a: impl Iterator<Item = i64> = 0..10;
 				a = 0..10;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn impl_iterator_next_via_question_mark()
 {
 	// mirrors `fn! test7`
-	ok(r#"
+	ok(r"
 			fn! test7(inp: impl Iterator<Item = i64>) -> Option<i64> {
 				var a: Option<i64> = inp.next?();
 				return a;
 			}
-		"#);
+		");
 }
 
 // ── if / switch / control flow ───────────────────────────────────────────
@@ -828,19 +828,19 @@ fn impl_iterator_next_via_question_mark()
 #[test]
 fn if_else_same_type()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var d: i64 = 1i64;
 				var _: i64 = if d == 1i64 { 10i64 } else { 20i64 };
 			}
-		"#);
+		");
 }
 
 #[test]
 fn if_else_type_mismatch_is_error()
 {
 	err(
-		r#"fn! main() { var _ = if true { 1i64 } else { false }; }"#,
+		r"fn! main() { var _ = if true { 1i64 } else { false }; }",
 		"branches have different types",
 	);
 }
@@ -848,7 +848,7 @@ fn if_else_type_mismatch_is_error()
 #[test]
 fn switch_wildcard_arm()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var mut d: i64 = 0i64;
 				switch d {
@@ -856,14 +856,14 @@ fn switch_wildcard_arm()
 					_    => {},
 				}
 			}
-		"#);
+		");
 }
 
 #[test]
 fn switch_arm_type_mismatch_is_error()
 {
 	err(
-		r#"
+		r"
 			fn! main() {
 				var x: i64 = 1i64;
 				var _ = switch x {
@@ -871,7 +871,7 @@ fn switch_arm_type_mismatch_is_error()
 					_ => 42i64,
 				};
 			}
-		"#,
+		",
 		"switch arms have different types",
 	);
 }
@@ -880,7 +880,7 @@ fn switch_arm_type_mismatch_is_error()
 fn switch_variant_pattern()
 {
 	// mirrors the `switch d { Option::Some(b: i64) => … }` in the sample
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var mut d: i64 = 0i64;
 				switch d {
@@ -888,30 +888,30 @@ fn switch_variant_pattern()
 					_ => {},
 				}
 			}
-		"#);
+		");
 }
 
 #[test]
 fn for_loop_range()
 {
 	// `for i: i64 in 1..10 {}`
-	ok(r#"
+	ok(r"
 			fn! main() {
 				for i: i64 in 1..10 {}
 			}
-		"#);
+		");
 }
 
 #[test]
 fn if_let_variant_pattern()
 {
 	// `if var Option::Some(b: i64) = b {} else {}`
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var b: i64 = 0i64;
 				if var Option::Some(b: i64) = b {} else {}
 			}
-		"#);
+		");
 }
 
 // ── casts ────────────────────────────────────────────────────────────────
@@ -952,12 +952,12 @@ fn reassign_wrong_type_is_error()
 fn compound_assign_add()
 {
 	// `asdf = asdf + 1i64 + 2` from the sample
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var mut asdf: i64 = 1i64 + 2i64;
 				asdf = asdf + 1i64 + 2i64;
 			}
-		"#);
+		");
 }
 
 // ── never / diverging ────────────────────────────────────────────────────
@@ -965,10 +965,10 @@ fn compound_assign_add()
 #[test]
 fn never_assignable_to_any_return_type()
 {
-	ok(r#"
+	ok(r"
 			fn panic_fn() -> ! { loop {} }
 			fn needs_i64() -> i64 { return panic_fn(); }
-		"#);
+		");
 }
 
 #[test]
@@ -982,31 +982,31 @@ fn loop_without_break_is_never()
 #[test]
 fn module_declaration_and_call()
 {
-	ok(r#"
+	ok(r"
 			module math {
 				pub fn square(x: i64) -> i64 { return x; }
 			}
 			fn! main() { var _: i64 = math::square(4i64); }
-		"#);
+		");
 }
 
 #[test]
 fn use_directive_brings_name_into_scope()
 {
-	ok(r#"
+	ok(r"
 			module util {
 				pub fn helper() {}
 			}
 			@use util::helper;
 			fn! main() { helper(); }
-		"#);
+		");
 }
 
 #[test]
 fn global_path_ignores_use()
 {
 	// `::t2::t::test()` must resolve even when a local `@use` shadows the name
-	ok(r#"
+	ok(r"
 			module outer {
 				pub module inner {
 					pub fn greet() {}
@@ -1017,7 +1017,7 @@ fn global_path_ignores_use()
 				inner::greet();
 				::outer::inner::greet();
 			}
-		"#);
+		");
 }
 
 // ── struct destructure pattern ────────────────────────────────────────────
@@ -1026,13 +1026,13 @@ fn global_path_ignores_use()
 fn struct_pattern_destructure()
 {
 	// `var A{ a -> b: i64 } = A{ a -> { var c: i64 = 0; c } }`
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			fn! main() {
 				var A{ a -> b: i64 } = A{ a -> { var c: i64 = 0i64; c } };
 				var _: i64 = b;
 			}
-		"#);
+		");
 }
 
 // ── tuples ───────────────────────────────────────────────────────────────
@@ -1041,12 +1041,12 @@ fn struct_pattern_destructure()
 fn tuple_construction_and_index()
 {
 	// `var a: (i64, i64) = (0, 1); a.0;`
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var a: (i64, i64) = (0i64, 1i64);
 				var _: i64 = a.0;
 			}
-		"#);
+		");
 }
 
 #[test]
@@ -1068,10 +1068,10 @@ fn unsafe_block_allowed()
 #[test]
 fn infer_pinned_by_function_param_type()
 {
-	ok(r#"
+	ok(r"
 			fn takes_i64(_x: i64) {}
 			fn! main() { var x: _ = 1i64; takes_i64(x); }
-		"#);
+		");
 }
 
 #[test]
@@ -1086,23 +1086,23 @@ fn infer_from_typed_variable_use()
 fn alloc_returns_pointer()
 {
 	// `var asd: *i64 = Alloc.alloc()` from the sample
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var asd: *i64 = Alloc.alloc(10);
 			}
-		"#);
+		");
 }
 
 #[test]
 fn alloc_wrong_pointer_type_is_error()
 {
 	err(
-		r#"
+		r"
 			fn! main() {
 				var asd: *bool = Alloc.alloc(10);
 				var _: *i64 = asd;
 			}
-		"#,
+		",
 		"type mismatch",
 	);
 }
@@ -1112,7 +1112,7 @@ fn alloc_wrong_pointer_type_is_error()
 #[test]
 fn assoc_type_in_trait_impl()
 {
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl std::ops::Add<B> for B {
@@ -1123,14 +1123,14 @@ fn assoc_type_in_trait_impl()
 				var x: B = B{ a -> 1i64 };
 				var _: B = x + x;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn self_output_assoc_type_resolves()
 {
 	// Self::Output in return position should resolve to the implementing type
-	ok(r#"
+	ok(r"
 			struct Val { v: i64 }
 			impl std::ops::Add<Val> for Val {
 				assoc Output = Self;
@@ -1141,7 +1141,7 @@ fn self_output_assoc_type_resolves()
 				var b: Val = Val{ v -> 2i64 };
 				var c: Val = a + b;
 			}
-		"#);
+		");
 }
 
 // ── static / associated function calls ──────────────────────────────────
@@ -1150,7 +1150,7 @@ fn self_output_assoc_type_resolves()
 fn static_method_call_via_double_colon()
 {
 	// `A::t7()` and `B::t7()` from the sample
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl A { fn t7() {} }
@@ -1158,14 +1158,14 @@ fn static_method_call_via_double_colon()
 				A::t7();
 				B::t7();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn trait_static_method_via_type()
 {
 	// `B::tr_f1(1)` and `B::tr_f2(1)` from the sample
-	ok(r#"
+	ok(r"
 			trait Tr {
 				fn tr_f1(i: i64);
 				fn tr_f2(i: i64) { Self::tr_f1(i); }
@@ -1177,18 +1177,18 @@ fn trait_static_method_via_type()
 				B::tr_f1(1i64);
 				B::tr_f2(1i64);
 			}
-		"#);
+		");
 }
 
 #[test]
 fn static_method_wrong_arg_type_is_error()
 {
 	err(
-		r#"
+		r"
 			struct A { a: i64 }
 			impl A { fn takes_i64(x: i64) {} }
 			fn! main() { A::takes_i64(true); }
-		"#,
+		",
 		"type mismatch",
 	);
 }
@@ -1199,7 +1199,7 @@ fn static_method_wrong_arg_type_is_error()
 fn heap_fn_named_generic_alloc_call()
 {
 	// `B::t8!<Alloc -> Alloc>(8)` — explicit allocator forwarding
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl B { fn! t8(i: i64) {} }
@@ -1207,7 +1207,7 @@ fn heap_fn_named_generic_alloc_call()
 				B::t8!<Alloc -> Alloc>(8i64);
 				B::t8!(8i64);
 			}
-		"#);
+		");
 }
 
 // ── `std::Q` and other stdlib constructors ───────────────────────────────
@@ -1216,11 +1216,11 @@ fn heap_fn_named_generic_alloc_call()
 fn std_q_new()
 {
 	// `std::Q::new(0)` from the sample
-	ok(r#"
+	ok(r"
 			fn! main() {
 				std::Q::new(0i64);
 			}
-		"#);
+		");
 }
 
 // ── printf / extern-C variadic ───────────────────────────────────────────
@@ -1293,24 +1293,24 @@ fn cfg_branch_type_mismatch_is_error()
 fn block_expression_as_initializer()
 {
 	// `A{ a -> { var c: i64 = 0; c } }` — block whose tail is the value
-	ok(r#"
+	ok(r"
 			struct A { a: i64 }
 			fn! main() {
 				var _: A = A{ a -> { var c: i64 = 0i64; c } };
 			}
-		"#);
+		");
 }
 
 #[test]
 fn block_expression_wrong_tail_type_is_error()
 {
 	err(
-		r#"
+		r"
 			struct A { a: i64 }
 			fn! main() {
 				var _: A = A{ a -> { var c: bool = true; c } };
 			}
-		"#,
+		",
 		"field `a`",
 	);
 }
@@ -1320,32 +1320,32 @@ fn block_expression_wrong_tail_type_is_error()
 #[test]
 fn exclusive_range_i64()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				var r: Range<i64> = std::Range::new(1i64, 10i64);
 			}
-		"#);
+		");
 }
 
 #[test]
 fn range_used_in_for_loop()
 {
-	ok(r#"
+	ok(r"
 			fn! main() {
 				for i: i64 in 1i64..10i64 {}
 			}
-		"#);
+		");
 }
 
 #[test]
 fn range_element_type_mismatch_is_error()
 {
 	err(
-		r#"
+		r"
 			fn! main() {
 				for i: bool in 1i64..10i64 {}
 			}
-		"#,
+		",
 		"type mismatch",
 	);
 }
@@ -1356,7 +1356,7 @@ fn range_element_type_mismatch_is_error()
 fn use_glob_import()
 {
 	// `@use t2::*` should bring all pub items into scope
-	ok(r#"
+	ok(r"
 			module t2 {
 				pub fn greet() {}
 				pub fn farewell() {}
@@ -1366,13 +1366,13 @@ fn use_glob_import()
 				greet();
 				farewell();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn use_specific_item()
 {
-	ok(r#"
+	ok(r"
 			module t2 {
 				pub fn greet() {}
 				pub fn other() {}
@@ -1381,14 +1381,14 @@ fn use_specific_item()
 			fn! main() {
 				greet();
 			}
-		"#);
+		");
 }
 
 #[test]
 fn call_non_imported_item_is_error()
 {
 	err(
-		r#"
+		r"
 			module t2 {
 				pub fn greet() {}
 				pub fn other() {}
@@ -1397,7 +1397,7 @@ fn call_non_imported_item_is_error()
 			fn! main() {
 				other();
 			}
-		"#,
+		",
 		"unresolved identifier",
 	);
 }
@@ -1408,25 +1408,25 @@ fn call_non_imported_item_is_error()
 fn generic_fn_with_multiple_bounds()
 {
 	// mirrors `fn!<…> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int`
-	ok(r#"
+	ok(r"
 			fn!<Alloc -> std::CAlloc> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int {
 				var a: T = input;
 				input = T::create();
 				return 0i64;
 			}
-		"#);
+		");
 }
 
 #[test]
 fn generic_missing_bound_is_error()
 {
 	err(
-		r#"
+		r"
 			fn!<Alloc -> std::CAlloc> test3<T: Iterator<Item = i64>>(input: T) -> impl Int {
 				input = T::create();   // Create bound missing → T::create() unresolved
 				return 0i64;
 			}
-		"#,
+		",
 		"unresolved",
 	);
 }
@@ -1436,7 +1436,7 @@ fn generic_missing_bound_is_error()
 #[test]
 fn default_in_struct_with_default_value()
 {
-	ok(r#"
+	ok(r"
 		struct Foo {
 			x: i64,
 			y: i64 = 0,
@@ -1444,14 +1444,14 @@ fn default_in_struct_with_default_value()
 		fn a() -> Foo {
 			return Foo{x -> 1, ..default()};
 		}
-		"#);
+		");
 }
 
 #[test]
 fn default_in_struct_without_default_value()
 {
 	err(
-		r#"
+		r"
 		struct Foo {
 			x: i64,
 			y: i64 = 0,
@@ -1459,7 +1459,7 @@ fn default_in_struct_without_default_value()
 		fn a() -> Foo {
 			return Foo{y -> 1, ..default()};
 		}
-		"#,
+		",
 		"",
 	);
 }
@@ -1468,11 +1468,11 @@ fn default_in_struct_without_default_value()
 fn default_outside_of_struct()
 {
 	err(
-		r#"
+		r"
 		fn a() -> i64 {
 			return default();
 		}
-		"#,
+		",
 		"",
 	);
 }

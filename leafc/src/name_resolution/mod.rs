@@ -1113,29 +1113,6 @@ impl<'a> Resolver<'a>
 		}
 	}
 
-	fn find_in_scope_chain_expr(&self, start: ScopeId, name: &str) -> Option<(SymbolId, ScopeId)>
-	{
-		let mut scope_id: ScopeId = start;
-		loop {
-			let scope: &Scope = self.global.scope(scope_id);
-
-			let blocked = self.trait_scope == Some(scope_id);
-
-			if !blocked {
-				for &sym_id in &scope.symbols {
-					if self.global.symbol(sym_id).name == name {
-						return Some((sym_id, scope_id));
-					}
-				}
-			}
-
-			match scope.parent {
-				Some(parent) => scope_id = parent,
-				None => return None,
-			}
-		}
-	}
-
 	fn find_introduced_scope(&self, sym_id: SymbolId) -> Option<ScopeId>
 	{
 		return self.global.symbol(sym_id).introduced_scope;
@@ -1583,7 +1560,7 @@ impl<'a> Resolver<'a>
 		});
 	}
 
-	fn collect_use_directives(&mut self, items: &[TopLevelDecl]) -> Result<(), NameResolutionError>
+	fn collect_use_directives(&mut self, items: &[TopLevelDecl])
 	{
 		use crate::parser::Directive;
 
@@ -1598,8 +1575,9 @@ impl<'a> Resolver<'a>
 
 					let should_validate: bool = use_path.global || segments.len() > 1;
 
-					if should_validate {
-						self.resolve_absolute_path(&segments, use_path.span(), use_path)?;
+					if should_validate && let Err(e) = self.resolve_absolute_path(&segments, use_path.span(), use_path)
+					{
+						self.diagnostics.push(e.build());
 					}
 					if use_path.glob {
 						self.use_imports.push(UseImport {
@@ -1638,7 +1616,6 @@ impl<'a> Resolver<'a>
 				_ => {}
 			}
 		}
-		return Ok(());
 	}
 
 	#[allow(clippy::type_complexity)]
@@ -2099,8 +2076,7 @@ impl<'a> Resolver<'a>
 
 	fn resolve_top_level_block(&mut self, block: &parser::TopLevelBlock) -> ResolvedTopLevelBlock
 	{
-		// Ignore error from collect_use_directives; diagnostics are pushed inside
-		let _ = self.collect_use_directives(&block.items);
+		self.collect_use_directives(&block.items);
 
 		let mut items: Vec<ResolvedTopLevelDecl> = Vec::new();
 		for decl in &block.items {
@@ -2261,13 +2237,15 @@ impl<'a> Resolver<'a>
 				let rp = self.resolve_path_or_primitive(path, path.span());
 				let resolved_args = args
 					.iter()
-					.map(|arg| match arg {
-						GenericArg::Type(ty) => ResolvedGenericArg::Type(self.resolve_type(ty)),
-						GenericArg::Binding { name, ty, span } => ResolvedGenericArg::Binding {
-							name: name.clone(),
-							ty: self.resolve_type(ty),
-							span: *span,
-						},
+					.map(|arg| {
+						return match arg {
+							GenericArg::Type(ty) => ResolvedGenericArg::Type(self.resolve_type(ty)),
+							GenericArg::Binding { name, ty, span } => ResolvedGenericArg::Binding {
+								name: name.clone(),
+								ty: self.resolve_type(ty),
+								span: *span,
+							},
+						};
 					})
 					.collect();
 				ResolvedWhereBound::Path {
@@ -2309,10 +2287,8 @@ impl<'a> Resolver<'a>
 				..
 			} => {
 				let name: String = path.segments[0].name.clone();
-				let symbol: SymbolId = self
-					.find_in_scope_chain(self.current_scope, &name)
-					.map(|(id, _)| id)
-					.unwrap_or_else(|| {
+				let symbol: SymbolId = self.find_in_scope_chain(self.current_scope, &name).map_or_else(
+					|| {
 						self.diagnostics.push(
 							NameResolutionError {
 								span: *span,
@@ -2321,8 +2297,10 @@ impl<'a> Resolver<'a>
 							}
 							.build(),
 						);
-						SymbolId(usize::MAX)
-					});
+						return SymbolId(usize::MAX);
+					},
+					|(id, _)| return id,
+				);
 				let resolved_ty = self.resolve_type(ty);
 				ResolvedPattern::TypedIdentifier {
 					symbol,
@@ -2360,7 +2338,7 @@ impl<'a> Resolver<'a>
 				let rp: ResolvedPath = self.resolve_path_or_primitive(path, *span);
 				let rfields: Vec<(String, ResolvedPattern)> = fields
 					.iter()
-					.map(|(name, pat)| (name.clone(), self.resolve_pattern(pat)))
+					.map(|(name, pat)| return (name.clone(), self.resolve_pattern(pat)))
 					.collect();
 				ResolvedPattern::Struct {
 					path: rp,
@@ -2519,7 +2497,7 @@ impl<'a> Resolver<'a>
 				let rcallee: ResolvedExpr = self.resolve_expr(callee);
 				let rng: Vec<(String, ResolvedExpr)> = named_generics
 					.iter()
-					.map(|(name, expr)| (name.clone(), self.resolve_expr(expr)))
+					.map(|(name, expr)| return (name.clone(), self.resolve_expr(expr)))
 					.collect();
 				let rargs = args.iter().map(|a| return self.resolve_expr(a)).collect();
 				ResolvedExpr::Call {
@@ -2580,9 +2558,9 @@ impl<'a> Resolver<'a>
 				let rp: ResolvedPath = self.resolve_path_or_primitive(path, *span);
 				let rfields: Vec<(String, ResolvedExpr)> = fields
 					.iter()
-					.map(|(name, e)| (name.clone(), self.resolve_expr(e)))
+					.map(|(name, e)| return (name.clone(), self.resolve_expr(e)))
 					.collect();
-				let rbase = base.as_ref().map(|e| Box::new(self.resolve_expr(e)));
+				let rbase = base.as_ref().map(|e| return Box::new(self.resolve_expr(e)));
 				ResolvedExpr::StructInit {
 					path: rp,
 					fields: rfields,
@@ -2882,10 +2860,8 @@ impl<'a> Resolver<'a>
 			.name
 			.as_str();
 
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: sig.name.span(),
@@ -2894,8 +2870,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -2923,7 +2901,7 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
+				return SymbolId(usize::MAX);
 			});
 			let ty: ResolvedType = self.resolve_type(&param.ty);
 			resolved_params.push(ResolvedParam {
@@ -2951,11 +2929,11 @@ impl<'a> Resolver<'a>
 					parser::HeapGenericKind::Forwarded => ResolvedGenericHeapKind::Forwarded,
 					parser::HeapGenericKind::Forced(ty) => ResolvedGenericHeapKind::Forced(self.resolve_type(ty)),
 				};
-				ResolvedGenericHeapParam {
+				return ResolvedGenericHeapParam {
 					name: hp.name.clone(),
 					kind,
 					span: hp.span,
-				}
+				};
 			})
 			.collect();
 
@@ -3003,21 +2981,23 @@ impl<'a> Resolver<'a>
 	fn resolve_variable_decl(&mut self, var: &VariableDecl) -> ResolvedVariableDecl
 	{
 		if let parser::Pattern::Wildcard { ty, span } = &var.pattern {
-			let ty = match ty {
-				Some(t) => self.resolve_type(t),
-				None => ResolvedType {
-					core: Box::new(ResolvedTypeCore::Primitive {
-						name: "_".to_string(),
-						generics: Vec::new(),
-					}),
-					span: *span,
+			let nty = ty.as_ref().map_or_else(
+				|| {
+					return ResolvedType {
+						core: Box::new(ResolvedTypeCore::Primitive {
+							name: "_".to_string(),
+							generics: Vec::new(),
+						}),
+						span: *span,
+					};
 				},
-			};
-			let init = var.init.as_ref().map(|e| self.resolve_expr(e));
+				|t| return self.resolve_type(t),
+			);
+			let init = var.init.as_ref().map(|e| return self.resolve_expr(e));
 			return ResolvedVariableDecl {
 				resolved_name: SymbolId(usize::MAX),
 				name: "_".to_string(),
-				ty,
+				ty: nty,
 				init,
 				comp_const: var.comp_const,
 				mutable: false,
@@ -3087,10 +3067,8 @@ impl<'a> Resolver<'a>
 
 		let init: Option<ResolvedExpr> = var.init.as_ref().map(|e| return self.resolve_expr(e));
 
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, &name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, &name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: var_span,
@@ -3101,8 +3079,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		return ResolvedVariableDecl {
 			resolved_name,
@@ -3120,10 +3100,8 @@ impl<'a> Resolver<'a>
 	fn resolve_struct_decl(&mut self, s: &StructDecl) -> ResolvedStructDecl
 	{
 		let name_str: &str = s.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: s.name.span(),
@@ -3132,8 +3110,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev = self.current_scope;
@@ -3144,15 +3124,15 @@ impl<'a> Resolver<'a>
 			.iter()
 			.map(|f| {
 				let ty = self.resolve_type(&f.ty);
-				let default_value = f.default_value.as_ref().map(|e| self.resolve_expr(e));
-				ResolvedStructField {
+				let default_value = f.default_value.as_ref().map(|e| return self.resolve_expr(e));
+				return ResolvedStructField {
 					name: f.name.clone(),
 					ty,
 					default_value,
 					modifiers: f.modifiers.clone(),
 					docs: f.docs.clone(),
 					span: f.span(),
-				}
+				};
 			})
 			.collect();
 
@@ -3179,10 +3159,8 @@ impl<'a> Resolver<'a>
 	fn resolve_union_decl(&mut self, u: &UnionDecl) -> ResolvedUnionDecl
 	{
 		let name_str: &str = u.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: u.name.span(),
@@ -3191,8 +3169,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3203,13 +3183,13 @@ impl<'a> Resolver<'a>
 			.iter()
 			.map(|f| {
 				let ty = self.resolve_type(&f.ty);
-				ResolvedUnionField {
+				return ResolvedUnionField {
 					name: f.name.clone(),
 					ty,
 					modifiers: f.modifiers.clone(),
 					docs: f.docs.clone(),
 					span: f.span(),
-				}
+				};
 			})
 			.collect();
 
@@ -3236,10 +3216,8 @@ impl<'a> Resolver<'a>
 	fn resolve_enum_decl(&mut self, e: &EnumDecl) -> ResolvedEnumDecl
 	{
 		let name_str: &str = e.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: e.name.span(),
@@ -3248,8 +3226,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3259,13 +3239,13 @@ impl<'a> Resolver<'a>
 			.variants
 			.iter()
 			.map(|v| {
-				let value = v.value.as_ref().map(|expr| self.resolve_expr(expr));
-				ResolvedEnumVariant {
+				let value = v.value.as_ref().map(|expr| return self.resolve_expr(expr));
+				return ResolvedEnumVariant {
 					name: v.name.clone(),
 					value,
 					docs: v.docs.clone(),
 					span: v.span(),
-				}
+				};
 			})
 			.collect();
 
@@ -3285,10 +3265,8 @@ impl<'a> Resolver<'a>
 	fn resolve_variant_decl(&mut self, v: &parser::VariantDecl) -> ResolvedVariantDecl
 	{
 		let name_str: &str = v.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: v.name.span(),
@@ -3297,8 +3275,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3308,15 +3288,15 @@ impl<'a> Resolver<'a>
 			.variants
 			.iter()
 			.map(|m| {
-				let ty = m.ty.as_ref().map(|t| self.resolve_type(t));
-				let value = m.value.as_ref().map(|e| self.resolve_expr(e));
-				ResolvedVariantMember {
+				let ty = m.ty.as_ref().map(|t| return self.resolve_type(t));
+				let value = m.value.as_ref().map(|e| return self.resolve_expr(e));
+				return ResolvedVariantMember {
 					name: m.name.clone(),
 					ty,
 					value,
 					docs: m.docs.clone(),
 					span: m.span(),
-				}
+				};
 			})
 			.collect();
 
@@ -3336,10 +3316,8 @@ impl<'a> Resolver<'a>
 	fn resolve_type_alias_decl(&mut self, t: &TypeAliasDecl) -> ResolvedTypeAliasDecl
 	{
 		let name_str: &str = t.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: t.name.span(),
@@ -3348,8 +3326,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let ty: ResolvedType = self.resolve_type(&t.ty);
 
@@ -3367,10 +3347,8 @@ impl<'a> Resolver<'a>
 	fn resolve_assoc_type_decl(&mut self, t: &AssocTypeDecl) -> ResolvedAssocTypeDecl
 	{
 		let name_str: &str = t.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: t.name.span(),
@@ -3379,10 +3357,12 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
-		let ty: Option<ResolvedType> = t.ty.as_ref().map(|pty| self.resolve_type(pty));
+		let ty: Option<ResolvedType> = t.ty.as_ref().map(|pty| return self.resolve_type(pty));
 
 		return ResolvedAssocTypeDecl {
 			resolved_name,
@@ -3398,10 +3378,8 @@ impl<'a> Resolver<'a>
 	fn resolve_trait_decl(&mut self, t: &TraitDecl) -> ResolvedTraitDecl
 	{
 		let name_str: &str = t.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: t.name.span(),
@@ -3410,8 +3388,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let body_scope: ScopeId = self.find_introduced_scope(resolved_name).unwrap_or(self.current_scope);
 		let prev: ScopeId = self.current_scope;
@@ -3429,11 +3409,13 @@ impl<'a> Resolver<'a>
 		let items: Vec<ResolvedTraitItem> = t
 			.items
 			.iter()
-			.map(|item| match item {
-				parser::TraitItem::Function(f) => ResolvedTraitItem::Function(self.resolve_function_decl(f)),
-				parser::TraitItem::TypeAlias(ta) => ResolvedTraitItem::TypeAlias(self.resolve_type_alias_decl(ta)),
-				parser::TraitItem::AssocType(ta) => ResolvedTraitItem::AssocType(self.resolve_assoc_type_decl(ta)),
-				parser::TraitItem::Const(var) => ResolvedTraitItem::Const(self.resolve_variable_decl(var)),
+			.map(|item| {
+				return match item {
+					parser::TraitItem::Function(f) => ResolvedTraitItem::Function(self.resolve_function_decl(f)),
+					parser::TraitItem::TypeAlias(ta) => ResolvedTraitItem::TypeAlias(self.resolve_type_alias_decl(ta)),
+					parser::TraitItem::AssocType(ta) => ResolvedTraitItem::AssocType(self.resolve_assoc_type_decl(ta)),
+					parser::TraitItem::Const(var) => ResolvedTraitItem::Const(self.resolve_variable_decl(var)),
+				};
 			})
 			.collect();
 
@@ -3456,10 +3438,8 @@ impl<'a> Resolver<'a>
 	fn resolve_module_decl(&mut self, m: &ModuleDecl) -> ResolvedModuleDecl
 	{
 		let name_str: &str = m.name.segments[0].name.as_str();
-		let resolved_name: SymbolId = self
-			.find_in_scope_chain(self.current_scope, name_str)
-			.map(|(id, _)| id)
-			.unwrap_or_else(|| {
+		let resolved_name: SymbolId = self.find_in_scope_chain(self.current_scope, name_str).map_or_else(
+			|| {
 				self.diagnostics.push(
 					NameResolutionError {
 						span: m.name.span(),
@@ -3468,8 +3448,10 @@ impl<'a> Resolver<'a>
 					}
 					.build(),
 				);
-				SymbolId(usize::MAX)
-			});
+				return SymbolId(usize::MAX);
+			},
+			|(id, _)| return id,
+		);
 
 		let resolved_body: Option<ResolvedTopLevelBlock> = match &m.kind {
 			ModuleKind::Inline(body) => {

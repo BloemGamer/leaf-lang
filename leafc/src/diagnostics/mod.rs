@@ -84,9 +84,9 @@ pub enum Severity
 
 impl Severity
 {
-	pub fn should_stop_compiling(&self) -> bool
+	pub const fn should_stop_compiling(self) -> bool
 	{
-		matches!(self, Severity::Error | Self::Bug)
+		return matches!(self, Severity::Error | Self::Bug);
 	}
 }
 
