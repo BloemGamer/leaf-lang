@@ -7,8 +7,8 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
-		Ty, TypedEnumDecl, TypedFunctionDecl, TypedImplItem, TypedModule, TypedStructDecl, TypedTopLevelDecl,
-		TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl,
+		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedFunctionDecl, TypedImplItem, TypedModule, TypedStructDecl,
+		TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl,
 	},
 };
 
@@ -44,7 +44,7 @@ pub struct MirGlobal
 	pub symbol: SymbolId,
 	pub name: String,
 	pub ty: Ty,
-	pub init: Option<MirConst>,
+	pub init: MirConst,
 	pub mutable: bool,
 	pub span: Span,
 }
@@ -306,6 +306,9 @@ pub enum MirConstValue
 {
 	Literal(Literal),
 	ZeroInit,
+	/// Explicit discriminant that hasn't been const-evaluated yet.
+	Pending(Box<MirRvalue>),
+	/// No explicit discriminant; compiler will assign sequentially.
 	Undef,
 }
 
@@ -456,7 +459,7 @@ impl<'a> MirLowerer<'a>
 				out.push(MirItem::TypeDef(Self::lower_union(u)));
 			}
 			TypedTopLevelDecl::Enum(e) => {
-				out.push(MirItem::TypeDef(Self::lower_enum(e)));
+				out.push(MirItem::TypeDef(self.lower_enum(e)));
 			}
 			TypedTopLevelDecl::Variant(v) => {
 				out.push(MirItem::TypeDef(Self::lower_variant(v)));
@@ -507,12 +510,36 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_function(&mut self, f: &TypedFunctionDecl) -> MirFunction
 	{
-		todo!("lower_function: {}", f.signature.name)
+		todo!("lower_function: {}", f.signature.name);
 	}
 
 	fn lower_global(&mut self, v: &TypedVariableDecl) -> MirGlobal
 	{
-		todo!("lower_global: {}", v.name)
+		return MirGlobal {
+			symbol: v.resolved_name,
+			name: v.name.clone(),
+			ty: v.ty.clone(),
+			init: if let Some(init) = &v.init {
+				self.lower_const_expr(init)
+			} else {
+				MirConst {
+					value: MirConstValue::Undef,
+					ty: v.ty.clone(),
+				}
+			},
+			mutable: v.mutable,
+			span: v.span,
+		};
+	}
+
+	fn lower_block(&mut self, b: &TypedBlock) -> MirBody
+	{
+		todo!("lower_block");
+	}
+
+	fn lower_const_expr(&mut self, e: &TypedExpr) -> MirConst
+	{
+		todo!("lower_const_expr");
 	}
 
 	fn lower_struct(s: &TypedStructDecl) -> MirTypeDef
@@ -539,7 +566,7 @@ impl<'a> MirLowerer<'a>
 		};
 	}
 
-	fn lower_enum(e: &TypedEnumDecl) -> MirTypeDef
+	fn lower_enum(&mut self, e: &TypedEnumDecl) -> MirTypeDef
 	{
 		return MirTypeDef {
 			symbol: e.resolved_name,
@@ -549,12 +576,7 @@ impl<'a> MirLowerer<'a>
 					.variants
 					.iter()
 					.map(|v| {
-						let c = v.value.as_ref().map(|te| {
-							return MirConst {
-								value: MirConstValue::Undef, // placeholder; evaluated later
-								ty: te.ty.clone(),
-							};
-						});
+						let c = v.value.as_ref().map(|te| self.lower_const_expr(te));
 						return (v.name.clone(), c);
 					})
 					.collect(),
