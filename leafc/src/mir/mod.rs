@@ -1,3 +1,5 @@
+mod display;
+
 use crate::{
 	diagnostics::{DiagnosticBuilder, ErrorCode},
 	lexer::Span,

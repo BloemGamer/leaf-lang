@@ -132,6 +132,7 @@ use self::{
 	desugar::DesugaredAST,
 	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
+	mir::MirModule,
 	modules::{ModuleError, ModuleErrorKind},
 	name_resolution::ResolvedModule,
 	parser::{AST, ExprEnum, Parser},
@@ -163,7 +164,7 @@ struct Args
 	lexed: bool,
 	#[arg(short, long)]
 	parsed: bool,
-	#[arg(short, long)]
+	#[arg(long)]
 	modules: bool,
 	#[arg(short, long)]
 	desugared: bool,
@@ -173,6 +174,8 @@ struct Args
 	name_resolution: bool,
 	#[arg(short, long)]
 	types: bool,
+	#[arg(short, long)]
+	mir: bool,
 
 	#[arg(short, long, default_value_t = ColourConf::Auto)]
 	colour: ColourConf,
@@ -182,7 +185,13 @@ impl Args
 {
 	const fn all_false(&self) -> bool
 	{
-		return !(self.lexed || self.parsed || self.desugared || self.modules || self.symbols || self.name_resolution);
+		return !(self.lexed
+			|| self.parsed
+			|| self.desugared
+			|| self.modules
+			|| self.symbols
+			|| self.name_resolution
+			|| self.mir);
 	}
 }
 
@@ -270,7 +279,6 @@ fn run(
 	]);
 	let mut visited: HashSet<Vec<String>> = HashSet::new();
 
-	// Phase 1: parse, desugar, and collect local symbols for each module
 	let mut pending_modules: Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)> = Vec::new();
 
 	while let Some(pm) = queue.pop_front() {
@@ -360,7 +368,6 @@ fn run(
 			);
 		}
 
-		// Pass logical_path so the local table knows which module it belongs to
 		let ret = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone());
 		let local_symbols: LocalSymbolTable = match ret {
 			Ok((ls, mut diags)) => {
@@ -383,8 +390,6 @@ fn run(
 		pending_modules.push((pm.logical_path, desugared, local_symbols));
 	}
 
-	// Phase 2: merge all local symbol tables into one globally consistent table.
-	// After this point, every SymbolId and ScopeId is valid across all modules.
 	let global_symbols: GlobalSymbolTable = symbol_collection::merge_symbol_tables(&pending_modules);
 
 	if args.symbols {
@@ -393,13 +398,6 @@ fn run(
 			global_symbols
 		);
 	}
-
-	// Phase 3: name resolution — each module resolved against the global table.
-	// The ASTs and their logical paths are all we need now; local tables are done.
-	// let ast_modules: Vec<(Vec<String>, DesugaredAST)> = pending_modules
-	// 	.into_iter()
-	// 	.map(|(path, desugared, _local)| (path, desugared))
-	// 	.collect();
 
 	let mut resolved_modules: Vec<ResolvedModule> = Vec::new();
 	for (path, desugared, symbols) in &pending_modules {
@@ -437,13 +435,35 @@ fn run(
 		typed_modules.push(typed);
 	}
 
-	if args.types || args.all_false() {
+	if args.types {
 		for TypedModule { ast, path } in &typed_modules {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",
 				path.join("::"),
 				ast
 			);
+		}
+	}
+
+	let mut mir_modules: Vec<MirModule> = Vec::new();
+	for tmod in &typed_modules {
+		let ret = mir::lower_module(tmod, &global_symbols);
+		let mir_mod: MirModule = match ret {
+			Ok((mm, mut diags)) => {
+				diagnostics.append(&mut diags);
+				mm
+			}
+			Err(mut diags) => {
+				diagnostics.append(&mut diags);
+				return (Err(None), diagnostics);
+			}
+		};
+		mir_modules.push(mir_mod);
+	}
+
+	if args.mir || args.all_false() {
+		for m in &mir_modules {
+			println!("{}", m);
 		}
 	}
 

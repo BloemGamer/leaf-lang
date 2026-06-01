@@ -12,6 +12,25 @@ use crate::{
 	utils::indent_writer::IndentWriter,
 };
 
+impl std::fmt::Display for UnaryOp
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		match self {
+			UnaryOp::Neg => write!(f, "-")?,
+			UnaryOp::Not => write!(f, "!")?,
+			UnaryOp::Deref => write!(f, "*")?,
+			UnaryOp::Addr { mutable } => {
+				write!(f, "&")?;
+				if *mutable {
+					write!(f, "mut ")?;
+				}
+			}
+		}
+		return Ok(());
+	}
+}
+
 impl std::fmt::Display for Expected
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
