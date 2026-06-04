@@ -7,8 +7,9 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
-		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedFunctionDecl, TypedImplItem, TypedModule, TypedStructDecl,
-		TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl,
+		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedFunctionDecl, TypedImplItem, TypedModule, TypedStmt,
+		TypedStructDecl, TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl,
+		TypedVariantDecl,
 	},
 };
 
@@ -412,6 +413,79 @@ pub enum MirCallee
 	Intrinsic(crate::type_analysis::intrinsics::Intrinsic),
 }
 
+struct BodyBuilder
+{
+	locals: Vec<MirLocal>,
+	blocks: Vec<MirBasicBlock>,
+	current_block: BlockId,
+	return_local: Option<LocalId>,
+}
+
+impl BodyBuilder
+{
+	fn new(locals: Vec<MirLocal>) -> Self
+	{
+		let entry = MirBasicBlock {
+			id: BlockId(0),
+			stmts: Vec::new(),
+			terminator: MirTerminator::Unreachable,
+		};
+		return Self {
+			locals,
+			blocks: vec![entry],
+			current_block: BlockId(0),
+			return_local: None,
+		};
+	}
+
+	fn alloc_local(&mut self, ty: Ty, name: Option<String>, mutable: bool, span: Span) -> LocalId
+	{
+		#[allow(clippy::cast_possible_truncation)]
+		let id = LocalId(self.locals.len() as u32);
+		self.locals.push(MirLocal {
+			id,
+			ty,
+			name: name.clone(),
+			mutable,
+			is_temp: name.is_none(),
+			span,
+		});
+		return id;
+	}
+
+	fn alloc_block(&mut self) -> BlockId
+	{
+		#[allow(clippy::cast_possible_truncation)]
+		let id = BlockId(self.blocks.len() as u32);
+		self.blocks.push(MirBasicBlock {
+			id,
+			stmts: Vec::new(),
+			terminator: MirTerminator::Unreachable,
+		});
+		return id;
+	}
+
+	fn push_stmt(&mut self, stmt: MirStmt)
+	{
+		self.blocks[self.current_block.0 as usize].stmts.push(stmt);
+	}
+
+	fn set_terminator(&mut self, term: MirTerminator)
+	{
+		self.blocks[self.current_block.0 as usize].terminator = term;
+	}
+
+	fn finish(self, param_count: usize) -> MirBody
+	{
+		return MirBody {
+			locals: self.locals,
+			param_count,
+			blocks: self.blocks,
+			return_local: self.return_local,
+		};
+	}
+}
+
 struct MirLowerer<'a>
 {
 	diagnostics: Vec<DiagnosticBuilder>,
@@ -510,7 +584,57 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_function(&mut self, f: &TypedFunctionDecl) -> MirFunction
 	{
-		todo!("lower_function: {}", f.signature.name);
+		let mut locals: Vec<MirLocal> = Vec::new();
+		let mut params: Vec<MirParam> = Vec::new();
+
+		for param in &f.signature.params {
+			#[allow(clippy::cast_possible_truncation)]
+			let id: LocalId = LocalId(locals.len() as u32);
+			locals.push(MirLocal {
+				id,
+				ty: param.ty.clone(),
+				name: Some(param.name.clone()),
+				mutable: param.mutable,
+				is_temp: false,
+				span: param.span,
+			});
+			params.push(MirParam {
+				local: id,
+				name: param.name.clone(),
+				ty: param.ty.clone(),
+				mutable: param.mutable,
+			});
+		}
+
+		let body = f.body.as_ref().map(|b| {
+			let mut builder = BodyBuilder::new(locals.clone());
+
+			if !matches!(f.signature.return_type, Ty::Unit | Ty::Never) {
+				let ret_id = builder.alloc_local(
+					f.signature.return_type.clone(),
+					Some("__return".to_string()),
+					true,
+					f.span,
+				);
+				builder.return_local = Some(ret_id);
+			}
+
+			self.lower_block_into(&mut builder, b);
+
+			builder.set_terminator(MirTerminator::Return);
+
+			return builder.finish(params.len());
+		});
+
+		return MirFunction {
+			symbol: f.resolved_name,
+			name: f.signature.name.clone(),
+			call_type: f.signature.call_type,
+			params,
+			return_ty: f.signature.return_type.clone(),
+			body,
+			span: f.span,
+		};
 	}
 
 	fn lower_global(&mut self, v: &TypedVariableDecl) -> MirGlobal
@@ -519,22 +643,30 @@ impl<'a> MirLowerer<'a>
 			symbol: v.resolved_name,
 			name: v.name.clone(),
 			ty: v.ty.clone(),
-			init: if let Some(init) = &v.init {
-				self.lower_expr_as_operand(init)
-			} else {
-				MirOperand::Const(MirLiteral {
-					value: MirLiteralValue::Undef,
-					ty: v.ty.clone(),
-				})
-			},
+			init: v.init.as_ref().map_or_else(
+				|| {
+					return MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::Undef,
+						ty: v.ty.clone(),
+					});
+				},
+				|init| return self.lower_expr_as_operand(init),
+			),
 			mutable: v.mutable,
 			span: v.span,
 		};
 	}
 
-	fn lower_block(&mut self, b: &TypedBlock) -> MirBody
+	fn lower_block_into(&mut self, builder: &mut BodyBuilder, block: &TypedBlock)
 	{
-		todo!("lower_block");
+		for stmt in &block.stmts {
+			self.lower_stmt_into(builder, stmt);
+		}
+	}
+
+	fn lower_stmt_into(&mut self, builder: &mut BodyBuilder, stmt: &TypedStmt)
+	{
+		todo!("lower_stmt_into")
 	}
 
 	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
