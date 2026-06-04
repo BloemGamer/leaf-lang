@@ -657,9 +657,7 @@ pub fn write_typed_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWrit
 		}
 		TypedStmt::Break { label, value, .. } => {
 			write!(f, "break")?;
-			if let Some(lbl) = label {
-				write!(f, " '{lbl}")?;
-			}
+			write!(f, " '{label}")?;
 			if let Some(v) = value {
 				write!(f, " ")?;
 				write_typed_expr(f, w, v)?;
@@ -669,9 +667,7 @@ pub fn write_typed_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWrit
 		}
 		TypedStmt::Continue { label, .. } => {
 			write!(f, "continue")?;
-			if let Some(lbl) = label {
-				write!(f, " '{lbl}")?;
-			}
+			write!(f, " '{label}")?;
 			return write!(f, ";");
 		}
 		TypedStmt::If {
@@ -691,9 +687,7 @@ pub fn write_typed_stmt_no_indent(f: &mut fmt::Formatter<'_>, w: &mut IndentWrit
 			return Ok(());
 		}
 		TypedStmt::Loop { label, body, .. } => {
-			if let Some(lbl) = label {
-				write!(f, "'{lbl}: ")?;
-			}
+			write!(f, " '{label}")?;
 			write!(f, "loop ")?;
 			return write_typed_block(f, w, body);
 		}

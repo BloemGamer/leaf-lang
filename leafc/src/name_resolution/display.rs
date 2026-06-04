@@ -836,9 +836,7 @@ pub fn write_resolved_stmt_no_indent(
 		}
 		ResolvedStmt::Break { label, value, .. } => {
 			write!(f, "break")?;
-			if let Some(lbl) = label {
-				write!(f, " '{}", lbl)?;
-			}
+			write!(f, " '{label}")?;
 			if let Some(v) = value {
 				write!(f, " ")?;
 				write_resolved_expr(f, w, v)?;
@@ -847,9 +845,7 @@ pub fn write_resolved_stmt_no_indent(
 		}
 		ResolvedStmt::Continue { label, .. } => {
 			write!(f, "continue")?;
-			if let Some(lbl) = label {
-				write!(f, " '{}", lbl)?;
-			}
+			write!(f, " '{label}")?;
 			return write!(f, ";");
 		}
 		ResolvedStmt::If {
@@ -869,9 +865,7 @@ pub fn write_resolved_stmt_no_indent(
 			return Ok(());
 		}
 		ResolvedStmt::Loop { label, body, .. } => {
-			if let Some(lbl) = label {
-				write!(f, "'{}: ", lbl)?;
-			}
+			write!(f, " '{label}")?;
 			write!(f, "loop ")?;
 			return write_resolved_block(f, w, body);
 		}

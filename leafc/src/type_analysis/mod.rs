@@ -546,13 +546,13 @@ pub enum TypedStmt
 	Expr(TypedExpr),
 	Break
 	{
-		label: Option<String>,
+		label: String,
 		value: Option<TypedExpr>,
 		span: Span,
 	},
 	Continue
 	{
-		label: Option<String>,
+		label: String,
 		span: Span,
 	},
 	If
@@ -564,7 +564,7 @@ pub enum TypedStmt
 	},
 	Loop
 	{
-		label: Option<String>,
+		label: String,
 		body: TypedBlock,
 		span: Span,
 	},

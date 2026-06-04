@@ -11,7 +11,7 @@ use std::fmt;
 
 use ignorable::PartialEq;
 
-use leaf_proc::Spanned;
+use leaf_proc::{Spanned, compiler_bug};
 
 use crate::{
 	desugar::DesugaredAST,
@@ -430,14 +430,14 @@ pub enum ResolvedStmt
 	Expr(ResolvedExpr),
 	Break
 	{
-		label: Option<String>,
+		label: String,
 		value: Option<ResolvedExpr>,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
 	Continue
 	{
-		label: Option<String>,
+		label: String,
 		#[ignored(PartialEq)]
 		span: Span,
 	},
@@ -451,7 +451,7 @@ pub enum ResolvedStmt
 	},
 	Loop
 	{
-		label: Option<String>,
+		label: String,
 		body: ResolvedBlock,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -2721,16 +2721,35 @@ impl<'a> Resolver<'a>
 
 			Stmt::Expr(e) => ResolvedStmt::Expr(self.resolve_expr(e)),
 
-			Stmt::Break { label, value, span } => ResolvedStmt::Break {
-				label: label.clone(),
-				value: value.as_ref().map(|e| return self.resolve_expr(e)),
-				span: *span,
-			},
+			Stmt::Break { label, value, span } => {
+				let l = if let Some(l) = label.clone() {
+					l
+				} else {
+					self.diagnostics.push(compiler_bug!(
+						*span,
+						"desugarer should always give labels to Stmt::Break"
+					));
+					"COMPILER_BUG".to_string()
+				};
+				ResolvedStmt::Break {
+					label: l,
+					value: value.as_ref().map(|e| return self.resolve_expr(e)),
+					span: *span,
+				}
+			}
 
-			Stmt::Continue { label, span } => ResolvedStmt::Continue {
-				label: label.clone(),
-				span: *span,
-			},
+			Stmt::Continue { label, span } => {
+				let l = if let Some(l) = label.clone() {
+					l
+				} else {
+					self.diagnostics.push(compiler_bug!(
+						*span,
+						"desugarer should always give labels to Stmt::Continue"
+					));
+					"COMPILER_BUG".to_string()
+				};
+				ResolvedStmt::Continue { label: l, span: *span }
+			}
 
 			Stmt::Directive(d) => ResolvedStmt::Directive(self.resolve_directive_node(d)),
 
@@ -2779,6 +2798,15 @@ impl<'a> Resolver<'a>
 			}
 
 			Stmt::Loop { label, body, span } => {
+				let l = if let Some(l) = label.clone() {
+					l
+				} else {
+					self.diagnostics.push(compiler_bug!(
+						*span,
+						"desugarer should always give labels to Stmt::Continue"
+					));
+					"COMPILER_BUG".to_string()
+				};
 				let loop_scope: Option<ScopeId> = self.next_anon_scope();
 				let prev: ScopeId = self.current_scope;
 				if let Some(sc) = loop_scope {
@@ -2787,7 +2815,7 @@ impl<'a> Resolver<'a>
 				let rbody: ResolvedBlock = self.resolve_block_contents(body);
 				self.current_scope = prev;
 				ResolvedStmt::Loop {
-					label: label.clone(),
+					label: l,
 					body: rbody,
 					span: *span,
 				}
