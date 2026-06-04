@@ -44,7 +44,7 @@ pub struct MirGlobal
 	pub symbol: SymbolId,
 	pub name: String,
 	pub ty: Ty,
-	pub init: MirConst,
+	pub init: MirOperand,
 	pub mutable: bool,
 	pub span: Span,
 }
@@ -71,7 +71,7 @@ pub enum MirTypeDefKind
 	},
 	Enum
 	{
-		variants: Vec<(String, Option<MirConst>)>
+		variants: Vec<(String, Option<MirOperand>)>,
 	},
 	Variant
 	{
@@ -115,7 +115,7 @@ pub struct MirBody
 	pub param_count: usize,
 	/// All basic blocks, indexed by `BlockId`. Block 0 is the entry block.
 	pub blocks: Vec<MirBasicBlock>,
-	/// The return local — every `return` stores into this before branching to
+	/// The return local - every `return` stores into this before branching to
 	/// the implicit exit block. `None` for `-> ()` / `-> !` functions.
 	pub return_local: Option<LocalId>,
 }
@@ -178,7 +178,7 @@ pub enum MirStmt
 		span: Span,
 	},
 
-	/// `delete expr` — call destructor
+	/// `delete expr` - call destructor
 	Delete
 	{
 		operand: MirOperand, span: Span
@@ -236,7 +236,7 @@ pub enum MirTerminator
 #[derive(Debug, Clone)]
 pub struct MirSwitchArm
 {
-	pub value: MirConst,
+	pub value: MirOperand,
 	pub target: BlockId,
 }
 
@@ -264,23 +264,22 @@ pub enum MirProjection
 	{
 		name: String, ty: Ty
 	},
-	/// `base[index]`
+	/// `base[index]` - index must already be materialised into a local.
 	Index
 	{
-		index: Box<MirOperand>, ty: Ty
+		index: LocalId, ty: Ty
 	},
 	/// `*base`
 	Deref,
 }
 
 /// A value that can be used as an input to an rvalue or call.
-/// Operands are either a copy/move of a place, or an inline constant.
 #[derive(Debug, Clone)]
 pub enum MirOperand
 {
 	Copy(MirPlace),
 	Move(MirPlace),
-	Const(MirConst),
+	Const(MirLiteral),
 }
 
 impl MirOperand
@@ -294,26 +293,26 @@ impl MirOperand
 	}
 }
 
+/// A literal constant value with its type.
 #[derive(Debug, Clone)]
-pub struct MirConst
+pub struct MirLiteral
 {
-	pub value: MirConstValue,
+	pub value: MirLiteralValue,
 	pub ty: Ty,
 }
 
 #[derive(Debug, Clone)]
-pub enum MirConstValue
+pub enum MirLiteralValue
 {
 	Literal(Literal),
 	ZeroInit,
-	/// Explicit discriminant that hasn't been const-evaluated yet.
-	Pending(Box<MirRvalue>),
-	/// No explicit discriminant; compiler will assign sequentially.
+	/// No explicit value provided; the backend assigns the next sequential
+	/// discriminant (only meaningful inside `MirTypeDefKind::Enum`).
 	Undef,
 }
 
 /// A pure computation that produces a value and can appear on the RHS of an
-/// assignment. Rvalues are not allowed to have control-flow side-effects.
+/// assignment.
 #[derive(Debug, Clone)]
 pub enum MirRvalue
 {
@@ -349,29 +348,33 @@ pub enum MirRvalue
 		mutable: bool, place: MirPlace
 	},
 
-	/// Struct / union / variant literal.
+	/// Struct / union / variant literal. All field values are operands
+	/// (i.e. already-computed locals or constants).
 	Aggregate
 	{
 		kind: MirAggregateKind,
 		fields: Vec<(String, MirOperand)>,
 	},
 
-	/// `[a, b, c]`
+	/// `[a, b, c]` - all elements are operands.
 	Array
 	{
 		elements: Vec<MirOperand>, elem_ty: Ty
 	},
 
-	/// `[val; count]` — count must be a compile-time constant here.
+	/// `[val; count]`
 	ArrayRepeat
 	{
-		value: MirOperand, count: u64, elem_ty: Ty
+		value: MirOperand,
+		count: MirOperand,
+		elem_ty: Ty,
 	},
 
-	/// `(a, b, c)`
+	/// `(a, b, c)` - all elements are operands.
 	Tuple(Vec<MirOperand>),
 
-	/// Range literal — produces a range struct.
+	/// Range literal - produces a range struct. Both bounds are optional
+	/// operands (already-computed locals or constants).
 	Range
 	{
 		start: Option<MirOperand>,
@@ -402,11 +405,8 @@ pub enum MirCallee
 	/// Direct call to a known function symbol.
 	Direct(SymbolId),
 
-	/// Indirect call through a function pointer / closure.
-	Indirect
-	{
-		callee: Box<MirOperand>
-	},
+	/// Indirect call through a function pointer / closure stored in a local.
+	Indirect(LocalId),
 
 	/// Compiler intrinsic (maps 1-to-1 from `TypedExprKind::InternalCall`).
 	Intrinsic(crate::type_analysis::intrinsics::Intrinsic),
@@ -420,7 +420,7 @@ struct MirLowerer<'a>
 
 impl<'a> MirLowerer<'a>
 {
-	fn new(global: &'a GlobalSymbolTable) -> Self
+	const fn new(global: &'a GlobalSymbolTable) -> Self
 	{
 		return Self {
 			diagnostics: Vec::new(),
@@ -520,12 +520,12 @@ impl<'a> MirLowerer<'a>
 			name: v.name.clone(),
 			ty: v.ty.clone(),
 			init: if let Some(init) = &v.init {
-				self.lower_const_expr(init)
+				self.lower_expr_as_operand(init)
 			} else {
-				MirConst {
-					value: MirConstValue::Undef,
+				MirOperand::Const(MirLiteral {
+					value: MirLiteralValue::Undef,
 					ty: v.ty.clone(),
-				}
+				})
 			},
 			mutable: v.mutable,
 			span: v.span,
@@ -537,9 +537,9 @@ impl<'a> MirLowerer<'a>
 		todo!("lower_block");
 	}
 
-	fn lower_const_expr(&mut self, e: &TypedExpr) -> MirConst
+	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
 	{
-		todo!("lower_const_expr");
+		todo!("lower_expr_as_operand");
 	}
 
 	fn lower_struct(s: &TypedStructDecl) -> MirTypeDef
@@ -576,7 +576,7 @@ impl<'a> MirLowerer<'a>
 					.variants
 					.iter()
 					.map(|v| {
-						let c = v.value.as_ref().map(|te| self.lower_const_expr(te));
+						let c = v.value.as_ref().map(|te| self.lower_expr_as_operand(te));
 						return (v.name.clone(), c);
 					})
 					.collect(),

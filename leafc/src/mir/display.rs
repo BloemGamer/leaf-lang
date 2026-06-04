@@ -1,10 +1,9 @@
 use std::fmt;
 
-use crate::parser::display::write_expr;
 use crate::utils::indent_writer::IndentWriter;
 
 use super::{
-	MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirConst, MirConstValue, MirFunction, MirGlobal, MirItem,
+	MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirFunction, MirGlobal, MirItem, MirLiteral, MirLiteralValue,
 	MirLocal, MirModule, MirOperand, MirPlace, MirPlaceBase, MirProjection, MirRvalue, MirStmt, MirSwitchArm,
 	MirTerminator, MirTypeDef, MirTypeDefKind,
 };
@@ -42,11 +41,8 @@ pub fn write_mir_global(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, globa
 	if global.mutable {
 		write!(f, "mut ")?;
 	}
-	write!(f, "{}: {}", global.name, global.ty)?;
-	if let Some(init) = &global.init {
-		write!(f, " = ")?;
-		write_mir_const(f, init)?;
-	}
+	write!(f, "{}: {} = ", global.name, global.ty)?;
+	write_mir_operand(f, &global.init)?;
 	return writeln!(f, ";  // {:?}", global.symbol);
 }
 
@@ -78,9 +74,9 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			w.indent();
 			for (name, value) in variants {
 				w.write_indent(f)?;
-				if let Some(c) = value {
+				if let Some(op) = value {
 					write!(f, "{} = ", name)?;
-					write_mir_const(f, c)?;
+					write_mir_operand(f, op)?;
 					writeln!(f, ",")?;
 				} else {
 					writeln!(f, "{},", name)?;
@@ -303,7 +299,7 @@ pub fn write_mir_terminator(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, te
 fn write_mir_switch_arm(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, arm: &MirSwitchArm) -> fmt::Result
 {
 	w.write_indent(f)?;
-	write_mir_const(f, &arm.value)?;
+	write_mir_operand(f, &arm.value)?;
 	return writeln!(f, " => bb{},", arm.target.0);
 }
 
@@ -316,11 +312,7 @@ pub fn write_mir_place(f: &mut fmt::Formatter<'_>, place: &MirPlace) -> fmt::Res
 	for proj in &place.projections {
 		match proj {
 			MirProjection::Field { name, .. } => write!(f, ".{}", name)?,
-			MirProjection::Index { index, .. } => {
-				write!(f, "[")?;
-				write_mir_operand(f, index)?;
-				write!(f, "]")?;
-			}
+			MirProjection::Index { index, .. } => write!(f, "[_{}]", index.0)?,
 			MirProjection::Deref => write!(f, ".*")?,
 		}
 	}
@@ -338,19 +330,18 @@ pub fn write_mir_operand(f: &mut fmt::Formatter<'_>, operand: &MirOperand) -> fm
 			write!(f, "move ")?;
 			return write_mir_place(f, place);
 		}
-		MirOperand::Const(c) => return write_mir_const(f, c),
+		MirOperand::Const(lit) => return write_mir_literal(f, lit),
 	}
 }
 
-pub fn write_mir_const(f: &mut fmt::Formatter<'_>, c: &MirConst) -> fmt::Result
+pub fn write_mir_literal(f: &mut fmt::Formatter<'_>, lit: &MirLiteral) -> fmt::Result
 {
-	match &c.value {
-		MirConstValue::Literal(lit) => write!(f, "{}", lit)?,
-		MirConstValue::ZeroInit => write!(f, "zeroinit")?,
-		MirConstValue::Undef => write!(f, "undef")?,
-		MirConstValue::Pending(rval) => write_mir_rvalue(f, rval)?,
+	match &lit.value {
+		MirLiteralValue::Literal(l) => write!(f, "{}", l)?,
+		MirLiteralValue::ZeroInit => write!(f, "zeroinit")?,
+		MirLiteralValue::Undef => write!(f, "undef")?,
 	}
-	return write!(f, ": {}", c.ty);
+	return write!(f, ": {}", lit.ty);
 }
 
 pub fn write_mir_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MirRvalue) -> fmt::Result
@@ -426,7 +417,9 @@ pub fn write_mir_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MirRvalue) -> fmt::
 		MirRvalue::ArrayRepeat { value, count, elem_ty } => {
 			write!(f, "[{}: ", elem_ty)?;
 			write_mir_operand(f, value)?;
-			return write!(f, "; {}]", count);
+			write!(f, "; ")?;
+			write_mir_operand(f, count)?;
+			return write!(f, "]");
 		}
 
 		MirRvalue::Tuple(elements) => {
@@ -463,11 +456,7 @@ pub fn write_mir_callee(f: &mut fmt::Formatter<'_>, callee: &MirCallee) -> fmt::
 {
 	match callee {
 		MirCallee::Direct(sym) => return write!(f, "{:?}", sym),
-		MirCallee::Indirect { callee } => {
-			write!(f, "(*")?;
-			write_mir_operand(f, callee)?;
-			return write!(f, ")");
-		}
+		MirCallee::Indirect(local) => return write!(f, "(*_{})", local.0),
 		MirCallee::Intrinsic(intrinsic) => return write!(f, "{}", intrinsic),
 	}
 }
