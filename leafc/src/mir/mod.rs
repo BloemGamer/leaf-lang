@@ -7,7 +7,7 @@ use leaf_proc::compiler_bug;
 use crate::{
 	diagnostics::{DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
-	parser::{BinaryOp, CallType, Literal, UnaryOp},
+	parser::{AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
@@ -417,6 +417,13 @@ pub enum MirCallee
 	Intrinsic(crate::type_analysis::intrinsics::Intrinsic),
 }
 
+struct LoopContext
+{
+	label: String,
+	break_target: BlockId,
+	continue_target: BlockId,
+}
+
 struct BodyBuilder
 {
 	locals: Vec<MirLocal>,
@@ -424,6 +431,7 @@ struct BodyBuilder
 	current_block: BlockId,
 	return_local: Option<LocalId>,
 	local_map: HashMap<SymbolId, LocalId>,
+	loop_stack: Vec<LoopContext>,
 }
 
 impl BodyBuilder
@@ -441,6 +449,7 @@ impl BodyBuilder
 			current_block: BlockId(0),
 			return_local: None,
 			local_map: HashMap::new(),
+			loop_stack: Vec::new(),
 		};
 	}
 
@@ -700,11 +709,57 @@ impl<'a> MirLowerer<'a>
 				op,
 				value,
 				span,
-			} => todo!(),
-			TypedStmt::Return { value, span } => todo!(),
+			} => {
+				if !matches!(op, AssignOp::Assign) {
+					self.diagnostics.push(compiler_bug!(
+						*span,
+						"the type resolution should have changed all the other assignments to function calls"
+					));
+					return;
+				}
+
+				let place = self.lower_expr_as_place(builder, target);
+				let operand = self.lower_expr_into(builder, value);
+
+				builder.push_stmt(MirStmt::Assign {
+					place,
+					rvalue: MirRvalue::Use(operand),
+					span: *span,
+				});
+			}
+			TypedStmt::Return { value, span } => {
+				if let Some(val) = value {
+					let operand = self.lower_expr_into(builder, val);
+					if let Some(ret_local) = builder.return_local {
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(ret_local),
+								projections: Vec::new(),
+								ty: operand.ty().clone(),
+							},
+							rvalue: MirRvalue::Use(operand),
+							span: *span,
+						});
+					}
+				}
+
+				builder.set_terminator(MirTerminator::Return);
+
+				// allocate a new block for dead code, but it should still be checked ect
+				let dead: BlockId = builder.alloc_block();
+				builder.current_block = dead;
+			}
 			TypedStmt::Expr(typed_expr) => todo!(),
 			TypedStmt::Break { label, value, span } => todo!(),
-			TypedStmt::Continue { label, span } => todo!(),
+			TypedStmt::Continue { label, span } => {
+				let continue_block = builder
+					.loop_stack
+					.iter()
+					.rev()
+					.find(|ctx| return ctx.label == *label)
+					.expect("continue with unknown label") // TODO: better error
+					.continue_target;
+			}
 			TypedStmt::If {
 				cond,
 				then_block,
@@ -727,6 +782,11 @@ impl<'a> MirLowerer<'a>
 	fn lower_expr_into(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirOperand
 	{
 		todo!("lower_expr_into")
+	}
+
+	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
+	{
+		todo!("lower_expr_as_place")
 	}
 
 	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
