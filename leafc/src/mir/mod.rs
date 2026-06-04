@@ -1,8 +1,12 @@
 mod display;
 
+use std::collections::HashMap;
+
+use leaf_proc::compiler_bug;
+
 use crate::{
 	diagnostics::{DiagnosticBuilder, ErrorCode},
-	lexer::Span,
+	lexer::{Span, Spanned},
 	parser::{BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
@@ -419,6 +423,7 @@ struct BodyBuilder
 	blocks: Vec<MirBasicBlock>,
 	current_block: BlockId,
 	return_local: Option<LocalId>,
+	local_map: HashMap<SymbolId, LocalId>,
 }
 
 impl BodyBuilder
@@ -435,6 +440,7 @@ impl BodyBuilder
 			blocks: vec![entry],
 			current_block: BlockId(0),
 			return_local: None,
+			local_map: HashMap::new(),
 		};
 	}
 
@@ -662,11 +668,65 @@ impl<'a> MirLowerer<'a>
 		for stmt in &block.stmts {
 			self.lower_stmt_into(builder, stmt);
 		}
+		if let Some(tail_expr) = &block.tail_expr {
+			todo!("lower_block_into: Some(block.tail_expr)")
+		}
 	}
 
 	fn lower_stmt_into(&mut self, builder: &mut BodyBuilder, stmt: &TypedStmt)
 	{
-		todo!("lower_stmt_into")
+		match stmt {
+			TypedStmt::VariableDecl(var) => {
+				let var_id: LocalId =
+					builder.alloc_local(var.ty.clone(), Some(var.name.clone()), var.mutable, var.span());
+
+				builder.local_map.insert(var.resolved_name, var_id);
+
+				if let Some(init) = &var.init {
+					let operand = self.lower_expr_into(builder, init);
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(var_id),
+							projections: Vec::new(),
+							ty: var.ty.clone(),
+						},
+						rvalue: MirRvalue::Use(operand),
+						span: var.span(),
+					});
+				}
+			}
+			TypedStmt::Assignment {
+				target,
+				op,
+				value,
+				span,
+			} => todo!(),
+			TypedStmt::Return { value, span } => todo!(),
+			TypedStmt::Expr(typed_expr) => todo!(),
+			TypedStmt::Break { label, value, span } => todo!(),
+			TypedStmt::Continue { label, span } => todo!(),
+			TypedStmt::If {
+				cond,
+				then_block,
+				else_branch,
+				span,
+			} => todo!(),
+			TypedStmt::Loop { label, body, span } => todo!(),
+			TypedStmt::Delete { expr, span } => todo!(),
+			TypedStmt::Unsafe(typed_block) | TypedStmt::Block(typed_block) => todo!(),
+			TypedStmt::Directive(_) => {
+				// Directive should not generate any MIR I think, well, when meta programming is introduced probably it should, but not for now
+			}
+			TypedStmt::Pending(span) => self.diagnostics.push(compiler_bug!(
+				*span,
+				"no TypedStmt::Pending should be able to leak to the MIR generation"
+			)),
+		}
+	}
+
+	fn lower_expr_into(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirOperand
+	{
+		todo!("lower_expr_into")
 	}
 
 	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
