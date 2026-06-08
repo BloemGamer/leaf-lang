@@ -769,7 +769,9 @@ impl<'a> MirLowerer<'a>
 				let dead: BlockId = builder.alloc_block();
 				builder.current_block = dead;
 			}
-			TypedStmt::Expr(typed_expr) => todo!(),
+			TypedStmt::Expr(typed_expr) => {
+				self.lower_expr_into(builder, typed_expr);
+			}
 			TypedStmt::Break { label, value, span } => {
 				let (break_block, result_local) =
 					if let Some(ct) = builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
@@ -802,7 +804,7 @@ impl<'a> MirLowerer<'a>
 
 				builder.set_terminator(MirTerminator::Goto { target: break_block });
 
-				let dead = builder.alloc_block();
+				let dead: BlockId = builder.alloc_block();
 				builder.current_block = dead;
 			}
 			TypedStmt::Continue { label, span } => {
@@ -820,16 +822,70 @@ impl<'a> MirLowerer<'a>
 						BlockId(0)
 					};
 				builder.set_terminator(MirTerminator::Goto { target: continue_block });
+
+				// allocate a new block for dead code, but it should still be checked ect
+				let dead: BlockId = builder.alloc_block();
+				builder.current_block = dead;
 			}
 			TypedStmt::If {
 				cond,
 				then_block,
 				else_branch,
 				span,
-			} => todo!(),
-			TypedStmt::Loop { label, body, span } => todo!(),
-			TypedStmt::Delete { expr, span } => todo!(),
-			TypedStmt::Unsafe(typed_block) | TypedStmt::Block(typed_block) => todo!(),
+			} => {
+				let cond_operand: MirOperand = self.lower_expr_into(builder, cond);
+
+				let then_bb: BlockId = builder.alloc_block();
+				let else_bb: BlockId = builder.alloc_block();
+				let merge_bb: BlockId = builder.alloc_block();
+
+				builder.set_terminator(MirTerminator::Branch {
+					cond: cond_operand,
+					then_block: then_bb,
+					else_block: else_bb,
+				});
+
+				builder.current_block = then_bb;
+				self.lower_block_into(builder, then_block);
+				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
+
+				builder.current_block = else_bb;
+				if let Some(else_block) = else_branch {
+					self.lower_stmt_into(builder, else_block);
+				}
+				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
+
+				builder.current_block = merge_bb;
+			}
+			TypedStmt::Loop { label, body, span } => {
+				let loop_bb: BlockId = builder.alloc_block();
+				let exit_loop_bb: BlockId = builder.alloc_block();
+
+				builder.loop_stack.push(LoopContext {
+					label: label.clone(),
+					break_target: exit_loop_bb,
+					continue_target: loop_bb,
+					result_local: None,
+				});
+
+				builder.current_block = loop_bb;
+
+				self.lower_block_into(builder, body);
+
+				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
+
+				builder.current_block = exit_loop_bb;
+			}
+			TypedStmt::Delete { expr, span } => {
+				let del_op: MirOperand = self.lower_expr_into(builder, expr);
+				builder.push_stmt(MirStmt::Delete {
+					operand: del_op,
+					span: *span,
+				});
+			}
+			TypedStmt::Unsafe(typed_block) | TypedStmt::Block(typed_block) => {
+				self.lower_block_into(builder, typed_block);
+			}
 			TypedStmt::Directive(_) => {
 				// Directive should not generate any MIR I think, well, when meta programming is introduced probably it should, but not for now
 			}
