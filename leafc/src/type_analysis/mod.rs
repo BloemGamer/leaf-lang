@@ -101,6 +101,37 @@ pub enum Ty
 	SelfTy,
 }
 
+impl Ty
+{
+	pub fn implements_copy(&self, trait_impls: &HashMap<TyKey, HashSet<SymbolId>>, copy_sym: SymbolId) -> bool
+	{
+		return match self {
+			Ty::Primitive(_) | Ty::Unit | Ty::Never => true,
+
+			Ty::Pointer { .. } => true,
+
+			Ty::Reference { mutable, .. } => !mutable,
+
+			Ty::Mutable { .. } => false,
+
+			Ty::Tuple(elems) => elems.iter().all(|t| return t.implements_copy(trait_impls, copy_sym)),
+
+			Ty::Array { inner, size } => size.is_some() && inner.implements_copy(trait_impls, copy_sym),
+
+			Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => bounds.iter().any(|b| {
+				return matches!(b, TyBound::Trait { symbol, .. } if *symbol == copy_sym);
+			}),
+
+			Ty::Named { .. } => {
+				let Some(key) = TyKey::of(self) else { return false };
+				trait_impls.get(&key).is_some_and(|set| return set.contains(&copy_sym))
+			}
+
+			Ty::Infer | Ty::SelfTy => false,
+		};
+	}
+}
+
 impl Primitive
 {
 	const fn int_from_int_type(int_type: IntType) -> Primitive
@@ -443,11 +474,12 @@ impl FieldTypeCache
 	}
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TypedModule
 {
 	pub path: Vec<String>,
 	pub ast: TypedAST,
+	pub caches: TypeCaches,
 }
 
 #[allow(clippy::upper_case_acronyms)]
@@ -1786,6 +1818,7 @@ impl<'src> BlockInferState<'src>
 
 const ALLOC_TRAIT_PATH: &[&str] = &["std", "Alloc"];
 const IO_TRAIT_PATH: &[&str] = &["std", "IO"];
+const COPY_TRAIT_PATH: &[&str] = &["std", "Copy"];
 
 #[derive(Debug, Clone, Default)]
 struct HeapTraitSyms
@@ -1794,7 +1827,7 @@ struct HeapTraitSyms
 	io: Option<SymbolId>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct TypeCaches
 {
 	pub env: TypeEnv,
@@ -1805,6 +1838,27 @@ pub struct TypeCaches
 	pub param: ParamTypeCache,
 	pub impl_assoc: HashMap<(TyKey, SymbolId, String), Ty>,
 	pub impl_assoc_generic_params: HashMap<(TyKey, SymbolId, String), Vec<String>>,
+	pub trait_impls: HashMap<TyKey, HashSet<SymbolId>>,
+	pub copy_sym: SymbolId,
+}
+
+impl Default for TypeCaches
+{
+	fn default() -> Self
+	{
+		Self {
+			env: Default::default(),
+			field: Default::default(),
+			field_default: Default::default(),
+			method: Default::default(),
+			method_fn: Default::default(),
+			param: Default::default(),
+			impl_assoc: Default::default(),
+			impl_assoc_generic_params: Default::default(),
+			trait_impls: Default::default(),
+			copy_sym: SymbolId(usize::MAX), // This one is always overwritten, and so can be safely be written to a nonsence value
+		}
+	}
 }
 
 #[derive(Debug, Default)]
@@ -7799,6 +7853,19 @@ pub fn check_types(
 		.check_block_tld(&module.ast.top_level_block)
 		.map_err(CompileError::Type)?;
 
+	checker.caches.trait_impls = checker.traits.impls;
+	checker.caches.copy_sym = if let Some(copy_sym) = resolve_trait_at_path(global, COPY_TRAIT_PATH) {
+		copy_sym
+	} else {
+		todo!(
+			"the Copy trait should be defined in the stdlib (make better error when the checker is switched to the new diagnostics system)"
+		);
+		// checker.diagnostics.push(compiler_bug!(
+		// 	Span::default(),
+		// 	"the Copy trait should be defined in the stdlib"
+		// ));
+	};
+
 	return Ok(TypedModule {
 		path: module.path.clone(),
 		ast: TypedAST {
@@ -7806,6 +7873,7 @@ pub fn check_types(
 			source_index: module.ast.source_index,
 			span: module.ast.span,
 		},
+		caches: checker.caches,
 	});
 }
 
