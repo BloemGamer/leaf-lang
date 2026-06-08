@@ -112,6 +112,9 @@
 // #![warn(clippy::todo)]
 
 use proc_macro::TokenStream;
+use syn::{DeriveInput, parse_macro_input};
+
+use self::diagnostics::impl_parse_errors;
 
 mod diagnostics;
 mod gen_lex;
@@ -139,4 +142,18 @@ pub fn diagnostic_builder(item: TokenStream) -> TokenStream
 pub fn compiler_bug(item: TokenStream) -> TokenStream
 {
 	return diagnostics::compiler_bug(item.into()).into();
+}
+
+#[proc_macro_derive(
+	CompileErrorKind,
+	attributes(error_msg, error_code, constructor, label, note, help, compile_error_variant)
+)]
+pub fn compile_error_kind(vinput: TokenStream) -> TokenStream
+{
+	let input = parse_macro_input!(vinput as DeriveInput);
+
+	return match impl_parse_errors(&input) {
+		Ok(ts) => ts.into(),
+		Err(e) => e.to_compile_error().into(),
+	};
 }

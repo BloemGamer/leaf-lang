@@ -16,7 +16,7 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
-use leaf_proc::Spanned;
+use leaf_proc::{CompileErrorKind, Spanned};
 
 /// Recursive descent parser for the programming language.
 ///
@@ -2122,57 +2122,6 @@ pub enum FuncBound
 }
 
 #[derive(Debug, Clone)]
-#[allow(unused)]
-pub enum ParseErrorKind
-{
-	UnexpectedToken
-	{
-		expected: Expected,
-		found: TokenKind,
-	},
-	UnexpectedEof,
-	InvalidPattern
-	{
-		reason: String,
-	},
-	UnbalancedDelimiter
-	{
-		delimiter: char,
-	},
-	InvalidType
-	{
-		reason: String,
-	},
-	InvalidDeclaration
-	{
-		reason: String,
-	},
-	UnexpectedItem
-	{
-		context: String,
-		found: TokenKind,
-	},
-	Generic
-	{
-		message: String,
-	},
-	NoCompileExpr
-	{
-		reason: String,
-	},
-	CompileExprError
-	{
-		reason: String,
-	},
-	ReservedToken(ReservedError),
-	UseOfNotAllowedInternal
-	{
-		reason: String,
-	},
-	UndefinedStringFlags,
-}
-
-#[derive(Debug, Clone)]
 pub enum Expected
 {
 	Token(TokenKind),
@@ -2192,193 +2141,103 @@ pub struct ParseError
 	pub kind: ParseErrorKind,
 }
 
-impl From<ParseError> for CompileError
+#[derive(Debug, Clone, CompileErrorKind)]
+#[compile_error_variant(CompileError::Parse)]
+pub enum ParseErrorKind
 {
-	fn from(value: ParseError) -> Self
+	#[error_msg("unexpected token `{found:?}`, expected {expected}")]
+	#[error_code(ErrorCode::ParseUnexpectedToken)]
+	#[constructor(unexpected_token(span: Span, expected: Expected, found: TokenKind))]
+	UnexpectedToken
 	{
-		return CompileError::Parse(value);
-	}
-}
+		expected: Expected, found: TokenKind
+	},
 
-impl std::fmt::Display for ParseError
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	#[error_msg("unexpected end of file")]
+	#[error_code(ErrorCode::ParseUnexpectedEof)]
+	#[constructor(unexpected_eof(span: Span))]
+	UnexpectedEof,
+
+	#[error_msg("invalid pattern: {reason}")]
+	#[error_code(ErrorCode::ParseInvalidPattern)]
+	#[constructor(invalid_pattern(span: Span, reason: impl Into<String>))]
+	InvalidPattern
 	{
-		write!(f, "Parse error at {:?}: ", self.span)?;
+		reason: String
+	},
 
-		match &self.kind {
-			ParseErrorKind::UnexpectedToken { expected, found } => {
-				write!(f, "unexpected token `{:?}`, expected {}", found, expected)?;
-			}
-			ParseErrorKind::UnexpectedEof => {
-				write!(f, "unexpected end of file")?;
-			}
-			ParseErrorKind::InvalidPattern { reason } => {
-				write!(f, "invalid pattern: {reason}")?;
-			}
-			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
-				write!(f, "unbalanced delimiter `{delimiter}`")?;
-			}
-			ParseErrorKind::InvalidType { reason } => {
-				write!(f, "invalid type: {reason}")?;
-			}
-			ParseErrorKind::InvalidDeclaration { reason } => {
-				write!(f, "invalid declaration: {reason}")?;
-			}
-			ParseErrorKind::UnexpectedItem { context, found } => {
-				write!(f, "unexpected item in {context}: found `{:?}`", found)?;
-			}
-			ParseErrorKind::Generic { message } => {
-				write!(f, "{message}")?;
-			}
-			ParseErrorKind::CompileExprError { reason } => {
-				write!(f, "compile-time expression error: {reason}")?;
-			}
-			ParseErrorKind::NoCompileExpr { reason } => {
-				write!(f, "no compile-time expression: {reason}")?;
-			}
-			ParseErrorKind::ReservedToken(e) => {
-				write!(f, "reserved token: {:?}", e.token)?;
-			}
-			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
-				write!(f, "{reason}")?;
-			}
-			ParseErrorKind::UndefinedStringFlags => {
-				write!(f, "undefined string flags")?;
-			}
-		}
-
-		return Ok(());
-	}
-}
-
-#[allow(unused)]
-impl ParseError
-{
-	pub const fn new(span: Span, kind: ParseErrorKind) -> Self
+	#[error_msg("unbalanced delimiter `{delimiter}`")]
+	#[error_code(ErrorCode::ParseInvalidPattern)]
+	#[constructor(unbalanced_delimiter(span: Span, delimiter: char))]
+	UnbalancedDelimiter
 	{
-		return Self { span, kind };
-	}
+		delimiter: char
+	},
 
-	pub const fn unexpected_token(span: Span, expected: Expected, found: TokenKind) -> Self
+	#[error_msg("invalid type: {reason}")]
+	#[error_code(ErrorCode::ParseInvalidType)]
+	#[constructor(invalid_type(span: Span, reason: impl Into<String>))]
+	InvalidType
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedToken { expected, found });
-	}
+		reason: String
+	},
 
-	pub const fn unexpected_eof(span: Span) -> Self
+	#[error_msg("invalid declaration: {reason}")]
+	#[error_code(ErrorCode::ParseInvalidDeclaration)]
+	#[constructor(invalid_declaration(span: Span, reason: impl Into<String>))]
+	InvalidDeclaration
 	{
-		return Self::new(span, ParseErrorKind::UnexpectedEof);
-	}
+		reason: String
+	},
 
-	pub fn invalid_pattern(span: Span, reason: impl Into<String>) -> Self
+	#[error_msg("unexpected item in {context}: found `{found:?}`")]
+	#[error_code(ErrorCode::ParseUnexpectedItem)]
+	#[constructor(unexpected_item(span: Span, context: impl Into<String>, found: TokenKind))]
+	UnexpectedItem
 	{
-		return Self::new(span, ParseErrorKind::InvalidPattern { reason: reason.into() });
-	}
+		context: String, found: TokenKind
+	},
 
-	pub const fn unbalanced_delimiter(span: Span, delimiter: char) -> Self
+	#[error_msg("{message}")]
+	#[error_code(ErrorCode::ParseGeneric)]
+	#[constructor(generic(span: Span, message: impl Into<String>))]
+	Generic
 	{
-		return Self::new(span, ParseErrorKind::UnbalancedDelimiter { delimiter });
-	}
+		message: String
+	},
 
-	pub fn invalid_type(span: Span, reason: impl Into<String>) -> Self
+	#[error_msg("compile-time expression error: {reason}")]
+	#[error_code(ErrorCode::ParseCompileExprError)]
+	CompileExprError
 	{
-		return Self::new(span, ParseErrorKind::InvalidType { reason: reason.into() });
-	}
+		reason: String
+	},
 
-	pub fn invalid_declaration(span: Span, reason: impl Into<String>) -> Self
+	#[error_msg("no compile-time expression: {reason}")]
+	#[error_code(ErrorCode::ParseNoCompileExpr)]
+	NoCompileExpr
 	{
-		return Self::new(span, ParseErrorKind::InvalidDeclaration { reason: reason.into() });
-	}
+		reason: String
+	},
 
-	pub fn unexpected_item(span: Span, context: impl Into<String>, found: TokenKind) -> Self
+	#[error_msg("reserved token: {f0:?}")]
+	#[error_code(ErrorCode::ParseReservedToken)]
+	#[label(primary, "this token is reserved for future use")]
+	#[help("rename the identifier")]
+	ReservedToken(ReservedError),
+
+	#[error_msg("{reason}")]
+	#[error_code(ErrorCode::ParseUseOfNotAllowedInternal)]
+	UseOfNotAllowedInternal
 	{
-		return Self::new(
-			span,
-			ParseErrorKind::UnexpectedItem {
-				context: context.into(),
-				found,
-			},
-		);
-	}
+		reason: String
+	},
 
-	pub fn generic(span: Span, message: impl Into<String>) -> Self
-	{
-		return Self::new(
-			span,
-			ParseErrorKind::Generic {
-				message: message.into(),
-			},
-		);
-	}
-}
-
-impl CompileDiagnostic for ParseError
-{
-	fn build(&self) -> DiagnosticBuilder
-	{
-		let mut diag = match &self.kind {
-			ParseErrorKind::UnexpectedToken { expected, found } => {
-				DiagnosticBuilder::error(format!("unexpected token `{found:?}`, expected {expected}"))
-					.code(ErrorCode::ParseUnexpectedToken)
-			}
-
-			ParseErrorKind::UnexpectedEof => {
-				DiagnosticBuilder::error("unexpected end of file").code(ErrorCode::ParseUnexpectedEof)
-			}
-
-			ParseErrorKind::InvalidPattern { reason } => {
-				DiagnosticBuilder::error(format!("invalid pattern: {reason}")).code(ErrorCode::ParseInvalidPattern)
-			}
-
-			ParseErrorKind::UnbalancedDelimiter { delimiter } => {
-				DiagnosticBuilder::error(format!("unbalanced delimiter `{delimiter}`"))
-					.code(ErrorCode::ParseInvalidPattern)
-			}
-
-			ParseErrorKind::InvalidType { reason } => {
-				DiagnosticBuilder::error(format!("invalid type: {reason}")).code(ErrorCode::ParseInvalidType)
-			}
-
-			ParseErrorKind::InvalidDeclaration { reason } => {
-				DiagnosticBuilder::error(format!("invalid declaration: {reason}"))
-					.code(ErrorCode::ParseInvalidDeclaration)
-			}
-
-			ParseErrorKind::UnexpectedItem { context, found } => {
-				DiagnosticBuilder::error(format!("unexpected item in {context}: found `{found:?}`"))
-					.code(ErrorCode::ParseUnexpectedItem)
-			}
-
-			ParseErrorKind::Generic { message } => {
-				DiagnosticBuilder::error(message.clone()).code(ErrorCode::ParseGeneric)
-			}
-
-			ParseErrorKind::CompileExprError { reason } => {
-				DiagnosticBuilder::error(format!("compile-time expression error: {reason}"))
-					.code(ErrorCode::ParseCompileExprError)
-			}
-
-			ParseErrorKind::NoCompileExpr { reason } => {
-				DiagnosticBuilder::error(format!("no compile-time expression: {reason}"))
-					.code(ErrorCode::ParseNoCompileExpr)
-			}
-
-			ParseErrorKind::ReservedToken(e) => {
-				DiagnosticBuilder::error(format!("reserved token: {:?}", e.token)).code(ErrorCode::ParseReservedToken)
-			}
-
-			ParseErrorKind::UseOfNotAllowedInternal { reason } => {
-				DiagnosticBuilder::error(reason.clone()).code(ErrorCode::ParseUseOfNotAllowedInternal)
-			}
-			ParseErrorKind::UndefinedStringFlags => {
-				DiagnosticBuilder::error("undefined string flag").code(ErrorCode::ParseUndefinedStringFlags)
-			}
-		};
-
-		diag = diag.primary(self.span, None);
-
-		return diag;
-	}
+	#[error_msg("undefined string flag")]
+	#[error_code(ErrorCode::ParseUndefinedStringFlags)]
+	#[constructor(undefined_string_flags(span: Span))]
+	#[note("valid flags are: `c` (c-string)")]
+	UndefinedStringFlags,
 }
 
 /// Type alias declaration.
