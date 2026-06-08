@@ -952,18 +952,223 @@ impl<'a> MirLowerer<'a>
 					})
 				}
 			},
-			TypedExprKind::Literal { value } => todo!(),
-			TypedExprKind::Default { heap_call } => todo!(),
-			TypedExprKind::Unary { op, expr } => todo!(),
-			TypedExprKind::Binary { op, lhs, rhs } => todo!(),
-			TypedExprKind::Cast { ty, expr } => todo!(),
+			TypedExprKind::Literal { value } => MirOperand::Const(MirLiteral {
+				value: MirLiteralValue::Literal(value.clone()),
+				ty: expr.ty.clone(),
+			}),
+			TypedExprKind::Default { heap_call } => {
+				self.diagnostics.push(compiler_bug!(
+					Span::default(),
+					"`TypedExprKind::Default` should not be leaking to the MIR lowering"
+				)); // TODO: fix the span I guess
+				MirOperand::Const(MirLiteral {
+					value: MirLiteralValue::Undef,
+					ty: Ty::Never,
+				})
+			}
+			TypedExprKind::Unary { op, expr: u_expr } => {
+				let operand: MirOperand = self.lower_expr_into(builder, u_expr);
+				let tmp: LocalId = builder.alloc_local(u_expr.ty.clone(), None, false, u_expr.span());
+
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(tmp),
+						projections: Vec::new(),
+						ty: u_expr.ty.clone(),
+					},
+					rvalue: MirRvalue::Unary { op: *op, operand },
+					span: u_expr.span(),
+				});
+
+				let place: MirPlace = MirPlace {
+					base: MirPlaceBase::Local(tmp),
+					projections: Vec::new(),
+					ty: expr.ty.clone(),
+				};
+
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(place)
+				} else {
+					MirOperand::Move(place)
+				}
+			}
+
+			TypedExprKind::Binary { op, lhs, rhs } => {
+				let lhs_operand: MirOperand = self.lower_expr_into(builder, lhs);
+				let rhs_operand: MirOperand = self.lower_expr_into(builder, rhs);
+				let tmp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(tmp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					},
+					rvalue: MirRvalue::Binary {
+						op: *op,
+						lhs: lhs_operand,
+						rhs: rhs_operand,
+					},
+					span: expr.span(),
+				});
+
+				let place: MirPlace = MirPlace {
+					base: MirPlaceBase::Local(tmp),
+					projections: Vec::new(),
+					ty: expr.ty.clone(),
+				};
+
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(place)
+				} else {
+					MirOperand::Move(place)
+				}
+			}
+			TypedExprKind::Cast { ty, expr: c_expr } => {
+				let operand: MirOperand = self.lower_expr_into(builder, c_expr);
+				let tmp: LocalId = builder.alloc_local(c_expr.ty.clone(), None, false, c_expr.span());
+
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(tmp),
+						projections: Vec::new(),
+						ty: c_expr.ty.clone(),
+					},
+					rvalue: MirRvalue::Cast {
+						ty: ty.clone(),
+						operand,
+					},
+					span: c_expr.span(),
+				});
+
+				let place: MirPlace = MirPlace {
+					base: MirPlaceBase::Local(tmp),
+					projections: Vec::new(),
+					ty: c_expr.ty.clone(),
+				};
+
+				if c_expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(place)
+				} else {
+					MirOperand::Move(place)
+				}
+			}
 			TypedExprKind::Call {
 				callee,
-				call_type,
-				named_generics,
+				call_type: _,
+				named_generics: _,
 				args,
-			} => todo!(),
-			TypedExprKind::InternalCall { intrinsic } => todo!(),
+			} => {
+				let lowered_args: Vec<MirOperand> =
+					args.iter().map(|a| return self.lower_expr_into(builder, a)).collect();
+
+				let lowered_callee: MirCallee = match &callee.kind {
+					TypedExprKind::Identifier { path } => match &path.kind {
+						ResolvedPathKind::Resolved(sym) => {
+							// TODO: when implementing function pointers, lambda/closures ect, this should change to a check and make MirCallee::Indirect() for that call
+							MirCallee::Direct(*sym)
+						}
+						ResolvedPathKind::AssocItem { base, .. } => MirCallee::Direct(*base),
+						ResolvedPathKind::Primitive(_) => {
+							self.diagnostics
+								.push(compiler_bug!(callee.span, "primitive used as callee in MIR lowering"));
+							return MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::Undef,
+								ty: expr.ty.clone(),
+							});
+						}
+					},
+					TypedExprKind::InternalCall { intrinsic } => MirCallee::Intrinsic(intrinsic.clone()),
+					_ => {
+						let operand: MirOperand = self.lower_expr_into(builder, callee);
+						let temp: LocalId = builder.alloc_local(callee.ty.clone(), None, false, callee.span());
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(temp),
+								projections: Vec::new(),
+								ty: callee.ty.clone(),
+							},
+							rvalue: MirRvalue::Use(operand),
+							span: callee.span(),
+						});
+						MirCallee::Indirect(temp)
+					}
+				};
+
+				let next_bb: BlockId = builder.alloc_block();
+
+				if matches!(expr.ty, Ty::Unit | Ty::Never) {
+					let dummy: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					builder.set_terminator(MirTerminator::CallAndContinue {
+						callee: lowered_callee,
+						args: lowered_args,
+						dest: MirPlace {
+							base: MirPlaceBase::Local(dummy),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						},
+						next: next_bb,
+						unwind: None,
+						span: expr.span(),
+					});
+					builder.current_block = next_bb;
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ZeroInit,
+						ty: expr.ty.clone(),
+					})
+				} else {
+					let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					builder.set_terminator(MirTerminator::CallAndContinue {
+						callee: lowered_callee,
+						args: lowered_args,
+						dest: MirPlace {
+							base: MirPlaceBase::Local(temp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						},
+						next: next_bb,
+						unwind: None,
+						span: expr.span(),
+					});
+					builder.current_block = next_bb;
+					if expr
+						.ty
+						.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+					{
+						MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(temp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						})
+					} else {
+						MirOperand::Move(MirPlace {
+							base: MirPlaceBase::Local(temp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						})
+					}
+				}
+			}
+			TypedExprKind::InternalCall { intrinsic: _ } => {
+				// TypedExprKind::InternalCall is only allowed to be used by `TypedExprKind::InternalCall`, outside of here should be caught earlier
+				self.diagnostics.push(compiler_bug!(
+					expr.span,
+					"`TypedExprKind::InternalCall` appeared outside of a `TypedExprKind::Call` expression in MIR lowering"
+				));
+				MirOperand::Const(MirLiteral {
+					value: MirLiteralValue::Undef,
+					ty: expr.ty.clone(),
+				})
+			}
 			TypedExprKind::Field { base, name } => todo!(),
 			TypedExprKind::Index { base, index } => todo!(),
 			TypedExprKind::Range(typed_range_expr) => todo!(),
