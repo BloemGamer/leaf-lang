@@ -49,12 +49,18 @@ pub fn compiler_bug(item: TokenStream2) -> TokenStream2
 	let span = input.span;
 	let message = input.message;
 
+	let input_span = proc_macro::Span::call_site();
+
+	let source_file = input_span.file();
+	let line = input_span.line();
+
 	return quote! {
 		{
 			crate::diagnostics::DiagnosticBuilder::bug("internal compiler bug")
 				.code(crate::diagnostics::ErrorCode::CompilerBug)
 				.primary(#span, Some(#message.to_string()))
 				.note("this is a bug in the compiler, not your code")
+				.note(format!("{}:{}", #source_file, #line))
 				.help("please report this issue with a minimal reproduction")
 		}
 	};
