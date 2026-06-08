@@ -1410,7 +1410,7 @@ pub enum ArrayLiteral
 /// * `Not` - Logical/bitwise NOT: `!x`
 /// * `Deref` - Pointer dereference: `*ptr`
 /// * `Addr` - Address-of operator: `&x` or `&mut x`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum UnaryOp
 {
 	Neg,
@@ -1452,7 +1452,7 @@ pub enum UnaryOp
 /// * `BitXor` - `^`
 /// * `Shl` - `<<`
 /// * `Shr` - `>>`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BinaryOp
 {
 	/// `||`
