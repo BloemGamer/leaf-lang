@@ -69,6 +69,9 @@ pub enum ErrorCode
 	ModuleIoError,
 	ModuleCycle,
 
+	// Mir
+	MirUndefinedLabel,
+
 	//
 	CompilerBug,
 }
@@ -275,6 +278,7 @@ pub enum CompileError
 	SymbolCollection(crate::symbol_collection::SymbolCollectionError),
 	NameResolution(crate::name_resolution::NameResolutionError),
 	Type(crate::type_analysis::TypeError),
+	Mir(crate::mir::MirError),
 }
 
 macro_rules! delegate {
@@ -286,6 +290,7 @@ macro_rules! delegate {
 			Self::SymbolCollection(e) => e.$method(),
 			Self::NameResolution(e) => e.$method(),
 			Self::Type(e) => e.$method(),
+			Self::Mir(e) => e.$method(),
 		}
 	};
 }
@@ -301,6 +306,7 @@ impl std::fmt::Display for CompileError
 			Self::SymbolCollection(e) => write!(f, "{e}"),
 			Self::NameResolution(e) => write!(f, "{e}"),
 			Self::Type(e) => write!(f, "{e}"),
+			Self::Mir(e) => write!(f, "{e}"),
 		};
 	}
 }
@@ -342,6 +348,7 @@ impl CompileDiagnostic for CompileError
 					.note("during type checking")
 					.help("verify that expressions match expected types");
 			}
+			CompileError::Mir(_) => diag = diag.note("during mir transformation"),
 		}
 
 		return diag;

@@ -2,10 +2,10 @@ mod display;
 
 use std::collections::HashMap;
 
-use leaf_proc::compiler_bug;
+use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 
 use crate::{
-	diagnostics::{DiagnosticBuilder, ErrorCode},
+	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
 	parser::{AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
@@ -16,6 +16,25 @@ use crate::{
 		TypedVariantDecl,
 	},
 };
+
+#[derive(Debug, Clone, Spanned)]
+pub struct MirError
+{
+	pub span: Span,
+	pub kind: MirErrorKind,
+}
+
+#[derive(Debug, Clone, CompileErrorKind)]
+#[compile_error_variant(CompileError::Mir)]
+pub enum MirErrorKind
+{
+	#[error_msg("undefined label `'{label}`")]
+	#[error_code(ErrorCode::MirUndefinedLabel)]
+	UndefinedLabel
+	{
+		label: String
+	},
+}
 
 /// A local variable or temporary within a `MirBody`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -752,13 +771,19 @@ impl<'a> MirLowerer<'a>
 			TypedStmt::Expr(typed_expr) => todo!(),
 			TypedStmt::Break { label, value, span } => todo!(),
 			TypedStmt::Continue { label, span } => {
-				let continue_block = builder
-					.loop_stack
-					.iter()
-					.rev()
-					.find(|ctx| return ctx.label == *label)
-					.expect("continue with unknown label") // TODO: better error
-					.continue_target;
+				let continue_block = match builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
+					Some(ct) => ct.continue_target,
+					None => {
+						self.diagnostics.push(
+							MirError {
+								span: *span,
+								kind: MirErrorKind::UndefinedLabel { label: label.clone() },
+							}
+							.build(),
+						);
+						BlockId(0)
+					}
+				};
 			}
 			TypedStmt::If {
 				cond,
