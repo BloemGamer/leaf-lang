@@ -7,13 +7,14 @@ use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 use crate::{
 	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{Span, Spanned},
+	name_resolution::ResolvedPathKind,
 	parser::{AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
-		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedFunctionDecl, TypedImplItem, TypedModule, TypedStmt,
-		TypedStructDecl, TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl,
-		TypedVariantDecl,
+		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind, TypedFunctionDecl, TypedImplItem, TypedModule,
+		TypedStmt, TypedStructDecl, TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl,
+		TypedVariableDecl, TypedVariantDecl,
 	},
 };
 
@@ -525,15 +526,17 @@ struct MirLowerer<'a>
 {
 	diagnostics: Vec<DiagnosticBuilder>,
 	global: &'a GlobalSymbolTable,
+	module: &'a TypedModule,
 }
 
 impl<'a> MirLowerer<'a>
 {
-	const fn new(global: &'a GlobalSymbolTable) -> Self
+	const fn new(global: &'a GlobalSymbolTable, module: &'a TypedModule) -> Self
 	{
 		return Self {
 			diagnostics: Vec::new(),
 			global,
+			module,
 		};
 	}
 
@@ -898,7 +901,90 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_expr_into(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirOperand
 	{
-		todo!("lower_expr_into")
+		return match &expr.kind {
+			TypedExprKind::Identifier { path } => match &path.kind {
+				ResolvedPathKind::Resolved(sym) => {
+					let place = if let Some(&local_id) = builder.local_map.get(sym) {
+						MirPlace {
+							base: MirPlaceBase::Local(local_id),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						}
+					} else {
+						MirPlace {
+							base: MirPlaceBase::Global(*sym),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						}
+					};
+					if expr
+						.ty
+						.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+					{
+						MirOperand::Copy(place)
+					} else {
+						MirOperand::Move(place)
+					}
+				}
+				ResolvedPathKind::AssocItem { base, .. } => {
+					let place = MirPlace {
+						base: MirPlaceBase::Global(*base),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+					if expr
+						.ty
+						.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+					{
+						MirOperand::Copy(place)
+					} else {
+						MirOperand::Move(place)
+					}
+				}
+				ResolvedPathKind::Primitive(_) => {
+					self.diagnostics.push(compiler_bug!(
+						expr.span,
+						"primitive type used as value expression in MIR lowering"
+					));
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::Undef,
+						ty: expr.ty.clone(),
+					})
+				}
+			},
+			TypedExprKind::Literal { value } => todo!(),
+			TypedExprKind::Default { heap_call } => todo!(),
+			TypedExprKind::Unary { op, expr } => todo!(),
+			TypedExprKind::Binary { op, lhs, rhs } => todo!(),
+			TypedExprKind::Cast { ty, expr } => todo!(),
+			TypedExprKind::Call {
+				callee,
+				call_type,
+				named_generics,
+				args,
+			} => todo!(),
+			TypedExprKind::InternalCall { intrinsic } => todo!(),
+			TypedExprKind::Field { base, name } => todo!(),
+			TypedExprKind::Index { base, index } => todo!(),
+			TypedExprKind::Range(typed_range_expr) => todo!(),
+			TypedExprKind::Tuple { elements } => todo!(),
+			TypedExprKind::Array(typed_array_literal) => todo!(),
+			TypedExprKind::StructInit {
+				path,
+				fields,
+				base,
+				has_rest,
+			} => todo!(),
+			TypedExprKind::Block(typed_block) => todo!(),
+			TypedExprKind::UnsafeBlock(typed_block) => todo!(),
+			TypedExprKind::Switch { expr, arms } => todo!(),
+			TypedExprKind::If {
+				cond,
+				then_block,
+				else_branch,
+			} => todo!(),
+			TypedExprKind::Loop { label, body } => todo!(),
+		};
 	}
 
 	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
@@ -1009,7 +1095,7 @@ pub fn lower_module(
 	global: &GlobalSymbolTable,
 ) -> Result<(MirModule, Vec<DiagnosticBuilder>), Vec<DiagnosticBuilder>>
 {
-	let mut lowerer = MirLowerer::new(global);
+	let mut lowerer = MirLowerer::new(global, module);
 
 	let mir_mod: MirModule = lowerer.lower_module(module);
 

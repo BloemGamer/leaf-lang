@@ -436,7 +436,7 @@ fn run(
 	}
 
 	if args.types {
-		for TypedModule { ast, path } in &typed_modules {
+		for TypedModule { ast, path, caches: _ } in &typed_modules {
 			println!(
 				"-------------------------------------------------------\n::{} =>\n{}",
 				path.join("::"),
