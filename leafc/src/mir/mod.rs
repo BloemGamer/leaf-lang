@@ -646,7 +646,7 @@ impl<'a> MirLowerer<'a>
 			if !matches!(f.signature.return_type, Ty::Unit | Ty::Never) {
 				let ret_id = builder.alloc_local(
 					f.signature.return_type.clone(),
-					Some("__return".to_string()),
+					Some("#__return".to_string()),
 					true,
 					f.span,
 				);
@@ -771,9 +771,10 @@ impl<'a> MirLowerer<'a>
 			TypedStmt::Expr(typed_expr) => todo!(),
 			TypedStmt::Break { label, value, span } => todo!(),
 			TypedStmt::Continue { label, span } => {
-				let continue_block = match builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
-					Some(ct) => ct.continue_target,
-					None => {
+				let continue_block =
+					if let Some(ct) = builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
+						ct.continue_target
+					} else {
 						self.diagnostics.push(
 							MirError {
 								span: *span,
@@ -782,8 +783,8 @@ impl<'a> MirLowerer<'a>
 							.build(),
 						);
 						BlockId(0)
-					}
-				};
+					};
+				builder.set_terminator(MirTerminator::Goto { target: continue_block });
 			}
 			TypedStmt::If {
 				cond,
