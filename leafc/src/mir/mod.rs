@@ -903,12 +903,35 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
 	{
-		todo!("lower_expr_as_place")
+		let operand = self.lower_expr_into(builder, expr);
+		match operand {
+			MirOperand::Copy(place) | MirOperand::Move(place) => return place,
+			MirOperand::Const(_) => {
+				// Constants can't be assigned to directly; materialize into a temp first
+				let ty: Ty = operand.ty().clone();
+				let temp: LocalId = builder.alloc_local(ty.clone(), None, false, expr.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: ty.clone(),
+					},
+					rvalue: MirRvalue::Use(operand),
+					span: expr.span(),
+				});
+				return MirPlace {
+					base: MirPlaceBase::Local(temp),
+					projections: Vec::new(),
+					ty,
+				};
+			}
+		}
 	}
 
 	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
 	{
-		todo!("lower_expr_as_operand");
+		let mut builder = BodyBuilder::new(Vec::new());
+		return self.lower_expr_into(&mut builder, e);
 	}
 
 	fn lower_struct(s: &TypedStructDecl) -> MirTypeDef
