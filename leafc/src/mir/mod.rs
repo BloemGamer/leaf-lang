@@ -441,6 +441,7 @@ struct LoopContext
 	label: String,
 	break_target: BlockId,
 	continue_target: BlockId,
+	result_local: Option<LocalId>,
 }
 
 struct BodyBuilder
@@ -769,7 +770,41 @@ impl<'a> MirLowerer<'a>
 				builder.current_block = dead;
 			}
 			TypedStmt::Expr(typed_expr) => todo!(),
-			TypedStmt::Break { label, value, span } => todo!(),
+			TypedStmt::Break { label, value, span } => {
+				let (break_block, result_local) =
+					if let Some(ct) = builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
+						(ct.break_target, ct.result_local)
+					} else {
+						self.diagnostics.push(
+							MirError {
+								span: *span,
+								kind: MirErrorKind::UndefinedLabel { label: label.clone() },
+							}
+							.build(),
+						);
+						(BlockId(0), None)
+					};
+
+				if let Some(val) = value {
+					let operand = self.lower_expr_into(builder, val);
+					if let Some(nresult_local) = result_local {
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(nresult_local),
+								projections: Vec::new(),
+								ty: operand.ty().clone(),
+							},
+							rvalue: MirRvalue::Use(operand),
+							span: *span,
+						});
+					}
+				}
+
+				builder.set_terminator(MirTerminator::Goto { target: break_block });
+
+				let dead = builder.alloc_block();
+				builder.current_block = dead;
+			}
 			TypedStmt::Continue { label, span } => {
 				let continue_block =
 					if let Some(ct) = builder.loop_stack.iter().rev().find(|ctx| return ctx.label == *label) {
