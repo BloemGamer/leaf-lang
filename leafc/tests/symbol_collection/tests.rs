@@ -170,16 +170,16 @@ fn test_generic_parameters()
 fn test_heap_generics()
 {
 	let source = r"
-			fn!<IO, Alloc> heap_func() {
+			fn!<io, alloc> heap_func() {
 				return;
 			}
 		";
 
 	let table = parse_and_collect(source).unwrap();
 
-	// IO and Alloc should be in the symbol table as generic params
-	let (_, io_symbol) = find_symbol_by_name(&table, "IO").expect("IO generic not found");
-	let (_, alloc_symbol) = find_symbol_by_name(&table, "Alloc").expect("Alloc generic not found");
+	// io and alloc should be in the symbol table as generic params
+	let (_, io_symbol) = find_symbol_by_name(&table, "io").expect("IO generic not found");
+	let (_, alloc_symbol) = find_symbol_by_name(&table, "alloc").expect("Alloc generic not found");
 
 	assert!(matches!(io_symbol.kind, SymbolKind::GenericParam));
 	assert!(matches!(alloc_symbol.kind, SymbolKind::GenericParam));

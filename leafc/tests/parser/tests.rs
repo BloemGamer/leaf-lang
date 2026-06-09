@@ -4390,7 +4390,7 @@ fn test_parse_heap_function_with_params()
 #[test]
 fn test_parse_heap_function_with_generics()
 {
-	let input = "fn!<Alloc> create() -> Box<T> {}";
+	let input = "fn!<alloc> create() -> Box<T> {}";
 	let result = parse_program_from_str(input);
 	assert!(result.is_ok());
 	let program = result.unwrap();
@@ -4535,7 +4535,7 @@ fn test_parse_heap_call_with_named_generics()
 #[test]
 fn test_parse_maybe_heap_call_with_named_generics()
 {
-	let input = "allocate?<IO -> StdIO>(data)";
+	let input = "allocate?<io -> StdIO>(data)";
 	let result = parse_expr_from_str(input);
 	assert!(result.is_ok());
 	match result.unwrap() {
@@ -4546,7 +4546,7 @@ fn test_parse_maybe_heap_call_with_named_generics()
 		} => {
 			assert_eq!(call_type, CallType::UserMaybeHeap);
 			assert_eq!(named_generics.len(), 1);
-			assert_eq!(named_generics[0].0, "IO");
+			assert_eq!(named_generics[0].0, "io");
 		}
 		_ => panic!("Expected call expression"),
 	}
@@ -4555,7 +4555,7 @@ fn test_parse_maybe_heap_call_with_named_generics()
 #[test]
 fn test_parse_heap_call_multiple_named_generics()
 {
-	let input = "create!<Alloc -> System, Error -> MyError>()";
+	let input = "create!<alloc -> System, io -> MyIo>()";
 	let result = parse_expr_from_str(input);
 	assert!(result.is_ok());
 	match result.unwrap() {
@@ -4566,8 +4566,8 @@ fn test_parse_heap_call_multiple_named_generics()
 		} => {
 			assert_eq!(call_type, CallType::UserHeap);
 			assert_eq!(named_generics.len(), 2);
-			assert_eq!(named_generics[0].0, "Alloc");
-			assert_eq!(named_generics[1].0, "Error");
+			assert_eq!(named_generics[0].0, "alloc");
+			assert_eq!(named_generics[1].0, "io");
 		}
 		_ => panic!("Expected call expression"),
 	}
@@ -4988,7 +4988,7 @@ fn test_parse_default_with_args_error()
 fn test_parse_allocator_pattern()
 {
 	let input = r"
-            fn! create_buffer<Alloc: Alloc>(size: usize) -> Buffer {
+            fn! create_buffer<alloc: Alloc>(size: usize) -> Buffer {
                 var ptr: *u8 = Alloc.allocate!(size);
                 return Buffer { ptr, size };
             }
@@ -5002,7 +5002,7 @@ fn test_parse_conditional_heap_allocation()
 {
 	let input = r"{
             if should_heap {
-                create!<Alloc -> Heap>(data)
+                create!<alloc -> Heap>(data)
             } else {
                 create(data)
             }
@@ -5045,7 +5045,7 @@ fn test_parse_function_returning_heap_allocated()
 {
 	let input = r"
             fn! create_vec<T>() -> Vec<T> {
-                Vec!<Alloc -> System>()
+                Vec!<alloc -> System>()
             }
         ";
 	let result = parse_program_from_str(input);
@@ -6168,7 +6168,7 @@ fn test_parse_quadruple_nested_generics()
 #[test]
 fn test_parse_heap_function_with_both_generic_types()
 {
-	let input = "fn!<Alloc -> CAlloc> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
+	let input = "fn!<alloc -> CAlloc> create<T: Clone>(alloc: A, value: T) -> Box<T> {}";
 	let result = parse_program_from_str(input);
 	assert!(result.is_ok());
 }

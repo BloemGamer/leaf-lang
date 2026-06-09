@@ -616,7 +616,7 @@ fn void_function_no_return_ok()
 fn heap_fn_with_explicit_allocator()
 {
 	ok(r"
-			fn!<Alloc -> std::CAlloc> heap_fn() {
+			fn!<alloc -> std::CAlloc> heap_fn() {
 				var _: i64 = 0i64;
 			}
 		");
@@ -626,8 +626,8 @@ fn heap_fn_with_explicit_allocator()
 fn heap_fn_calling_other_heap_fn()
 {
 	ok(r"
-			fn!<Alloc -> std::CAlloc> inner() {}
-			fn!<Alloc -> std::CAlloc> outer() { inner!(); }
+			fn!<alloc -> std::CAlloc> inner() {}
+			fn!<alloc -> std::CAlloc> outer() { inner!(); }
 		");
 }
 
@@ -636,7 +636,7 @@ fn heap_fn_in_call()
 {
 	ok(r"
 			fn! inner() {}
-			fn! outer() { inner!<Alloc -> Alloc>(); }
+			fn! outer() { inner!<alloc -> alloc>(); }
 		");
 }
 
@@ -649,7 +649,7 @@ fn heap_fn_in_call_no_alloc_trait()
 			fn! inner() {}
 			fn! outer() {
 				var f: Foo = Foo{};
-				inner!<Alloc -> f>();
+				inner!<alloc -> f>();
 			}
 		",
 		"",
@@ -752,7 +752,7 @@ fn impl_trait_local_variable()
 {
 	// mirrors `var mut aa: impl Int = 0i64` from the sample
 	ok(r"
-			fn!<Alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 			}
 		");
@@ -762,7 +762,7 @@ fn impl_trait_local_variable()
 fn impl_trait_var_reassign_same_concrete_type()
 {
 	ok(r"
-			fn!<Alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 				var mut ab: impl Int = aa;
 			}
@@ -776,7 +776,7 @@ fn impl_trait_parameter_stays_opaque()
 	// Matches test3_should_fail in the sample.
 	err(
 		r"
-			fn!<Alloc -> std::CAlloc> test(i: impl Int) {
+			fn!<alloc -> std::CAlloc> test(i: impl Int) {
 				i = 1i64;
 			}
 		",
@@ -804,7 +804,7 @@ fn range_assigned_to_impl_iterator()
 {
 	// `var mut a: impl Iterator<Item = i64> = 0..10`
 	ok(r"
-			fn!<Alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::CAlloc> test() {
 				var mut a: impl Iterator<Item = i64> = 0..10;
 				a = 0..10;
 			}
@@ -1085,10 +1085,10 @@ fn infer_from_typed_variable_use()
 #[test]
 fn alloc_returns_pointer()
 {
-	// `var asd: *i64 = Alloc.alloc()` from the sample
+	// `var asd: *i64 = alloc.alloc()` from the sample
 	ok(r"
 			fn! main() {
-				var asd: *i64 = Alloc.alloc(10);
+				var asd: *i64 = alloc.alloc(10);
 			}
 		");
 }
@@ -1099,7 +1099,7 @@ fn alloc_wrong_pointer_type_is_error()
 	err(
 		r"
 			fn! main() {
-				var asd: *bool = Alloc.alloc(10);
+				var asd: *bool = alloc.alloc(10);
 				var _: *i64 = asd;
 			}
 		",
@@ -1193,18 +1193,18 @@ fn static_method_wrong_arg_type_is_error()
 	);
 }
 
-// ── heap-call with explicit generic allocator (`fn!<Alloc -> …>`) ────────
+// ── heap-call with explicit generic allocator (`fn!<alloc -> …>`) ────────
 
 #[test]
 fn heap_fn_named_generic_alloc_call()
 {
-	// `B::t8!<Alloc -> Alloc>(8)` — explicit allocator forwarding
+	// `B::t8!<alloc -> alloc>(8)` — explicit allocator forwarding
 	ok(r"
 			struct A { a: i64 }
 			type B = A;
 			impl B { fn! t8(i: i64) {} }
 			fn! main() {
-				B::t8!<Alloc -> Alloc>(8i64);
+				B::t8!<alloc -> alloc>(8i64);
 				B::t8!(8i64);
 			}
 		");
@@ -1409,7 +1409,7 @@ fn generic_fn_with_multiple_bounds()
 {
 	// mirrors `fn!<…> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int`
 	ok(r"
-			fn!<Alloc -> std::CAlloc> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int {
+			fn!<alloc -> std::CAlloc> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int {
 				var a: T = input;
 				input = T::create();
 				return 0i64;
@@ -1422,7 +1422,7 @@ fn generic_missing_bound_is_error()
 {
 	err(
 		r"
-			fn!<Alloc -> std::CAlloc> test3<T: Iterator<Item = i64>>(input: T) -> impl Int {
+			fn!<alloc -> std::CAlloc> test3<T: Iterator<Item = i64>>(input: T) -> impl Int {
 				input = T::create();   // Create bound missing → T::create() unresolved
 				return 0i64;
 			}

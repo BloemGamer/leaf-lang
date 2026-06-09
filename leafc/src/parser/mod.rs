@@ -637,7 +637,7 @@ pub struct GenericHeapParam
 pub enum HeapGenericKind
 {
 	Forwarded,
-	/// Mostly used for C functions, so they can be set to have IO or Alloc, while not being able to be changed
+	/// Mostly used for C functions, so they can be set to have io or alloc, while not being able to be changed
 	Forced(Type),
 }
 
@@ -1269,20 +1269,20 @@ impl Expr
 ///
 /// # Variants
 /// * `Regular` - Regular function call: `func()`
-/// * `UserHeap` - User-written heap call: `func!<IO: x>()`
-/// * `UserMaybeHeap` - User-written for templates call: `func?<IO: x>()`
-/// * `CompilerHeap` - Compiler-generated call: `func?<IO: x>()`
+/// * `UserHeap` - User-written heap call: `func!<io: x>()`
+/// * `UserMaybeHeap` - User-written for templates call: `func?<io: x>()`
+/// * `CompilerHeap` - Compiler-generated call: `func?<io: x>()`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
 pub enum CallType
 {
 	/// Regular function call: `func()`
 	Regular,
-	/// User-written heap call: `func!<IO: x>()`
+	/// User-written heap call: `func!<io: x>()`
 	UserHeap,
-	/// User-written for templates call: `func?<IO: x>()`
+	/// User-written for templates call: `func?<io: x>()`
 	UserMaybeHeap,
-	/// Compiler-generated call: `func?<IO: x>()`
+	/// Compiler-generated call: `func?<io: x>()`
 	CompilerHeap,
 }
 
@@ -2440,7 +2440,7 @@ pub struct VariantMember
 	pub span: Span,
 }
 
-pub const ALLOWED_HEAP_GENERICS: [&str; 2] = ["IO", "Alloc"];
+pub const ALLOWED_HEAP_GENERICS: [&str; 2] = ["io", "alloc"];
 
 impl<'s, 'c, T> Parser<'s, 'c, T>
 where

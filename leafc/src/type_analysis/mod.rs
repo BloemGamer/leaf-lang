@@ -1,6 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 // TODO: change to the new error system
+// TODO: rewrite this probably, I there are a lot of weird things in here, and the reflection system probs needs to be at least partly in here
 
 #[cfg(test)]
 #[path = "../../tests/type_analysis/tests.rs"]
@@ -1846,18 +1847,18 @@ impl Default for TypeCaches
 {
 	fn default() -> Self
 	{
-		Self {
-			env: Default::default(),
-			field: Default::default(),
-			field_default: Default::default(),
-			method: Default::default(),
-			method_fn: Default::default(),
-			param: Default::default(),
-			impl_assoc: Default::default(),
-			impl_assoc_generic_params: Default::default(),
-			trait_impls: Default::default(),
+		return Self {
+			env: TypeEnv::default(),
+			field: FieldTypeCache::default(),
+			field_default: HashMap::default(),
+			method: MethodTypeCache::default(),
+			method_fn: MethodFnCache::default(),
+			param: ParamTypeCache::default(),
+			impl_assoc: HashMap::default(),
+			impl_assoc_generic_params: HashMap::default(),
+			trait_impls: HashMap::default(),
 			copy_sym: SymbolId(usize::MAX), // This one is always overwritten, and so can be safely be written to a nonsence value
-		}
+		};
 	}
 }
 
@@ -1982,6 +1983,13 @@ impl<'a> Checker<'a>
 	{
 		if let Some(ty) = self.caches.env.get(id) {
 			return Ok(ty.clone());
+		}
+
+		if id.0 < self.global.symbols.len() {
+			let name = &self.global.symbol(id).name;
+			if let Some(ty) = self.fn_ctx.heap_params.get(name.as_str()) {
+				return Ok(ty.clone());
+			}
 		}
 
 		if id.0 < self.global.symbols.len() {
@@ -3084,22 +3092,36 @@ impl<'a> Checker<'a>
 		for hp in &sig.heap_generics {
 			let ty: Ty = match &hp.kind {
 				ResolvedGenericHeapKind::Forwarded => {
-					let bounds: Vec<TyBound> = self
-						.global
-						.symbols
-						.iter()
-						.enumerate()
-						.find_map(|(i, sym)| {
-							return if sym.name == hp.name && matches!(sym.kind, SymbolKind::Trait) {
-								Some(vec![TyBound::Trait {
-									symbol: SymbolId(i),
-									args: Vec::new(),
-								}])
-							} else {
-								None
-							};
-						})
-						.unwrap_or_default();
+					let trait_sym = match hp.name.as_str() {
+						// TODO: I don't like this solution for now, but it's good enough for finishing V0.1
+						"alloc" => self.traits.heap_syms.alloc,
+						"io" => self.traits.heap_syms.io,
+						_ => None,
+					};
+					let bounds = match trait_sym {
+						Some(sym) => vec![TyBound::Trait {
+							symbol: sym,
+							args: Vec::new(),
+						}],
+						None => {
+							// fallback: search by name case-insensitively
+							self.global
+								.symbols
+								.iter()
+								.enumerate()
+								.find_map(|(i, sym)| {
+									if sym.name.eq_ignore_ascii_case(&hp.name) && matches!(sym.kind, SymbolKind::Trait)
+									{
+										return Some(vec![TyBound::Trait {
+											symbol: SymbolId(i),
+											args: Vec::new(),
+										}]);
+									}
+									return None;
+								})
+								.unwrap_or_default()
+						}
+					};
 					if bounds.is_empty() {
 						Ty::Generic {
 							name: hp.name.clone(),
@@ -4288,6 +4310,16 @@ impl<'a> Checker<'a>
 								},
 							));
 						}
+
+						let sym_name = self.global.symbol(*id).name.clone();
+						if let Some(hp_ty) = self.fn_ctx.heap_params.get(&sym_name).cloned() {
+							return Ok(TypedExpr {
+								kind: TypedExprKind::Identifier { path: path.clone() },
+								ty: hp_ty,
+								span,
+							});
+						}
+
 						let mut ty = self.ty_of_symbol(*id, span)?;
 
 						ty = match ty {
@@ -5147,6 +5179,7 @@ impl<'a> Checker<'a>
 
 				if *call_type != CallType::Regular {
 					let required_trait_sym: Option<SymbolId> = match call_type {
+						// TODO: figuere out TF is happening here??
 						CallType::UserHeap | CallType::CompilerHeap => self.traits.heap_syms.alloc,
 						CallType::UserMaybeHeap => self.traits.heap_syms.io,
 						CallType::Regular => unreachable!(),
@@ -7854,9 +7887,7 @@ pub fn check_types(
 		.map_err(CompileError::Type)?;
 
 	checker.caches.trait_impls = checker.traits.impls;
-	checker.caches.copy_sym = if let Some(copy_sym) = resolve_trait_at_path(global, COPY_TRAIT_PATH) {
-		copy_sym
-	} else {
+	checker.caches.copy_sym = resolve_trait_at_path(global, COPY_TRAIT_PATH).unwrap_or_else(|| {
 		todo!(
 			"the Copy trait should be defined in the stdlib (make better error when the checker is switched to the new diagnostics system)"
 		);
@@ -7864,7 +7895,7 @@ pub fn check_types(
 		// 	Span::default(),
 		// 	"the Copy trait should be defined in the stdlib"
 		// ));
-	};
+	});
 
 	return Ok(TypedModule {
 		path: module.path.clone(),
