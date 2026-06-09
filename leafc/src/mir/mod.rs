@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../../tests/mir/tests.rs"]
+mod tests;
+
 mod display;
 
 use std::collections::HashMap;
@@ -309,6 +313,11 @@ pub enum MirOperand
 
 impl MirOperand
 {
+	pub const DUMMY: MirOperand = MirOperand::Const(MirLiteral {
+		value: MirLiteralValue::Undef,
+		ty: Ty::Never,
+	});
+
 	pub const fn ty(&self) -> &Ty
 	{
 		match self {
@@ -1249,7 +1258,11 @@ impl<'a> MirLowerer<'a>
 				}
 			}
 			TypedExprKind::Range(_) => {
-				todo!("I think this one is not able to be produced but just for the check")
+				self.diagnostics.push(compiler_bug!(
+					expr.span(),
+					"`TypedExprKind::Range` should be removed by the desugarer"
+				));
+				MirOperand::DUMMY
 			}
 			TypedExprKind::Tuple { elements } => {
 				let operands: Vec<MirOperand> = elements
@@ -1531,12 +1544,127 @@ impl<'a> MirLowerer<'a>
 					},
 				)
 			}
+
 			TypedExprKind::If {
 				cond,
 				then_block,
 				else_branch,
-			} => todo!(),
-			TypedExprKind::Loop { label, body } => todo!(),
+			} => {
+				let cond_operand: MirOperand = self.lower_expr_into(builder, cond);
+
+				let then_bb: BlockId = builder.alloc_block();
+				let else_bb: BlockId = builder.alloc_block();
+				let merge_bb: BlockId = builder.alloc_block();
+
+				let result_local: Option<LocalId> = if matches!(expr.ty, Ty::Unit | Ty::Never) {
+					None
+				} else {
+					Some(builder.alloc_local(expr.ty.clone(), None, false, expr.span()))
+				};
+
+				builder.set_terminator(MirTerminator::Branch {
+					cond: cond_operand,
+					then_block: then_bb,
+					else_block: else_bb,
+				});
+
+				builder.current_block = then_bb;
+				for stmt in &then_block.stmts {
+					self.lower_stmt_into(builder, stmt);
+				}
+				if let Some(res) = result_local
+					&& let Some(tail) = &then_block.tail_expr
+				{
+					let then_operand = self.lower_expr_into(builder, tail);
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						},
+						rvalue: MirRvalue::Use(then_operand),
+						span: expr.span(),
+					});
+				}
+				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
+
+				builder.current_block = else_bb;
+				if let Some(else_expr) = else_branch {
+					let else_operand = self.lower_expr_into(builder, else_expr);
+					if let Some(res) = result_local {
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(res),
+								projections: Vec::new(),
+								ty: expr.ty.clone(),
+							},
+							rvalue: MirRvalue::Use(else_operand),
+							span: expr.span(),
+						});
+					}
+				}
+				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
+
+				builder.current_block = merge_bb;
+
+				result_local.map_or(
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ZeroInit,
+						ty: Ty::Unit,
+					}),
+					|res| {
+						let place = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
+			}
+
+			TypedExprKind::Loop { label, body } => {
+				let loop_bb: BlockId = builder.alloc_block();
+				let exit_bb: BlockId = builder.alloc_block();
+
+				let result_local: Option<LocalId> = if matches!(expr.ty, Ty::Unit | Ty::Never) {
+					None
+				} else {
+					Some(builder.alloc_local(expr.ty.clone(), None, false, expr.span()))
+				};
+
+				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
+
+				builder.loop_stack.push(LoopContext {
+					label: label.clone(),
+					break_target: exit_bb,
+					continue_target: loop_bb,
+					result_local,
+				});
+
+				builder.current_block = loop_bb;
+				self.lower_block_into(builder, body);
+				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
+
+				builder.loop_stack.pop();
+
+				builder.current_block = exit_bb;
+
+				result_local.map_or(
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ZeroInit,
+						ty: Ty::Unit,
+					}),
+					|res| {
+						let place: MirPlace = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
+			}
 		};
 	}
 
