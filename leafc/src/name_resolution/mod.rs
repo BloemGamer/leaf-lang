@@ -373,7 +373,7 @@ pub enum ResolvedExpr
 	},
 	Loop
 	{
-		label: Option<String>,
+		label: String,
 		body: Box<ResolvedBlock>,
 		#[ignored(PartialEq)]
 		span: Span,
@@ -2656,7 +2656,13 @@ impl<'a> Resolver<'a>
 				let rbody: ResolvedBlock = self.resolve_block_contents(body);
 				self.current_scope = prev;
 				ResolvedExpr::Loop {
-					label: label.clone(),
+					label: if let Some(l) = label {
+						l.clone()
+					} else {
+						self.diagnostics
+							.push(compiler_bug!(*span, "desugarer should have given loop a label"));
+						"ERROR".to_string()
+					},
 					body: Box::new(rbody),
 					span: *span,
 				}

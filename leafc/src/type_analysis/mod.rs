@@ -700,7 +700,7 @@ pub enum TypedExprKind
 	},
 	Loop
 	{
-		label: Option<String>,
+		label: String,
 		body: Box<TypedBlock>,
 	},
 }

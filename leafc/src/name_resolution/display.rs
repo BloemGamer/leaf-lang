@@ -1056,9 +1056,7 @@ pub fn write_resolved_expr(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, exp
 			return Ok(());
 		}
 		ResolvedExpr::Loop { label, body, .. } => {
-			if let Some(lbl) = label {
-				write!(f, "'{}: ", lbl)?;
-			}
+			write!(f, "'{}: ", label)?;
 			write!(f, "loop ")?;
 			return write_resolved_block(f, w, body);
 		}

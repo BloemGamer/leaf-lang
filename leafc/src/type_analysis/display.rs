@@ -881,9 +881,7 @@ fn write_typed_expr_kind(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, kind:
 			return Ok(());
 		}
 		TypedExprKind::Loop { label, body } => {
-			if let Some(lbl) = label {
-				write!(f, "'{lbl}: ")?;
-			}
+			write!(f, "'{label}: ")?;
 			write!(f, "loop ")?;
 			return write_typed_block(f, w, body);
 		}
