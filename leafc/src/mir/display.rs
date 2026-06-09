@@ -449,6 +449,12 @@ pub fn write_mir_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MirRvalue) -> fmt::
 			}
 			return Ok(());
 		}
+
+		MirRvalue::Discriminant(place) => {
+			write!(f, "discriminant(")?;
+			write_mir_place(f, place)?;
+			return write!(f, ")");
+		}
 	}
 }
 

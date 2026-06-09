@@ -346,7 +346,8 @@ pub enum MirRvalue
 
 	Unary
 	{
-		op: UnaryOp, operand: MirOperand
+		op: UnaryOp,
+		operand: MirOperand,
 	},
 
 	Binary
@@ -358,19 +359,22 @@ pub enum MirRvalue
 
 	Cast
 	{
-		ty: Ty, operand: MirOperand
+		ty: Ty,
+		operand: MirOperand,
 	},
 
 	/// Take the address of a place: `&place` or `&mut place`.
 	Ref
 	{
-		mutable: bool, place: MirPlace
+		mutable: bool,
+		place: MirPlace,
 	},
 
 	/// Pointer arithmetic / raw address-of.
 	RawPtr
 	{
-		mutable: bool, place: MirPlace
+		mutable: bool,
+		place: MirPlace,
 	},
 
 	/// Struct / union / variant literal. All field values are operands
@@ -384,7 +388,8 @@ pub enum MirRvalue
 	/// `[a, b, c]` - all elements are operands.
 	Array
 	{
-		elements: Vec<MirOperand>, elem_ty: Ty
+		elements: Vec<MirOperand>,
+		elem_ty: Ty,
 	},
 
 	/// `[val; count]`
@@ -407,6 +412,8 @@ pub enum MirRvalue
 		inclusive: bool,
 		elem_ty: Ty,
 	},
+
+	Discriminant(MirPlace),
 }
 
 #[derive(Debug, Clone)]
@@ -662,7 +669,7 @@ impl<'a> MirLowerer<'a>
 			if !matches!(f.signature.return_type, Ty::Unit | Ty::Never) {
 				let ret_id = builder.alloc_local(
 					f.signature.return_type.clone(),
-					Some("#__return".to_string()),
+					Some("#return".to_string()),
 					true,
 					f.span,
 				);
@@ -1410,7 +1417,120 @@ impl<'a> MirLowerer<'a>
 					|tail| return self.lower_expr_into(builder, tail),
 				)
 			}
-			TypedExprKind::Switch { expr, arms } => todo!(),
+			TypedExprKind::Switch { expr: scrutinee, arms } => {
+				let scrutinee_operand: MirOperand = self.lower_expr_into(builder, scrutinee);
+
+				let scrutinee_local: LocalId = builder.alloc_local(scrutinee.ty.clone(), None, false, scrutinee.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(scrutinee_local),
+						projections: Vec::new(),
+						ty: scrutinee.ty.clone(),
+					},
+					rvalue: MirRvalue::Use(scrutinee_operand),
+					span: scrutinee.span(),
+				});
+
+				let result_local: Option<LocalId> = if matches!(expr.ty, Ty::Unit | Ty::Never) {
+					None
+				} else {
+					Some(builder.alloc_local(expr.ty.clone(), None, false, expr.span()))
+				};
+
+				let merge_bb: BlockId = builder.alloc_block();
+				let unreachable_bb: BlockId = builder.alloc_block();
+
+				let mut next_test_bb: BlockId = builder.current_block;
+
+				for (i, arm) in arms.iter().enumerate() {
+					let is_last: bool = i == arms.len() - 1;
+					let body_bb: BlockId = builder.alloc_block();
+					let fail_bb: BlockId = if is_last { unreachable_bb } else { builder.alloc_block() };
+					builder.current_block = next_test_bb;
+					self.lower_pattern_test(builder, &arm.pattern, scrutinee_local, &scrutinee.ty, body_bb, fail_bb);
+
+					builder.current_block = body_bb;
+
+					self.lower_pattern_bindings(builder, &arm.pattern, scrutinee_local);
+
+					let arm_operand: MirOperand = match &arm.body {
+						TypedSwitchBody::Expr(e) => self.lower_expr_into(builder, e),
+						TypedSwitchBody::Block(b) => {
+							for stmt in &b.stmts {
+								self.lower_stmt_into(builder, stmt);
+							}
+							b.tail_expr.as_ref().map_or(
+								MirOperand::Const(MirLiteral {
+									value: MirLiteralValue::ZeroInit,
+									ty: Ty::Unit,
+								}),
+								|tail| return self.lower_expr_into(builder, tail),
+							)
+						}
+					};
+
+					if let Some(res) = result_local {
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(res),
+								projections: Vec::new(),
+								ty: expr.ty.clone(),
+							},
+							rvalue: MirRvalue::Use(arm_operand),
+							span: arm.span,
+						});
+					}
+					builder.set_terminator(MirTerminator::Goto { target: merge_bb });
+					next_test_bb = fail_bb;
+				}
+
+				builder.current_block = unreachable_bb;
+				// TODO: the checker does not validate if patterns are exausted, so inserting a panic for the default value, should be removed if this check is implemented
+				{
+					let panic_bb: BlockId = builder.alloc_block();
+					let base: MirPlaceBase =
+						MirPlaceBase::Local(builder.alloc_local(Ty::Unit, None, false, expr.span()));
+
+					builder.set_terminator(MirTerminator::CallAndContinue {
+						callee: MirCallee::Intrinsic(Intrinsic::Panic),
+						args: vec![MirOperand::Const(MirLiteral {
+							value: MirLiteralValue::Literal(Literal::String {
+								value: "non-exhaustive match".to_string(),
+								flags: StringFlags::NONE,
+								span: scrutinee.span(),
+							}),
+							ty: Ty::Primitive(Primitive::Str),
+						})],
+						dest: MirPlace {
+							base,
+							projections: Vec::new(),
+							ty: Ty::Unit,
+						},
+						next: panic_bb,
+						unwind: None,
+						span: expr.span(),
+					});
+					builder.current_block = panic_bb;
+					builder.set_terminator(MirTerminator::Unreachable);
+				}
+
+				builder.current_block = merge_bb;
+
+				result_local.map_or(
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ZeroInit,
+						ty: Ty::Unit,
+					}),
+					|res| {
+						let place: MirPlace = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
+			}
 			TypedExprKind::If {
 				cond,
 				then_block,
@@ -1420,9 +1540,486 @@ impl<'a> MirLowerer<'a>
 		};
 	}
 
+	fn lower_pattern_test(
+		&mut self,
+		builder: &mut BodyBuilder,
+		pattern: &TypedPattern,
+		scrutinee_local: LocalId,
+		scrutinee_ty: &Ty,
+		success: BlockId,
+		fail: BlockId,
+	)
+	{
+		match pattern {
+			TypedPattern::Wildcard { .. } | TypedPattern::TypedIdentifier { .. } => {
+				builder.set_terminator(MirTerminator::Goto { target: success });
+			}
+
+			TypedPattern::Literal { value, ty, span } => {
+				let scrutinee_operand: MirOperand = self.copy_or_move(MirPlace {
+					base: MirPlaceBase::Local(scrutinee_local),
+					projections: Vec::new(),
+					ty: scrutinee_ty.clone(),
+				});
+				let pattern_operand: MirOperand = MirOperand::Const(MirLiteral {
+					value: MirLiteralValue::Literal(value.clone()),
+					ty: ty.clone(),
+				});
+				let cmp_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, *span);
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(cmp_local),
+						projections: Vec::new(),
+						ty: Ty::Primitive(Primitive::Bool),
+					},
+					rvalue: MirRvalue::Binary {
+						op: BinaryOp::Eq,
+						lhs: scrutinee_operand,
+						rhs: pattern_operand,
+					},
+					span: *span,
+				});
+				builder.set_terminator(MirTerminator::Branch {
+					cond: MirOperand::Copy(MirPlace {
+						base: MirPlaceBase::Local(cmp_local),
+						projections: Vec::new(),
+						ty: Ty::Primitive(Primitive::Bool),
+					}),
+					then_block: success,
+					else_block: fail,
+				});
+			}
+
+			TypedPattern::Range(range_expr) => {
+				let span: Span = range_expr.span();
+				let scrutinee_place: MirPlace = MirPlace {
+					base: MirPlaceBase::Local(scrutinee_local),
+					projections: Vec::new(),
+					ty: scrutinee_ty.clone(),
+				};
+
+				let check_upper_bb: BlockId = builder.alloc_block();
+
+				if let Some(start) = &range_expr.start {
+					let start_operand: MirOperand = self.lower_expr_as_operand(start);
+					let ge_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, span);
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(ge_local),
+							projections: Vec::new(),
+							ty: Ty::Primitive(Primitive::Bool),
+						},
+						rvalue: MirRvalue::Binary {
+							op: BinaryOp::Ge,
+							lhs: MirOperand::Copy(scrutinee_place.clone()),
+							rhs: start_operand,
+						},
+						span,
+					});
+					builder.set_terminator(MirTerminator::Branch {
+						cond: MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(ge_local),
+							projections: Vec::new(),
+							ty: Ty::Primitive(Primitive::Bool),
+						}),
+						then_block: check_upper_bb,
+						else_block: fail,
+					});
+				} else {
+					builder.set_terminator(MirTerminator::Goto { target: check_upper_bb });
+				}
+				builder.current_block = check_upper_bb;
+
+				if let Some(end) = &range_expr.end {
+					let end_operand: MirOperand = self.lower_expr_as_operand(end);
+					let le_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, span);
+					let upper_op: BinaryOp = if range_expr.inclusive {
+						BinaryOp::Le
+					} else {
+						BinaryOp::Lt
+					};
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(le_local),
+							projections: Vec::new(),
+							ty: Ty::Primitive(Primitive::Bool),
+						},
+						rvalue: MirRvalue::Binary {
+							op: upper_op,
+							lhs: MirOperand::Copy(scrutinee_place),
+							rhs: end_operand,
+						},
+						span,
+					});
+					builder.set_terminator(MirTerminator::Branch {
+						cond: MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(le_local),
+							projections: Vec::new(),
+							ty: Ty::Primitive(Primitive::Bool),
+						}),
+						then_block: success,
+						else_block: fail,
+					});
+				} else {
+					builder.set_terminator(MirTerminator::Goto { target: success });
+				}
+			}
+
+			TypedPattern::Or { patterns, .. } => {
+				let mut next_bb: BlockId = builder.current_block;
+				for (i, alt) in patterns.iter().enumerate() {
+					builder.current_block = next_bb;
+					let alt_fail: BlockId = if i == patterns.len() - 1 {
+						fail
+					} else {
+						builder.alloc_block()
+					};
+					self.lower_pattern_test(builder, alt, scrutinee_local, scrutinee_ty, success, alt_fail);
+					next_bb = alt_fail;
+				}
+			}
+
+			TypedPattern::Tuple { patterns, ty, span } => {
+				let mut chain: Vec<(BlockId, BlockId, &TypedPattern, usize)> = Vec::new();
+				let mut next_success: BlockId = success;
+				for (idx, sub) in patterns.iter().enumerate().rev() {
+					let test_bb: BlockId = if idx == 0 {
+						builder.current_block
+					} else {
+						builder.alloc_block()
+					};
+					chain.push((test_bb, next_success, sub, idx));
+					next_success = test_bb;
+				}
+				chain.reverse();
+				for (test_bb, sub_success, sub_pattern, idx) in chain {
+					builder.current_block = test_bb;
+					let elem_ty: Ty = sub_pattern.ty().clone();
+					let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub_pattern.span());
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(elem_local),
+							projections: Vec::new(),
+							ty: elem_ty.clone(),
+						},
+						rvalue: MirRvalue::Use(MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(scrutinee_local),
+							projections: vec![MirProjection::Field {
+								name: idx.to_string(),
+								ty: elem_ty.clone(),
+							}],
+							ty: elem_ty.clone(),
+						})),
+						span: sub_pattern.span(),
+					});
+					self.lower_pattern_test(builder, sub_pattern, elem_local, &elem_ty, sub_success, fail);
+				}
+			}
+
+			TypedPattern::Variant {
+				path,
+				args,
+				ty: _,
+				span,
+			} => {
+				const USIZE_TY: Ty = Ty::Primitive(Primitive::Int(IntType {
+					bits: IntSize::Size,
+					sign: IntSign::Unsigned,
+				}));
+
+				let tag_local: LocalId = builder.alloc_local(USIZE_TY.clone(), None, false, *span);
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(tag_local),
+						projections: Vec::new(),
+						ty: USIZE_TY.clone(),
+					},
+					rvalue: MirRvalue::Discriminant(MirPlace {
+						base: MirPlaceBase::Local(scrutinee_local),
+						projections: Vec::new(),
+						ty: scrutinee_ty.clone(),
+					}),
+					span: *span,
+				});
+
+				let variant_sym: SymbolId = match &path.kind {
+					ResolvedPathKind::Resolved(s) => *s,
+					ResolvedPathKind::AssocItem { base, .. } => *base,
+					ResolvedPathKind::Primitive(_) => {
+						self.diagnostics
+							.push(compiler_bug!(*span, "primitives can't be variants I think"));
+						builder.set_terminator(MirTerminator::Goto { target: fail });
+						return;
+					}
+				};
+
+				let discriminant: usize = self.variant_discriminant(variant_sym);
+				let expected_tag: MirOperand = MirOperand::Const(MirLiteral {
+					value: MirLiteralValue::Literal(Literal::Int {
+						value: discriminant.to_string(),
+						base: crate::lexer::IntBase::Decimal,
+						ty: None,
+						span: *span,
+					}),
+					ty: USIZE_TY.clone(),
+				});
+
+				let eq_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, *span);
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(eq_local),
+						projections: Vec::new(),
+						ty: Ty::Primitive(Primitive::Bool),
+					},
+					rvalue: MirRvalue::Binary {
+						op: BinaryOp::Eq,
+						lhs: MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(tag_local),
+							projections: Vec::new(),
+							ty: USIZE_TY,
+						}),
+						rhs: expected_tag,
+					},
+					span: *span,
+				});
+
+				let sub_check_bb: BlockId = if args.is_empty() {
+					success
+				} else {
+					builder.alloc_block()
+				};
+
+				builder.set_terminator(MirTerminator::Branch {
+					cond: MirOperand::Copy(MirPlace {
+						base: MirPlaceBase::Local(eq_local),
+						projections: Vec::new(),
+						ty: Ty::Primitive(Primitive::Bool),
+					}),
+					then_block: sub_check_bb,
+					else_block: fail,
+				});
+
+				if !args.is_empty() {
+					let mut test_blocks: Vec<BlockId> = vec![sub_check_bb];
+					for _ in 1..args.len() {
+						test_blocks.push(builder.alloc_block());
+					}
+
+					for (idx, (sub_pattern, &test_bb)) in args.iter().zip(test_blocks.iter()).enumerate() {
+						let sub_success: BlockId = if idx == args.len() - 1 {
+							success
+						} else {
+							test_blocks[idx + 1]
+						};
+
+						builder.current_block = test_bb;
+
+						let elem_ty: Ty = sub_pattern.ty().clone();
+						let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub_pattern.span());
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(elem_local),
+								projections: Vec::new(),
+								ty: elem_ty.clone(),
+							},
+							rvalue: MirRvalue::Use(self.copy_or_move(MirPlace {
+								base: MirPlaceBase::Local(scrutinee_local),
+								projections: vec![MirProjection::Field {
+									name: idx.to_string(),
+									ty: elem_ty.clone(),
+								}],
+								ty: elem_ty.clone(),
+							})),
+							span: sub_pattern.span(),
+						});
+
+						self.lower_pattern_test(builder, sub_pattern, elem_local, &elem_ty, sub_success, fail);
+					}
+				}
+			}
+
+			TypedPattern::Struct {
+				path: _,
+				fields,
+				has_rest: _,
+				ty: _,
+				span: _,
+			} => {
+				let mut next_success: BlockId = success;
+				let mut chain: Vec<(BlockId, BlockId, &TypedPattern, String)> = Vec::new();
+				for (idx, (field_name, sub)) in fields.iter().enumerate().rev() {
+					let test_bb: BlockId = if idx == 0 {
+						builder.current_block
+					} else {
+						builder.alloc_block()
+					};
+					chain.push((test_bb, next_success, sub, field_name.clone()));
+					next_success = test_bb;
+				}
+				if chain.is_empty() {
+					builder.set_terminator(MirTerminator::Goto { target: success });
+					return;
+				}
+				chain.reverse();
+				for (test_bb, sub_success, sub_pattern, field_name) in chain {
+					builder.current_block = test_bb;
+					let field_ty: Ty = sub_pattern.ty().clone();
+					let field_local: LocalId = builder.alloc_local(field_ty.clone(), None, false, sub_pattern.span());
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(field_local),
+							projections: Vec::new(),
+							ty: field_ty.clone(),
+						},
+						rvalue: MirRvalue::Use(MirOperand::Copy(MirPlace {
+							base: MirPlaceBase::Local(scrutinee_local),
+							projections: vec![MirProjection::Field {
+								name: field_name.clone(),
+								ty: field_ty.clone(),
+							}],
+							ty: field_ty.clone(),
+						})),
+						span: sub_pattern.span(),
+					});
+					self.lower_pattern_test(builder, sub_pattern, field_local, &field_ty, sub_success, fail);
+				}
+			}
+		}
+	}
+
+	fn variant_discriminant(&mut self, variant_sym: SymbolId) -> usize
+	{
+		let sym: &crate::symbol_collection::Symbol = self.global.symbol(variant_sym);
+		let parent_scope: &crate::symbol_collection::Scope = self.global.scope(sym.scope);
+		return parent_scope
+			.symbols
+			.iter()
+			.position(|&s| return s == variant_sym)
+			.unwrap_or_else(|| {
+				self.diagnostics.push(compiler_bug!(
+					Span::default(),
+					"variant symbol not found in parent scope"
+				));
+				return 0;
+			});
+	}
+
+	fn lower_pattern_bindings(&mut self, builder: &mut BodyBuilder, pattern: &TypedPattern, scrutinee_local: LocalId)
+	{
+		match pattern {
+			TypedPattern::TypedIdentifier {
+				symbol,
+				name,
+				ty,
+				mutable,
+				span,
+			} => {
+				let local: LocalId = builder.alloc_local(ty.clone(), Some(name.clone()), *mutable, *span);
+				builder.local_map.insert(*symbol, local);
+				let operand: MirOperand = self.copy_or_move(MirPlace {
+					base: MirPlaceBase::Local(scrutinee_local),
+					projections: Vec::new(),
+					ty: ty.clone(),
+				});
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(local),
+						projections: Vec::new(),
+						ty: ty.clone(),
+					},
+					rvalue: MirRvalue::Use(operand),
+					span: *span,
+				});
+			}
+
+			TypedPattern::Wildcard { .. } | TypedPattern::Literal { .. } | TypedPattern::Range(_) => {}
+
+			TypedPattern::Or { patterns, .. } => {
+				if let Some(first) = patterns.first() {
+					self.lower_pattern_bindings(builder, first, scrutinee_local);
+				}
+			}
+
+			TypedPattern::Tuple { patterns, .. } => {
+				for (idx, sub) in patterns.iter().enumerate() {
+					let elem_ty: Ty = sub.ty().clone();
+					let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub.span());
+					let operand: MirOperand = self.copy_or_move(MirPlace {
+						base: MirPlaceBase::Local(scrutinee_local),
+						projections: vec![MirProjection::Field {
+							name: idx.to_string(),
+							ty: elem_ty.clone(),
+						}],
+						ty: elem_ty.clone(),
+					});
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(elem_local),
+							projections: Vec::new(),
+							ty: elem_ty.clone(),
+						},
+						rvalue: MirRvalue::Use(operand),
+						span: sub.span(),
+					});
+					self.lower_pattern_bindings(builder, sub, elem_local);
+				}
+			}
+
+			TypedPattern::Variant { args, .. } => {
+				for (idx, sub) in args.iter().enumerate() {
+					let elem_ty: Ty = sub.ty().clone();
+					let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub.span());
+					let operand: MirOperand = self.copy_or_move(MirPlace {
+						base: MirPlaceBase::Local(scrutinee_local),
+						projections: vec![MirProjection::Field {
+							name: idx.to_string(),
+							ty: elem_ty.clone(),
+						}],
+						ty: elem_ty.clone(),
+					});
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(elem_local),
+							projections: Vec::new(),
+							ty: elem_ty.clone(),
+						},
+						rvalue: MirRvalue::Use(operand),
+						span: sub.span(),
+					});
+					self.lower_pattern_bindings(builder, sub, elem_local);
+				}
+			}
+
+			TypedPattern::Struct { fields, .. } => {
+				for (field_name, sub) in fields {
+					let field_ty: Ty = sub.ty().clone();
+					let field_local: LocalId = builder.alloc_local(field_ty.clone(), None, false, sub.span());
+					let operand: MirOperand = self.copy_or_move(MirPlace {
+						base: MirPlaceBase::Local(scrutinee_local),
+						projections: vec![MirProjection::Field {
+							name: field_name.clone(),
+							ty: field_ty.clone(),
+						}],
+						ty: field_ty.clone(),
+					});
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(field_local),
+							projections: Vec::new(),
+							ty: field_ty.clone(),
+						},
+						rvalue: MirRvalue::Use(operand),
+						span: sub.span(),
+					});
+					self.lower_pattern_bindings(builder, sub, field_local);
+				}
+			}
+		}
+	}
+
 	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
 	{
-		let operand = self.lower_expr_into(builder, expr);
+		let operand: MirOperand = self.lower_expr_into(builder, expr);
 		match operand {
 			MirOperand::Copy(place) | MirOperand::Move(place) => return place,
 			MirOperand::Const(_) => {
@@ -1449,7 +2046,7 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
 	{
-		let mut builder = BodyBuilder::new(Vec::new());
+		let mut builder: BodyBuilder = BodyBuilder::new(Vec::new());
 		return self.lower_expr_into(&mut builder, e);
 	}
 
