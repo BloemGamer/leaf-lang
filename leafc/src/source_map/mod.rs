@@ -26,6 +26,10 @@ pub struct SourceMap
 
 impl SourceMap
 {
+	pub fn new() -> SourceMap
+	{
+		return SourceMap::default();
+	}
 	pub fn add_file(&mut self, path: impl Into<path::PathBuf>, src: impl Into<String>) -> SourceIndex
 	{
 		let file: SourceFile = SourceFile {
