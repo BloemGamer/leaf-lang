@@ -6,15 +6,15 @@ use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 
 use crate::{
 	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
-	lexer::{Span, Spanned},
+	lexer::{IntSign, IntSize, IntType, Span, Spanned, StringFlags},
 	name_resolution::ResolvedPathKind,
 	parser::{AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
-		Ty, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind, TypedFunctionDecl, TypedImplItem, TypedModule,
-		TypedStmt, TypedStructDecl, TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl,
-		TypedVariableDecl, TypedVariantDecl,
+		Primitive, Ty, TypedArrayLiteral, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind, TypedFunctionDecl,
+		TypedImplItem, TypedModule, TypedPattern, TypedStmt, TypedStructDecl, TypedSwitchBody, TypedTopLevelDecl,
+		TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl, intrinsics::Intrinsic,
 	},
 };
 
@@ -540,6 +540,18 @@ impl<'a> MirLowerer<'a>
 		};
 	}
 
+	fn copy_or_move(&self, place: MirPlace) -> MirOperand
+	{
+		if place
+			.ty
+			.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+		{
+			MirOperand::Copy(place)
+		} else {
+			MirOperand::Move(place)
+		}
+	}
+
 	fn lower_module(&mut self, module: &TypedModule) -> MirModule
 	{
 		let mut items = Vec::new();
@@ -701,7 +713,9 @@ impl<'a> MirLowerer<'a>
 			self.lower_stmt_into(builder, stmt);
 		}
 		if let Some(tail_expr) = &block.tail_expr {
-			todo!("lower_block_into: Some(block.tail_expr)")
+			// Value is discarded
+			// a block as a stmt should doesn't give back anything
+			self.lower_expr_into(builder, tail_expr);
 		}
 	}
 
@@ -904,7 +918,7 @@ impl<'a> MirLowerer<'a>
 		return match &expr.kind {
 			TypedExprKind::Identifier { path } => match &path.kind {
 				ResolvedPathKind::Resolved(sym) => {
-					let place = if let Some(&local_id) = builder.local_map.get(sym) {
+					let place: MirPlace = if let Some(&local_id) = builder.local_map.get(sym) {
 						MirPlace {
 							base: MirPlaceBase::Local(local_id),
 							projections: Vec::new(),
@@ -927,7 +941,7 @@ impl<'a> MirLowerer<'a>
 					}
 				}
 				ResolvedPathKind::AssocItem { base, .. } => {
-					let place = MirPlace {
+					let place: MirPlace = MirPlace {
 						base: MirPlaceBase::Global(*base),
 						projections: Vec::new(),
 						ty: expr.ty.clone(),
@@ -956,7 +970,7 @@ impl<'a> MirLowerer<'a>
 				value: MirLiteralValue::Literal(value.clone()),
 				ty: expr.ty.clone(),
 			}),
-			TypedExprKind::Default { heap_call } => {
+			TypedExprKind::Default { heap_call: _ } => {
 				self.diagnostics.push(compiler_bug!(
 					Span::default(),
 					"`TypedExprKind::Default` should not be leaking to the MIR lowering"
@@ -1088,6 +1102,7 @@ impl<'a> MirLowerer<'a>
 						}
 					},
 					TypedExprKind::InternalCall { intrinsic } => MirCallee::Intrinsic(intrinsic.clone()),
+
 					_ => {
 						let operand: MirOperand = self.lower_expr_into(builder, callee);
 						let temp: LocalId = builder.alloc_local(callee.ty.clone(), None, false, callee.span());
@@ -1169,19 +1184,232 @@ impl<'a> MirLowerer<'a>
 					ty: expr.ty.clone(),
 				})
 			}
-			TypedExprKind::Field { base, name } => todo!(),
-			TypedExprKind::Index { base, index } => todo!(),
-			TypedExprKind::Range(typed_range_expr) => todo!(),
-			TypedExprKind::Tuple { elements } => todo!(),
-			TypedExprKind::Array(typed_array_literal) => todo!(),
+			TypedExprKind::Field { base, name } => {
+				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
+				let place: MirPlace = MirPlace {
+					ty: expr.ty.clone(),
+					projections: {
+						let mut projs: Vec<MirProjection> = base_place.projections.clone();
+						projs.push(MirProjection::Field {
+							name: name.clone(),
+							ty: expr.ty.clone(),
+						});
+						projs
+					},
+					base: base_place.base,
+				};
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(place)
+				} else {
+					MirOperand::Move(place)
+				}
+			}
+			TypedExprKind::Index { base, index } => {
+				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
+				let index_operand: MirOperand = self.lower_expr_into(builder, index);
+				let index_local: LocalId = builder.alloc_local(index.ty.clone(), None, false, index.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(index_local),
+						projections: Vec::new(),
+						ty: index.ty.clone(),
+					},
+					rvalue: MirRvalue::Use(index_operand),
+					span: index.span(),
+				});
+				let place: MirPlace = MirPlace {
+					ty: expr.ty.clone(),
+					projections: {
+						let mut projs: Vec<MirProjection> = base_place.projections.clone();
+						projs.push(MirProjection::Index {
+							index: index_local,
+							ty: expr.ty.clone(),
+						});
+						projs
+					},
+					base: base_place.base,
+				};
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(place)
+				} else {
+					MirOperand::Move(place)
+				}
+			}
+			TypedExprKind::Range(_) => {
+				todo!("I think this one is not able to be produced but just for the check")
+			}
+			TypedExprKind::Tuple { elements } => {
+				let operands: Vec<MirOperand> = elements
+					.iter()
+					.map(|e| return self.lower_expr_into(builder, e))
+					.collect();
+				let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					},
+					rvalue: MirRvalue::Tuple(operands),
+					span: expr.span(),
+				});
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				} else {
+					MirOperand::Move(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				}
+			}
+			TypedExprKind::Array(array_literal) => {
+				let elem_ty: Ty = if let Ty::Array { inner, .. } = &expr.ty {
+					*inner.clone()
+				} else {
+					self.diagnostics.push(compiler_bug!(
+						expr.span,
+						"array literal does not have array type in MIR lowering"
+					));
+					Ty::Unit
+				};
+				let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+				let rvalue: MirRvalue = match array_literal {
+					TypedArrayLiteral::List { elements, .. } => {
+						let operands: Vec<MirOperand> = elements
+							.iter()
+							.map(|e| return self.lower_expr_into(builder, e))
+							.collect();
+						MirRvalue::Array {
+							elements: operands,
+							elem_ty,
+						}
+					}
+					TypedArrayLiteral::Repeat { value, count, .. } => {
+						let value_operand: MirOperand = self.lower_expr_into(builder, value);
+						let count_operand: MirOperand = self.lower_expr_into(builder, count);
+						MirRvalue::ArrayRepeat {
+							value: value_operand,
+							count: count_operand,
+							elem_ty,
+						}
+					}
+				};
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					},
+					rvalue,
+					span: expr.span(),
+				});
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				} else {
+					MirOperand::Move(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				}
+			}
 			TypedExprKind::StructInit {
 				path,
 				fields,
 				base,
 				has_rest,
-			} => todo!(),
-			TypedExprKind::Block(typed_block) => todo!(),
-			TypedExprKind::UnsafeBlock(typed_block) => todo!(),
+			} => {
+				if *has_rest || base.is_some() {
+					self.diagnostics.push(compiler_bug!(
+						expr.span(),
+						"base should always be None, and has_rest has to be false"
+					));
+				}
+				let symbol: SymbolId = match &path.kind {
+					ResolvedPathKind::Resolved(sym) => *sym,
+					ResolvedPathKind::AssocItem { base, .. } => *base,
+					ResolvedPathKind::Primitive(_) => {
+						self.diagnostics.push(compiler_bug!(
+							expr.span,
+							"primitive type used as struct init path in MIR lowering"
+						));
+						return MirOperand::Const(MirLiteral {
+							value: MirLiteralValue::Undef,
+							ty: expr.ty.clone(),
+						});
+					}
+				};
+
+				let lowered_fields: Vec<(String, MirOperand)> = fields
+					.iter()
+					.map(|f| return (f.0.clone(), self.lower_expr_into(builder, &f.1)))
+					.collect();
+
+				let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					},
+					rvalue: MirRvalue::Aggregate {
+						kind: MirAggregateKind::Struct(symbol),
+						fields: lowered_fields,
+					},
+					span: expr.span(),
+				});
+
+				if expr
+					.ty
+					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
+				{
+					MirOperand::Copy(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				} else {
+					MirOperand::Move(MirPlace {
+						base: MirPlaceBase::Local(temp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					})
+				}
+			}
+			TypedExprKind::Block(typed_block) | TypedExprKind::UnsafeBlock(typed_block) => {
+				for stmt in &typed_block.stmts {
+					self.lower_stmt_into(builder, stmt);
+				}
+
+				typed_block.tail_expr.as_ref().map_or(
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ZeroInit,
+						ty: Ty::Unit,
+					}),
+					|tail| return self.lower_expr_into(builder, tail),
+				)
+			}
 			TypedExprKind::Switch { expr, arms } => todo!(),
 			TypedExprKind::If {
 				cond,
@@ -1259,7 +1487,7 @@ impl<'a> MirLowerer<'a>
 					.variants
 					.iter()
 					.map(|v| {
-						let c = v.value.as_ref().map(|te| self.lower_expr_as_operand(te));
+						let c = v.value.as_ref().map(|te| return self.lower_expr_as_operand(te));
 						return (v.name.clone(), c);
 					})
 					.collect(),
