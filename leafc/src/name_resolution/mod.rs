@@ -2469,13 +2469,13 @@ impl<'a> Resolver<'a>
 			},
 
 			Expr::Unary { op, expr, span } => ResolvedExpr::Unary {
-				op: op.clone(),
+				op: *op,
 				expr: Box::new(self.resolve_expr(expr)),
 				span: *span,
 			},
 
 			Expr::Binary { op, lhs, rhs, span } => ResolvedExpr::Binary {
-				op: op.clone(),
+				op: *op,
 				lhs: Box::new(self.resolve_expr(lhs)),
 				rhs: Box::new(self.resolve_expr(rhs)),
 				span: *span,
@@ -2715,7 +2715,7 @@ impl<'a> Resolver<'a>
 				span,
 			} => ResolvedStmt::Assignment {
 				target: self.resolve_expr(target),
-				op: op.clone(),
+				op: *op,
 				value: self.resolve_expr(value),
 				span: *span,
 			},

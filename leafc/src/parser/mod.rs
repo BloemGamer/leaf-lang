@@ -1509,7 +1509,7 @@ pub enum BinaryOp
 /// * `XorAssign` - Bitwise XOR and assign: `^=`
 /// * `ShlAssign` - Left shift and assign: `<<=`
 /// * `ShrAssign` - Right shift and assign: `>>=`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AssignOp
 {
 	/// `=`

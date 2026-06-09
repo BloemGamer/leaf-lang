@@ -2,6 +2,7 @@
 
 // TODO: change to the new error system
 // TODO: rewrite this probably, I there are a lot of weird things in here, and the reflection system probs needs to be at least partly in here
+// TODO: runtime const/mut is not yet checked
 
 #[cfg(test)]
 #[path = "../../tests/type_analysis/tests.rs"]
@@ -107,13 +108,11 @@ impl Ty
 	pub fn implements_copy(&self, trait_impls: &HashMap<TyKey, HashSet<SymbolId>>, copy_sym: SymbolId) -> bool
 	{
 		return match self {
-			Ty::Primitive(_) | Ty::Unit | Ty::Never => true,
+			Ty::Primitive(_) | Ty::Unit | Ty::Never | Ty::Pointer { .. } => true,
 
-			Ty::Pointer { .. } => true,
+			Ty::Mutable { .. } | Ty::Infer | Ty::SelfTy => false,
 
 			Ty::Reference { mutable, .. } => !mutable,
-
-			Ty::Mutable { .. } => false,
 
 			Ty::Tuple(elems) => elems.iter().all(|t| return t.implements_copy(trait_impls, copy_sym)),
 
@@ -127,8 +126,6 @@ impl Ty
 				let Some(key) = TyKey::of(self) else { return false };
 				trait_impls.get(&key).is_some_and(|set| return set.contains(&copy_sym))
 			}
-
-			Ty::Infer | Ty::SelfTy => false,
 		};
 	}
 }
@@ -362,7 +359,7 @@ impl ParamTypeCache
 		return self.map.get(&(fn_sym, index));
 	}
 
-	pub fn find_fn_sym_by_name(&self, global: &GlobalSymbolTable, fn_name: &str) -> Option<SymbolId>
+	pub fn find_fn_sym_by_name(global: &GlobalSymbolTable, fn_name: &str) -> Option<SymbolId>
 	{
 		return global.symbols.iter().enumerate().find_map(|(i, sym)| {
 			if sym.name == fn_name && matches!(sym.kind, SymbolKind::Function { .. }) {
@@ -3990,7 +3987,7 @@ impl<'a> Checker<'a>
 					None
 				};
 
-				let pending = bp.pending.remove(&dep_sym).unwrap();
+				let pending = bp.pending.remove(&dep_sym).expect("");
 				match self.try_check_infer_var_hinted(pending.resolved, hint.as_ref()) {
 					Ok(typed_decl) => {
 						self.caches.env.insert(dep_sym, typed_decl.ty.clone());
@@ -4150,7 +4147,7 @@ impl<'a> Checker<'a>
 
 				TypedStmt::Assignment {
 					target: ttarget,
-					op: op.clone(),
+					op: *op,
 					value: tvalue,
 					span: *span,
 				}
@@ -4603,7 +4600,7 @@ impl<'a> Checker<'a>
 			}
 
 			ResolvedExpr::Literal { value, .. } => {
-				let ty: Ty = self.type_of_literal(value, hint);
+				let ty: Ty = Self::type_of_literal(value, hint);
 				(TypedExprKind::Literal { value: value.clone() }, ty)
 			}
 
@@ -4628,7 +4625,7 @@ impl<'a> Checker<'a>
 						};
 						(
 							TypedExprKind::Unary {
-								op: op.clone(),
+								op: *op,
 								expr: Box::new(tinner),
 							},
 							ty,
@@ -4712,7 +4709,7 @@ impl<'a> Checker<'a>
 																	.get_sym(*symbol, "deref")
 																	.map(|_| return *symbol);
 															})
-															.unwrap()
+															.expect("")
 													},
 													member: "deref".to_string(),
 												},
@@ -4770,7 +4767,7 @@ impl<'a> Checker<'a>
 								return Err(Self::err(
 									span,
 									TypeErrorKind::InvalidUnaryOp {
-										op: op.clone(),
+										op: *op,
 										ty: self.fmt_ty(other),
 									},
 								));
@@ -4803,7 +4800,7 @@ impl<'a> Checker<'a>
 							let ty = tinner.ty.clone();
 							return Ok(TypedExpr {
 								kind: TypedExprKind::Unary {
-									op: op.clone(),
+									op: *op,
 									expr: Box::new(tinner),
 								},
 								ty,
@@ -4813,7 +4810,7 @@ impl<'a> Checker<'a>
 
 						if let Some(fn_sym) = self.op_trait_fn_sym(&tinner.ty, trait_name) {
 							let method_name = self.global.symbol(fn_sym).name.clone();
-							let ret_ty = self.check_unary(op, &tinner.ty, span)?;
+							let ret_ty = self.check_unary(*op, &tinner.ty, span)?;
 
 							let callee = TypedExpr {
 								ty: Ty::Unit,
@@ -4838,7 +4835,7 @@ impl<'a> Checker<'a>
 						return Err(Self::err(
 							span,
 							TypeErrorKind::InvalidUnaryOp {
-								op: op.clone(),
+								op: *op,
 								ty: self.fmt_ty(&tinner.ty),
 							},
 						));
@@ -4851,7 +4848,7 @@ impl<'a> Checker<'a>
 				let trhs_hint = if tlhs.ty == Ty::Infer { hint } else { Some(&tlhs.ty) };
 				let trhs: TypedExpr = self.check_expr(rhs, trhs_hint)?;
 
-				let texpr = self.check_binary(op, tlhs, trhs, span)?;
+				let texpr = self.check_binary(*op, tlhs, trhs, span)?;
 				(texpr.kind, texpr.ty)
 			}
 
@@ -5091,7 +5088,7 @@ impl<'a> Checker<'a>
 								Some(*id)
 							} else {
 								let fn_name = self.global.symbol(*id).name.clone();
-								self.caches.param.find_fn_sym_by_name(self.global, &fn_name)
+								ParamTypeCache::find_fn_sym_by_name(self.global, &fn_name)
 							}
 						}
 						ResolvedPathKind::AssocItem { base, member } => {
@@ -5936,7 +5933,7 @@ impl<'a> Checker<'a>
 		};
 	}
 
-	fn is_fn_type(&self, ty: &Ty) -> bool
+	fn is_fn_type(ty: &Ty) -> bool
 	{
 		return match ty {
 			Ty::Infer => true,
@@ -5967,7 +5964,7 @@ impl<'a> Checker<'a>
 						return true;
 					}
 				}
-				return self.is_fn_type(&callee.ty);
+				return Self::is_fn_type(&callee.ty);
 			}
 
 			TypedExprKind::Field { base, name } => {
@@ -6001,14 +5998,14 @@ impl<'a> Checker<'a>
 					}
 					_ => {}
 				}
-				return self.is_fn_type(&callee.ty);
+				return Self::is_fn_type(&callee.ty);
 			}
 
-			_ => return self.is_fn_type(&callee.ty),
+			_ => return Self::is_fn_type(&callee.ty),
 		}
 	}
 
-	fn type_of_literal(&self, lit: &Literal, hint: Option<&Ty>) -> Ty
+	fn type_of_literal(lit: &Literal, hint: Option<&Ty>) -> Ty
 	{
 		match lit {
 			Literal::Int { ty, .. } => {
@@ -6077,7 +6074,7 @@ impl<'a> Checker<'a>
 		}
 	}
 
-	fn check_unary(&mut self, op: &UnaryOp, ty: &Ty, span: Span) -> Result<Ty, TypeError>
+	fn check_unary(&mut self, op: UnaryOp, ty: &Ty, span: Span) -> Result<Ty, TypeError>
 	{
 		if matches!(op, UnaryOp::Deref) {
 			return Ok(match ty {
@@ -6087,7 +6084,7 @@ impl<'a> Checker<'a>
 					return Err(Self::err(
 						span,
 						TypeErrorKind::InvalidUnaryOp {
-							op: op.clone(),
+							op,
 							ty: self.fmt_ty(other),
 						},
 					));
@@ -6097,7 +6094,7 @@ impl<'a> Checker<'a>
 
 		if let UnaryOp::Addr { mutable } = op {
 			return Ok(Ty::Reference {
-				mutable: *mutable,
+				mutable,
 				inner: Box::new(ty.clone()),
 			});
 		}
@@ -6116,7 +6113,7 @@ impl<'a> Checker<'a>
 				return Err(Self::err(
 					span,
 					TypeErrorKind::InvalidUnaryOp {
-						op: op.clone(),
+						op,
 						ty: self.fmt_ty(ty),
 					},
 				));
@@ -6135,7 +6132,7 @@ impl<'a> Checker<'a>
 
 	fn check_binary(
 		&mut self,
-		op: &BinaryOp,
+		op: BinaryOp,
 		tlhs: TypedExpr,
 		trhs: TypedExpr,
 		span: Span,
@@ -6189,7 +6186,7 @@ impl<'a> Checker<'a>
 			};
 			return Ok(TypedExpr {
 				kind: TypedExprKind::Binary {
-					op: op.clone(),
+					op,
 					lhs: Box::new(tlhs),
 					rhs: Box::new(trhs),
 				},
@@ -6202,7 +6199,7 @@ impl<'a> Checker<'a>
 			if *lhs == Ty::Primitive(Primitive::Bool) && *rhs == Ty::Primitive(Primitive::Bool) {
 				return Ok(TypedExpr {
 					kind: TypedExprKind::Binary {
-						op: op.clone(),
+						op,
 						lhs: Box::new(tlhs),
 						rhs: Box::new(trhs),
 					},
@@ -6213,7 +6210,7 @@ impl<'a> Checker<'a>
 			return Err(Self::err(
 				span,
 				TypeErrorKind::InvalidBinaryOp {
-					op: op.clone(),
+					op,
 					lhs: self.fmt_ty(lhs),
 					rhs: self.fmt_ty(rhs),
 				},
@@ -6226,7 +6223,7 @@ impl<'a> Checker<'a>
 			return Self::err(
 				span,
 				TypeErrorKind::InvalidBinaryOp {
-					op: op.clone(),
+					op,
 					lhs: self.fmt_ty(lhs),
 					rhs: self.fmt_ty(rhs),
 				},
@@ -6266,7 +6263,7 @@ impl<'a> Checker<'a>
 					return Self::err(
 						span,
 						TypeErrorKind::InvalidBinaryOp {
-							op: op.clone(),
+							op,
 							lhs: self.fmt_ty(lhs),
 							rhs: self.fmt_ty(rhs),
 						},
@@ -6297,7 +6294,7 @@ impl<'a> Checker<'a>
 		return Err(TypeError {
 			span,
 			kind: TypeErrorKind::InvalidBinaryOp {
-				op: op.clone(),
+				op,
 				lhs: self.fmt_ty(&tlhs.ty),
 				rhs: self.fmt_ty(&trhs.ty),
 			},
@@ -6786,7 +6783,7 @@ impl<'a> Checker<'a>
 			}
 
 			ResolvedPattern::Literal { value, span } => {
-				let ty: Ty = self.type_of_literal(value, Some(scrutinee));
+				let ty: Ty = Self::type_of_literal(value, Some(scrutinee));
 				TypedPattern::Literal {
 					value: value.clone(),
 					ty,
@@ -7446,7 +7443,7 @@ impl<'a> Checker<'a>
 					} else {
 						stmts.push(TypedStmt::Assignment {
 							target: ttarget,
-							op: op.clone(),
+							op: *op,
 							value: tvalue,
 							span: *span,
 						});
