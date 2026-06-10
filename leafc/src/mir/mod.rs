@@ -953,6 +953,7 @@ impl<'a> MirLowerer<'a>
 			TypedStmt::Loop { label, body, span: _ } => {
 				let loop_bb: BlockId = builder.alloc_block();
 				let exit_loop_bb: BlockId = builder.alloc_block();
+				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
 
 				builder.loop_stack.push(LoopContext {
 					label: label.clone(),
@@ -1166,7 +1167,7 @@ impl<'a> MirLowerer<'a>
 			}
 			TypedExprKind::Cast { ty, expr: c_expr } => {
 				let operand: MirOperand = self.lower_expr_into(builder, c_expr);
-				let tmp: LocalId = builder.alloc_local(c_expr.ty.clone(), None, false, c_expr.span());
+				let tmp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, c_expr.span());
 
 				builder.push_stmt(MirStmt::Assign {
 					place: MirPlace {
@@ -2226,9 +2227,14 @@ impl<'a> MirLowerer<'a>
 
 			TypedPattern::Wildcard { .. } | TypedPattern::Literal { .. } | TypedPattern::Range(_) => {}
 
-			TypedPattern::Or { patterns, .. } => {
+			TypedPattern::Or { patterns, span, .. } => {
 				if let Some(first) = patterns.first() {
 					self.lower_pattern_bindings(builder, first, scrutinee_local);
+				} else {
+					self.diagnostics.push(compiler_bug!(
+						*span,
+						"`TypedPattern::Or` with no alternitives reached MIR lowering"
+					));
 				}
 			}
 
