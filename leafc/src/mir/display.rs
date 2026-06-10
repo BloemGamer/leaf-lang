@@ -3,9 +3,9 @@ use std::fmt;
 use crate::utils::indent_writer::IndentWriter;
 
 use super::{
-	MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirFunction, MirGlobal, MirItem, MirLiteral, MirLiteralValue,
-	MirLocal, MirModule, MirOperand, MirPlace, MirPlaceBase, MirProjection, MirRvalue, MirStmt, MirSwitchArm,
-	MirTerminator, MirTypeDef, MirTypeDefKind,
+	ConstBodyId, MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirConstBody, MirFunction, MirGlobal, MirItem,
+	MirLiteral, MirLiteralValue, MirLocal, MirModule, MirOperand, MirPlace, MirPlaceBase, MirProjection, MirRvalue,
+	MirStmt, MirSwitchArm, MirTerminator, MirTypeDef, MirTypeDefKind,
 };
 
 impl fmt::Display for MirModule
@@ -22,8 +22,36 @@ impl fmt::Display for MirModule
 			write_mir_item(f, &mut w, item)?;
 			writeln!(f)?;
 		}
+
+		if !self.const_bodies.is_empty() {
+			writeln!(f, "// ---- const bodies ----")?;
+			for (i, cb) in self.const_bodies.iter().enumerate() {
+				write_mir_const_body(f, &mut w, ConstBodyId(i as u32), cb)?;
+				writeln!(f)?;
+			}
+		}
 		return Ok(());
 	}
+}
+
+pub fn write_mir_const_body(
+	f: &mut fmt::Formatter<'_>,
+	w: &mut IndentWriter,
+	id: ConstBodyId,
+	cb: &MirConstBody,
+) -> fmt::Result
+{
+	writeln!(
+		f,
+		"const#{} -> _{}: {} {{",
+		id.0,
+		cb.result.0,
+		cb.body.local(cb.result).ty
+	)?;
+	w.indent();
+	write_mir_body(f, w, &cb.body)?;
+	w.dedent();
+	return writeln!(f, "}}");
 }
 
 pub fn write_mir_item(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, item: &MirItem) -> fmt::Result
@@ -41,9 +69,11 @@ pub fn write_mir_global(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, globa
 	if global.mutable {
 		write!(f, "mut ")?;
 	}
-	write!(f, "{}: {} = ", global.name, global.ty)?;
-	write_mir_operand(f, &global.init)?;
-	return writeln!(f, ";  // {:?}", global.symbol);
+	return writeln!(
+		f,
+		"{}: {} = const#{};  // {:?}",
+		global.name, global.ty, global.init.0, global.symbol
+	);
 }
 
 pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typedef: &MirTypeDef) -> fmt::Result
@@ -74,10 +104,8 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			w.indent();
 			for (name, value) in variants {
 				w.write_indent(f)?;
-				if let Some(op) = value {
-					write!(f, "{} = ", name)?;
-					write_mir_operand(f, op)?;
-					writeln!(f, ",")?;
+				if let Some(id) = value {
+					writeln!(f, "{} = const#{},", name, id.0)?;
 				} else {
 					writeln!(f, "{},", name)?;
 				}
@@ -340,6 +368,7 @@ pub fn write_mir_literal(f: &mut fmt::Formatter<'_>, lit: &MirLiteral) -> fmt::R
 		MirLiteralValue::Literal(l) => write!(f, "{}", l)?,
 		MirLiteralValue::ZeroInit => write!(f, "zeroinit")?,
 		MirLiteralValue::Undef => write!(f, "undef")?,
+		MirLiteralValue::ConstBody(id) => write!(f, "const#{}", id.0)?,
 	}
 	return write!(f, ": {}", lit.ty);
 }
@@ -431,23 +460,6 @@ pub fn write_mir_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MirRvalue) -> fmt::
 				write_mir_operand(f, el)?;
 			}
 			return write!(f, ")");
-		}
-
-		MirRvalue::Range {
-			start, end, inclusive, ..
-		} => {
-			if let Some(s) = start {
-				write_mir_operand(f, s)?;
-			}
-			if *inclusive {
-				write!(f, "..=")?;
-			} else {
-				write!(f, "..")?;
-			}
-			if let Some(e) = end {
-				write_mir_operand(f, e)?;
-			}
-			return Ok(());
 		}
 
 		MirRvalue::Discriminant(place) => {

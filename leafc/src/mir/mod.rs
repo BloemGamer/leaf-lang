@@ -39,6 +39,10 @@ pub enum MirErrorKind
 	{
 		label: String
 	},
+
+	#[error_msg("variables should always be initialized")]
+	#[error_code(ErrorCode::MirUninitializedVariable)]
+	UninitializedVariable {},
 }
 
 /// A local variable or temporary within a `MirBody`.
@@ -49,12 +53,16 @@ pub struct LocalId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConstBodyId(pub u32);
+
 #[derive(Debug, Clone)]
 pub struct MirModule
 {
 	pub path: Vec<String>,
 	pub source_index: SourceIndex,
 	pub items: Vec<MirItem>,
+	pub const_bodies: Vec<MirConstBody>,
 }
 
 #[derive(Debug, Clone)]
@@ -73,7 +81,7 @@ pub struct MirGlobal
 	pub symbol: SymbolId,
 	pub name: String,
 	pub ty: Ty,
-	pub init: MirOperand,
+	pub init: ConstBodyId,
 	pub mutable: bool,
 	pub span: Span,
 }
@@ -100,7 +108,7 @@ pub enum MirTypeDefKind
 	},
 	Enum
 	{
-		variants: Vec<(String, Option<MirOperand>)>,
+		variants: Vec<(String, Option<ConstBodyId>)>,
 	},
 	Variant
 	{
@@ -133,6 +141,14 @@ pub struct MirParam
 	pub name: String,
 	pub ty: Ty,
 	pub mutable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MirConstBody
+{
+	pub body: MirBody,
+	/// Local holding the final value after `body` runs to completion.
+	pub result: LocalId,
 }
 
 /// The control-flow graph for a single function body.
@@ -343,6 +359,7 @@ pub enum MirLiteralValue
 	/// No explicit value provided; the backend assigns the next sequential
 	/// discriminant (only meaningful inside `MirTypeDefKind::Enum`).
 	Undef,
+	ConstBody(ConstBodyId),
 }
 
 /// A pure computation that produces a value and can appear on the RHS of an
@@ -412,16 +429,15 @@ pub enum MirRvalue
 	/// `(a, b, c)` - all elements are operands.
 	Tuple(Vec<MirOperand>),
 
-	/// Range literal - produces a range struct. Both bounds are optional
-	/// operands (already-computed locals or constants).
-	Range
-	{
-		start: Option<MirOperand>,
-		end: Option<MirOperand>,
-		inclusive: bool,
-		elem_ty: Ty,
-	},
-
+	// /// Range literal - produces a range struct. Both bounds are optional
+	// /// operands (already-computed locals or constants).
+	// Range
+	// {
+	// 	start: Option<MirConstBody>,
+	// 	end: Option<MirConstBody>,
+	// 	inclusive: bool,
+	// 	elem_ty: Ty,
+	// },
 	Discriminant(MirPlace),
 }
 
@@ -555,6 +571,7 @@ struct MirLowerer<'a>
 	diagnostics: Vec<DiagnosticBuilder>,
 	global: &'a GlobalSymbolTable,
 	module: &'a TypedModule,
+	const_bodies: Vec<MirConstBody>,
 }
 
 impl<'a> MirLowerer<'a>
@@ -565,6 +582,7 @@ impl<'a> MirLowerer<'a>
 			diagnostics: Vec::new(),
 			global,
 			module,
+			const_bodies: Vec::new(),
 		};
 	}
 
@@ -580,19 +598,55 @@ impl<'a> MirLowerer<'a>
 		};
 	}
 
+	fn intern_const_body(&mut self, expr: &TypedExpr) -> ConstBodyId
+	{
+		let body: MirConstBody = self.lower_const_body(expr);
+		#[allow(clippy::cast_possible_truncation)]
+		let id: ConstBodyId = ConstBodyId(self.const_bodies.len() as u32);
+		self.const_bodies.push(body);
+		return id;
+	}
+
+	fn intern_undef_const(&mut self, ty: Ty, span: Span) -> ConstBodyId
+	{
+		let mut builder: BodyBuilder = BodyBuilder::new(Vec::new());
+		let result: LocalId = builder.alloc_local(ty.clone(), Some("#const".to_string()), false, span);
+		builder.return_local = Some(result);
+		builder.push_stmt(MirStmt::Assign {
+			place: MirPlace {
+				base: MirPlaceBase::Local(result),
+				projections: Vec::new(),
+				ty: ty.clone(),
+			},
+			rvalue: MirRvalue::Use(MirOperand::Const(MirLiteral {
+				value: MirLiteralValue::Undef,
+				ty,
+			})),
+			span,
+		});
+		builder.set_terminator(MirTerminator::Return);
+
+		#[allow(clippy::cast_possible_truncation)]
+		let id: ConstBodyId = ConstBodyId(self.const_bodies.len() as u32);
+		self.const_bodies.push(MirConstBody {
+			body: builder.finish(0),
+			result,
+		});
+		return id;
+	}
+
 	fn lower_module(&mut self, module: &TypedModule) -> MirModule
 	{
-		let mut items = Vec::new();
-
+		let mut items: Vec<MirItem> = Vec::new();
 		for decl in &module.ast.top_level_block.items {
 			self.lower_top_level_decl(decl, &mut items);
 		}
-
-		return MirModule {
+		MirModule {
 			path: module.path.clone(),
 			source_index: module.ast.source_index,
 			items,
-		};
+			const_bodies: std::mem::take(&mut self.const_bodies),
+		}
 	}
 
 	fn lower_top_level_decl(&mut self, decl: &TypedTopLevelDecl, out: &mut Vec<MirItem>)
@@ -725,22 +779,28 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_global(&mut self, v: &TypedVariableDecl) -> MirGlobal
 	{
-		return MirGlobal {
+		let init: ConstBodyId = match v.init.as_ref() {
+			Some(init) => self.intern_const_body(init),
+			None => {
+				self.diagnostics.push(
+					MirError {
+						span: v.span(),
+						kind: MirErrorKind::UninitializedVariable {},
+					}
+					.build(),
+				);
+				self.intern_undef_const(v.ty.clone(), v.span)
+			}
+		};
+
+		MirGlobal {
 			symbol: v.resolved_name,
 			name: v.name.clone(),
 			ty: v.ty.clone(),
-			init: v.init.as_ref().map_or_else(
-				|| {
-					return MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::Undef,
-						ty: v.ty.clone(),
-					});
-				},
-				|init| return self.lower_expr_as_operand(init),
-			),
+			init,
 			mutable: v.mutable,
 			span: v.span,
-		};
+		}
 	}
 
 	fn lower_block_into(&mut self, builder: &mut BodyBuilder, block: &TypedBlock)
@@ -1810,7 +1870,12 @@ impl<'a> MirLowerer<'a>
 				let check_upper_bb: BlockId = builder.alloc_block();
 
 				if let Some(start) = &range_expr.start {
-					let start_operand: MirOperand = self.lower_expr_as_operand(start);
+					let start_id: ConstBodyId = self.intern_const_body(start);
+					let start_operand: MirOperand = MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ConstBody(start_id),
+						ty: start.ty.clone(),
+					});
+
 					let ge_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, span);
 					builder.push_stmt(MirStmt::Assign {
 						place: MirPlace {
@@ -1840,7 +1905,12 @@ impl<'a> MirLowerer<'a>
 				builder.switch_to(check_upper_bb);
 
 				if let Some(end) = &range_expr.end {
-					let end_operand: MirOperand = self.lower_expr_as_operand(end);
+					let end_id: ConstBodyId = self.intern_const_body(end);
+					let end_operand: MirOperand = MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::ConstBody(end_id),
+						ty: end.ty.clone(),
+					});
+
 					let le_local: LocalId = builder.alloc_local(Ty::Primitive(Primitive::Bool), None, false, span);
 					let upper_op: BinaryOp = if range_expr.inclusive {
 						BinaryOp::Le
@@ -2347,10 +2417,28 @@ impl<'a> MirLowerer<'a>
 		}
 	}
 
-	fn lower_expr_as_operand(&mut self, e: &TypedExpr) -> MirOperand
+	fn lower_const_body(&mut self, expr: &TypedExpr) -> MirConstBody
 	{
 		let mut builder: BodyBuilder = BodyBuilder::new(Vec::new());
-		return self.lower_expr_into(&mut builder, e);
+		let result: LocalId = builder.alloc_local(expr.ty.clone(), Some("#const".to_string()), false, expr.span());
+		builder.return_local = Some(result);
+
+		let operand: MirOperand = self.lower_expr_into(&mut builder, expr);
+		builder.push_stmt(MirStmt::Assign {
+			place: MirPlace {
+				base: MirPlaceBase::Local(result),
+				projections: Vec::new(),
+				ty: expr.ty.clone(),
+			},
+			rvalue: MirRvalue::Use(operand),
+			span: expr.span(),
+		});
+		builder.set_terminator(MirTerminator::Return);
+
+		MirConstBody {
+			body: builder.finish(0),
+			result,
+		}
 	}
 
 	fn lower_struct(s: &TypedStructDecl) -> MirTypeDef
@@ -2379,7 +2467,7 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_enum(&mut self, e: &TypedEnumDecl) -> MirTypeDef
 	{
-		return MirTypeDef {
+		MirTypeDef {
 			symbol: e.resolved_name,
 			name: e.name.clone(),
 			kind: MirTypeDefKind::Enum {
@@ -2387,13 +2475,13 @@ impl<'a> MirLowerer<'a>
 					.variants
 					.iter()
 					.map(|v| {
-						let c = v.value.as_ref().map(|te| return self.lower_expr_as_operand(te));
-						return (v.name.clone(), c);
+						let c = v.value.as_ref().map(|te| self.intern_const_body(te));
+						(v.name.clone(), c)
 					})
 					.collect(),
 			},
 			span: e.span,
-		};
+		}
 	}
 
 	fn lower_variant(v: &TypedVariantDecl) -> MirTypeDef

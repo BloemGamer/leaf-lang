@@ -71,6 +71,7 @@ pub enum ErrorCode
 
 	// Mir
 	MirUndefinedLabel,
+	MirUninitializedVariable,
 
 	//
 	CompilerBug,
