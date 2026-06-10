@@ -4796,22 +4796,62 @@ impl<'a> Checker<'a>
 						let trait_name =
 							unary_op_trait_method!(op).expect("Neg and Not always have a trait method name");
 
-						if matches!(&tinner.ty, Ty::Generic { .. } | Ty::Infer) {
-							let ty = tinner.ty.clone();
-							return Ok(TypedExpr {
-								kind: TypedExprKind::Unary {
-									op: *op,
-									expr: Box::new(tinner),
-								},
-								ty,
-								span,
-							});
+						let mut nfn_sym: Option<SymbolId> = self.op_trait_fn_sym(&tinner.ty, trait_name);
+
+						if nfn_sym.is_none() {
+							let bounds: &[TyBound] = match &tinner.ty {
+								Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => bounds,
+								_ => &[],
+							};
+							if !bounds.is_empty()
+								&& let Some(op_trait_sym) = self.traits.op_symbols.get(trait_name).copied()
+							{
+								for bound in bounds {
+									let TyBound::Trait { symbol, .. } = bound else { continue };
+									if *symbol == op_trait_sym {
+										let method_name = self
+											.traits
+											.decls
+											.get(symbol)
+											.and_then(|td| {
+												return td.items.iter().find_map(|it| {
+													return if let ResolvedTraitItem::Function(f) = it {
+														Some(f.signature.name.clone())
+													} else {
+														None
+													};
+												});
+											})
+											.unwrap_or_else(|| return trait_name.to_lowercase());
+										if let Some(&s) = self.caches.method_fn.get_sym(*symbol, &method_name) {
+											nfn_sym = Some(s);
+											break;
+										}
+									}
+									for blanket in &self.traits.blanket_impls {
+										if blanket.required_builtin == *symbol
+											&& blanket.granted_trait == op_trait_sym
+											&& let Some(m) = blanket.methods.iter().find(|m| {
+												return m.name.eq_ignore_ascii_case(trait_name)
+													|| m.name == trait_name.to_lowercase();
+											}) {
+											nfn_sym = Some(m.fn_sym);
+											break;
+										}
+									}
+									if nfn_sym.is_some() {
+										break;
+									}
+								}
+							}
 						}
 
-						if let Some(fn_sym) = self.op_trait_fn_sym(&tinner.ty, trait_name) {
+						if let Some(fn_sym) = nfn_sym {
 							let method_name = self.global.symbol(fn_sym).name.clone();
-							let ret_ty = self.check_unary(*op, &tinner.ty, span)?;
-
+							let ret_ty = match &tinner.ty {
+								Ty::Generic { .. } | Ty::ImplTrait { .. } => tinner.ty.clone(),
+								_ => self.check_unary(*op, &tinner.ty, span)?,
+							};
 							let callee = TypedExpr {
 								ty: Ty::Unit,
 								span,
@@ -4828,6 +4868,18 @@ impl<'a> Checker<'a>
 									args: vec![],
 								},
 								ty: ret_ty,
+								span,
+							});
+						}
+
+						if matches!(&tinner.ty, Ty::Infer) {
+							let ty = tinner.ty.clone();
+							return Ok(TypedExpr {
+								kind: TypedExprKind::Unary {
+									op: *op,
+									expr: Box::new(tinner),
+								},
+								ty,
 								span,
 							});
 						}
