@@ -36,8 +36,8 @@ fn! main()
 <br/>
 
 ### Current focus
+- [ ] MIR generation
 - [ ] Small improvements in the compiler
-- [ ] Type resolutions
 - [ ] Improve diagnostics
 
 ### Still actively being developed
@@ -46,7 +46,8 @@ fn! main()
 - [x] Desugarer
 - [x] Symbol collections
 - [x] Name resolution
-- [ ] Type resolution
+- [x] Type resolutions
+- [ ] MIR generation
 - [ ] Refining the syntax
 
 ### Short-term
