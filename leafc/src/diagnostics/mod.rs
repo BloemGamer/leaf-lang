@@ -535,10 +535,31 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 
 		let span: Span = primary.span;
 
-		let file: &crate::source_map::SourceFile = self
-			.source_map
-			.get(span.source_index)
-			.expect("Bug: asked a file that does not exsist");
+		let gutter: String = blue("|", self.config);
+
+		let Some(file) = self.source_map.get(span.source_index) else {
+			writeln!(f, "{severity_label}: {}", bold(&self.diag.message, self.config))?;
+			for note in &self.diag.notes {
+				writeln!(f, "note: {}", note)?;
+			}
+			for help in &self.diag.helps {
+				writeln!(f, "help: {}", help)?;
+			}
+			for sug in &self.diag.suggestions {
+				writeln!(f, "suggestion: {}", sug.message)?;
+				for (span, replacement) in &sug.edits {
+					writeln!(f, "  replace {}..{} with `{}`", span.start, span.end, replacement)?;
+				}
+			}
+			for related in &self.diag.related {
+				writeln!(f)?;
+				writeln!(f, "related:")?;
+				let r: OldStyleRenderer = Self::new(related, self.source_map, self.config);
+				writeln!(f, "{}", r)?;
+			}
+			return Ok(());
+		};
+
 		let source: &str = &file.src;
 		let filename: &std::path::PathBuf = &file.path;
 
@@ -546,7 +567,6 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 			&format!("{}:{}:{}", filename.display(), span.start_line, span.start_col),
 			self.config,
 		);
-		let gutter: String = blue("|", self.config);
 
 		writeln!(
 			f,
