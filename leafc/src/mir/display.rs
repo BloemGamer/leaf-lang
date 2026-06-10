@@ -1,6 +1,7 @@
 use std::fmt;
 
-use crate::utils::indent_writer::IndentWriter;
+use crate::parser::CallType;
+use crate::{type_analysis::TyBound, utils::indent_writer::IndentWriter};
 
 use super::{
 	ConstBodyId, MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirConstBody, MirFunction, MirGlobal, MirItem,
@@ -77,11 +78,105 @@ pub fn write_mir_global(f: &mut fmt::Formatter<'_>, _w: &mut IndentWriter, globa
 	);
 }
 
+fn write_generic_param_list(f: &mut fmt::Formatter<'_>, generics: &[crate::parser::GenericParam]) -> fmt::Result
+{
+	if generics.is_empty() {
+		return Ok(());
+	}
+	write!(f, "<")?;
+	for (i, g) in generics.iter().enumerate() {
+		if i > 0 {
+			write!(f, ", ")?;
+		}
+		write!(f, "{}", g.name)?;
+	}
+	return write!(f, ">");
+}
+
+fn write_fn_generic_list(
+	f: &mut fmt::Formatter<'_>,
+	generics: &[(crate::parser::Ident, crate::lexer::Span)],
+	heap_generics: &[crate::name_resolution::ResolvedGenericHeapParam],
+) -> fmt::Result
+{
+	if generics.is_empty() && heap_generics.is_empty() {
+		return Ok(());
+	}
+	write!(f, "<")?;
+	let mut first = true;
+	for (name, _) in generics {
+		if !first {
+			write!(f, ", ")?;
+		}
+		write!(f, "{}", name)?;
+		first = false;
+	}
+	for hp in heap_generics {
+		if !first {
+			write!(f, ", ")?;
+		}
+		// Heap generics get a leading `'` so they're visually distinct from
+		// regular type params.
+		write!(f, "'{}", hp.name)?;
+		first = false;
+	}
+	return write!(f, ">");
+}
+
+fn write_ty_bound(f: &mut fmt::Formatter<'_>, b: &TyBound) -> fmt::Result
+{
+	match b {
+		TyBound::Trait { symbol, .. } => return write!(f, "{:?}", symbol),
+		TyBound::Fn { args, ret } => {
+			write!(f, "Fn(")?;
+			for (i, a) in args.iter().enumerate() {
+				if i > 0 {
+					write!(f, ", ")?;
+				}
+				write!(f, "{}", a)?;
+			}
+			return write!(f, ") -> {}", ret);
+		}
+	}
+}
+
+fn write_where_clause(
+	f: &mut fmt::Formatter<'_>,
+	w: &IndentWriter,
+	where_clause: &[crate::type_analysis::TypedWhereConstraint],
+) -> fmt::Result
+{
+	if where_clause.is_empty() {
+		return Ok(());
+	}
+	writeln!(f)?;
+	w.write_indent(f)?;
+	write!(f, "where")?;
+	for (i, c) in where_clause.iter().enumerate() {
+		if i > 0 {
+			write!(f, ",")?;
+		}
+		writeln!(f)?;
+		w.write_indent(f)?;
+		write!(f, "  {}: ", c.ty)?;
+		for (j, b) in c.bounds.iter().enumerate() {
+			if j > 0 {
+				write!(f, " + ")?;
+			}
+			write_ty_bound(f, b)?;
+		}
+	}
+	return Ok(());
+}
+
 pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typedef: &MirTypeDef) -> fmt::Result
 {
 	match &typedef.kind {
 		MirTypeDefKind::Struct { fields } => {
-			writeln!(f, "struct {} {{  // {:?}", typedef.name, typedef.symbol)?;
+			write!(f, "struct {}", typedef.name)?;
+			write_generic_param_list(f, &typedef.generics)?;
+			write_where_clause(f, w, &typedef.where_clause)?;
+			writeln!(f, " {{  // {:?}", typedef.symbol)?;
 			w.indent();
 			for (name, ty) in fields {
 				w.write_indent(f)?;
@@ -91,7 +186,10 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			return writeln!(f, "}}");
 		}
 		MirTypeDefKind::Union { fields } => {
-			writeln!(f, "union {} {{  // {:?}", typedef.name, typedef.symbol)?;
+			write!(f, "union {}", typedef.name)?;
+			write_generic_param_list(f, &typedef.generics)?;
+			write_where_clause(f, w, &typedef.where_clause)?;
+			writeln!(f, " {{  // {:?}", typedef.symbol)?;
 			w.indent();
 			for (name, ty) in fields {
 				w.write_indent(f)?;
@@ -101,7 +199,9 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			return writeln!(f, "}}");
 		}
 		MirTypeDefKind::Enum { variants } => {
-			writeln!(f, "enum {} {{  // {:?}", typedef.name, typedef.symbol)?;
+			write!(f, "enum {}", typedef.name)?;
+			write_generic_param_list(f, &typedef.generics)?;
+			writeln!(f, " {{  // {:?}", typedef.symbol)?;
 			w.indent();
 			for (name, value) in variants {
 				w.write_indent(f)?;
@@ -115,7 +215,9 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			return writeln!(f, "}}");
 		}
 		MirTypeDefKind::Variant { members } => {
-			writeln!(f, "variant {} {{  // {:?}", typedef.name, typedef.symbol)?;
+			write!(f, "variant {}", typedef.name)?;
+			write_generic_param_list(f, &typedef.generics)?;
+			writeln!(f, " {{  // {:?}", typedef.symbol)?;
 			w.indent();
 			for (name, ty) in members {
 				w.write_indent(f)?;
@@ -129,14 +231,23 @@ pub fn write_mir_typedef(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, typed
 			return writeln!(f, "}}");
 		}
 		MirTypeDefKind::TypeAlias { ty } => {
-			return writeln!(f, "type {} = {};  // {:?}", typedef.name, ty, typedef.symbol);
+			write!(f, "type {}", typedef.name)?;
+			write_generic_param_list(f, &typedef.generics)?;
+			return writeln!(f, " = {};  // {:?}", ty, typedef.symbol);
 		}
 	}
 }
 
 pub fn write_mir_function(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func: &MirFunction) -> fmt::Result
 {
-	write!(f, "fn {}", func.name)?;
+	write!(f, "fn")?;
+	match func.call_type {
+		CallType::UserHeap => write!(f, "!")?,
+		CallType::UserMaybeHeap | CallType::CompilerHeap => write!(f, "?")?,
+		CallType::Regular => {}
+	}
+	write!(f, " {}", func.name)?;
+	write_fn_generic_list(f, &func.generics, &func.heap_generics)?;
 	write!(f, "(")?;
 	for (i, param) in func.params.iter().enumerate() {
 		if i > 0 {
@@ -148,6 +259,7 @@ pub fn write_mir_function(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, func
 		write!(f, "{}: {} [_{:?}]", param.name, param.ty, param.local.0)?;
 	}
 	write!(f, ") -> {}", func.return_ty)?;
+	write_where_clause(f, w, &func.where_clause)?;
 	writeln!(f, "  // {:?}", func.symbol)?;
 
 	match &func.body {
@@ -226,6 +338,34 @@ pub fn write_mir_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: 
 	return writeln!(f, "}}");
 }
 
+fn write_call_generics(
+	f: &mut fmt::Formatter<'_>,
+	type_args: &[crate::type_analysis::Ty],
+	named_generics: &[(String, crate::type_analysis::Ty)],
+) -> fmt::Result
+{
+	if type_args.is_empty() && named_generics.is_empty() {
+		return Ok(());
+	}
+	write!(f, "::<")?;
+	let mut first = true;
+	for ta in type_args {
+		if !first {
+			write!(f, ", ")?;
+		}
+		write!(f, "{}", ta)?;
+		first = false;
+	}
+	for (name, ty) in named_generics {
+		if !first {
+			write!(f, ", ")?;
+		}
+		write!(f, "{} = {}", name, ty)?;
+		first = false;
+	}
+	return write!(f, ">");
+}
+
 pub fn write_mir_stmt(f: &mut fmt::Formatter<'_>, w: &IndentWriter, stmt: &MirStmt) -> fmt::Result
 {
 	w.write_indent(f)?;
@@ -236,8 +376,15 @@ pub fn write_mir_stmt(f: &mut fmt::Formatter<'_>, w: &IndentWriter, stmt: &MirSt
 			write_mir_rvalue(f, rvalue)?;
 			return writeln!(f, ";");
 		}
-		MirStmt::Call { callee, args, .. } => {
+		MirStmt::Call {
+			callee,
+			type_args,
+			named_generics,
+			args,
+			..
+		} => {
 			write_mir_callee(f, callee)?;
+			write_call_generics(f, type_args, named_generics)?;
 			write!(f, "(")?;
 			for (i, arg) in args.iter().enumerate() {
 				if i > 0 {
@@ -276,6 +423,8 @@ pub fn write_mir_terminator(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, te
 		}
 		MirTerminator::CallAndContinue {
 			callee,
+			type_args,
+			named_generics,
 			args,
 			dest,
 			next,
@@ -285,6 +434,7 @@ pub fn write_mir_terminator(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, te
 			write_mir_place(f, dest)?;
 			write!(f, " = ")?;
 			write_mir_callee(f, callee)?;
+			write_call_generics(f, type_args, named_generics)?;
 			write!(f, "(")?;
 			for (i, arg) in args.iter().enumerate() {
 				if i > 0 {

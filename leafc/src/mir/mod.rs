@@ -13,14 +13,15 @@ use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 use crate::{
 	diagnostics::{CompileDiagnostic, CompileError, DiagnosticBuilder, ErrorCode},
 	lexer::{IntSign, IntSize, IntType, Span, Spanned, StringFlags},
-	name_resolution::ResolvedPathKind,
-	parser::{AssignOp, BinaryOp, CallType, Literal, UnaryOp},
+	name_resolution::{ResolvedGenericHeapParam, ResolvedPathKind},
+	parser::{self, AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{
 		Primitive, Ty, TypedArrayLiteral, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind, TypedFunctionDecl,
 		TypedImplItem, TypedModule, TypedPattern, TypedStmt, TypedStructDecl, TypedSwitchBody, TypedTopLevelDecl,
-		TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl, intrinsics::Intrinsic,
+		TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl, TypedWhereConstraint,
+		intrinsics::Intrinsic,
 	},
 };
 
@@ -93,6 +94,8 @@ pub struct MirTypeDef
 {
 	pub symbol: SymbolId,
 	pub name: String,
+	pub generics: Vec<parser::GenericParam>,
+	pub where_clause: Vec<TypedWhereConstraint>,
 	pub kind: MirTypeDefKind,
 	pub span: Span,
 }
@@ -128,6 +131,12 @@ pub struct MirFunction
 	pub symbol: SymbolId,
 	pub name: String,
 	pub call_type: CallType,
+	/// Type-level generic parameters (`<T, U>`).
+	pub generics: Vec<(parser::Ident, Span)>,
+	/// Heap/IO generic parameters (`<alloc>`, `<io>`).
+	pub heap_generics: Vec<ResolvedGenericHeapParam>,
+	/// `where` clause bounds (already lowered to `TyBound`s).
+	pub where_clause: Vec<TypedWhereConstraint>,
 	/// Parameters are the first `params.len()` locals in `body.locals`.
 	pub params: Vec<MirParam>,
 	pub return_ty: Ty,
@@ -222,6 +231,10 @@ pub enum MirStmt
 	Call
 	{
 		callee: MirCallee,
+		/// Explicit type arguments at the call site (turbofish-style).
+		type_args: Vec<Ty>,
+		/// Heap/IO generic tokens forwarded into the callee.
+		named_generics: Vec<(String, Ty)>,
 		args: Vec<MirOperand>,
 		span: Span,
 	},
@@ -258,10 +271,11 @@ pub enum MirTerminator
 	CallAndContinue
 	{
 		callee: MirCallee,
+		type_args: Vec<Ty>,
+		named_generics: Vec<(String, Ty)>,
 		args: Vec<MirOperand>,
 		dest: MirPlace,
 		next: BlockId,
-		/// Target block for unwinding (not yet used; placeholder for later, maybe).
 		unwind: Option<BlockId>,
 		span: Span,
 	},
@@ -735,10 +749,8 @@ impl<'a> MirLowerer<'a>
 		}
 
 		let body = f.body.as_ref().map(|b| {
-			let mut builder = BodyBuilder::new(locals.clone());
+			let mut builder: BodyBuilder = BodyBuilder::new(locals.clone());
 
-			// Seed local_map with parameters so identifier lookups find locals
-			// instead of falling through to MirPlaceBase::Global.
 			for (sym, local_id) in &param_symbols {
 				builder.local_map.insert(*sym, *local_id);
 			}
@@ -754,7 +766,6 @@ impl<'a> MirLowerer<'a>
 			}
 
 			self.lower_block_into(&mut builder, b);
-
 			builder.set_terminator(MirTerminator::Return);
 
 			return builder.finish(params.len());
@@ -764,6 +775,9 @@ impl<'a> MirLowerer<'a>
 			symbol: f.resolved_name,
 			name: f.signature.name.clone(),
 			call_type: f.signature.call_type,
+			generics: f.signature.generics.clone(),
+			heap_generics: f.signature.heap_generics.clone(),
+			where_clause: f.signature.where_clause.clone(),
 			params,
 			return_ty: f.signature.return_type.clone(),
 			body,
@@ -1202,7 +1216,8 @@ impl<'a> MirLowerer<'a>
 			TypedExprKind::Call {
 				callee,
 				call_type: _,
-				named_generics: _,
+				named_generics,
+
 				args,
 			} => {
 				if let TypedExprKind::InternalCall { intrinsic } = &callee.kind
@@ -1255,12 +1270,20 @@ impl<'a> MirLowerer<'a>
 					}
 				};
 
+				// after building `lowered_callee` and `lowered_args`
+				let lowered_named_generics: Vec<(String, Ty)> = named_generics
+					.iter()
+					.map(|(name, te)| return (name.clone(), te.ty.clone()))
+					.collect();
+
 				let next_bb: BlockId = builder.alloc_block();
 
 				if matches!(expr.ty, Ty::Unit | Ty::Never) {
 					let dummy: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
 					builder.set_terminator(MirTerminator::CallAndContinue {
 						callee: lowered_callee,
+						type_args: Vec::new(),
+						named_generics: lowered_named_generics,
 						args: lowered_args,
 						dest: MirPlace {
 							base: MirPlaceBase::Local(dummy),
@@ -1280,6 +1303,8 @@ impl<'a> MirLowerer<'a>
 					let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
 					builder.set_terminator(MirTerminator::CallAndContinue {
 						callee: lowered_callee,
+						type_args: Vec::new(),
+						named_generics: lowered_named_generics,
 						args: lowered_args,
 						dest: MirPlace {
 							base: MirPlaceBase::Local(temp),
@@ -1633,6 +1658,8 @@ impl<'a> MirLowerer<'a>
 						next: panic_bb,
 						unwind: None,
 						span: expr.span(),
+						type_args: Vec::new(),
+						named_generics: Vec::new(),
 					});
 					builder.switch_to(panic_bb);
 					builder.set_terminator(MirTerminator::Unreachable);
@@ -2463,6 +2490,8 @@ impl<'a> MirLowerer<'a>
 		return MirTypeDef {
 			symbol: s.resolved_name,
 			name: s.name.clone(),
+			generics: s.generics.clone(),
+			where_clause: s.where_clause.clone(),
 			kind: MirTypeDefKind::Struct {
 				fields: s.fields.iter().map(|f| return (f.name.clone(), f.ty.clone())).collect(),
 			},
@@ -2475,6 +2504,8 @@ impl<'a> MirLowerer<'a>
 		return MirTypeDef {
 			symbol: u.resolved_name,
 			name: u.name.clone(),
+			generics: u.generics.clone(),
+			where_clause: u.where_clause.clone(),
 			kind: MirTypeDefKind::Union {
 				fields: u.fields.iter().map(|f| return (f.name.clone(), f.ty.clone())).collect(),
 			},
@@ -2487,6 +2518,8 @@ impl<'a> MirLowerer<'a>
 		return MirTypeDef {
 			symbol: e.resolved_name,
 			name: e.name.clone(),
+			generics: e.generics.clone(),
+			where_clause: Vec::new(), // enums currently have no where clause
 			kind: MirTypeDefKind::Enum {
 				variants: e
 					.variants
@@ -2506,6 +2539,8 @@ impl<'a> MirLowerer<'a>
 		return MirTypeDef {
 			symbol: v.resolved_name,
 			name: v.name.clone(),
+			generics: v.generics.clone(),
+			where_clause: Vec::new(),
 			kind: MirTypeDefKind::Variant {
 				members: v
 					.variants
@@ -2522,6 +2557,8 @@ impl<'a> MirLowerer<'a>
 		return MirTypeDef {
 			symbol: t.resolved_name,
 			name: t.name.clone(),
+			generics: t.generics.clone(),
+			where_clause: Vec::new(),
 			kind: MirTypeDefKind::TypeAlias { ty: t.ty.clone() },
 			span: t.span,
 		};
