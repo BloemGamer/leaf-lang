@@ -527,6 +527,11 @@ impl BodyBuilder
 		self.blocks[self.current_block.0 as usize].terminator = term;
 	}
 
+	const fn switch_to(&mut self, block: BlockId)
+	{
+		self.current_block = block;
+	}
+
 	fn finish(self, param_count: usize) -> MirBody
 	{
 		return MirBody {
@@ -535,6 +540,13 @@ impl BodyBuilder
 			blocks: self.blocks,
 			return_local: self.return_local,
 		};
+	}
+
+	fn terminate(&mut self, term: MirTerminator)
+	{
+		self.set_terminator(term);
+		let dead = self.alloc_block();
+		self.current_block = dead;
 	}
 }
 
@@ -558,14 +570,14 @@ impl<'a> MirLowerer<'a>
 
 	fn copy_or_move(&self, place: MirPlace) -> MirOperand
 	{
-		if place
+		return if place
 			.ty
 			.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
 		{
 			MirOperand::Copy(place)
 		} else {
 			MirOperand::Move(place)
-		}
+		};
 	}
 
 	fn lower_module(&mut self, module: &TypedModule) -> MirModule
@@ -804,11 +816,7 @@ impl<'a> MirLowerer<'a>
 					}
 				}
 
-				builder.set_terminator(MirTerminator::Return);
-
-				// allocate a new block for dead code, but it should still be checked ect
-				let dead: BlockId = builder.alloc_block();
-				builder.current_block = dead;
+				builder.terminate(MirTerminator::Return);
 			}
 			TypedStmt::Expr(typed_expr) => {
 				self.lower_expr_into(builder, typed_expr);
@@ -843,10 +851,7 @@ impl<'a> MirLowerer<'a>
 					}
 				}
 
-				builder.set_terminator(MirTerminator::Goto { target: break_block });
-
-				let dead: BlockId = builder.alloc_block();
-				builder.current_block = dead;
+				builder.terminate(MirTerminator::Goto { target: break_block });
 			}
 			TypedStmt::Continue { label, span } => {
 				let continue_block =
@@ -862,11 +867,7 @@ impl<'a> MirLowerer<'a>
 						);
 						BlockId(0)
 					};
-				builder.set_terminator(MirTerminator::Goto { target: continue_block });
-
-				// allocate a new block for dead code, but it should still be checked ect
-				let dead: BlockId = builder.alloc_block();
-				builder.current_block = dead;
+				builder.terminate(MirTerminator::Goto { target: continue_block });
 			}
 			TypedStmt::If {
 				cond,
@@ -886,17 +887,17 @@ impl<'a> MirLowerer<'a>
 					else_block: else_bb,
 				});
 
-				builder.current_block = then_bb;
+				builder.switch_to(then_bb);
 				self.lower_block_into(builder, then_block);
 				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
 
-				builder.current_block = else_bb;
+				builder.switch_to(else_bb);
 				if let Some(else_block) = else_branch {
 					self.lower_stmt_into(builder, else_block);
 				}
 				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
 
-				builder.current_block = merge_bb;
+				builder.switch_to(merge_bb);
 			}
 			TypedStmt::Loop { label, body, span } => {
 				let loop_bb: BlockId = builder.alloc_block();
@@ -909,13 +910,13 @@ impl<'a> MirLowerer<'a>
 					result_local: None,
 				});
 
-				builder.current_block = loop_bb;
+				builder.switch_to(loop_bb);
 
 				self.lower_block_into(builder, body);
 
 				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
 
-				builder.current_block = exit_loop_bb;
+				builder.switch_to(exit_loop_bb);
 				builder.loop_stack.pop();
 			}
 			TypedStmt::Delete { expr, span } => {
@@ -1185,7 +1186,7 @@ impl<'a> MirLowerer<'a>
 						unwind: None,
 						span: expr.span(),
 					});
-					builder.current_block = next_bb;
+					builder.switch_to(next_bb);
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::ZeroInit,
 						ty: expr.ty.clone(),
@@ -1204,7 +1205,7 @@ impl<'a> MirLowerer<'a>
 						unwind: None,
 						span: expr.span(),
 					});
-					builder.current_block = next_bb;
+					builder.switch_to(next_bb);
 					if expr
 						.ty
 						.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
@@ -1493,10 +1494,10 @@ impl<'a> MirLowerer<'a>
 					let is_last: bool = i == arms.len() - 1;
 					let body_bb: BlockId = builder.alloc_block();
 					let fail_bb: BlockId = if is_last { unreachable_bb } else { builder.alloc_block() };
-					builder.current_block = next_test_bb;
+					builder.switch_to(next_test_bb);
 					self.lower_pattern_test(builder, &arm.pattern, scrutinee_local, &scrutinee.ty, body_bb, fail_bb);
 
-					builder.current_block = body_bb;
+					builder.switch_to(body_bb);
 
 					self.lower_pattern_bindings(builder, &arm.pattern, scrutinee_local);
 
@@ -1531,7 +1532,7 @@ impl<'a> MirLowerer<'a>
 					next_test_bb = fail_bb;
 				}
 
-				builder.current_block = unreachable_bb;
+				builder.switch_to(unreachable_bb);
 				// TODO: the checker does not validate if patterns are exausted, so inserting a panic for the default value, should be removed if this check is implemented
 				{
 					let panic_bb: BlockId = builder.alloc_block();
@@ -1557,11 +1558,11 @@ impl<'a> MirLowerer<'a>
 						unwind: None,
 						span: expr.span(),
 					});
-					builder.current_block = panic_bb;
+					builder.switch_to(panic_bb);
 					builder.set_terminator(MirTerminator::Unreachable);
 				}
 
-				builder.current_block = merge_bb;
+				builder.switch_to(merge_bb);
 
 				if let Some(res) = result_local {
 					let place: MirPlace = MirPlace {
@@ -1574,7 +1575,7 @@ impl<'a> MirLowerer<'a>
 					// Merge block is unreachable; mark it and hand back a typed dummy.
 					builder.set_terminator(MirTerminator::Unreachable);
 					let dead: BlockId = builder.alloc_block();
-					builder.current_block = dead;
+					builder.switch_to(dead);
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::Undef,
 						ty: Ty::Never,
@@ -1611,7 +1612,7 @@ impl<'a> MirLowerer<'a>
 					else_block: else_bb,
 				});
 
-				builder.current_block = then_bb;
+				builder.switch_to(then_bb);
 				for stmt in &then_block.stmts {
 					self.lower_stmt_into(builder, stmt);
 				}
@@ -1631,7 +1632,7 @@ impl<'a> MirLowerer<'a>
 				}
 				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
 
-				builder.current_block = else_bb;
+				builder.switch_to(else_bb);
 				if let Some(else_expr) = else_branch {
 					let else_operand = self.lower_expr_into(builder, else_expr);
 					if let Some(res) = result_local {
@@ -1648,7 +1649,7 @@ impl<'a> MirLowerer<'a>
 				}
 				builder.set_terminator(MirTerminator::Goto { target: merge_bb });
 
-				builder.current_block = merge_bb;
+				builder.switch_to(merge_bb);
 
 				if let Some(res) = result_local {
 					let place: MirPlace = MirPlace {
@@ -1661,7 +1662,7 @@ impl<'a> MirLowerer<'a>
 					// Merge block is unreachable; mark it and hand back a typed dummy.
 					builder.set_terminator(MirTerminator::Unreachable);
 					let dead: BlockId = builder.alloc_block();
-					builder.current_block = dead;
+					builder.switch_to(dead);
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::Undef,
 						ty: Ty::Never,
@@ -1694,13 +1695,13 @@ impl<'a> MirLowerer<'a>
 					result_local,
 				});
 
-				builder.current_block = loop_bb;
+				builder.switch_to(loop_bb);
 				self.lower_block_into(builder, body);
 				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
 
 				builder.loop_stack.pop();
 
-				builder.current_block = exit_bb;
+				builder.switch_to(exit_bb);
 
 				if let Some(res) = result_local {
 					let place: MirPlace = MirPlace {
@@ -1713,7 +1714,7 @@ impl<'a> MirLowerer<'a>
 					// Merge block is unreachable; mark it and hand back a typed dummy.
 					builder.set_terminator(MirTerminator::Unreachable);
 					let dead: BlockId = builder.alloc_block();
-					builder.current_block = dead;
+					builder.switch_to(dead);
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::Undef,
 						ty: Ty::Never,
@@ -1817,7 +1818,7 @@ impl<'a> MirLowerer<'a>
 				} else {
 					builder.set_terminator(MirTerminator::Goto { target: check_upper_bb });
 				}
-				builder.current_block = check_upper_bb;
+				builder.switch_to(check_upper_bb);
 
 				if let Some(end) = &range_expr.end {
 					let end_operand: MirOperand = self.lower_expr_as_operand(end);
@@ -1857,7 +1858,7 @@ impl<'a> MirLowerer<'a>
 			TypedPattern::Or { patterns, .. } => {
 				let mut next_bb: BlockId = builder.current_block;
 				for (i, alt) in patterns.iter().enumerate() {
-					builder.current_block = next_bb;
+					builder.switch_to(next_bb);
 					let alt_fail: BlockId = if i == patterns.len() - 1 {
 						fail
 					} else {
@@ -1882,7 +1883,7 @@ impl<'a> MirLowerer<'a>
 				}
 				chain.reverse();
 				for (test_bb, sub_success, sub_pattern, idx) in chain {
-					builder.current_block = test_bb;
+					builder.switch_to(test_bb);
 					let elem_ty: Ty = sub_pattern.ty().clone();
 					let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub_pattern.span());
 					builder.push_stmt(MirStmt::Assign {
@@ -2001,7 +2002,7 @@ impl<'a> MirLowerer<'a>
 							test_blocks[idx + 1]
 						};
 
-						builder.current_block = test_bb;
+						builder.switch_to(test_bb);
 
 						let elem_ty: Ty = sub_pattern.ty().clone();
 						let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub_pattern.span());
@@ -2051,7 +2052,7 @@ impl<'a> MirLowerer<'a>
 				}
 				chain.reverse();
 				for (test_bb, sub_success, sub_pattern, field_name) in chain {
-					builder.current_block = test_bb;
+					builder.switch_to(test_bb);
 					let field_ty: Ty = sub_pattern.ty().clone();
 					let field_local: LocalId = builder.alloc_local(field_ty.clone(), None, false, sub_pattern.span());
 					builder.push_stmt(MirStmt::Assign {
