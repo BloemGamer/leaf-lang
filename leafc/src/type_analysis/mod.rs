@@ -5901,12 +5901,13 @@ impl<'a> Checker<'a>
 
 			ResolvedExpr::Loop { label, body, .. } => {
 				let tbody: TypedBlock = self.check_block_as_value(body)?;
+				let loop_ty: Ty = collect_loop_break_ty(&tbody, label).unwrap_or(Ty::Never);
 				(
 					TypedExprKind::Loop {
 						label: label.clone(),
 						body: Box::new(tbody),
 					},
-					Ty::Never,
+					loop_ty,
 				)
 			}
 		};
@@ -8154,4 +8155,140 @@ fn is_builtin_modifier(modifiers: &[parser::Modifier]) -> bool
 				if name == "builtin"
 		);
 	});
+}
+
+fn collect_loop_break_ty(block: &TypedBlock, loop_label: &str) -> Option<Ty>
+{
+	let mut out: Option<Ty> = None;
+	collect_breaks_in_stmts(&block.stmts, loop_label, &mut out);
+	if let Some(tail) = &block.tail_expr {
+		collect_breaks_in_expr(tail, loop_label, &mut out);
+	}
+	return out;
+}
+
+fn merge_break_ty(out: &mut Option<Ty>, candidate: &Ty)
+{
+	match out {
+		None => *out = Some(candidate.clone()),
+		Some(Ty::Never) if !matches!(candidate, Ty::Never) => *out = Some(candidate.clone()),
+		_ => {}
+	}
+}
+
+fn collect_breaks_in_stmts(stmts: &[TypedStmt], loop_label: &str, out: &mut Option<Ty>)
+{
+	for s in stmts {
+		match s {
+			TypedStmt::Break {
+				label, value: Some(v), ..
+			} if label == loop_label => {
+				merge_break_ty(out, &v.ty);
+			}
+
+			TypedStmt::Loop { label, .. } if label == loop_label => {}
+
+			TypedStmt::Loop { body, .. } => {
+				collect_breaks_in_stmts(&body.stmts, loop_label, out);
+				if let Some(t) = &body.tail_expr {
+					collect_breaks_in_expr(t, loop_label, out);
+				}
+			}
+
+			TypedStmt::If {
+				then_block,
+				else_branch,
+				..
+			} => {
+				collect_breaks_in_stmts(&then_block.stmts, loop_label, out);
+				if let Some(t) = &then_block.tail_expr {
+					collect_breaks_in_expr(t, loop_label, out);
+				}
+				if let Some(eb) = else_branch {
+					collect_breaks_in_stmts(std::slice::from_ref(eb.as_ref()), loop_label, out);
+				}
+			}
+
+			TypedStmt::Block(b) | TypedStmt::Unsafe(b) => {
+				collect_breaks_in_stmts(&b.stmts, loop_label, out);
+				if let Some(t) = &b.tail_expr {
+					collect_breaks_in_expr(t, loop_label, out);
+				}
+			}
+
+			TypedStmt::Expr(e) => collect_breaks_in_expr(e, loop_label, out),
+
+			TypedStmt::VariableDecl(v) => {
+				if let Some(init) = &v.init {
+					collect_breaks_in_expr(init, loop_label, out);
+				}
+			}
+			TypedStmt::Assignment { target, value, .. } => {
+				collect_breaks_in_expr(target, loop_label, out);
+				collect_breaks_in_expr(value, loop_label, out);
+			}
+			TypedStmt::Return { value: Some(v), .. } => {
+				collect_breaks_in_expr(v, loop_label, out);
+			}
+			TypedStmt::Delete { expr, .. } => collect_breaks_in_expr(expr, loop_label, out),
+
+			TypedStmt::Return { value: None, .. }
+			| TypedStmt::Break { .. }
+			| TypedStmt::Continue { .. }
+			| TypedStmt::Directive(_)
+			| TypedStmt::Pending(_) => {}
+		}
+	}
+}
+
+fn collect_breaks_in_expr(expr: &TypedExpr, loop_label: &str, out: &mut Option<Ty>)
+{
+	match &expr.kind {
+		TypedExprKind::Block(b) | TypedExprKind::UnsafeBlock(b) => {
+			collect_breaks_in_stmts(&b.stmts, loop_label, out);
+			if let Some(t) = &b.tail_expr {
+				collect_breaks_in_expr(t, loop_label, out);
+			}
+		}
+
+		TypedExprKind::If {
+			then_block,
+			else_branch,
+			..
+		} => {
+			collect_breaks_in_stmts(&then_block.stmts, loop_label, out);
+			if let Some(t) = &then_block.tail_expr {
+				collect_breaks_in_expr(t, loop_label, out);
+			}
+			if let Some(e) = else_branch {
+				collect_breaks_in_expr(e, loop_label, out);
+			}
+		}
+
+		TypedExprKind::Loop { label, .. } if label == loop_label => {
+			// Shadowed by inner loop with the same label.
+		}
+		TypedExprKind::Loop { body, .. } => {
+			collect_breaks_in_stmts(&body.stmts, loop_label, out);
+			if let Some(t) = &body.tail_expr {
+				collect_breaks_in_expr(t, loop_label, out);
+			}
+		}
+
+		TypedExprKind::Switch { arms, .. } => {
+			for arm in arms {
+				match &arm.body {
+					TypedSwitchBody::Expr(e) => collect_breaks_in_expr(e, loop_label, out),
+					TypedSwitchBody::Block(b) => {
+						collect_breaks_in_stmts(&b.stmts, loop_label, out);
+						if let Some(t) = &b.tail_expr {
+							collect_breaks_in_expr(t, loop_label, out);
+						}
+					}
+				}
+			}
+		}
+
+		_ => {}
+	}
 }
