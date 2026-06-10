@@ -68,6 +68,7 @@ fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModu
 		.map(|x| return x.0);
 }
 
+#[allow(clippy::type_complexity)]
 fn build_pending(
 	modules: &[(&[&str], &str)],
 	config: &Config,

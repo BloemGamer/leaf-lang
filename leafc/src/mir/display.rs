@@ -26,6 +26,7 @@ impl fmt::Display for MirModule
 		if !self.const_bodies.is_empty() {
 			writeln!(f, "// ---- const bodies ----")?;
 			for (i, cb) in self.const_bodies.iter().enumerate() {
+				#[allow(clippy::cast_possible_truncation)]
 				write_mir_const_body(f, &mut w, ConstBodyId(i as u32), cb)?;
 				writeln!(f)?;
 			}
@@ -185,7 +186,7 @@ pub fn write_mir_body(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, body: &M
 
 fn write_mir_local_decl(
 	f: &mut fmt::Formatter<'_>,
-	w: &mut IndentWriter,
+	w: &IndentWriter,
 	local: &MirLocal,
 	param_count: usize,
 ) -> fmt::Result
@@ -225,7 +226,7 @@ pub fn write_mir_block(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, block: 
 	return writeln!(f, "}}");
 }
 
-pub fn write_mir_stmt(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, stmt: &MirStmt) -> fmt::Result
+pub fn write_mir_stmt(f: &mut fmt::Formatter<'_>, w: &IndentWriter, stmt: &MirStmt) -> fmt::Result
 {
 	w.write_indent(f)?;
 	match stmt {
@@ -324,7 +325,7 @@ pub fn write_mir_terminator(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, te
 	}
 }
 
-fn write_mir_switch_arm(f: &mut fmt::Formatter<'_>, w: &mut IndentWriter, arm: &MirSwitchArm) -> fmt::Result
+fn write_mir_switch_arm(f: &mut fmt::Formatter<'_>, w: &IndentWriter, arm: &MirSwitchArm) -> fmt::Result
 {
 	w.write_indent(f)?;
 	write_mir_operand(f, &arm.value)?;

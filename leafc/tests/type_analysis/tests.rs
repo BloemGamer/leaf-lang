@@ -110,9 +110,9 @@ fn parse_and_analyse<const TYPE_INFERENCE: bool>(
 		queue.extend(children);
 
 		let desugared: DesugaredAST = desugar::desugar_program(ast)
-			.map(|(ast, mut diags)| {
+			.map(|(tmp_ast, mut diags)| {
 				diagnostics.append(&mut diags);
-				return ast;
+				return tmp_ast;
 			})
 			.map_err(|mut diags| {
 				diagnostics.append(&mut diags);

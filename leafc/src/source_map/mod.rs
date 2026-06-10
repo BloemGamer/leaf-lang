@@ -26,6 +26,7 @@ pub struct SourceMap
 
 impl SourceMap
 {
+	#[allow(unused)]
 	pub fn new() -> SourceMap
 	{
 		return SourceMap::default();

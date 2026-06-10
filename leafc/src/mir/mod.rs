@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 #[cfg(test)]
 #[path = "../../tests/mir/tests.rs"]
 mod tests;
@@ -167,7 +169,7 @@ pub struct MirBody
 
 impl MirBody
 {
-	pub const fn entry_block(&self) -> BlockId
+	pub const fn entry_block() -> BlockId
 	{
 		return BlockId(0);
 	}
@@ -205,6 +207,7 @@ pub struct MirBasicBlock
 
 /// A single side-effecting step that does not alter control flow.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum MirStmt
 {
 	/// `place = rvalue`
@@ -632,12 +635,12 @@ impl<'a> MirLowerer<'a>
 		for decl in &module.ast.top_level_block.items {
 			self.lower_top_level_decl(decl, &mut items);
 		}
-		MirModule {
+		return MirModule {
 			path: module.path.clone(),
 			source_index: module.ast.source_index,
 			items,
 			const_bodies: std::mem::take(&mut self.const_bodies),
-		}
+		};
 	}
 
 	fn lower_top_level_decl(&mut self, decl: &TypedTopLevelDecl, out: &mut Vec<MirItem>)
@@ -770,28 +773,27 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_global(&mut self, v: &TypedVariableDecl) -> MirGlobal
 	{
-		let init: ConstBodyId = match v.init.as_ref() {
-			Some(init) => self.intern_const_body(init),
-			None => {
-				self.diagnostics.push(
-					MirError {
-						span: v.span(),
-						kind: MirErrorKind::UninitializedVariable {},
-					}
-					.build(),
-				);
-				self.intern_undef_const(v.ty.clone(), v.span)
-			}
+		let init: ConstBodyId = if let Some(init) = v.init.as_ref() {
+			self.intern_const_body(init)
+		} else {
+			self.diagnostics.push(
+				MirError {
+					span: v.span(),
+					kind: MirErrorKind::UninitializedVariable {},
+				}
+				.build(),
+			);
+			self.intern_undef_const(v.ty.clone(), v.span)
 		};
 
-		MirGlobal {
+		return MirGlobal {
 			symbol: v.resolved_name,
 			name: v.name.clone(),
 			ty: v.ty.clone(),
 			init,
 			mutable: v.mutable,
 			span: v.span,
-		}
+		};
 	}
 
 	fn lower_block_into(&mut self, builder: &mut BodyBuilder, block: &TypedBlock)
@@ -2450,10 +2452,10 @@ impl<'a> MirLowerer<'a>
 		});
 		builder.set_terminator(MirTerminator::Return);
 
-		MirConstBody {
+		return MirConstBody {
 			body: builder.finish(0),
 			result,
-		}
+		};
 	}
 
 	fn lower_struct(s: &TypedStructDecl) -> MirTypeDef

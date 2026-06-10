@@ -1,3 +1,5 @@
+#![allow(clippy::needless_raw_strings)]
+
 use std::{
 	collections::{HashSet, VecDeque},
 	fs, path,
@@ -96,7 +98,7 @@ fn compile_mir_with_result(
 					ModuleErrorKind::IoError(e.to_string())
 				};
 
-				vec![
+				return vec![
 					CompileError::Module(ModuleError {
 						logical_path: pm.logical_path.clone(),
 						span: pm.declared_at_span,
@@ -104,11 +106,11 @@ fn compile_mir_with_result(
 						context: Vec::new(),
 					})
 					.build(),
-				]
+				];
 			})?
 		};
 
-		let lexer = Lexer::new_add_to_source_map(&config, raw, pm.file_path.clone(), source_map);
+		let lexer = Lexer::new_add_to_source_map(config, raw, pm.file_path.clone(), source_map);
 
 		let expanded = ExpandedLexer::new(lexer);
 
@@ -118,11 +120,11 @@ fn compile_mir_with_result(
 			.parse_program()
 			.map(|(ast, mut diags)| {
 				diagnostics.append(&mut diags);
-				ast
+				return ast;
 			})
 			.map_err(|mut diags| {
 				diagnostics.append(&mut diags);
-				diagnostics.clone()
+				return diagnostics.clone();
 			})?;
 
 		let children = modules::collect_pending(&ast, &pm.file_path, &pm.logical_path)
@@ -131,23 +133,23 @@ fn compile_mir_with_result(
 		queue.extend(children);
 
 		let desugared = desugar::desugar_program(ast)
-			.map(|(ast, mut diags)| {
+			.map(|(tmp_ast, mut diags)| {
 				diagnostics.append(&mut diags);
-				ast
+				return tmp_ast;
 			})
 			.map_err(|mut diags| {
 				diagnostics.append(&mut diags);
-				diagnostics.clone()
+				return diagnostics.clone();
 			})?;
 
 		let symbols = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone())
 			.map(|(symbols, mut diags)| {
 				diagnostics.append(&mut diags);
-				symbols
+				return symbols;
 			})
 			.map_err(|mut diags| {
 				diagnostics.append(&mut diags);
-				diagnostics.clone()
+				return diagnostics.clone();
 			})?;
 
 		pending_modules.push((pm.logical_path, desugared, symbols));
@@ -162,7 +164,7 @@ fn compile_mir_with_result(
 			name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules).map_err(
 				|mut diags| {
 					diagnostics.append(&mut diags);
-					diagnostics.clone()
+					return diagnostics.clone();
 				},
 			)?;
 
@@ -177,14 +179,14 @@ fn compile_mir_with_result(
 
 			let (mir, _) = mir::lower_module(&typed, &global_symbols).map_err(|mut diags| {
 				diagnostics.append(&mut diags);
-				diagnostics.clone()
+				return diagnostics.clone();
 			})?;
 
 			return Ok(mir);
 		}
 	}
 
-	Err(vec![DiagnosticBuilder {
+	return Err(vec![DiagnosticBuilder {
 		code: None,
 		severity: Severity::Bug,
 		message: "User module was never lowered to MIR".into(),
@@ -193,20 +195,26 @@ fn compile_mir_with_result(
 		helps: Vec::new(),
 		suggestions: Vec::new(),
 		related: Vec::new(),
-	}])
+	}]);
 }
 
 fn first_function(mir: &MirModule) -> &crate::mir::MirFunction
 {
-	mir.items
+	return mir
+		.items
 		.iter()
-		.find_map(|i| if let MirItem::Function(f) = i { Some(f) } else { None })
-		.expect("no function in module")
+		.find_map(|i| {
+			if let MirItem::Function(f) = i {
+				return Some(f);
+			}
+			return None;
+		})
+		.expect("no function in module");
 }
 
 fn body(mir: &MirModule) -> &MirBody
 {
-	first_function(mir).body.as_ref().expect("function has no body")
+	return first_function(mir).body.as_ref().expect("function has no body");
 }
 
 // ── basic structure ────────────────────────────────────────────────────────
@@ -259,18 +267,18 @@ fn unit_return_has_no_return_local()
 fn var_decl_creates_local_and_assign()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() {
 				var x: i32 = 42;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// Find the local named "x"
 	let x_local = b
 		.locals
 		.iter()
-		.find(|l| l.name.as_deref() == Some("x"))
+		.find(|l| return l.name.as_deref() == Some("x"))
 		.expect("no local 'x'");
 	assert!(!x_local.mutable);
 
@@ -280,13 +288,11 @@ fn var_decl_creates_local_and_assign()
 			place,
 			rvalue: MirRvalue::Use(MirOperand::Const(lit)),
 			..
-		} = s
+		} = s && let MirPlaceBase::Local(id) = place.base
 		{
-			if let MirPlaceBase::Local(id) = place.base {
-				return id == x_local.id;
-			}
+			return id == x_local.id;
 		}
-		false
+		return false;
 	});
 	assert!(has_assign, "expected assign of 42 into 'x'");
 }
@@ -299,7 +305,7 @@ fn mutable_var_local_is_marked_mutable()
 	let y = b
 		.locals
 		.iter()
-		.find(|l| l.name.as_deref() == Some("y"))
+		.find(|l| return l.name.as_deref() == Some("y"))
 		.expect("no local 'y'");
 	assert!(y.mutable);
 }
@@ -312,15 +318,15 @@ fn mutable_var_local_is_marked_mutable()
 fn deref_read_emits_deref_projection()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(p: &i32) -> i32 {
 				return *p;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 
-	let has_deref_proj = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_deref_proj = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign {
 			rvalue: MirRvalue::Use(op),
 			..
@@ -330,13 +336,12 @@ fn deref_read_emits_deref_projection()
 				MirOperand::Copy(p) | MirOperand::Move(p) => p,
 				MirOperand::Const(_) => return false,
 			};
-			place
+			return place
 				.projections
 				.iter()
-				.any(|proj| matches!(proj, crate::mir::MirProjection::Deref))
-		} else {
-			false
+				.any(|proj| matches!(proj, crate::mir::MirProjection::Deref));
 		}
+		return false;
 	});
 	assert!(has_deref_proj, "expected a Deref projection when reading `*p`");
 
@@ -358,23 +363,22 @@ fn deref_read_emits_deref_projection()
 fn deref_write_emits_deref_projection_on_lhs()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(p: &mut i32) {
 				*p = 7;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 
-	let has_deref_lhs = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_deref_lhs = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign { place, .. } = s {
-			place
+			return place
 				.projections
 				.iter()
-				.any(|proj| matches!(proj, crate::mir::MirProjection::Deref))
-		} else {
-			false
+				.any(|proj| matches!(proj, crate::mir::MirProjection::Deref));
 		}
+		return false;
 	});
 	assert!(
 		has_deref_lhs,
@@ -388,16 +392,16 @@ fn deref_write_emits_deref_projection_on_lhs()
 fn deref_then_field_chains_projections()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			struct Pair { a: i32, b: i32 }
 			fn f(p: &Pair) -> i32 {
 				return (*p).a;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 
-	let has_chained = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_chained = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign {
 			rvalue: MirRvalue::Use(op),
 			..
@@ -415,10 +419,9 @@ fn deref_then_field_chains_projections()
 				.projections
 				.iter()
 				.any(|proj| matches!(proj, crate::mir::MirProjection::Field { name, .. } if name == "a"));
-			has_deref && has_field
-		} else {
-			false
+			return has_deref && has_field;
 		}
+		return false;
 	});
 	assert!(has_chained, "expected a chained Deref + Field projection for `(*p).a`");
 }
@@ -428,13 +431,13 @@ fn deref_then_field_chains_projections()
 fn if_stmt_produces_branch_terminator()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(cond: bool) {
 				if cond {
 					var x: i32 = 1;
 				}
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	let has_branch = b
@@ -450,7 +453,7 @@ fn if_stmt_produces_branch_terminator()
 fn if_else_stmt_produces_branch_and_two_gotos()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(cond: bool) {
 				if cond {
 					var x: i32 = 1;
@@ -458,7 +461,7 @@ fn if_else_stmt_produces_branch_and_two_gotos()
 					var x: i32 = 2;
 				}
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	let branches = b
@@ -480,13 +483,13 @@ fn if_else_stmt_produces_branch_and_two_gotos()
 fn loop_has_back_edge()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() {
 				loop {
 					break;
 				}
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// Find the loop header (the block that follows the entry Goto)
@@ -509,13 +512,13 @@ fn loop_has_back_edge()
 fn break_jumps_to_exit_block()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() {
 				loop {
 					break;
 				}
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// There should be at least two distinct Goto targets: the loop header and
@@ -525,10 +528,9 @@ fn break_jumps_to_exit_block()
 		.iter()
 		.filter_map(|bb| {
 			if let MirTerminator::Goto { target } = bb.terminator {
-				Some(target)
-			} else {
-				None
+				return Some(target);
 			}
+			return None;
 		})
 		.collect();
 	assert!(
@@ -544,10 +546,10 @@ fn break_jumps_to_exit_block()
 fn direct_call_produces_call_and_continue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn callee() -> i32 { return 1; }
 			fn caller() -> i32 { return callee(); }
-		"#,
+		",
 	);
 	// Look at the *caller* function specifically
 	let caller = mir
@@ -557,10 +559,9 @@ fn direct_call_produces_call_and_continue()
 			if let MirItem::Function(f) = i
 				&& f.name == "caller"
 			{
-				Some(f)
-			} else {
-				None
+				return Some(f);
 			}
+			return None;
 		})
 		.expect("no 'caller' function");
 	let b = caller.body.as_ref().unwrap();
@@ -577,10 +578,10 @@ fn direct_call_produces_call_and_continue()
 fn void_call_produces_call_and_continue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn side_effect() {}
 			fn caller() { side_effect(); }
-		"#,
+		",
 	);
 	let caller = mir
 		.items
@@ -589,10 +590,9 @@ fn void_call_produces_call_and_continue()
 			if let MirItem::Function(f) = i
 				&& f.name == "caller"
 			{
-				Some(f)
-			} else {
-				None
+				return Some(f);
 			}
+			return None;
 		})
 		.expect("no 'caller' function");
 	let b = caller.body.as_ref().unwrap();
@@ -610,16 +610,15 @@ fn integer_literal_becomes_const_operand()
 {
 	let mir = compile_mir("fn f() -> i32 { return 99; }");
 	let b = body(&mir);
-	let has_const = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_const = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign {
 			rvalue: MirRvalue::Use(MirOperand::Const(lit)),
 			..
 		} = s
 		{
-			matches!(lit.value, MirLiteralValue::Literal(_))
-		} else {
-			false
+			return matches!(lit.value, MirLiteralValue::Literal(_));
 		}
+		return false;
 	});
 	assert!(has_const, "expected a Const literal operand for 99");
 }
@@ -629,14 +628,14 @@ fn bool_literal_becomes_const_operand()
 {
 	let mir = compile_mir("fn f() -> bool { return true; }");
 	let b = body(&mir);
-	let has_const = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_const = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Use(MirOperand::Const(_)),
 				..
 			}
-		)
+		);
 	});
 	assert!(has_const, "expected a Const operand for `true`");
 }
@@ -647,16 +646,16 @@ fn bool_literal_becomes_const_operand()
 fn struct_init_emits_aggregate_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			struct Point { x: i32, y: i32 }
 			fn f() -> Point {
 				return Point{ x -> 1, y -> 2 };
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_agg = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_agg = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Aggregate {
@@ -665,7 +664,7 @@ fn struct_init_emits_aggregate_rvalue()
 				},
 				..
 			}
-		)
+		);
 	});
 	assert!(has_agg, "expected an Aggregate rvalue for struct init");
 }
@@ -676,21 +675,21 @@ fn struct_init_emits_aggregate_rvalue()
 fn tuple_expr_emits_tuple_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() -> (i32, i32) {
 				return (1, 2);
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_tuple = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_tuple = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Tuple(_),
 				..
 			}
-		)
+		);
 	});
 	assert!(has_tuple, "expected a Tuple rvalue");
 }
@@ -701,21 +700,21 @@ fn tuple_expr_emits_tuple_rvalue()
 fn array_list_emits_array_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() -> [i32; 3] {
 				return [1, 2, 3];
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_arr = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_arr = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Array { .. },
 				..
 			}
-		)
+		);
 	});
 	assert!(has_arr, "expected an Array rvalue");
 }
@@ -724,21 +723,21 @@ fn array_list_emits_array_rvalue()
 fn array_repeat_emits_array_repeat_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() -> [i32; 5] {
 				return [0; 5];
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_repeat = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_repeat = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::ArrayRepeat { .. },
 				..
 			}
-		)
+		);
 	});
 	assert!(has_repeat, "expected an ArrayRepeat rvalue");
 }
@@ -749,32 +748,30 @@ fn array_repeat_emits_array_repeat_rvalue()
 fn field_access_emits_field_projection()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			struct Pair { a: i32, b: i32 }
 			fn f(p: Pair) -> i32 {
 				return p.a;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// The Copy/Move operand for `p.a` should carry a Field projection
-	let has_field_proj = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_field_proj = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign {
 			rvalue: MirRvalue::Use(op),
 			..
 		} = s
 		{
-			let place = match op {
-				MirOperand::Copy(p) | MirOperand::Move(p) => p,
-				_ => return false,
+			let (MirOperand::Copy(place) | MirOperand::Move(place)) = op else {
+				return false;
 			};
-			place
+			return place
 				.projections
 				.iter()
-				.any(|proj| matches!(proj, crate::mir::MirProjection::Field { name, .. } if name == "a"))
-		} else {
-			false
+				.any(|proj| matches!(proj, crate::mir::MirProjection::Field { name, .. } if name == "a"));
 		}
+		return false;
 	});
 	assert!(has_field_proj, "expected a Field projection for 'p.a'");
 }
@@ -787,12 +784,12 @@ fn field_access_emits_field_projection()
 fn early_return_creates_dead_block()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(x: bool) -> i32 {
 				if x { return 1; }
 				return 0;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// There should be at least two Return terminators (early + final) OR
@@ -815,10 +812,9 @@ fn struct_decl_emits_typedef()
 	let mir = compile_mir("struct Foo { x: i32 }");
 	let has_struct = mir.items.iter().any(|i| {
 		if let MirItem::TypeDef(td) = i {
-			matches!(td.kind, crate::mir::MirTypeDefKind::Struct { .. }) && td.name == "Foo"
-		} else {
-			false
+			return matches!(td.kind, crate::mir::MirTypeDefKind::Struct { .. }) && td.name == "Foo";
 		}
+		return false;
 	});
 	assert!(has_struct, "expected a Struct typedef for 'Foo'");
 }
@@ -829,10 +825,9 @@ fn enum_decl_emits_typedef()
 	let mir = compile_mir("enum Color { Red, Green, Blue }");
 	let has_enum = mir.items.iter().any(|i| {
 		if let MirItem::TypeDef(td) = i {
-			matches!(td.kind, crate::mir::MirTypeDefKind::Enum { .. }) && td.name == "Color"
-		} else {
-			false
+			return matches!(td.kind, crate::mir::MirTypeDefKind::Enum { .. }) && td.name == "Color";
 		}
+		return false;
 	});
 	assert!(has_enum, "expected an Enum typedef for 'Color'");
 }
@@ -843,10 +838,9 @@ fn union_decl_emits_typedef()
 	let mir = compile_mir("union U { a: i32, b: f32 }");
 	let has_union = mir.items.iter().any(|i| {
 		if let MirItem::TypeDef(td) = i {
-			matches!(td.kind, crate::mir::MirTypeDefKind::Union { .. }) && td.name == "U"
-		} else {
-			false
+			return matches!(td.kind, crate::mir::MirTypeDefKind::Union { .. }) && td.name == "U";
 		}
+		return false;
 	});
 	assert!(has_union, "expected a Union typedef for 'U'");
 }
@@ -859,10 +853,9 @@ fn global_const_emits_global_item()
 	let mir = compile_mir("const MAX: i32 = 100;");
 	let has_global = mir.items.iter().any(|i| {
 		if let MirItem::Global(g) = i {
-			g.name == "MAX" && !g.mutable
-		} else {
-			false
+			return g.name == "MAX" && !g.mutable;
 		}
+		return false;
 	});
 	assert!(has_global, "expected a non-mutable global 'MAX'");
 }
@@ -873,10 +866,9 @@ fn global_mut_var_emits_mutable_global()
 	let mir = compile_mir("var mut COUNTER: i32 = 0;");
 	let has_global = mir.items.iter().any(|i| {
 		if let MirItem::Global(g) = i {
-			g.name == "COUNTER" && g.mutable
-		} else {
-			false
+			return g.name == "COUNTER" && g.mutable;
 		}
+		return false;
 	});
 	assert!(has_global, "expected a mutable global 'COUNTER'");
 }
@@ -889,7 +881,7 @@ fn global_mut_var_emits_mutable_global()
 fn switch_on_literal_produces_branches()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn classify(n: i32) -> i32 {
 				return switch n {
 					0 => 10,
@@ -897,7 +889,7 @@ fn switch_on_literal_produces_branches()
 					_ => 30,
 				};
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	let branch_count = b
@@ -918,7 +910,7 @@ fn switch_on_literal_produces_branches()
 #[test]
 fn extern_fn_has_no_body()
 {
-	let mir = compile_mir(r#"extern(C) fn puts(s: &cstr) -> i32;"#);
+	let mir = compile_mir(r"extern(C) fn puts(s: &cstr) -> i32;");
 	let f = first_function(&mir);
 	assert!(f.body.is_none(), "extern fn should have no MIR body");
 }
@@ -930,14 +922,14 @@ fn extern_fn_has_no_body()
 fn impl_method_is_emitted_as_function()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			struct Counter { n: i32 }
 			impl Counter {
 				fn increment(self) -> i32 {
 					return self.n + 1;
 				}
 			}
-		"#,
+		",
 	);
 	let has_method = mir
 		.items
@@ -955,21 +947,21 @@ fn impl_method_is_emitted_as_function()
 fn cast_emits_cast_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(x: i32) -> i64 {
 				return <i64>x;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_cast = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_cast = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Cast { .. },
 				..
 			}
-		)
+		);
 	});
 	assert!(has_cast, "expected a Cast rvalue");
 }
@@ -980,21 +972,21 @@ fn cast_emits_cast_rvalue()
 fn ref_expr_emits_ref_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(x: i32) -> &i32 {
 				return &x;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let has_ref = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
-		matches!(
+	let has_ref = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Ref { mutable: false, .. },
 				..
 			}
-		)
+		);
 	});
 	assert!(has_ref, "expected an immutable Ref rvalue");
 }
@@ -1003,11 +995,11 @@ fn ref_expr_emits_ref_rvalue()
 fn mut_ref_expr_emits_mutable_ref_rvalue()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(mut x: i32) -> &mut i32 {
 				return &mut x;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	let has_ref = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
@@ -1029,17 +1021,17 @@ fn mut_ref_expr_emits_mutable_ref_rvalue()
 fn delete_stmt_emits_delete_mir_stmt()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(p: *mut i32) {
 				delete p;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	let has_delete = b
 		.blocks
 		.iter()
-		.flat_map(|bb| bb.stmts.iter())
+		.flat_map(|bb| return bb.stmts.iter())
 		.any(|s| matches!(s, MirStmt::Delete { .. }));
 	assert!(has_delete, "expected a Delete MIR statement");
 }
@@ -1052,7 +1044,7 @@ fn nested_block_flattens_into_same_cfg()
 	// A plain `{ }` block expression does not create new basic blocks; it just
 	// flattens its statements into the current block.
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() -> i32 {
 				var x: i32 = {
 					var a: i32 = 1;
@@ -1060,10 +1052,10 @@ fn nested_block_flattens_into_same_cfg()
 				};
 				return x;
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
-	let a_local = b.locals.iter().find(|l| l.name.as_deref() == Some("a"));
+	let a_local = b.locals.iter().find(|l| return l.name.as_deref() == Some("a"));
 	assert!(a_local.is_some(), "local 'a' from inner block should exist");
 }
 
@@ -1073,28 +1065,27 @@ fn nested_block_flattens_into_same_cfg()
 fn loop_break_with_value_stores_into_result_local()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f() -> i32 {
 				return loop {
 					break 42i32;
 				};
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// There must be an Assign of the literal 42 somewhere (the break value
 	// being stored into the loop result local).
 	println!("{}", mir);
-	let has_literal_assign = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).any(|s| {
+	let has_literal_assign = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).any(|s| {
 		if let MirStmt::Assign {
 			rvalue: MirRvalue::Use(MirOperand::Const(lit)),
 			..
 		} = s
 		{
-			matches!(&lit.value, MirLiteralValue::Literal(crate::parser::Literal::Int { value, .. }) if value == "42")
-		} else {
-			false
+			return matches!(&lit.value, MirLiteralValue::Literal(crate::parser::Literal::Int { value, .. }) if value == "42");
 		}
+		return false;
 	});
 	assert!(
 		has_literal_assign,
@@ -1108,23 +1099,23 @@ fn loop_break_with_value_stores_into_result_local()
 fn if_expr_stores_result_into_local()
 {
 	let mir = compile_mir(
-		r#"
+		r"
 			fn f(cond: bool) -> i32 {
 				return if cond { 1i32 } else { 2i32 };
 			}
-		"#,
+		",
 	);
 	let b = body(&mir);
 	// Two Branch arms each store a constant into the result local; that means
 	// we expect at least two Assign-of-Const statements (one per arm).
-	let const_assigns = b.blocks.iter().flat_map(|bb| bb.stmts.iter()).filter(|s| {
-		matches!(
+	let const_assigns = b.blocks.iter().flat_map(|bb| return bb.stmts.iter()).filter(|s| {
+		return matches!(
 			s,
 			MirStmt::Assign {
 				rvalue: MirRvalue::Use(MirOperand::Const(_)),
 				..
 			}
-		)
+		);
 	});
 	assert!(
 		const_assigns.count() >= 2,
@@ -1148,9 +1139,9 @@ fn temporaries_have_no_name()
 {
 	let mir = compile_mir("fn f(a: i32, b: i32) -> i32 { return a + b; }");
 	let b = body(&mir);
-	let anon_temps = b.locals.iter().filter(|l| l.is_temp).count();
+	let anon_temps = b.locals.iter().filter(|l| return l.is_temp).count();
 	assert!(anon_temps > 0, "expected at least one anonymous temporary");
-	for tmp in b.locals.iter().filter(|l| l.is_temp) {
+	for tmp in b.locals.iter().filter(|l| return l.is_temp) {
 		assert!(tmp.name.is_none(), "temporary should have no name, got {:?}", tmp.name);
 	}
 }

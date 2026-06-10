@@ -267,6 +267,7 @@ impl Token
 #[derive(Clone, Debug)]
 pub struct ReservedError
 {
+	#[allow(unused)]
 	pub token: TokenKind,
 }
 
