@@ -1133,6 +1133,19 @@ impl<'a> MirLowerer<'a>
 				named_generics: _,
 				args,
 			} => {
+				if let TypedExprKind::InternalCall { intrinsic } = &callee.kind
+					&& matches!(intrinsic, Intrinsic::RefDeref | Intrinsic::PtrDeref)
+				{
+					let base_place: MirPlace = self.lower_expr_as_place(builder, &args[0]);
+					let mut projections: Vec<MirProjection> = base_place.projections;
+					projections.push(MirProjection::Deref);
+					let place: MirPlace = MirPlace {
+						base: base_place.base,
+						projections,
+						ty: expr.ty.clone(),
+					};
+					return self.copy_or_move(place);
+				}
 				let lowered_args: Vec<MirOperand> =
 					args.iter().map(|a| return self.lower_expr_into(builder, a)).collect();
 
@@ -2219,6 +2232,16 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
 	{
+		if let Some(inner) = Self::as_deref_call(expr) {
+			let base_place: MirPlace = self.lower_expr_as_place(builder, inner);
+			let mut projections: Vec<MirProjection> = base_place.projections;
+			projections.push(MirProjection::Deref);
+			return MirPlace {
+				base: base_place.base,
+				projections,
+				ty: expr.ty.clone(),
+			};
+		}
 		match &expr.kind {
 			TypedExprKind::Identifier { path } => match &path.kind {
 				ResolvedPathKind::Resolved(sym) => {
@@ -2397,6 +2420,18 @@ impl<'a> MirLowerer<'a>
 			kind: MirTypeDefKind::TypeAlias { ty: t.ty.clone() },
 			span: t.span,
 		};
+	}
+
+	fn as_deref_call(expr: &TypedExpr) -> Option<&TypedExpr>
+	{
+		if let TypedExprKind::Call { callee, args, .. } = &expr.kind
+			&& let TypedExprKind::InternalCall { intrinsic } = &callee.kind
+			&& matches!(intrinsic, Intrinsic::RefDeref | Intrinsic::PtrDeref)
+			&& args.len() == 1
+		{
+			return Some(&args[0]);
+		}
+		return None;
 	}
 }
 
