@@ -429,15 +429,6 @@ pub enum MirRvalue
 	/// `(a, b, c)` - all elements are operands.
 	Tuple(Vec<MirOperand>),
 
-	// /// Range literal - produces a range struct. Both bounds are optional
-	// /// operands (already-computed locals or constants).
-	// Range
-	// {
-	// 	start: Option<MirConstBody>,
-	// 	end: Option<MirConstBody>,
-	// 	inclusive: bool,
-	// 	elem_ty: Ty,
-	// },
 	Discriminant(MirPlace),
 }
 
@@ -1067,28 +1058,46 @@ impl<'a> MirLowerer<'a>
 				})
 			}
 			TypedExprKind::Unary { op, expr: u_expr } => {
-				// shortcircuit Addr
 				if let UnaryOp::Addr { mutable } = op {
-					let place: MirPlace = self.lower_expr_as_place(builder, u_expr);
-					let tmp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					let place = self.lower_expr_as_place(builder, u_expr);
+					let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+
+					let rvalue = match &expr.ty {
+						Ty::Reference { .. } => MirRvalue::Ref {
+							mutable: *mutable,
+							place,
+						},
+						Ty::Pointer { .. } => MirRvalue::RawPtr {
+							mutable: *mutable,
+							place,
+						},
+						_ => {
+							self.diagnostics.push(compiler_bug!(
+								expr.span,
+								"address-of expression has neither reference nor pointer type"
+							));
+							MirRvalue::Ref {
+								mutable: *mutable,
+								place,
+							}
+						}
+					};
+
 					builder.push_stmt(MirStmt::Assign {
 						place: MirPlace {
 							base: MirPlaceBase::Local(tmp),
 							projections: Vec::new(),
 							ty: expr.ty.clone(),
 						},
-						rvalue: MirRvalue::Ref {
-							mutable: *mutable,
-							place,
-						},
+						rvalue,
 						span: expr.span(),
 					});
-					let result_place = MirPlace {
+
+					return MirOperand::Move(MirPlace {
 						base: MirPlaceBase::Local(tmp),
 						projections: Vec::new(),
 						ty: expr.ty.clone(),
-					};
-					return MirOperand::Move(result_place);
+					});
 				}
 
 				self.diagnostics.push(compiler_bug!(
@@ -2467,7 +2476,7 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_enum(&mut self, e: &TypedEnumDecl) -> MirTypeDef
 	{
-		MirTypeDef {
+		return MirTypeDef {
 			symbol: e.resolved_name,
 			name: e.name.clone(),
 			kind: MirTypeDefKind::Enum {
@@ -2475,13 +2484,13 @@ impl<'a> MirLowerer<'a>
 					.variants
 					.iter()
 					.map(|v| {
-						let c = v.value.as_ref().map(|te| self.intern_const_body(te));
-						(v.name.clone(), c)
+						let c = v.value.as_ref().map(|te| return self.intern_const_body(te));
+						return (v.name.clone(), c);
 					})
 					.collect(),
 			},
 			span: e.span,
-		}
+		};
 	}
 
 	fn lower_variant(v: &TypedVariantDecl) -> MirTypeDef
