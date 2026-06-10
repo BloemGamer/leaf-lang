@@ -652,6 +652,7 @@ impl<'a> MirLowerer<'a>
 	{
 		let mut locals: Vec<MirLocal> = Vec::new();
 		let mut params: Vec<MirParam> = Vec::new();
+		let mut param_symbols: Vec<(SymbolId, LocalId)> = Vec::new();
 
 		for param in &f.signature.params {
 			#[allow(clippy::cast_possible_truncation)]
@@ -670,10 +671,17 @@ impl<'a> MirLowerer<'a>
 				ty: param.ty.clone(),
 				mutable: param.mutable,
 			});
+			param_symbols.push((param.symbol, id));
 		}
 
 		let body = f.body.as_ref().map(|b| {
 			let mut builder = BodyBuilder::new(locals.clone());
+
+			// Seed local_map with parameters so identifier lookups find locals
+			// instead of falling through to MirPlaceBase::Global.
+			for (sym, local_id) in &param_symbols {
+				builder.local_map.insert(*sym, *local_id);
+			}
 
 			if !matches!(f.signature.return_type, Ty::Unit | Ty::Never) {
 				let ret_id = builder.alloc_local(
@@ -908,6 +916,7 @@ impl<'a> MirLowerer<'a>
 				builder.set_terminator(MirTerminator::Goto { target: loop_bb });
 
 				builder.current_block = exit_loop_bb;
+				builder.loop_stack.pop();
 			}
 			TypedStmt::Delete { expr, span } => {
 				let del_op: MirOperand = self.lower_expr_into(builder, expr);
@@ -997,9 +1006,36 @@ impl<'a> MirLowerer<'a>
 				})
 			}
 			TypedExprKind::Unary { op, expr: u_expr } => {
+				// shortcircuit Addr
+				if let UnaryOp::Addr { mutable } = op {
+					let place: MirPlace = self.lower_expr_as_place(builder, u_expr);
+					let tmp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(tmp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						},
+						rvalue: MirRvalue::Ref {
+							mutable: *mutable,
+							place,
+						},
+						span: expr.span(),
+					});
+					let result_place = MirPlace {
+						base: MirPlaceBase::Local(tmp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+					return MirOperand::Move(result_place);
+				}
+
+				self.diagnostics.push(compiler_bug!(
+					u_expr.span(),
+					"the type analysis should have removed the `TypedExprKind::Unary`"
+				));
 				let operand: MirOperand = self.lower_expr_into(builder, u_expr);
 				let tmp: LocalId = builder.alloc_local(u_expr.ty.clone(), None, false, u_expr.span());
-
 				builder.push_stmt(MirStmt::Assign {
 					place: MirPlace {
 						base: MirPlaceBase::Local(tmp),
@@ -1009,13 +1045,11 @@ impl<'a> MirLowerer<'a>
 					rvalue: MirRvalue::Unary { op: *op, operand },
 					span: u_expr.span(),
 				});
-
 				let place: MirPlace = MirPlace {
 					base: MirPlaceBase::Local(tmp),
 					projections: Vec::new(),
 					ty: expr.ty.clone(),
 				};
-
 				if expr
 					.ty
 					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
@@ -1529,20 +1563,29 @@ impl<'a> MirLowerer<'a>
 
 				builder.current_block = merge_bb;
 
-				result_local.map_or(
+				if let Some(res) = result_local {
+					let place: MirPlace = MirPlace {
+						base: MirPlaceBase::Local(res),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+					self.copy_or_move(place)
+				} else if matches!(expr.ty, Ty::Never) {
+					// Merge block is unreachable; mark it and hand back a typed dummy.
+					builder.set_terminator(MirTerminator::Unreachable);
+					let dead: BlockId = builder.alloc_block();
+					builder.current_block = dead;
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::Undef,
+						ty: Ty::Never,
+					})
+				} else {
+					// expr.ty == Ty::Unit
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::ZeroInit,
 						ty: Ty::Unit,
-					}),
-					|res| {
-						let place: MirPlace = MirPlace {
-							base: MirPlaceBase::Local(res),
-							projections: Vec::new(),
-							ty: expr.ty.clone(),
-						};
-						return self.copy_or_move(place);
-					},
-				)
+					})
+				}
 			}
 
 			TypedExprKind::If {
@@ -1607,20 +1650,29 @@ impl<'a> MirLowerer<'a>
 
 				builder.current_block = merge_bb;
 
-				result_local.map_or(
+				if let Some(res) = result_local {
+					let place: MirPlace = MirPlace {
+						base: MirPlaceBase::Local(res),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+					self.copy_or_move(place)
+				} else if matches!(expr.ty, Ty::Never) {
+					// Merge block is unreachable; mark it and hand back a typed dummy.
+					builder.set_terminator(MirTerminator::Unreachable);
+					let dead: BlockId = builder.alloc_block();
+					builder.current_block = dead;
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::Undef,
+						ty: Ty::Never,
+					})
+				} else {
+					// expr.ty == Ty::Unit
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::ZeroInit,
 						ty: Ty::Unit,
-					}),
-					|res| {
-						let place = MirPlace {
-							base: MirPlaceBase::Local(res),
-							projections: Vec::new(),
-							ty: expr.ty.clone(),
-						};
-						return self.copy_or_move(place);
-					},
-				)
+					})
+				}
 			}
 
 			TypedExprKind::Loop { label, body } => {
@@ -1650,20 +1702,29 @@ impl<'a> MirLowerer<'a>
 
 				builder.current_block = exit_bb;
 
-				result_local.map_or(
+				if let Some(res) = result_local {
+					let place: MirPlace = MirPlace {
+						base: MirPlaceBase::Local(res),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+					self.copy_or_move(place)
+				} else if matches!(expr.ty, Ty::Never) {
+					// Merge block is unreachable; mark it and hand back a typed dummy.
+					builder.set_terminator(MirTerminator::Unreachable);
+					let dead: BlockId = builder.alloc_block();
+					builder.current_block = dead;
+					MirOperand::Const(MirLiteral {
+						value: MirLiteralValue::Undef,
+						ty: Ty::Never,
+					})
+				} else {
+					// expr.ty == Ty::Unit
 					MirOperand::Const(MirLiteral {
 						value: MirLiteralValue::ZeroInit,
 						ty: Ty::Unit,
-					}),
-					|res| {
-						let place: MirPlace = MirPlace {
-							base: MirPlaceBase::Local(res),
-							projections: Vec::new(),
-							ty: expr.ty.clone(),
-						};
-						return self.copy_or_move(place);
-					},
-				)
+					})
+				}
 			}
 		};
 	}
