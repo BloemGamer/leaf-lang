@@ -425,7 +425,7 @@ fn test_parse_mutable_address_of()
 #[test]
 fn test_parse_cast()
 {
-	let result = parse_expr_from_str("(i32)42");
+	let result = parse_expr_from_str("<i32>42");
 	assert!(result.is_ok());
 	match result.unwrap() {
 		Expr::Cast { ty, expr, .. } => {
@@ -877,7 +877,7 @@ fn test_parse_empty_range_in_nested_expression()
 #[test]
 fn test_parse_empty_range_with_cast()
 {
-	let result = parse_expr_from_str("(Range)..(i32)10;");
+	let result = parse_expr_from_str("(Range)..<i32>10;");
 	assert!(result.is_ok());
 }
 
@@ -2721,7 +2721,7 @@ fn test_parse_mixed_postfix_operations()
 #[test]
 fn test_parse_cast_in_expression()
 {
-	let result = parse_expr_from_str("(i64)x + (i64)y");
+	let result = parse_expr_from_str("<i64>x + <i64>y");
 	assert!(result.is_ok());
 }
 
@@ -8228,23 +8228,13 @@ fn test_parse_array_of_references()
 fn test_parse_cast_vs_tuple()
 {
 	// (i32) should be parsed as cast when followed by expression
-	let input = "(i32)42";
+	let input = "<i32>42";
 	let result = parse_expr_from_str(input);
 	assert!(result.is_ok());
 	match result.unwrap() {
 		Expr::Cast { .. } => (),
 		_ => panic!("Expected cast"),
 	}
-}
-
-#[test]
-fn test_parse_parenthesized_type_not_cast()
-{
-	// (i32) followed by range should not be cast
-	let input = "(i32)..10";
-	let result = parse_expr_from_str(input);
-	// Should backtrack and parse as (i32) followed by range
-	assert!(result.is_ok());
 }
 
 // ========== Directive Param Edge Cases ==========

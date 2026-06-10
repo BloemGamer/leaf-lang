@@ -3924,20 +3924,13 @@ where
 	fn parse_cast(&mut self, restrictions: Restrictions) -> Result<Expr, Box<DiagnosticBuilder>>
 	{
 		let span: Span = self.peek()?.span();
-		if self.at(&TokenKind::LeftParen)? {
+		if self.at(&TokenKind::LessThan)? {
 			let checkpoint: (Peekable<T>, Span, Option<Token>) = self.make_checkpoint();
-			self.next()?; // (
+			self.next()?; // <
 
 			if let Ok(ty) = self.parse_type()
-				&& self.consume(&TokenKind::RightParen)?
+				&& self.consume_greater_than()?
 			{
-				let next_tok: &TokenKind = self.peek_kind()?;
-
-				if matches!(next_tok, TokenKind::DotDot | TokenKind::DotDotEquals) {
-					self.load_checkpoint(checkpoint);
-					return self.parse_unary(restrictions);
-				}
-
 				let expr: Expr = self.parse_cast(restrictions)?;
 				return Ok(Expr::Cast {
 					ty: Box::new(ty),

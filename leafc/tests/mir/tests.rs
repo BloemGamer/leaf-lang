@@ -957,7 +957,7 @@ fn cast_emits_cast_rvalue()
 	let mir = compile_mir(
 		r#"
 			fn f(x: i32) -> i64 {
-				return (i64)x;
+				return <i64>x;
 			}
 		"#,
 	);

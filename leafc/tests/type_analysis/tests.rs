@@ -454,7 +454,7 @@ fn type_alias_cast()
 			struct A { a: i64 }
 			type B = A;
 			fn! main() {
-				var z: A = (A)B{ a -> 0i64 };
+				var z: A = <A>B{ a -> 0i64 };
 			}
 		");
 }
@@ -919,19 +919,19 @@ fn if_let_variant_pattern()
 #[test]
 fn numeric_widening_cast()
 {
-	ok("fn! main() { var _: i64 = (i64)1i32; }");
+	ok("fn! main() { var _: i64 = <i64>1i32; }");
 }
 
 #[test]
 fn bool_to_int_cast_is_error()
 {
-	err("fn! main() { var _ = (i64)true; }", "cannot cast");
+	err("fn! main() { var _ = <i64>true; }", "cannot cast");
 }
 
 #[test]
 fn int_to_pointer_cast()
 {
-	ok("fn! main() { var _: *i64 = (*i64)0usize; }");
+	ok("fn! main() { var _: *i64 = <*i64>0usize; }");
 }
 
 // ── assignment ───────────────────────────────────────────────────────────
