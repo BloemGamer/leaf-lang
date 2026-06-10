@@ -497,9 +497,9 @@ impl BodyBuilder
 		self.locals.push(MirLocal {
 			id,
 			ty,
-			name: name.clone(),
-			mutable,
 			is_temp: name.is_none(),
+			name,
+			mutable,
 			span,
 		});
 		return id;
@@ -791,8 +791,8 @@ impl<'a> MirLowerer<'a>
 					return;
 				}
 
-				let place = self.lower_expr_as_place(builder, target);
-				let operand = self.lower_expr_into(builder, value);
+				let place: MirPlace = self.lower_expr_as_place(builder, target);
+				let operand: MirOperand = self.lower_expr_into(builder, value);
 
 				builder.push_stmt(MirStmt::Assign {
 					place,
@@ -873,7 +873,7 @@ impl<'a> MirLowerer<'a>
 				cond,
 				then_block,
 				else_branch,
-				span,
+				span: _,
 			} => {
 				let cond_operand: MirOperand = self.lower_expr_into(builder, cond);
 
@@ -899,7 +899,7 @@ impl<'a> MirLowerer<'a>
 
 				builder.switch_to(merge_bb);
 			}
-			TypedStmt::Loop { label, body, span } => {
+			TypedStmt::Loop { label, body, span: _ } => {
 				let loop_bb: BlockId = builder.alloc_block();
 				let exit_loop_bb: BlockId = builder.alloc_block();
 
@@ -1237,26 +1237,17 @@ impl<'a> MirLowerer<'a>
 			}
 			TypedExprKind::Field { base, name } => {
 				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
-				let place: MirPlace = MirPlace {
+				let mut projections: Vec<MirProjection> = base_place.projections;
+				projections.push(MirProjection::Field {
+					name: name.clone(),
 					ty: expr.ty.clone(),
-					projections: {
-						let mut projs: Vec<MirProjection> = base_place.projections.clone();
-						projs.push(MirProjection::Field {
-							name: name.clone(),
-							ty: expr.ty.clone(),
-						});
-						projs
-					},
+				});
+				let place: MirPlace = MirPlace {
 					base: base_place.base,
+					projections,
+					ty: expr.ty.clone(),
 				};
-				if expr
-					.ty
-					.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
-				{
-					MirOperand::Copy(place)
-				} else {
-					MirOperand::Move(place)
-				}
+				self.copy_or_move(place)
 			}
 			TypedExprKind::Index { base, index } => {
 				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
@@ -1564,29 +1555,34 @@ impl<'a> MirLowerer<'a>
 
 				builder.switch_to(merge_bb);
 
-				if let Some(res) = result_local {
-					let place: MirPlace = MirPlace {
-						base: MirPlaceBase::Local(res),
-						projections: Vec::new(),
-						ty: expr.ty.clone(),
-					};
-					self.copy_or_move(place)
-				} else if matches!(expr.ty, Ty::Never) {
-					// Merge block is unreachable; mark it and hand back a typed dummy.
-					builder.set_terminator(MirTerminator::Unreachable);
-					let dead: BlockId = builder.alloc_block();
-					builder.switch_to(dead);
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::Undef,
-						ty: Ty::Never,
-					})
-				} else {
-					// expr.ty == Ty::Unit
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::ZeroInit,
-						ty: Ty::Unit,
-					})
-				}
+				result_local.map_or_else(
+					|| {
+						return if matches!(expr.ty, Ty::Never) {
+							// Merge block is unreachable; mark it and hand back a typed dummy.
+							builder.set_terminator(MirTerminator::Unreachable);
+							let dead: BlockId = builder.alloc_block();
+							builder.switch_to(dead);
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::Undef,
+								ty: Ty::Never,
+							})
+						} else {
+							// expr.ty == Ty::Unit
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::ZeroInit,
+								ty: Ty::Unit,
+							})
+						};
+					},
+					|res| {
+						let place: MirPlace = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
 			}
 
 			TypedExprKind::If {
@@ -1651,29 +1647,34 @@ impl<'a> MirLowerer<'a>
 
 				builder.switch_to(merge_bb);
 
-				if let Some(res) = result_local {
-					let place: MirPlace = MirPlace {
-						base: MirPlaceBase::Local(res),
-						projections: Vec::new(),
-						ty: expr.ty.clone(),
-					};
-					self.copy_or_move(place)
-				} else if matches!(expr.ty, Ty::Never) {
-					// Merge block is unreachable; mark it and hand back a typed dummy.
-					builder.set_terminator(MirTerminator::Unreachable);
-					let dead: BlockId = builder.alloc_block();
-					builder.switch_to(dead);
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::Undef,
-						ty: Ty::Never,
-					})
-				} else {
-					// expr.ty == Ty::Unit
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::ZeroInit,
-						ty: Ty::Unit,
-					})
-				}
+				result_local.map_or_else(
+					|| {
+						return if matches!(expr.ty, Ty::Never) {
+							// Merge block is unreachable; mark it and hand back a typed dummy.
+							builder.set_terminator(MirTerminator::Unreachable);
+							let dead: BlockId = builder.alloc_block();
+							builder.switch_to(dead);
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::Undef,
+								ty: Ty::Never,
+							})
+						} else {
+							// expr.ty == Ty::Unit
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::ZeroInit,
+								ty: Ty::Unit,
+							})
+						};
+					},
+					|res| {
+						let place: MirPlace = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
 			}
 
 			TypedExprKind::Loop { label, body } => {
@@ -1703,29 +1704,34 @@ impl<'a> MirLowerer<'a>
 
 				builder.switch_to(exit_bb);
 
-				if let Some(res) = result_local {
-					let place: MirPlace = MirPlace {
-						base: MirPlaceBase::Local(res),
-						projections: Vec::new(),
-						ty: expr.ty.clone(),
-					};
-					self.copy_or_move(place)
-				} else if matches!(expr.ty, Ty::Never) {
-					// Merge block is unreachable; mark it and hand back a typed dummy.
-					builder.set_terminator(MirTerminator::Unreachable);
-					let dead: BlockId = builder.alloc_block();
-					builder.switch_to(dead);
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::Undef,
-						ty: Ty::Never,
-					})
-				} else {
-					// expr.ty == Ty::Unit
-					MirOperand::Const(MirLiteral {
-						value: MirLiteralValue::ZeroInit,
-						ty: Ty::Unit,
-					})
-				}
+				result_local.map_or_else(
+					|| {
+						return if matches!(expr.ty, Ty::Never) {
+							// Merge block is unreachable; mark it and hand back a typed dummy.
+							builder.set_terminator(MirTerminator::Unreachable);
+							let dead: BlockId = builder.alloc_block();
+							builder.switch_to(dead);
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::Undef,
+								ty: Ty::Never,
+							})
+						} else {
+							// expr.ty == Ty::Unit
+							MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::ZeroInit,
+								ty: Ty::Unit,
+							})
+						};
+					},
+					|res| {
+						let place: MirPlace = MirPlace {
+							base: MirPlaceBase::Local(res),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+						return self.copy_or_move(place);
+					},
+				)
 			}
 		};
 	}
@@ -1869,7 +1875,11 @@ impl<'a> MirLowerer<'a>
 				}
 			}
 
-			TypedPattern::Tuple { patterns, ty, span } => {
+			TypedPattern::Tuple {
+				patterns,
+				ty: _,
+				span: _,
+			} => {
 				let mut chain: Vec<(BlockId, BlockId, &TypedPattern, usize)> = Vec::new();
 				let mut next_success: BlockId = success;
 				for (idx, sub) in patterns.iter().enumerate().rev() {
@@ -2209,27 +2219,107 @@ impl<'a> MirLowerer<'a>
 
 	fn lower_expr_as_place(&mut self, builder: &mut BodyBuilder, expr: &TypedExpr) -> MirPlace
 	{
-		let operand: MirOperand = self.lower_expr_into(builder, expr);
-		match operand {
-			MirOperand::Copy(place) | MirOperand::Move(place) => return place,
-			MirOperand::Const(_) => {
-				// Constants can't be assigned to directly; materialize into a temp first
-				let ty: Ty = operand.ty().clone();
-				let temp: LocalId = builder.alloc_local(ty.clone(), None, false, expr.span());
-				builder.push_stmt(MirStmt::Assign {
-					place: MirPlace {
+		match &expr.kind {
+			TypedExprKind::Identifier { path } => match &path.kind {
+				ResolvedPathKind::Resolved(sym) => {
+					let base: MirPlaceBase = if let Some(&local_id) = builder.local_map.get(sym) {
+						MirPlaceBase::Local(local_id)
+					} else {
+						MirPlaceBase::Global(*sym)
+					};
+					return MirPlace {
+						base,
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+				}
+				ResolvedPathKind::AssocItem { base, .. } => {
+					return MirPlace {
+						base: MirPlaceBase::Global(*base),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					};
+				}
+				ResolvedPathKind::Primitive(_) => {
+					self.diagnostics.push(compiler_bug!(
+						expr.span,
+						"primitive type used as place expression in MIR lowering"
+					));
+					// Materialize a dummy temp so callers still get a writable place.
+					let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					return MirPlace {
 						base: MirPlaceBase::Local(temp),
 						projections: Vec::new(),
-						ty: ty.clone(),
-					},
-					rvalue: MirRvalue::Use(operand),
-					span: expr.span(),
+						ty: expr.ty.clone(),
+					};
+				}
+			},
+
+			TypedExprKind::Field { base, name } => {
+				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
+				let mut projections: Vec<MirProjection> = base_place.projections;
+				projections.push(MirProjection::Field {
+					name: name.clone(),
+					ty: expr.ty.clone(),
 				});
 				return MirPlace {
-					base: MirPlaceBase::Local(temp),
-					projections: Vec::new(),
-					ty,
+					base: base_place.base,
+					projections,
+					ty: expr.ty.clone(),
 				};
+			}
+
+			TypedExprKind::Index { base, index } => {
+				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
+				let index_operand: MirOperand = self.lower_expr_into(builder, index);
+				let index_local: LocalId = builder.alloc_local(index.ty.clone(), None, false, index.span());
+				builder.push_stmt(MirStmt::Assign {
+					place: MirPlace {
+						base: MirPlaceBase::Local(index_local),
+						projections: Vec::new(),
+						ty: index.ty.clone(),
+					},
+					rvalue: MirRvalue::Use(index_operand),
+					span: index.span(),
+				});
+				let mut projections: Vec<MirProjection> = base_place.projections;
+				projections.push(MirProjection::Index {
+					index: index_local,
+					ty: expr.ty.clone(),
+				});
+				return MirPlace {
+					base: base_place.base,
+					projections,
+					ty: expr.ty.clone(),
+				};
+			}
+
+			// Anything else isn't structurally a place. Lower as an operand
+			// and, if we get a value back (Const), materialize it into a temp
+			// so the caller still has something writable.
+			_ => {
+				let operand: MirOperand = self.lower_expr_into(builder, expr);
+				match operand {
+					MirOperand::Copy(place) | MirOperand::Move(place) => return place,
+					MirOperand::Const(_) => {
+						let ty: Ty = operand.ty().clone();
+						let temp: LocalId = builder.alloc_local(ty.clone(), None, false, expr.span());
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(temp),
+								projections: Vec::new(),
+								ty: ty.clone(),
+							},
+							rvalue: MirRvalue::Use(operand),
+							span: expr.span(),
+						});
+						return MirPlace {
+							base: MirPlaceBase::Local(temp),
+							projections: Vec::new(),
+							ty,
+						};
+					}
+				}
 			}
 		}
 	}
