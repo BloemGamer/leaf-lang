@@ -73,6 +73,9 @@ pub enum ErrorCode
 	MirUndefinedLabel,
 	MirUninitializedVariable,
 
+	// Mono
+	MonoNoMainEntry,
+
 	//
 	CompilerBug,
 }
@@ -102,11 +105,39 @@ pub struct Label
 	pub message: Option<String>,
 }
 
+impl std::fmt::Display for Label
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		write!(f, "{}: ", self.kind)?;
+		if let Some(message) = &self.message {
+			write!(f, "{}", message)?;
+		}
+		return Ok(());
+	}
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum LabelKind
 {
 	Primary,
 	Secondary,
+}
+
+impl std::fmt::Display for LabelKind
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+	{
+		match self {
+			LabelKind::Primary => {
+				write!(f, "primary")?;
+			}
+			LabelKind::Secondary => {
+				write!(f, "secondary")?;
+			}
+		}
+		return Ok(());
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -280,6 +311,7 @@ pub enum CompileError
 	NameResolution(crate::name_resolution::NameResolutionError),
 	Type(crate::type_analysis::TypeError),
 	Mir(crate::mir::MirError),
+	Mono(crate::monomorphization::MonoError),
 }
 
 macro_rules! delegate {
@@ -292,6 +324,7 @@ macro_rules! delegate {
 			Self::NameResolution(e) => e.$method(),
 			Self::Type(e) => e.$method(),
 			Self::Mir(e) => e.$method(),
+			Self::Mono(e) => e.$method(),
 		}
 	};
 }
@@ -308,6 +341,7 @@ impl std::fmt::Display for CompileError
 			Self::NameResolution(e) => write!(f, "{e}"),
 			Self::Type(e) => write!(f, "{e}"),
 			Self::Mir(e) => write!(f, "{e}"),
+			Self::Mono(e) => write!(f, "{e}"),
 		};
 	}
 }
@@ -350,6 +384,7 @@ impl CompileDiagnostic for CompileError
 					.help("verify that expressions match expected types");
 			}
 			CompileError::Mir(_) => diag = diag.note("during mir transformation"),
+			CompileError::Mono(_) => diag = diag.note("during monomorphization"),
 		}
 
 		return diag;
@@ -539,6 +574,9 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 
 		let Some(file) = self.source_map.get(span.source_index) else {
 			writeln!(f, "{severity_label}: {}", bold(&self.diag.message, self.config))?;
+			for label in &self.diag.labels {
+				writeln!(f, "{}", label)?;
+			}
 			for note in &self.diag.notes {
 				writeln!(f, "note: {}", note)?;
 			}

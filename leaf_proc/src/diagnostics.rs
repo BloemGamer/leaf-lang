@@ -24,17 +24,30 @@ struct CompilerBugInput
 {
 	span: Expr,
 	_comma: Token![,],
-	message: Expr,
+	format_str: LitStr,
+	format_args: Vec<Expr>,
 }
 
 impl Parse for CompilerBugInput
 {
 	fn parse(input: ParseStream) -> syn::Result<Self>
 	{
+		let span = input.parse()?;
+		let _comma: Token![,] = input.parse()?;
+		let format_str: LitStr = input.parse()?;
+		let mut format_args = Vec::new();
+		while input.peek(Token![,]) {
+			input.parse::<Token![,]>()?;
+			if input.is_empty() {
+				break;
+			}
+			format_args.push(input.parse::<Expr>()?);
+		}
 		return Ok(Self {
-			span: input.parse()?,
-			_comma: input.parse()?,
-			message: input.parse()?,
+			span,
+			_comma,
+			format_str,
+			format_args,
 		});
 	}
 }
@@ -47,7 +60,8 @@ pub fn compiler_bug(item: TokenStream2) -> TokenStream2
 	};
 
 	let span = input.span;
-	let message = input.message;
+	let format_str = input.format_str;
+	let format_args = input.format_args;
 
 	let input_span = proc_macro::Span::call_site();
 
@@ -58,7 +72,7 @@ pub fn compiler_bug(item: TokenStream2) -> TokenStream2
 		{
 			crate::diagnostics::DiagnosticBuilder::bug("internal compiler bug")
 				.code(crate::diagnostics::ErrorCode::CompilerBug)
-				.primary(#span, Some(#message.to_string()))
+				.primary(#span, Some(format!(#format_str #(, #format_args)*)))
 				.note("this is a bug in the compiler, not your code")
 				.note(format!("{}:{}", #source_file, #line))
 				.help("please report this issue with a minimal reproduction")
