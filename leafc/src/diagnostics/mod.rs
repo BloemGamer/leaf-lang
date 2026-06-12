@@ -75,6 +75,7 @@ pub enum ErrorCode
 
 	// Mono
 	MonoNoMainEntry,
+	MonoAbstractTraitMethodCall,
 
 	//
 	CompilerBug,

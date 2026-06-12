@@ -145,6 +145,7 @@ mod desugar;
 mod lexer;
 mod mir;
 mod modules;
+mod monomorphization;
 mod name_resolution;
 mod parser;
 mod symbol_collection;
@@ -176,6 +177,8 @@ struct Args
 	types: bool,
 	#[arg(short, long)]
 	mir: bool,
+	#[arg(long)]
+	mono: bool,
 
 	#[arg(short, long, default_value_t = ColourConf::Auto)]
 	colour: ColourConf,
@@ -461,10 +464,17 @@ fn run(
 		mir_modules.push(mir_mod);
 	}
 
-	if args.mir || args.all_false() {
+	if args.mir {
 		for m in &mir_modules {
 			println!("{}", m);
 		}
+	}
+
+	let (mono_mod, mut diags) = monomorphization::monomorphize(&mir_modules, &global_symbols);
+	diagnostics.append(&mut diags);
+
+	if args.mono || args.all_false() {
+		println!("{}", mono_mod);
 	}
 
 	return (Ok(()), diagnostics);
