@@ -16,12 +16,12 @@ use crate::{
 	name_resolution::{ResolvedGenericHeapParam, ResolvedPathKind},
 	parser::{self, AssignOp, BinaryOp, CallType, Literal, UnaryOp},
 	source_map::SourceIndex,
-	symbol_collection::{GlobalSymbolTable, SymbolId},
+	symbol_collection::{GlobalSymbolTable, ScopeKind, SymbolId, SymbolKind},
 	type_analysis::{
-		Primitive, Ty, TypedArrayLiteral, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind, TypedFunctionDecl,
-		TypedImplItem, TypedModule, TypedPattern, TypedStmt, TypedStructDecl, TypedSwitchBody, TypedTopLevelDecl,
-		TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl, TypedWhereConstraint,
-		intrinsics::Intrinsic,
+		Primitive, Ty, TyKey, TypedArrayLiteral, TypedBlock, TypedEnumDecl, TypedExpr, TypedExprKind,
+		TypedFunctionDecl, TypedImplItem, TypedModule, TypedPattern, TypedStmt, TypedStructDecl, TypedSwitchBody,
+		TypedTopLevelDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl, TypedVariableDecl, TypedVariantDecl,
+		TypedWhereConstraint, intrinsics::Intrinsic,
 	},
 };
 
@@ -66,6 +66,7 @@ pub struct MirModule
 	pub source_index: SourceIndex,
 	pub items: Vec<MirItem>,
 	pub const_bodies: Vec<MirConstBody>,
+	pub method_dispatch: HashMap<(TyKey, String), SymbolId>,
 }
 
 #[derive(Debug, Clone)]
@@ -649,11 +650,17 @@ impl<'a> MirLowerer<'a>
 		for decl in &module.ast.top_level_block.items {
 			self.lower_top_level_decl(decl, &mut items);
 		}
+		let mut method_dispatch: HashMap<(TyKey, String), SymbolId> = HashMap::new();
+		for ((key, name), &sym) in module.caches.method_fn.iter() {
+			method_dispatch.insert((key.clone(), name.clone()), sym);
+		}
+
 		return MirModule {
 			path: module.path.clone(),
 			source_index: module.ast.source_index,
 			items,
 			const_bodies: std::mem::take(&mut self.const_bodies),
+			method_dispatch,
 		};
 	}
 
@@ -682,26 +689,26 @@ impl<'a> MirLowerer<'a>
 				out.push(MirItem::TypeDef(Self::lower_type_alias(t)));
 			}
 			TypedTopLevelDecl::Impl(i) => {
+				let impl_generics: Vec<(parser::Ident, Span)> =
+					i.generics.iter().map(|g| return (g.name.clone(), g.span)).collect();
+
 				for item in &i.items {
 					match item {
 						TypedImplItem::Function(f) => {
-							out.push(MirItem::Function(self.lower_function(f)));
+							let mut mir_fn = self.lower_function(f);
+
+							let mut combined = impl_generics.clone();
+							combined.extend(std::mem::take(&mut mir_fn.generics));
+							mir_fn.generics = combined;
+							out.push(MirItem::Function(mir_fn));
 						}
-						TypedImplItem::Const(v) => {
-							out.push(MirItem::Global(self.lower_global(v)));
-						}
-						TypedImplItem::TypeAlias(t) => {
-							out.push(MirItem::TypeDef(Self::lower_type_alias(t)));
-						}
-						TypedImplItem::AssocType(_) => {
-							// Associated types are purely a type-level construct;
-							// nothing to emit in MIR.
-						}
+						TypedImplItem::Const(v) => out.push(MirItem::Global(self.lower_global(v))),
+						TypedImplItem::TypeAlias(t) => out.push(MirItem::TypeDef(Self::lower_type_alias(t))),
+						TypedImplItem::AssocType(_) => {}
 					}
 				}
 			}
 			TypedTopLevelDecl::Trait(t) => {
-				// Only lower the default method bodies.
 				for item in &t.items {
 					if let TypedTraitItem::Function(f) = item
 						&& f.body.is_some()
@@ -816,8 +823,6 @@ impl<'a> MirLowerer<'a>
 			self.lower_stmt_into(builder, stmt);
 		}
 		if let Some(tail_expr) = &block.tail_expr {
-			// Value is discarded
-			// a block as a stmt should doesn't give back anything
 			self.lower_expr_into(builder, tail_expr);
 		}
 	}
@@ -1012,6 +1017,38 @@ impl<'a> MirLowerer<'a>
 		return match &expr.kind {
 			TypedExprKind::Identifier { path } => match &path.kind {
 				ResolvedPathKind::Resolved(sym) => {
+					if matches!(self.global.symbol(*sym).kind, SymbolKind::VariantMember) {
+						let parent = self.variant_parent(*sym).unwrap_or_else(|| {
+							self.diagnostics.push(compiler_bug!(
+								expr.span,
+								"variant member has no parent variant in scope"
+							));
+							return *sym;
+						});
+						let member_name = self.global.symbol(*sym).name.clone();
+						let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(tmp),
+								projections: Vec::new(),
+								ty: expr.ty.clone(),
+							},
+							rvalue: MirRvalue::Aggregate {
+								kind: MirAggregateKind::VariantMember {
+									parent,
+									member: member_name,
+								},
+								fields: Vec::new(),
+							},
+							span: expr.span(),
+						});
+						return self.copy_or_move(MirPlace {
+							base: MirPlaceBase::Local(tmp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						});
+					}
+
 					let place: MirPlace = if let Some(&local_id) = builder.local_map.get(sym) {
 						MirPlace {
 							base: MirPlaceBase::Local(local_id),
@@ -1025,6 +1062,31 @@ impl<'a> MirLowerer<'a>
 							ty: expr.ty.clone(),
 						}
 					};
+
+					if matches!(self.global.symbol(*sym).kind, SymbolKind::GenericParam) {
+						let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+						let agg_kind = match &expr.ty {
+							Ty::Named { symbol: ty_sym, .. } => MirAggregateKind::Struct(*ty_sym),
+							_ => MirAggregateKind::Tuple,
+						};
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(tmp),
+								projections: Vec::new(),
+								ty: expr.ty.clone(),
+							},
+							rvalue: MirRvalue::Aggregate {
+								kind: agg_kind,
+								fields: Vec::new(),
+							},
+							span: expr.span(),
+						});
+						return self.copy_or_move(MirPlace {
+							base: MirPlaceBase::Local(tmp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						});
+					}
 					if expr
 						.ty
 						.implements_copy(&self.module.caches.trait_impls, self.module.caches.copy_sym)
@@ -1236,13 +1298,67 @@ impl<'a> MirLowerer<'a>
 				let lowered_args: Vec<MirOperand> =
 					args.iter().map(|a| return self.lower_expr_into(builder, a)).collect();
 
+				let variant_member_sym: Option<SymbolId> = if let TypedExprKind::Identifier { path } = &callee.kind {
+					let candidate = match &path.kind {
+						ResolvedPathKind::Resolved(s) => Some(*s),
+						ResolvedPathKind::AssocItem { item, .. } => Some(*item),
+						ResolvedPathKind::Primitive(_) => None,
+					};
+					candidate.filter(|s| return matches!(self.global.symbol(*s).kind, SymbolKind::VariantMember))
+				} else {
+					None
+				};
+
+				if let Some(member_sym) = variant_member_sym {
+					let parent = self.variant_parent(member_sym).unwrap_or_else(|| {
+						self.diagnostics.push(compiler_bug!(
+							expr.span,
+							"variant member has no parent variant in scope"
+						));
+						return member_sym;
+					});
+					let member_name = self.global.symbol(member_sym).name.clone();
+					let fields: Vec<(String, MirOperand)> = lowered_args
+						.into_iter()
+						.enumerate()
+						.map(|(i, op)| return (i.to_string(), op))
+						.collect();
+
+					let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+					builder.push_stmt(MirStmt::Assign {
+						place: MirPlace {
+							base: MirPlaceBase::Local(tmp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						},
+						rvalue: MirRvalue::Aggregate {
+							kind: MirAggregateKind::VariantMember {
+								parent,
+								member: member_name,
+							},
+							fields,
+						},
+						span: expr.span(),
+					});
+					return self.copy_or_move(MirPlace {
+						base: MirPlaceBase::Local(tmp),
+						projections: Vec::new(),
+						ty: expr.ty.clone(),
+					});
+				}
+
 				let lowered_callee: MirCallee = match &callee.kind {
 					TypedExprKind::Identifier { path } => match &path.kind {
 						ResolvedPathKind::Resolved(sym) => {
 							// TODO: when implementing function pointers, lambda/closures ect, this should change to a check and make MirCallee::Indirect() for that call
 							MirCallee::Direct(*sym)
 						}
-						ResolvedPathKind::AssocItem { base, .. } => MirCallee::Direct(*base),
+						ResolvedPathKind::AssocItem {
+							base,
+							member,
+							item,
+							base_type_args,
+						} => MirCallee::Direct(*item),
 						ResolvedPathKind::Primitive(_) => {
 							self.diagnostics
 								.push(compiler_bug!(callee.span, "primitive used as callee in MIR lowering"));
@@ -1270,11 +1386,25 @@ impl<'a> MirLowerer<'a>
 					}
 				};
 
-				// after building `lowered_callee` and `lowered_args`
-				let lowered_named_generics: Vec<(String, Ty)> = named_generics
+				let mut lowered_named_generics: Vec<(String, Ty)> = named_generics
 					.iter()
 					.map(|(name, te)| return (name.clone(), te.ty.clone()))
 					.collect();
+
+				//
+
+				if let TypedExprKind::Identifier { path } = &callee.kind
+					&& let ResolvedPathKind::AssocItem { base, item, .. } = &path.kind
+					&& *item != SymbolId::DUMMY
+					&& !lowered_named_generics.iter().any(|(n, _)| return n == "Self")
+				{
+					let item_scope_kind = &self.global.scope(self.global.symbol(*item).scope).kind;
+					let base_is_trait = matches!(self.global.symbol(*base).kind, SymbolKind::Trait);
+
+					if matches!(item_scope_kind, ScopeKind::TraitBody) && !base_is_trait {
+						lowered_named_generics.push(("Self".to_string(), Ty::named(*base)));
+					}
+				}
 
 				let next_bb: BlockId = builder.alloc_block();
 
@@ -1670,7 +1800,6 @@ impl<'a> MirLowerer<'a>
 				result_local.map_or_else(
 					|| {
 						return if matches!(expr.ty, Ty::Never) {
-							// Merge block is unreachable; mark it and hand back a typed dummy.
 							builder.set_terminator(MirTerminator::Unreachable);
 							let dead: BlockId = builder.alloc_block();
 							builder.switch_to(dead);
@@ -2226,6 +2355,20 @@ impl<'a> MirLowerer<'a>
 			});
 	}
 
+	fn variant_parent(&self, member: SymbolId) -> Option<SymbolId>
+	{
+		return self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+			if !matches!(s.kind, SymbolKind::Variant) {
+				return None;
+			}
+			let scope_id = s.introduced_scope?;
+			if self.global.scope(scope_id).symbols.contains(&member) {
+				return Some(SymbolId(i));
+			}
+			return None;
+		});
+	}
+
 	fn lower_pattern_bindings(&mut self, builder: &mut BodyBuilder, pattern: &TypedPattern, scrutinee_local: LocalId)
 	{
 		match pattern {
@@ -2431,9 +2574,6 @@ impl<'a> MirLowerer<'a>
 				};
 			}
 
-			// Anything else isn't structurally a place. Lower as an operand
-			// and, if we get a value back (Const), materialize it into a temp
-			// so the caller still has something writable.
 			_ => {
 				let operand: MirOperand = self.lower_expr_into(builder, expr);
 				match operand {

@@ -53,7 +53,7 @@ pub struct SymbolId(pub usize);
 
 impl SymbolId
 {
-	const DUMMY: SymbolId = SymbolId(usize::MAX);
+	pub const DUMMY: SymbolId = SymbolId(usize::MAX);
 }
 
 /// The kind of symbol and its associated metadata.
@@ -313,6 +313,39 @@ impl GlobalSymbolTable
 	pub fn symbol(&self, id: SymbolId) -> &Symbol
 	{
 		return &self.symbols[id.0];
+	}
+
+	pub fn scope_path(&self, sym_id: SymbolId) -> Vec<String>
+	{
+		let sym = self.symbol(sym_id);
+		let mut path: Vec<String> = Vec::new();
+		let mut current = sym.scope;
+
+		loop {
+			let scope = self.scope(current);
+			// Find the symbol in this scope that introduced it, to get the name
+			// Walk up until we hit the global root (no parent)
+			match scope.parent {
+				None => break,
+				Some(parent) => {
+					// Find the symbol in the parent scope whose introduced_scope is current
+					let owner = self.scope(parent).symbols.iter().find_map(|&sid| {
+						let s = self.symbol(sid);
+						if s.introduced_scope == Some(current) {
+							return Some(s.name.clone());
+						}
+						return None;
+					});
+					if let Some(name) = owner {
+						path.push(name);
+					}
+					current = parent;
+				}
+			}
+		}
+
+		path.reverse();
+		return path;
 	}
 }
 

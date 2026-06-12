@@ -1837,6 +1837,7 @@ pub struct TypeCaches
 	pub impl_assoc: HashMap<(TyKey, SymbolId, String), Ty>,
 	pub impl_assoc_generic_params: HashMap<(TyKey, SymbolId, String), Vec<String>>,
 	pub trait_impls: HashMap<TyKey, HashSet<SymbolId>>,
+	pub variant_generics: HashMap<SymbolId, Vec<String>>,
 	pub copy_sym: SymbolId,
 }
 
@@ -1854,6 +1855,7 @@ impl Default for TypeCaches
 			impl_assoc: HashMap::default(),
 			impl_assoc_generic_params: HashMap::default(),
 			trait_impls: HashMap::default(),
+			variant_generics: HashMap::default(),
 			copy_sym: SymbolId(usize::MAX), // This one is always overwritten, and so can be safely be written to a nonsence value
 		};
 	}
@@ -1974,6 +1976,17 @@ impl<'a> Checker<'a>
 			return Ok(());
 		}
 		return Err(self.mismatch(span, expected, found));
+	}
+
+	fn heap_param_symbol(&self, name: &str) -> Option<SymbolId>
+	{
+		return self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+			return if s.name == name && matches!(s.kind, SymbolKind::GenericParam) {
+				Some(SymbolId(i))
+			} else {
+				None
+			};
+		});
 	}
 
 	fn ty_of_symbol(&self, id: SymbolId, span: Span) -> Result<Ty, TypeError>
@@ -2097,7 +2110,7 @@ impl<'a> Checker<'a>
 			ResolvedTypeCore::Base { path, generics } => {
 				let sym_id: SymbolId = match &path.kind {
 					ResolvedPathKind::Resolved(id) => *id,
-					ResolvedPathKind::AssocItem { base, member } => {
+					ResolvedPathKind::AssocItem { base, member, .. } => {
 						if let Some(ty) = self.fn_ctx.assoc_types.get(member) {
 							return Ok(ty.clone());
 						}
@@ -2607,6 +2620,11 @@ impl<'a> Checker<'a>
 	{
 		self.caches.env.insert(v.resolved_name, Ty::named(v.resolved_name));
 
+		self.caches.variant_generics.insert(
+			v.resolved_name,
+			v.generics.iter().map(|g| return g.name.clone()).collect(),
+		);
+
 		let pairs: Vec<(String, Span)> = Self::generic_pairs(&v.generics);
 		let where_clause: Vec<TypedWhereConstraint> = self.lower_where_constraints_with_generics(&pairs, &[])?;
 		self.generic_scope.push_generic_params(&v.generics, &where_clause);
@@ -2742,7 +2760,7 @@ impl<'a> Checker<'a>
 		let self_ty: Ty = match &i.resolved_target.kind {
 			ResolvedPathKind::Resolved(id) => {
 				let sym = self.global.symbol(*id);
-				#[allow(clippy::redundant_else)] // clippy does weird things
+				#[allow(clippy::redundant_else)]
 				if matches!(sym.kind, SymbolKind::GenericParam) {
 					self.generic_scope.lookup(&sym.name).cloned().unwrap_or_else(|| {
 						return Ty::Generic {
@@ -3100,24 +3118,21 @@ impl<'a> Checker<'a>
 							symbol: sym,
 							args: Vec::new(),
 						}],
-						None => {
-							// fallback: search by name case-insensitively
-							self.global
-								.symbols
-								.iter()
-								.enumerate()
-								.find_map(|(i, sym)| {
-									if sym.name.eq_ignore_ascii_case(&hp.name) && matches!(sym.kind, SymbolKind::Trait)
-									{
-										return Some(vec![TyBound::Trait {
-											symbol: SymbolId(i),
-											args: Vec::new(),
-										}]);
-									}
-									return None;
-								})
-								.unwrap_or_default()
-						}
+						None => self
+							.global
+							.symbols
+							.iter()
+							.enumerate()
+							.find_map(|(i, sym)| {
+								if sym.name.eq_ignore_ascii_case(&hp.name) && matches!(sym.kind, SymbolKind::Trait) {
+									return Some(vec![TyBound::Trait {
+										symbol: SymbolId(i),
+										args: Vec::new(),
+									}]);
+								}
+								return None;
+							})
+							.unwrap_or_default(),
 					};
 					if bounds.is_empty() {
 						Ty::Generic {
@@ -3287,8 +3302,8 @@ impl<'a> Checker<'a>
 							bounds: bounds.clone(),
 							concrete: Some(Box::new(concrete.clone())),
 						};
-						self.caches.env.insert(v.resolved_name, pinned);
-						(declared, Some(te))
+						self.caches.env.insert(v.resolved_name, pinned.clone());
+						(pinned, Some(te))
 					}
 				}
 			} else {
@@ -4317,12 +4332,7 @@ impl<'a> Checker<'a>
 							});
 						}
 
-						let mut ty = self.ty_of_symbol(*id, span)?;
-
-						ty = match ty {
-							Ty::ImplTrait { bounds, .. } => Ty::ImplTrait { bounds, concrete: None },
-							other => other,
-						};
+						let ty = self.ty_of_symbol(*id, span)?;
 
 						match (&ty, hint) {
 							(
@@ -4342,7 +4352,7 @@ impl<'a> Checker<'a>
 							_ => ty,
 						}
 					}
-					ResolvedPathKind::AssocItem { base, member } => {
+					ResolvedPathKind::AssocItem { base, member, .. } => {
 						let actual: SymbolId = self.resolve_to_struct_sym(*base);
 						let base_name: String = self.global.symbol(*base).name.clone();
 
@@ -4399,7 +4409,14 @@ impl<'a> Checker<'a>
 						));
 					}
 				};
-				(TypedExprKind::Identifier { path: path.clone() }, ty)
+				let mut tpath = path.clone();
+
+				let base_concrete = match &ty {
+					Ty::Named { .. } => Some(&ty),
+					_ => None,
+				};
+				self.finalize_assoc_in_path(&mut tpath, base_concrete);
+				(TypedExprKind::Identifier { path: tpath }, ty)
 			}
 
 			ResolvedExpr::UnresolvedIdentifier { path, .. } => {
@@ -4462,6 +4479,8 @@ impl<'a> Checker<'a>
 										kind: ResolvedPathKind::AssocItem {
 											base: *trait_sym,
 											member: member.name.clone(),
+											item: SymbolId::DUMMY,
+											base_type_args: Vec::new(),
 										},
 										original: base.original.clone(),
 									},
@@ -4492,6 +4511,8 @@ impl<'a> Checker<'a>
 										kind: ResolvedPathKind::AssocItem {
 											base: *trait_sym,
 											member: member.name.clone(),
+											item: SymbolId::DUMMY,
+											base_type_args: Vec::new(),
 										},
 										original: base.original.clone(),
 									},
@@ -4532,6 +4553,8 @@ impl<'a> Checker<'a>
 										kind: ResolvedPathKind::AssocItem {
 											base: sym,
 											member: member.name.clone(),
+											item: SymbolId::DUMMY,
+											base_type_args: Vec::new(),
 										},
 										original: parser::Path {
 											segments: vec![PathSegment {
@@ -4560,6 +4583,8 @@ impl<'a> Checker<'a>
 									kind: ResolvedPathKind::AssocItem {
 										base: trait_sym,
 										member: member.name.clone(),
+										item: SymbolId::DUMMY,
+										base_type_args: Vec::new(),
 									},
 									original: parser::Path {
 										segments: vec![PathSegment {
@@ -4712,6 +4737,8 @@ impl<'a> Checker<'a>
 															.expect("")
 													},
 													member: "deref".to_string(),
+													item: SymbolId::DUMMY,
+													base_type_args: Vec::new(),
 												},
 												original: parser::Path {
 													segments: vec![PathSegment {
@@ -5025,7 +5052,7 @@ impl<'a> Checker<'a>
 								{
 									self.caches.env.get(*id).cloned()
 								}
-								ResolvedPathKind::AssocItem { base, member } => {
+								ResolvedPathKind::AssocItem { base, member, .. } => {
 									let actual = self.resolve_to_struct_sym(*base);
 									self.caches
 										.method_fn
@@ -5099,7 +5126,7 @@ impl<'a> Checker<'a>
 					}
 				};
 
-				let rng: Vec<(String, TypedExpr)> = named_generics
+				let mut rng: Vec<(String, TypedExpr)> = named_generics
 					.iter()
 					.map(|(n, rt)| {
 						if let ResolvedExpr::Identifier { path, .. } = rt
@@ -5143,7 +5170,7 @@ impl<'a> Checker<'a>
 								ParamTypeCache::find_fn_sym_by_name(self.global, &fn_name)
 							}
 						}
-						ResolvedPathKind::AssocItem { base, member } => {
+						ResolvedPathKind::AssocItem { base, member, .. } => {
 							let actual: SymbolId = self.resolve_to_struct_sym(*base);
 							self.caches
 								.method_fn
@@ -5227,59 +5254,62 @@ impl<'a> Checker<'a>
 				}
 
 				if *call_type != CallType::Regular {
-					let required_trait_sym: Option<SymbolId> = match call_type {
-						// TODO: figuere out TF is happening here??
-						CallType::UserHeap | CallType::CompilerHeap => self.traits.heap_syms.alloc,
-						CallType::UserMaybeHeap => self.traits.heap_syms.io,
-						CallType::Regular => unreachable!(),
-					};
+					for hp_name in ["alloc", "io"] {
+						if rng.iter().any(|(n, _)| return n == hp_name) {
+							continue;
+						}
+						let Some(ty) = self.fn_ctx.heap_params.get(hp_name).cloned() else {
+							return Err(Self::err(
+								span,
+								TypeErrorKind::TypeMismatch {
+									expected: format!(
+										"caller to declare a `{hp_name}` heap parameter (required by a \
+                         non-Regular call); add it to the function signature or pass it \
+                         explicitly with `<{hp_name}=…>`"
+									),
+									found: "no matching heap parameter in scope".to_string(),
+								},
+							));
+						};
+						let sym = self.heap_param_symbol(hp_name).unwrap_or(SymbolId::DUMMY);
+						rng.push((
+							hp_name.to_string(),
+							TypedExpr {
+								kind: TypedExprKind::Identifier {
+									path: ResolvedPath {
+										kind: ResolvedPathKind::Resolved(sym),
+										original: parser::Path {
+											segments: vec![PathSegment {
+												name: hp_name.to_string(),
+												generics: Vec::new(),
+												span,
+											}],
+											glob: false,
+											global: false,
+											span,
+										},
+									},
+								},
+								ty,
+								span,
+							},
+						));
+					}
+					rng.sort_by(|a, b| return a.0.cmp(&b.0));
+				}
+				if *call_type != CallType::Regular {
+					for (hp_name, required_trait_sym) in
+						[("alloc", self.traits.heap_syms.alloc), ("io", self.traits.heap_syms.io)]
+					{
+						let Some(trait_sym) = required_trait_sym else { continue };
 
-					if let Some(trait_sym) = required_trait_sym {
-						let token_ty: Option<&Ty> = rng.first().map(|(_, te)| return &te.ty);
+						let token_ty: Option<&Ty> = rng
+							.iter()
+							.find(|(n, _)| return n == hp_name)
+							.map(|(_, te)| return &te.ty);
 
 						match token_ty {
-							None => {
-								let forwarded = self
-									.fn_ctx
-									.heap_params
-									.iter()
-									.find(|(param_name, hp_ty)| {
-										let name_matches = self.global.symbol(trait_sym).name == **param_name;
-										if name_matches {
-											return true;
-										}
-										return match hp_ty {
-											Ty::ImplTrait { bounds, .. } | Ty::Generic { bounds, .. } => {
-												bounds.iter().any(
-													|b| matches!(b, TyBound::Trait { symbol, .. } if *symbol == trait_sym),
-												)
-											}
-											_ => self.ty_satisfies_bound(
-												hp_ty,
-												&TyBound::Trait {
-													symbol: trait_sym,
-													args: Vec::new(),
-												},
-											),
-										};
-									})
-									.map(|(_, ty)| return ty.clone());
-
-								if forwarded.is_none() {
-									return Err(Self::err(
-										span,
-										TypeErrorKind::TypeMismatch {
-											expected: format!(
-												"a heap/IO generic argument implementing `{}`",
-												self.global.symbol(trait_sym).name
-											),
-											found:
-												"no named generic argument provided and no matching heap param in scope"
-													.to_owned(),
-										},
-									));
-								}
-							}
+							None => { /* existing "no matching heap param" error */ }
 							Some(ty) => {
 								let already_satisfies = match ty {
 									Ty::ImplTrait { bounds, .. } | Ty::Generic { bounds, .. } => bounds
@@ -5518,6 +5548,8 @@ impl<'a> Checker<'a>
 										kind: ResolvedPathKind::AssocItem {
 											base: type_sym,
 											member: method_name,
+											item: SymbolId::DUMMY,
+											base_type_args: Vec::new(),
 										},
 										original: parser::Path {
 											segments: vec![PathSegment {
@@ -5548,10 +5580,47 @@ impl<'a> Checker<'a>
 					other_kind => (other_kind, targs),
 				};
 
+				let nfinal_callee_kind = match final_callee_kind {
+					TypedExprKind::Identifier { mut path } => {
+						if let ResolvedPathKind::AssocItem {
+							item,
+							base_type_args,
+							base,
+							member,
+						} = &mut path.kind
+						{
+							if let Some(fn_sym) = callee_fn_sym {
+								*item = fn_sym;
+							} else {
+								let (i, _) = self.resolve_assoc_path(*base, member, None);
+								*item = i;
+							}
+
+							let base_ty = final_args.first().map(|a| return &a.ty);
+							if let Some(Ty::Named { generics, .. }) = base_ty
+								&& !generics.is_empty()
+							{
+								base_type_args.clone_from(generics);
+							}
+							if base_type_args.is_empty()
+								&& let Some(Ty::Named {
+									symbol: hint_sym,
+									generics: hint_gens,
+								}) = hint && *hint_sym == *base
+								&& !hint_gens.is_empty()
+							{
+								base_type_args.clone_from(hint_gens);
+							}
+						}
+						TypedExprKind::Identifier { path }
+					}
+					other => other,
+				};
+
 				(
 					TypedExprKind::Call {
 						callee: Box::new(TypedExpr {
-							kind: final_callee_kind,
+							kind: nfinal_callee_kind,
 							ty: Ty::Unit,
 							span: tcallee_span,
 						}),
@@ -6007,7 +6076,7 @@ impl<'a> Checker<'a>
 				{
 					return true;
 				}
-				if let ResolvedPathKind::AssocItem { base, member } = &path.kind {
+				if let ResolvedPathKind::AssocItem { base, member, .. } = &path.kind {
 					let actual = self.resolve_to_struct_sym(*base);
 					let base_name = self.global.symbol(*base).name.clone();
 					if self.caches.method_fn.get_sym(*base, member).is_some()
@@ -6881,12 +6950,65 @@ impl<'a> Checker<'a>
 						));
 					}
 				};
+
+				let member_sym: Option<SymbolId> = match &path.kind {
+					ResolvedPathKind::Resolved(id) => Some(*id),
+					ResolvedPathKind::AssocItem { item, .. } if *item != SymbolId::DUMMY => Some(*item),
+					ResolvedPathKind::AssocItem { base, member, .. } => {
+						self.global.symbol(*base).introduced_scope.and_then(|sc| {
+							return self.global.scope(sc).symbols.iter().copied().find(|&s| {
+								return self.global.symbol(s).name == *member
+									&& matches!(self.global.symbol(s).kind, SymbolKind::VariantMember);
+							});
+						})
+					}
+					ResolvedPathKind::Primitive(_) => None,
+				};
+
+				let parent_sym: Option<SymbolId> = member_sym.and_then(|ms| {
+					return self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+						if !matches!(s.kind, SymbolKind::Variant) {
+							return None;
+						}
+						let sc = s.introduced_scope?;
+						if self.global.scope(sc).symbols.contains(&ms) {
+							return Some(SymbolId(i));
+						}
+						return None;
+					});
+				});
+
+				let scrutinee_args: Vec<Ty> = match scrutinee {
+					Ty::Named { generics, .. } => generics.clone(),
+					_ => Vec::new(),
+				};
+				let mut subs: HashMap<String, Ty> = HashMap::new();
+				if let Some(p) = parent_sym
+					&& let Some(names) = self.caches.variant_generics.get(&p)
+				{
+					for (n, t) in names.iter().zip(scrutinee_args.iter()) {
+						subs.insert(n.clone(), t.clone());
+					}
+				}
+
+				let payload_tys: Vec<Ty> = member_sym
+					.and_then(|s| return self.caches.env.get(s).cloned())
+					.map(|env_ty| vec![substitute_generics(&env_ty, &subs)])
+					.unwrap_or_default();
+
 				let targs: Vec<TypedPattern> = args
 					.iter()
-					.map(|p| return self.check_pattern(p, &Ty::Infer))
+					.enumerate()
+					.map(|(i, p)| {
+						let sub_scrut = payload_tys.get(i).cloned().unwrap_or(Ty::Infer);
+						return self.check_pattern(p, &sub_scrut);
+					})
 					.collect::<Result<_, _>>()?;
+
+				let mut tpath = path.clone();
+				self.finalize_assoc_in_path(&mut tpath, Some(&variant_ty));
 				TypedPattern::Variant {
-					path: path.clone(),
+					path: tpath,
 					args: targs,
 					ty: variant_ty,
 					span: *span,
@@ -6930,6 +7052,8 @@ impl<'a> Checker<'a>
 						));
 					}
 				};
+				let mut tpath = path.clone();
+				self.finalize_assoc_in_path(&mut tpath, Some(&Ty::named(struct_sym)));
 				let tfields: Vec<(String, TypedPattern)> = fields
 					.iter()
 					.map(|(name, pat)| {
@@ -6946,7 +7070,7 @@ impl<'a> Checker<'a>
 					})
 					.collect::<Result<_, TypeError>>()?;
 				TypedPattern::Struct {
-					path: path.clone(),
+					path: tpath.clone(),
 					fields: tfields,
 					has_rest: *has_rest,
 					ty: Ty::named(struct_sym),
@@ -7652,7 +7776,7 @@ impl<'a> Checker<'a>
 
 				let raw_return_is_self_or_generic = match &callee.kind {
 					TypedExprKind::Identifier { path } => match &path.kind {
-						ResolvedPathKind::AssocItem { base, member } => {
+						ResolvedPathKind::AssocItem { base, member, .. } => {
 							let ffn_sym = self.caches.method_fn.get_sym(*base, member).copied();
 							ffn_sym.is_some_and(|fn_sym| return self.fn_return_is_self_or_generic(fn_sym, generic_name))
 						}
@@ -7740,6 +7864,56 @@ impl<'a> Checker<'a>
 			}
 			_ => false,
 		};
+	}
+
+	fn resolve_assoc_path(&self, base: SymbolId, member: &str, base_concrete: Option<&Ty>) -> (SymbolId, Vec<Ty>)
+	{
+		let actual = self.resolve_to_struct_sym(base);
+		let item = self
+			.caches
+			.method_fn
+			.get_sym(base, member)
+			.or_else(|| return self.caches.method_fn.get_sym(actual, member))
+			.copied()
+			.or_else(|| {
+				let generic_ty = self.caches.env.get(base).cloned()?;
+				let bounds = match &generic_ty {
+					Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => bounds.clone(),
+					_ => return None,
+				};
+				return bounds.iter().find_map(|b| {
+					let TyBound::Trait { symbol: trait_sym, .. } = b else {
+						return None;
+					};
+					return self.caches.method_fn.get_sym(*trait_sym, member).copied();
+				});
+			})
+			.unwrap_or(SymbolId::DUMMY);
+
+		let base_type_args = match base_concrete {
+			Some(Ty::Named { generics, .. }) => generics.clone(),
+			_ => Vec::new(),
+		};
+
+		return (item, base_type_args);
+	}
+
+	fn finalize_assoc_in_path(&self, path: &mut ResolvedPath, base_concrete: Option<&Ty>)
+	{
+		if let ResolvedPathKind::AssocItem {
+			base,
+			member,
+			item,
+			base_type_args,
+		} = &mut path.kind
+		{
+			if *item != SymbolId::DUMMY {
+				return;
+			}
+			let (resolved, args) = self.resolve_assoc_path(*base, member, base_concrete);
+			*item = resolved;
+			*base_type_args = args;
+		}
 	}
 }
 

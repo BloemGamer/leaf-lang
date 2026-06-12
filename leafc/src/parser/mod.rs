@@ -16,7 +16,7 @@ use crate::{
 	source_map::SourceIndex,
 	symbol_collection::Visibility,
 };
-use leaf_proc::{CompileErrorKind, Spanned};
+use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 
 /// Recursive descent parser for the programming language.
 ///
@@ -2869,10 +2869,15 @@ where
 			}
 		} else if modifiers.is_empty() {
 			let tok: Token = self.next()?;
-			match tok.kind {
-				TokenKind::Directive(d) => self.parse_directive_kind(d, Vec::new())?,
-				_ => unreachable!("Bug: Token should be a directive"),
-			}
+			if let TokenKind::Directive(d) = tok.kind { self.parse_directive_kind(d, Vec::new())? } else {
+   					self.diagnostics
+   						.push(compiler_bug!(tok.span(), "Token should be a directive"));
+   					// unreachable!("Bug: Token should be a directive");
+   					Directive::Custom {
+   						name: "ERROR".to_string(),
+   						params: Vec::new(),
+   					}
+   				}
 		} else {
 			let tok: Token = self.next()?;
 			return Err(Box::new(

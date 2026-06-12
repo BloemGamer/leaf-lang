@@ -43,7 +43,7 @@ impl fmt::Display for ResolvedPath
 	{
 		return match &self.kind {
 			ResolvedPathKind::Resolved(sym) => write!(f, "{} /* #{} */", self.original, sym.0),
-			ResolvedPathKind::AssocItem { base, member } => {
+			ResolvedPathKind::AssocItem { base, member, .. } => {
 				write!(f, "{} /* #{} */::{}  /* assoc */", self.original, base.0, member)
 			}
 			ResolvedPathKind::Primitive(name) => write!(f, "{} /* primitive */", name),

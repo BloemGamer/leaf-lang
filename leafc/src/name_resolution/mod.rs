@@ -44,6 +44,10 @@ pub enum ResolvedPathKind
 	{
 		base: SymbolId,
 		member: String,
+		/// filled in type analysis
+		item: SymbolId,
+		/// filled in type analysis
+		base_type_args: Vec<Ty>,
 	},
 	Primitive(type_analysis::Ty),
 }
@@ -1174,7 +1178,7 @@ impl<'a> Resolver<'a>
 			.symbols
 			.anon_scopes
 			.get(idx)
-			.map(|&local| return ScopeId(local.0 + self.scope_offset)); // ← convert to global
+			.map(|&local| return ScopeId(local.0 + self.scope_offset));
 	}
 
 	fn resolve_path(&self, path: &Path, span: Span) -> Result<ResolvedPathResult, NameResolutionError>
@@ -1555,7 +1559,12 @@ impl<'a> Resolver<'a>
 			},
 			ResolvedPathResult::Assoc { base, member } => ResolvedPath {
 				original: path.clone(),
-				kind: ResolvedPathKind::AssocItem { base, member },
+				kind: ResolvedPathKind::AssocItem {
+					base,
+					member,
+					item: SymbolId::DUMMY,
+					base_type_args: Vec::new(),
+				},
 			},
 		});
 	}
@@ -2148,7 +2157,12 @@ impl<'a> Resolver<'a>
 						return ResolvedTypeCore::Base {
 							path: ResolvedPath {
 								original: path.clone(),
-								kind: ResolvedPathKind::AssocItem { base: self_sym, member },
+								kind: ResolvedPathKind::AssocItem {
+									base: self_sym,
+									member,
+									item: SymbolId::DUMMY,
+									base_type_args: Vec::new(),
+								},
 							},
 							generics: resolved_generics,
 						};
