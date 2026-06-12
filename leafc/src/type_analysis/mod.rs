@@ -30,7 +30,7 @@ use crate::{
 		ResolvedTraitDecl, ResolvedTraitItem, ResolvedType, ResolvedTypeAliasDecl, ResolvedTypeCore, ResolvedUnionDecl,
 		ResolvedVariableDecl, ResolvedVariantDecl, ResolvedWhereBound, ResolvedWhereConstraint,
 	},
-	parser::{self, AssignOp, BinaryOp, CallType, Literal, PathSegment, UnaryOp},
+	parser::{self, AssignOp, BinaryOp, CallType, Literal, PathSegment, UnaryOp, read_radix_number},
 	source_map::SourceIndex,
 	symbol_collection::{GlobalSymbolTable, Scope, Symbol, SymbolId, SymbolKind},
 	type_analysis::intrinsics::Intrinsic,
@@ -212,6 +212,9 @@ impl Ty
 			(Ty::Tuple(ts1), Ty::Tuple(ts2)) => {
 				ts1.len() == ts2.len() && ts1.iter().zip(ts2).all(|(a, b)| return a.is_assignable_to(b))
 			}
+			(Ty::Unit, Ty::Tuple(e)) if e.is_empty() => true,
+			(Ty::Tuple(e), Ty::Unit) if e.is_empty() => true,
+			(Ty::Unit, Ty::Unit) => true,
 
 			_ => self == expected,
 		};
@@ -2012,6 +2015,22 @@ impl<'a> Checker<'a>
 				| SymbolKind::Trait
 				| SymbolKind::Module => Ty::named(id),
 				SymbolKind::Function { .. } => Ty::Unit,
+				SymbolKind::EnumVariant => {
+					let parent = self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+						if !matches!(s.kind, SymbolKind::Enum) {
+							return None;
+						}
+						let scope_id = s.introduced_scope?;
+						if self.global.scope(scope_id).symbols.contains(&id) {
+							return Some(SymbolId(i));
+						}
+						return None;
+					});
+					match parent {
+						Some(parent_id) => Ty::named(parent_id),
+						None => return Err(Self::err(span, TypeErrorKind::UnknownSymbol { id })),
+					}
+				}
 				SymbolKind::VariantMember => {
 					let parent = self.global.symbols.iter().enumerate().find_map(|(i, s)| {
 						if !matches!(s.kind, SymbolKind::Variant) {
@@ -2193,10 +2212,33 @@ impl<'a> Checker<'a>
 				inner: Box::new(self.lower_ty_core(inner, span)?),
 			},
 
-			ResolvedTypeCore::Array { inner, .. } => Ty::Array {
-				inner: Box::new(self.lower_ty_core(inner, span)?),
-				size: None,
-			},
+			ResolvedTypeCore::Array { inner, size } => {
+				let lowered_size: Option<u64> = size.as_ref().and_then(|s| {
+					// TODO: This is temporary, so, array's can be used in language for now, but should be good enough for now
+					return if let ResolvedExpr::Literal {
+						value: lit @ Literal::Int { .. },
+						..
+					} = s.as_ref()
+					{
+						#[allow(clippy::cast_possible_truncation)]
+						#[allow(clippy::cast_sign_loss)]
+						let Ok(r) = read_radix_number(lit)
+							.map(|val| return val as u64)
+							.inspect_err(|e| eprintln!("{:#?}", e))
+						else {
+							todo!("make a good error for when parsing the number does not work");
+						};
+						Some(r)
+					} else {
+						None
+					};
+				});
+
+				Ty::Array {
+					inner: Box::new(self.lower_ty_core(inner, span)?),
+					size: lowered_size,
+				}
+			}
 
 			ResolvedTypeCore::Tuple(types) => {
 				if types.is_empty() {
@@ -2613,7 +2655,20 @@ impl<'a> Checker<'a>
 
 	fn scan_enum(&mut self, e: &ResolvedEnumDecl)
 	{
-		self.caches.env.insert(e.resolved_name, Ty::named(e.resolved_name));
+		let enum_ty = Ty::named(e.resolved_name);
+		self.caches.env.insert(e.resolved_name, enum_ty.clone());
+
+		if let Some(sym) = self.global.symbols.get(e.resolved_name.0)
+			&& let Some(scope_id) = sym.introduced_scope
+		{
+			let scope = self.global.scope(scope_id);
+			for &mem_id in &scope.symbols {
+				let mem = self.global.symbol(mem_id);
+				if matches!(mem.kind, SymbolKind::EnumVariant) && e.variants.iter().any(|v| return v.name == mem.name) {
+					self.caches.env.insert(mem_id, enum_ty.clone());
+				}
+			}
+		}
 	}
 
 	fn scan_variant(&mut self, v: &ResolvedVariantDecl) -> Result<(), TypeError>
@@ -4390,6 +4445,22 @@ impl<'a> Checker<'a>
 								}
 								return None;
 							})
+							.or_else(|| {
+								let base_sym = self.global.symbol(*base);
+								if !matches!(base_sym.kind, SymbolKind::Enum) {
+									return None;
+								}
+								let scope_id = base_sym.introduced_scope?;
+								let scope = self.global.scope(scope_id);
+								return scope.symbols.iter().copied().find_map(|sid| {
+									let s = self.global.symbol(sid);
+									if &s.name == member && matches!(s.kind, SymbolKind::EnumVariant) {
+										// Variant's type was registered by scan_enum as Ty::named(enum_sym).
+										return self.caches.env.get(sid).cloned();
+									}
+									return None;
+								});
+							})
 							.ok_or_else(|| {
 								return Self::err(
 									span,
@@ -4640,14 +4711,40 @@ impl<'a> Checker<'a>
 			}
 
 			ResolvedExpr::Unary { op, expr: inner, .. } => {
-				let tinner = self.check_expr(inner, hint)?;
+				let inner_hint: Option<Ty> = match op {
+					UnaryOp::Addr { .. } => match hint {
+						Some(Ty::Reference { inner, .. } | Ty::Pointer { inner, .. }) => Some((**inner).clone()),
+						_ => None,
+					},
+					_ => hint.cloned(),
+				};
+				let tinner = self.check_expr(inner, inner_hint.as_ref())?;
 
 				match op {
 					UnaryOp::Addr { mutable } => {
-						let ty = Ty::Reference {
-							mutable: *mutable,
-							inner: Box::new(tinner.ty.clone()),
+						let want_pointer =
+							matches!(hint, Some(Ty::Pointer { .. } | Ty::ImplTrait { concrete: Some(_), .. }))
+								|| matches!(
+									hint,
+									Some(Ty::ImplTrait { concrete, .. })
+										if concrete
+											.as_ref()
+											.is_some_and(|c| matches!(c.as_ref(), Ty::Pointer { .. }))
+								);
+
+						let ty = if matches!(hint, Some(Ty::Pointer { .. })) {
+							Ty::Pointer {
+								mutable: *mutable,
+								inner: Box::new(tinner.ty.clone()),
+							}
+						} else {
+							Ty::Reference {
+								mutable: *mutable,
+								inner: Box::new(tinner.ty.clone()),
+							}
 						};
+						let _: bool = want_pointer;
+
 						(
 							TypedExprKind::Unary {
 								op: *op,
@@ -5030,8 +5127,20 @@ impl<'a> Checker<'a>
 					));
 				}
 
+				let callee_is_known_fn = match &tcallee.kind {
+					TypedExprKind::Identifier { path } => match &path.kind {
+						ResolvedPathKind::Resolved(id) => {
+							matches!(self.global.symbol(*id).kind, SymbolKind::Function { .. })
+						}
+						ResolvedPathKind::AssocItem { .. } => true,
+						ResolvedPathKind::Primitive(_) => false,
+					},
+					TypedExprKind::Field { .. } => true,
+					_ => false,
+				};
+
 				let ret_ty: Ty = match &tcallee.ty {
-					Ty::ImplTrait { bounds, .. } | Ty::Generic { bounds, .. } => bounds
+					Ty::ImplTrait { bounds, .. } | Ty::Generic { bounds, .. } if !callee_is_known_fn => bounds
 						.iter()
 						.find_map(|b| {
 							return if let TyBound::Fn { ret, .. } = b {
@@ -5042,7 +5151,7 @@ impl<'a> Checker<'a>
 						})
 						.unwrap_or_else(|| return hint.cloned().unwrap_or(Ty::Infer)),
 
-					Ty::Named { .. } => tcallee.ty.clone(),
+					Ty::Named { .. } if !callee_is_known_fn => tcallee.ty.clone(),
 
 					_ => {
 						let from_env = if let TypedExprKind::Identifier { path } = &tcallee.kind {
@@ -5487,12 +5596,19 @@ impl<'a> Checker<'a>
 
 					if let TypedExprKind::Identifier { path } = &tcallee.kind {
 						if let ResolvedPathKind::AssocItem { base, .. } = &path.kind {
-							let self_concrete = self
-								.caches
-								.env
-								.get(*base)
-								.cloned()
-								.unwrap_or_else(|| return Ty::named(*base));
+							let base_is_trait = matches!(self.global.symbol(*base).kind, SymbolKind::Trait);
+							let receiver_is_generic_like =
+								matches!(&tcallee.ty, Ty::Generic { .. } | Ty::ImplTrait { .. });
+
+							let self_concrete = if base_is_trait && receiver_is_generic_like {
+								tcallee.ty.clone()
+							} else {
+								self.caches
+									.env
+									.get(*base)
+									.cloned()
+									.unwrap_or_else(|| return Ty::named(*base))
+							};
 							substitute_self(&after_generic_subs, &self_concrete)
 						} else {
 							after_generic_subs
@@ -6847,8 +6963,32 @@ impl<'a> Checker<'a>
 				)
 			}
 			ResolvedArrayLiteral::Repeat { value, count, span } => {
+				let usize_ty = Ty::Primitive(Primitive::Int(IntType {
+					bits: IntSize::Size,
+					sign: IntSign::Unsigned,
+				}));
+
 				let tval: TypedExpr = self.check_expr(value, elem_hint.as_ref())?;
-				let tcount: TypedExpr = self.check_expr(count, None)?;
+				let tcount: TypedExpr = self.check_expr(count, Some(&usize_ty))?;
+				self.expect_ty(&tcount.ty, &usize_ty, count.span())?;
+
+				let static_size: Option<u64> = if let TypedExprKind::Literal {
+					value: lit @ Literal::Int { .. },
+				} = &tcount.kind
+				{
+					#[allow(clippy::cast_possible_truncation)]
+					#[allow(clippy::cast_sign_loss)]
+					let Ok(r) = read_radix_number(lit)
+						.map(|val| return val as u64)
+						.inspect_err(|e| eprintln!("{:#?}", e))
+					else {
+						todo!("make a good error for when parsing the number does not work");
+					};
+					Some(r)
+				} else {
+					None
+				};
+
 				let elem: Ty = tval.ty.clone();
 				(
 					TypedArrayLiteral::Repeat {
@@ -6858,7 +6998,7 @@ impl<'a> Checker<'a>
 					},
 					Ty::Array {
 						inner: Box::new(elem),
-						size: None,
+						size: static_size,
 					},
 				)
 			}
@@ -7774,52 +7914,74 @@ impl<'a> Checker<'a>
 					return false;
 				}
 
-				let raw_return_is_self_or_generic = match &callee.kind {
+				let lookup_fn_via_bounds = |base_sym: SymbolId, member: &str| -> Option<SymbolId> {
+					if let Some(s) = self.caches.method_fn.get_sym(base_sym, member).copied() {
+						return Some(s);
+					}
+					let generic_ty = self.caches.env.get(base_sym)?;
+					let (Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. }) = generic_ty else {
+						return None;
+					};
+					return bounds.iter().find_map(|b| {
+						let TyBound::Trait { symbol: trait_sym, .. } = b else {
+							return None;
+						};
+						return self.caches.method_fn.get_sym(*trait_sym, member).copied();
+					});
+				};
+
+				match &callee.kind {
 					TypedExprKind::Identifier { path } => match &path.kind {
 						ResolvedPathKind::AssocItem { base, member, .. } => {
-							let ffn_sym = self.caches.method_fn.get_sym(*base, member).copied();
-							ffn_sym.is_some_and(|fn_sym| return self.fn_return_is_self_or_generic(fn_sym, generic_name))
+							let base_name = &self.global.symbol(*base).name;
+							let base_is_target_generic = base_name == generic_name;
+
+							let Some(fn_sym) = lookup_fn_via_bounds(*base, member) else {
+								return false;
+							};
+							if !self.fn_return_is_self_or_generic(fn_sym, generic_name) {
+								return false;
+							}
+
+							if base_is_target_generic {
+								return true;
+							}
+
+							return args.first().is_some_and(|arg| match &arg.ty {
+								Ty::Generic { name, .. } if name == generic_name => return true,
+								Ty::Reference { inner, .. } | Ty::Mutable { inner } | Ty::Pointer { inner, .. } => {
+									return matches!(inner.as_ref(), Ty::Generic { name, .. } if name == generic_name);
+								}
+								_ => return false,
+							});
 						}
-						ResolvedPathKind::Resolved(id) => self.fn_return_is_self_or_generic(*id, generic_name),
-						ResolvedPathKind::Primitive(_) => false,
+						ResolvedPathKind::Resolved(id) => {
+							return self.fn_return_is_self_or_generic(*id, generic_name);
+						}
+						ResolvedPathKind::Primitive(_) => return false,
 					},
+
 					TypedExprKind::Field { base, name } => {
-						let receiver_is_generic = matches!(&base.ty, Ty::Generic { name: n, .. } if n == generic_name);
+						let receiver_is_generic = matches!(&base.ty, Ty::Generic { name, .. } if name == generic_name);
 						if !receiver_is_generic {
 							return false;
 						}
-						let ffn_sym = match &base.ty {
+						let fn_sym = match &base.ty {
 							Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => {
 								bounds.iter().find_map(|bound| {
-									return if let TyBound::Trait { symbol: trait_sym, .. } = bound {
-										self.caches.method_fn.get_sym(*trait_sym, name).copied()
-									} else {
-										None
+									let TyBound::Trait { symbol: trait_sym, .. } = bound else {
+										return None;
 									};
+									return self.caches.method_fn.get_sym(*trait_sym, name).copied();
 								})
 							}
 							_ => None,
 						};
-						ffn_sym.is_some_and(|fn_sym| return self.fn_return_is_self_or_generic(fn_sym, generic_name))
+						return fn_sym.is_some_and(|s| return self.fn_return_is_self_or_generic(s, generic_name));
 					}
-					_ => false,
-				};
 
-				if !raw_return_is_self_or_generic {
-					return false;
+					_ => return false,
 				}
-
-				let receiver_arg_is_generic = args.first().is_some_and(|arg| {
-					return match &arg.ty {
-						Ty::Generic { name, .. } if name == generic_name => true,
-						Ty::Reference { inner, .. } | Ty::Mutable { inner } | Ty::Pointer { inner, .. } => {
-							matches!(inner.as_ref(), Ty::Generic { name, .. } if name == generic_name)
-						}
-						_ => false,
-					};
-				});
-
-				return receiver_arg_is_generic;
 			}
 
 			TypedExprKind::Block(block) | TypedExprKind::UnsafeBlock(block) => {
@@ -7838,10 +8000,9 @@ impl<'a> Checker<'a>
 					.tail_expr
 					.as_ref()
 					.is_some_and(|t| return self.expr_provably_returns_generic(t, generic_name));
-				let else_ok = else_branch.as_ref().map_or_else(
-					|| return false,
-					|e| return self.expr_provably_returns_generic(e, generic_name),
-				);
+				let else_ok = else_branch
+					.as_ref()
+					.is_some_and(|e| return self.expr_provably_returns_generic(e, generic_name));
 				return then_ok && else_ok;
 			}
 

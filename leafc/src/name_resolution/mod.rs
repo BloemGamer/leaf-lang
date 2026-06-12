@@ -24,7 +24,7 @@ use crate::{
 	},
 	source_map::SourceIndex,
 	symbol_collection::{
-		GlobalSymbolTable, LocalSymbolTable, Scope, ScopeId, Symbol, SymbolId, SymbolKind, Visibility,
+		GlobalSymbolTable, LocalSymbolTable, Scope, ScopeId, ScopeKind, Symbol, SymbolId, SymbolKind, Visibility,
 	},
 	type_analysis::{self, Ty, intrinsics::Intrinsic},
 };
@@ -1157,6 +1157,31 @@ impl<'a> Resolver<'a>
 		return None;
 	}
 
+	fn enclosing_module_scope(&self, mut scope: ScopeId) -> ScopeId
+	{
+		loop {
+			let s = self.global.scope(scope);
+			if matches!(s.kind, ScopeKind::ModuleInline | ScopeKind::ModuleImport) {
+				return scope;
+			}
+			match s.parent {
+				Some(parent) => scope = parent,
+				None => return scope, // global root
+			}
+		}
+	}
+
+	fn current_module_path(&self) -> Option<Vec<String>>
+	{
+		let mod_scope = self.enclosing_module_scope(self.current_scope);
+		return self
+			.global
+			.module_roots
+			.iter()
+			.find(|(_, s)| return **s == mod_scope)
+			.map(|(p, _)| return p.clone());
+	}
+
 	fn is_descendant_of(&self, mut scope: ScopeId, ancestor: ScopeId) -> bool
 	{
 		loop {
@@ -1275,7 +1300,8 @@ impl<'a> Resolver<'a>
 				};
 
 				let sym: &Symbol = self.global.symbol(sym_id);
-				if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, search_scope) {
+				let def_module = self.enclosing_module_scope(sym.scope);
+				if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, def_module) {
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
@@ -1370,14 +1396,14 @@ impl<'a> Resolver<'a>
 				};
 
 				let sym: &Symbol = self.global.symbol(next_sym_id);
-				if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, cur_scope) {
+				let def_module = self.enclosing_module_scope(sym.scope);
+				if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, def_module) {
 					return Err(NameResolutionError {
 						span,
 						kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 						context: Vec::new(),
 					});
 				}
-
 				abs_path.push(name.clone());
 				cur_scope = if let Some(&mod_root) = self.global.module_roots.get(abs_path.as_slice()) {
 					mod_root
@@ -1490,14 +1516,14 @@ impl<'a> Resolver<'a>
 			};
 
 			let sym: &Symbol = self.global.symbol(sym_id);
-			if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, search_scope) {
+			let def_module = self.enclosing_module_scope(sym.scope);
+			if sym.visibility == Visibility::Private && !self.is_descendant_of(self.current_scope, def_module) {
 				return Err(NameResolutionError {
 					span,
 					kind: NameResolutionErrorKind::PrivateSymbol { path: path.clone() },
 					context: Vec::new(),
 				});
 			}
-
 			current_abs_path = next_abs_path;
 			current_sym_id = sym_id;
 		}
@@ -1580,14 +1606,45 @@ impl<'a> Resolver<'a>
 				Directive::Use {
 					use_path, visibility, ..
 				} => {
-					let segments: Vec<String> = use_path.segments.iter().map(|s| return s.name.clone()).collect();
+					let raw: Vec<String> = use_path.segments.iter().map(|s| return s.name.clone()).collect();
+
+					let segments: Vec<String> = if use_path.global || raw.is_empty() {
+						raw
+					} else if let Some((sym, _)) = self.find_in_scope_chain(self.current_scope, &raw[0])
+						&& let Some(intro) = self.global.symbol(sym).introduced_scope
+						&& let Some((full, _)) = self.global.module_roots.iter().find(|(_, s)| return **s == intro)
+					{
+						let mut abs = full.clone();
+						abs.extend(raw.into_iter().skip(1));
+						abs
+					} else if self.global.module_roots.contains_key(raw.as_slice()) {
+						raw
+					} else if let Some(mut base) = self.current_module_path()
+						&& !base.is_empty()
+					{
+						let mut probe = base.clone();
+						probe.extend(raw.iter().cloned());
+						if self
+							.global
+							.module_roots
+							.contains_key(&probe[..probe.len().saturating_sub(1)])
+							|| self.scope_for_path_prefix(&probe).is_some()
+						{
+							base.extend(raw);
+							base
+						} else {
+							raw
+						}
+					} else {
+						raw
+					};
 
 					let should_validate: bool = use_path.global || segments.len() > 1;
-
 					if should_validate && let Err(e) = self.resolve_absolute_path(&segments, use_path.span(), use_path)
 					{
 						self.diagnostics.push(e.build());
 					}
+
 					if use_path.glob {
 						self.use_imports.push(UseImport {
 							alias: Vec::new(),
@@ -1920,8 +1977,9 @@ impl<'a> Resolver<'a>
 						&& let Some(sym_id) = self.find_sym_in_global_scope(parent_root, mod_name)
 					{
 						let sym = self.global.symbol(sym_id);
+						let def_module = self.enclosing_module_scope(sym.scope);
 						if sym.visibility == Visibility::Private
-							&& !self.is_descendant_of(self.current_scope, sym.scope)
+							&& !self.is_descendant_of(self.current_scope, def_module)
 						{
 							return Err(NameResolutionError {
 								span,
@@ -2406,68 +2464,72 @@ impl<'a> Resolver<'a>
 					}
 				}
 
-				if let Ok(rp) = self.resolve_path_full(path, *span) {
-					ResolvedExpr::Identifier { path: rp, span: *span }
-				} else {
-					if matches!(
-						path,
-						Path {
-							segments,
-							glob: false,
-							global: false,
-							..
-						} if matches!(
-							&segments[0],
-							PathSegment { name, generics, .. }
-								if name == "Self" && generics.is_empty()
-						)
-					) {
-						return ResolvedExpr::AssocSelf {
-							member: path.segments[1].clone(),
-							span: path.span(),
-						};
-					}
-
-					if !path.global && path.segments.len() == 2 && path.segments[0].generics.is_empty() {
-						let base_name = &path.segments[0].name;
-						let is_generic_param =
-							self.find_in_scope_chain(self.current_scope, base_name)
-								.is_some_and(|(sym_id, _)| {
-									return matches!(self.global.symbol(sym_id).kind, SymbolKind::GenericParam);
-								});
-
-						if is_generic_param
-							&& let Ok(base_path) = self.resolve_path_full(
-								&Path::simple(vec![base_name.clone()], path.segments[0].span),
-								path.segments[0].span,
-							) {
-							return ResolvedExpr::AssocPath {
-								base: base_path,
+				match self.resolve_path_full(path, *span) {
+					Ok(rp) => ResolvedExpr::Identifier { path: rp, span: *span },
+					Err(e) => {
+						if !matches!(e.kind, NameResolutionErrorKind::UnresolvedPath { .. }) {
+							self.diagnostics.push(e.build());
+						}
+						if matches!(
+							path,
+							Path {
+								segments,
+								glob: false,
+								global: false,
+								..
+							} if matches!(
+								&segments[0],
+								PathSegment { name, generics, .. }
+									if name == "Self" && generics.is_empty()
+							)
+						) {
+							return ResolvedExpr::AssocSelf {
 								member: path.segments[1].clone(),
-								span: *span,
+								span: path.span(),
 							};
 						}
-					}
 
-					if !path.global && path.segments.len() == 1 {
-						let name = &path.segments[0].name;
-						if let Some(kind_str) = self.find_self_member_kind(name) {
-							self.diagnostics.push(
-								NameResolutionError {
+						if !path.global && path.segments.len() == 2 && path.segments[0].generics.is_empty() {
+							let base_name = &path.segments[0].name;
+							let is_generic_param =
+								self.find_in_scope_chain(self.current_scope, base_name)
+									.is_some_and(|(sym_id, _)| {
+										return matches!(self.global.symbol(sym_id).kind, SymbolKind::GenericParam);
+									});
+
+							if is_generic_param
+								&& let Ok(base_path) = self.resolve_path_full(
+									&Path::simple(vec![base_name.clone()], path.segments[0].span),
+									path.segments[0].span,
+								) {
+								return ResolvedExpr::AssocPath {
+									base: base_path,
+									member: path.segments[1].clone(),
 									span: *span,
-									kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
-									context: vec![format!(
-										"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
-									)],
-								}
-								.build(),
-							);
+								};
+							}
 						}
-					}
 
-					ResolvedExpr::UnresolvedIdentifier {
-						path: path.clone(),
-						span: *span,
+						if !path.global && path.segments.len() == 1 {
+							let name = &path.segments[0].name;
+							if let Some(kind_str) = self.find_self_member_kind(name) {
+								self.diagnostics.push(
+									NameResolutionError {
+										span: *span,
+										kind: NameResolutionErrorKind::UnresolvedPath { path: path.clone() },
+										context: vec![format!(
+											"`{name}` is a {kind_str} of `Self`; write `Self::{name}` to reference it"
+										)],
+									}
+									.build(),
+								);
+							}
+						}
+
+						ResolvedExpr::UnresolvedIdentifier {
+							path: path.clone(),
+							span: *span,
+						}
 					}
 				}
 			}

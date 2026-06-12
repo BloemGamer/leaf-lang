@@ -1018,15 +1018,15 @@ impl<'a> MirLowerer<'a>
 			TypedExprKind::Identifier { path } => match &path.kind {
 				ResolvedPathKind::Resolved(sym) => {
 					if matches!(self.global.symbol(*sym).kind, SymbolKind::VariantMember) {
-						let parent = self.variant_parent(*sym).unwrap_or_else(|| {
+						let parent: SymbolId = self.variant_parent(*sym).unwrap_or_else(|| {
 							self.diagnostics.push(compiler_bug!(
 								expr.span,
 								"variant member has no parent variant in scope"
 							));
 							return *sym;
 						});
-						let member_name = self.global.symbol(*sym).name.clone();
-						let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+						let member_name: String = self.global.symbol(*sym).name.clone();
+						let tmp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
 						builder.push_stmt(MirStmt::Assign {
 							place: MirPlace {
 								base: MirPlaceBase::Local(tmp),
@@ -1045,6 +1045,14 @@ impl<'a> MirLowerer<'a>
 						return self.copy_or_move(MirPlace {
 							base: MirPlaceBase::Local(tmp),
 							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						});
+					}
+
+					if self.is_enum_variant(*sym) {
+						let cb_id: ConstBodyId = self.const_body_for_enum_variant(*sym, &expr.ty, expr.span());
+						return MirOperand::Const(MirLiteral {
+							value: MirLiteralValue::ConstBody(cb_id),
 							ty: expr.ty.clone(),
 						});
 					}
@@ -1390,8 +1398,6 @@ impl<'a> MirLowerer<'a>
 					.iter()
 					.map(|(name, te)| return (name.clone(), te.ty.clone()))
 					.collect();
-
-				//
 
 				if let TypedExprKind::Identifier { path } = &callee.kind
 					&& let ResolvedPathKind::AssocItem { base, item, .. } = &path.kind
@@ -2369,6 +2375,50 @@ impl<'a> MirLowerer<'a>
 		});
 	}
 
+	fn is_enum_variant(&self, sym: SymbolId) -> bool
+	{
+		let s = self.global.symbol(sym);
+		let parent_scope = s.scope;
+		return self.global.symbols.iter().any(|p| {
+			return matches!(p.kind, SymbolKind::Enum) && p.introduced_scope == Some(parent_scope);
+		});
+	}
+
+	fn const_body_for_enum_variant(&mut self, sym: SymbolId, enum_ty: &Ty, span: Span) -> ConstBodyId
+	{
+		let discr: usize = self.variant_discriminant(sym);
+
+		let mut builder: BodyBuilder = BodyBuilder::new(Vec::new());
+		let result: LocalId = builder.alloc_local(enum_ty.clone(), Some("#variant".to_string()), false, span);
+		builder.return_local = Some(result);
+		builder.push_stmt(MirStmt::Assign {
+			place: MirPlace {
+				base: MirPlaceBase::Local(result),
+				projections: Vec::new(),
+				ty: enum_ty.clone(),
+			},
+			rvalue: MirRvalue::Use(MirOperand::Const(MirLiteral {
+				value: MirLiteralValue::Literal(Literal::Int {
+					value: discr.to_string(),
+					base: crate::lexer::IntBase::Decimal,
+					ty: None,
+					span,
+				}),
+				ty: enum_ty.clone(),
+			})),
+			span,
+		});
+		builder.set_terminator(MirTerminator::Return);
+
+		#[allow(clippy::cast_possible_truncation)]
+		let id: ConstBodyId = ConstBodyId(self.const_bodies.len() as u32);
+		self.const_bodies.push(MirConstBody {
+			body: builder.finish(0),
+			result,
+		});
+		return id;
+	}
+
 	fn lower_pattern_bindings(&mut self, builder: &mut BodyBuilder, pattern: &TypedPattern, scrutinee_local: LocalId)
 	{
 		match pattern {
@@ -2502,6 +2552,27 @@ impl<'a> MirLowerer<'a>
 		match &expr.kind {
 			TypedExprKind::Identifier { path } => match &path.kind {
 				ResolvedPathKind::Resolved(sym) => {
+					if self.is_enum_variant(*sym) {
+						let cb_id: ConstBodyId = self.const_body_for_enum_variant(*sym, &expr.ty, expr.span());
+						let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+						builder.push_stmt(MirStmt::Assign {
+							place: MirPlace {
+								base: MirPlaceBase::Local(temp),
+								projections: Vec::new(),
+								ty: expr.ty.clone(),
+							},
+							rvalue: MirRvalue::Use(MirOperand::Const(MirLiteral {
+								value: MirLiteralValue::ConstBody(cb_id),
+								ty: expr.ty.clone(),
+							})),
+							span: expr.span(),
+						});
+						return MirPlace {
+							base: MirPlaceBase::Local(temp),
+							projections: Vec::new(),
+							ty: expr.ty.clone(),
+						};
+					}
 					let base: MirPlaceBase = if let Some(&local_id) = builder.local_map.get(sym) {
 						MirPlaceBase::Local(local_id)
 					} else {
@@ -2525,7 +2596,6 @@ impl<'a> MirLowerer<'a>
 						expr.span,
 						"primitive type used as place expression in MIR lowering"
 					));
-					// Materialize a dummy temp so callers still get a writable place.
 					let temp: LocalId = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
 					return MirPlace {
 						base: MirPlaceBase::Local(temp),

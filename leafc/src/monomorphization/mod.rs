@@ -1,5 +1,9 @@
 #![allow(unused)]
 
+#[cfg(test)]
+#[path = "../../tests/monomorphization/tests.rs"]
+mod tests;
+
 mod display;
 
 use std::{
@@ -754,16 +758,6 @@ impl<'a> Monomorphizer<'a>
 		span: Span,
 	) -> Subst
 	{
-		eprintln!(
-			"build_subst: fn={:?} ({}) heap_bindings_names=[{}]",
-			f.symbol,
-			f.name,
-			heap_bindings
-				.iter()
-				.map(|(n, _)| return n.as_str())
-				.collect::<Vec<_>>()
-				.join(", "),
-		);
 		let mut subst = Subst::new();
 
 		if type_args.len() > f.generics.len() {
@@ -1206,6 +1200,21 @@ impl<'a> Monomorphizer<'a>
 
 	fn mono_global(&mut self, sym: SymbolId) -> Option<MonoGlobal>
 	{
+		if !self.globals.contains_key(&sym) {
+			let kind_hint = if self.typedefs.contains_key(&sym) {
+				"type/variant"
+			} else {
+				"unknown"
+			};
+			self.diagnostics.push(compiler_bug!(
+				Span::default(),
+				"MIR referenced SymbolId({:?}) as a global, but it is a {}; \
+             the MIR builder should lower enum variants as constants, not globals",
+				sym,
+				kind_hint,
+			));
+			return None;
+		}
 		let Some(ItemRef::Global(mi, g)) = self.lookup_item(sym) else {
 			self.diagnostics.push(compiler_bug!(
 				Span::default(),
@@ -1441,22 +1450,10 @@ impl<'a> Monomorphizer<'a>
 	{
 		return match callee {
 			MirCallee::Direct(sym) => {
-				eprintln!(
-					"lower_callee: sym={:?} name={:?} self_in_subst={:?} heap_bindings_keys=?",
-					sym,
-					self.global.symbol(*sym).name,
-					subst.get("Self").is_some(),
-				);
-
 				let mut effective_sym = *sym;
 				if self.lookup_item(effective_sym).is_none() {
 					let recv_ty = args.first().map(|a| return a.ty());
 					let method_name = &self.global.symbol(*sym).name;
-					for ((k, n), v) in &self.method_dispatch {
-						if n == method_name {
-							eprintln!("    candidate: key={:?} -> {:?}", k, v);
-						}
-					}
 				}
 				if self.lookup_item(effective_sym).is_none()
 					&& let Some(recv) = args.first()
@@ -1624,7 +1621,7 @@ impl<'a> Monomorphizer<'a>
 		};
 	}
 
-	fn lower_rvalue(&mut self, rvalue: &MirRvalue, subst: &Subst, module_idx: usize) -> MonoRvalue
+	fn lower_rvalue(&mut self, rvalue: &MirRvalue, subst: &Subst, module_idx: usize, dest_ty: &MonoTy) -> MonoRvalue
 	{
 		return match rvalue {
 			MirRvalue::Use(op) => MonoRvalue::Use(self.lower_operand(op, subst, module_idx)),
@@ -1650,7 +1647,7 @@ impl<'a> Monomorphizer<'a>
 				place: self.lower_place(place, subst, module_idx),
 			},
 			MirRvalue::Aggregate { kind, fields } => MonoRvalue::Aggregate {
-				kind: self.lower_aggregate_kind(kind),
+				kind: self.lower_aggregate_kind(kind, dest_ty),
 				fields: fields
 					.iter()
 					.filter_map(|(name, op)| {
@@ -1658,7 +1655,7 @@ impl<'a> Monomorphizer<'a>
 						if mono_op.ty().is_zst() {
 							return None;
 						}
-						return Some((name.clone(), mono_op));
+						return Some((name.clone(), mono_op))
 					})
 					.collect(),
 			},
@@ -1708,27 +1705,101 @@ impl<'a> Monomorphizer<'a>
 				ty: dest_ty.clone(),
 			}));
 		}
-		return self.lower_rvalue(rvalue, subst, module_idx);
+
+		if let MirRvalue::Aggregate { kind, fields } = rvalue {
+			let extended = self.build_aggregate_subst(kind, dest_ty, subst);
+			let mono_kind = self.lower_aggregate_kind(kind, dest_ty);
+			return MonoRvalue::Aggregate {
+				kind: mono_kind,
+				fields: fields
+					.iter()
+					.filter_map(|(name, op)| {
+						let mono_op = self.lower_operand(op, &extended, module_idx);
+						if mono_op.ty().is_zst() {
+							return None;
+						}
+						return Some((name.clone(), mono_op))
+					})
+					.collect(),
+			};
+		}
+
+		return self.lower_rvalue(rvalue, subst, module_idx, dest_ty);
 	}
 
-	fn lower_aggregate_kind(&self, kind: &MirAggregateKind) -> MonoAggregateKind
+	fn lower_aggregate_kind(&mut self, kind: &MirAggregateKind, dest_ty: &MonoTy) -> MonoAggregateKind
 	{
-		return match kind {
-			MirAggregateKind::Struct(s) => MonoAggregateKind::Struct {
-				symbol: *s,
-				mangled_name: self.type_name_cache_lookup(*s),
-			},
-			MirAggregateKind::Union(s) => MonoAggregateKind::Union {
-				symbol: *s,
-				mangled_name: self.type_name_cache_lookup(*s),
-			},
-			MirAggregateKind::VariantMember { parent, member } => MonoAggregateKind::VariantMember {
-				parent: *parent,
-				parent_mangled: self.type_name_cache_lookup(*parent),
-				member: member.clone(),
-			},
-			MirAggregateKind::Tuple => MonoAggregateKind::Tuple,
+		match kind {
+			MirAggregateKind::Struct(s) => {
+				let mangled = match dest_ty {
+					MonoTy::Named { symbol, type_args, .. } if symbol == s => self.type_mangled_name(*s, type_args),
+					_ => self.global.symbol(*s).name.clone(),
+				};
+
+				return MonoAggregateKind::Struct {
+					symbol: *s,
+					mangled_name: mangled,
+				}
+			}
+
+			MirAggregateKind::Union(s) => {
+				let mangled = match dest_ty {
+					MonoTy::Named { symbol, type_args, .. } if symbol == s => self.type_mangled_name(*s, type_args),
+					_ => self.global.symbol(*s).name.clone(),
+				};
+
+				return MonoAggregateKind::Union {
+					symbol: *s,
+					mangled_name: mangled,
+				}
+			}
+
+			MirAggregateKind::VariantMember { parent, member } => {
+				let mangled = match dest_ty {
+					MonoTy::Named { symbol, type_args, .. } if symbol == parent => {
+						self.type_mangled_name(*parent, type_args)
+					}
+					_ => self.global.symbol(*parent).name.clone(),
+				};
+
+				return MonoAggregateKind::VariantMember {
+					parent: *parent,
+					parent_mangled: mangled,
+					member: member.clone(),
+				}
+			}
+
+			MirAggregateKind::Tuple => return MonoAggregateKind::Tuple,
+		}
+	}
+
+	fn build_aggregate_subst(&self, kind: &MirAggregateKind, dest_ty: &MonoTy, base_subst: &Subst) -> Subst
+	{
+		let mut extended = base_subst.clone();
+
+		let (sym, type_args) = match (kind, dest_ty) {
+			(MirAggregateKind::Struct(s) | MirAggregateKind::Union(s), MonoTy::Named { symbol, type_args, .. })
+				if symbol == s =>
+			{
+				(*s, type_args)
+			}
+
+			(MirAggregateKind::VariantMember { parent, .. }, MonoTy::Named { symbol, type_args, .. })
+				if symbol == parent =>
+			{
+				(*parent, type_args)
+			}
+
+			_ => return extended,
 		};
+
+		if let Some(ItemRef::TypeDef(_, t)) = self.lookup_item(sym) {
+			for (gp, ty) in t.generics.iter().zip(type_args.iter()) {
+				extended.insert(gp.name.clone(), ty.clone());
+			}
+		}
+
+		return extended;
 	}
 
 	fn type_name_cache_lookup(&self, sym: SymbolId) -> String
