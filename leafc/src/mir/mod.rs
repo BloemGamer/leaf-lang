@@ -142,6 +142,7 @@ pub struct MirFunction
 	pub params: Vec<MirParam>,
 	pub return_ty: Ty,
 	/// `None` for extern / trait declarations without a body.
+	pub modifiers: Vec<parser::Modifier>,
 	pub body: Option<MirBody>,
 	pub span: Span,
 }
@@ -787,6 +788,7 @@ impl<'a> MirLowerer<'a>
 			where_clause: f.signature.where_clause.clone(),
 			params,
 			return_ty: f.signature.return_type.clone(),
+			modifiers: f.signature.modifiers.clone(),
 			body,
 			span: f.span,
 		};

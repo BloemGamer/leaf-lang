@@ -238,6 +238,9 @@ impl std::fmt::Display for Directive
 				write!(f, "{}", use_path)?;
 				return Ok(());
 			}
+			Directive::MangleName { name } => {
+				return write!(f, "@mangle_name(\"{name}\")");
+			}
 			Directive::Custom { name, params } => {
 				write!(f, "@{}", name)?;
 				if !params.is_empty() {

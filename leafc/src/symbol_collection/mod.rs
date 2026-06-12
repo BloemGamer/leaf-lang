@@ -1554,11 +1554,8 @@ impl Collector
 		match &directive.directive {
 			Directive::Use { .. }
 			| Directive::Import { .. }
-			| Directive::ValidateStructPattern {
-				struct_path: _,
-				pattern_fields: _,
-				has_rest: _,
-			} => {}
+			| Directive::ValidateStructPattern { .. }
+			| Directive::MangleName { .. } => {}
 			Directive::ValidateType { ty: _, expr } => {
 				self.collect_expr(expr);
 			}

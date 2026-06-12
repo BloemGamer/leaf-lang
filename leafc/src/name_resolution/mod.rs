@@ -2930,6 +2930,9 @@ impl<'a> Resolver<'a>
 				use_path: use_path.clone(),
 				visibility: *visibility,
 			},
+			parser::Directive::MangleName { .. } => {
+				todo!("can't be an expression or something?? Check if this indeed will not be hit")
+			}
 			parser::Directive::Custom { name, params } => ResolvedDirective::Custom {
 				name: name.clone(),
 				params: params.clone(),

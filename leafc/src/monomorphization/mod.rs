@@ -22,7 +22,7 @@ use crate::{
 		MirGlobal, MirItem, MirLiteral, MirLiteralValue, MirLocal, MirModule, MirOperand, MirParam, MirPlace,
 		MirPlaceBase, MirProjection, MirRvalue, MirStmt, MirSwitchArm, MirTerminator, MirTypeDef, MirTypeDefKind,
 	},
-	parser::{BinaryOp, UnaryOp},
+	parser::{self, BinaryOp, UnaryOp},
 	symbol_collection::{GlobalSymbolTable, SymbolId},
 	type_analysis::{Primitive, Ty, TyBound, TyKey},
 };
@@ -121,10 +121,9 @@ pub struct MonoFunction
 	pub type_args: Vec<MonoTy>,
 	pub mangled_name: String,
 	pub params: Vec<MonoParam>,
-
 	pub return_ty: Option<MonoTy>,
-
 	pub body: Option<MonoBody>,
+	pub modifiers: Vec<parser::Modifier>,
 	pub span: Span,
 }
 
@@ -723,6 +722,22 @@ impl<'a> Monomorphizer<'a>
 
 	fn fn_mangled_name(&mut self, sym: SymbolId, type_args: &[MonoTy], heap_bindings: &[(String, MonoTy)]) -> String
 	{
+		if let Some(ItemRef::Function(_, f)) = self.lookup_item(sym) {
+			if let Some(explicit) = Self::explicit_mangle_name(&f.modifiers) {
+				if type_args.is_empty() && heap_bindings.is_empty() {
+					return explicit;
+				}
+				todo!("for now, `@mangle_name()` can't have any generics")
+			}
+
+			let is_extern_c = f
+				.modifiers
+				.iter()
+				.any(|m| matches!(m, parser::Modifier::Extern(Some(parser::ExternLanguage::C))));
+			if is_extern_c {
+				todo!("write a good error, but an extern(C) function should always have a `@mangle_name()`")
+			}
+		}
 		let mut sorted_hb: Vec<(String, MonoTy)> = heap_bindings.to_vec();
 		sorted_hb.sort_by(|a, b| return a.0.cmp(&b.0));
 
@@ -748,6 +763,16 @@ impl<'a> Monomorphizer<'a>
 		let mangled = Self::mangle_with_args(&scope_path, &name, type_args, &[]);
 		self.type_name_cache.insert(key, mangled.clone());
 		return mangled;
+	}
+
+	fn explicit_mangle_name(modifiers: &[parser::Modifier]) -> Option<String>
+	{
+		for m in modifiers {
+			if let parser::Modifier::Directive(parser::Directive::MangleName { name }) = m {
+				return Some(name.clone());
+			}
+		}
+		return None;
 	}
 
 	fn build_subst(
@@ -1194,6 +1219,7 @@ impl<'a> Monomorphizer<'a>
 			params,
 			return_ty,
 			body,
+			modifiers: f.modifiers.clone(),
 			span: f.span,
 		});
 	}
@@ -1655,7 +1681,7 @@ impl<'a> Monomorphizer<'a>
 						if mono_op.ty().is_zst() {
 							return None;
 						}
-						return Some((name.clone(), mono_op))
+						return Some((name.clone(), mono_op));
 					})
 					.collect(),
 			},
@@ -1718,7 +1744,7 @@ impl<'a> Monomorphizer<'a>
 						if mono_op.ty().is_zst() {
 							return None;
 						}
-						return Some((name.clone(), mono_op))
+						return Some((name.clone(), mono_op));
 					})
 					.collect(),
 			};
@@ -1739,7 +1765,7 @@ impl<'a> Monomorphizer<'a>
 				return MonoAggregateKind::Struct {
 					symbol: *s,
 					mangled_name: mangled,
-				}
+				};
 			}
 
 			MirAggregateKind::Union(s) => {
@@ -1751,7 +1777,7 @@ impl<'a> Monomorphizer<'a>
 				return MonoAggregateKind::Union {
 					symbol: *s,
 					mangled_name: mangled,
-				}
+				};
 			}
 
 			MirAggregateKind::VariantMember { parent, member } => {
@@ -1766,7 +1792,7 @@ impl<'a> Monomorphizer<'a>
 					parent: *parent,
 					parent_mangled: mangled,
 					member: member.clone(),
-				}
+				};
 			}
 
 			MirAggregateKind::Tuple => return MonoAggregateKind::Tuple,

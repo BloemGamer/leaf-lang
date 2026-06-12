@@ -382,6 +382,10 @@ pub enum Directive
 		use_path: Path,
 		visibility: Visibility,
 	},
+	MangleName
+	{
+		name: String
+	},
 	Custom
 	{
 		name: Ident, params: Vec<DirectiveParam>
@@ -2929,11 +2933,11 @@ where
 			}),
 			lexer::Directive::Import => {
 				let incl: Token = self.next()?;
-				let ret = match &incl.kind {
+				let ret = match incl.kind {
 					TokenKind::StringLiteral { string, .. } => Directive::Import {
 						visibility: get_visibility(&modifiers),
 						modifers: modifiers,
-						import: string.clone(),
+						import: string,
 					},
 					_ => {
 						return Err(Box::new(
@@ -2949,6 +2953,28 @@ where
 						));
 					}
 				};
+				Ok(ret)
+			}
+			lexer::Directive::Custom(name) if name == "mangle_name" => {
+				self.expect(&TokenKind::LeftParen)?;
+				let incl: Token = self.next()?;
+				let ret = match incl.kind {
+					TokenKind::StringLiteral { string, .. } => Directive::MangleName { name: string },
+					_ => {
+						return Err(Box::new(
+							ParseError::unexpected_token(
+								incl.span,
+								Expected::Token(TokenKind::StringLiteral {
+									string: String::new(),
+									flags: StringFlags::NONE,
+								}),
+								incl.kind,
+							)
+							.build(),
+						));
+					}
+				};
+				self.expect(&TokenKind::RightParen)?;
 				Ok(ret)
 			}
 			lexer::Directive::Custom(name) => {
