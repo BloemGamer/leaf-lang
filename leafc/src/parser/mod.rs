@@ -950,12 +950,12 @@ pub enum ExprEnum
 	String(String),
 }
 
-fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
+pub fn read_radix_number(lit: &Literal) -> Result<i128, Box<DiagnosticBuilder>>
 {
 	let Literal::Int { value, base, ty, span } = lit else {
 		unreachable!("Called `read_radix_number` with a not `Literal::Int`: {:?}", lit);
 	};
-	if !ty.is_some() {
+	if ty.is_some() {
 		return Err(Box::new(
 			ParseError {
 				span: *span,
@@ -2869,15 +2869,17 @@ where
 			}
 		} else if modifiers.is_empty() {
 			let tok: Token = self.next()?;
-			if let TokenKind::Directive(d) = tok.kind { self.parse_directive_kind(d, Vec::new())? } else {
-   					self.diagnostics
-   						.push(compiler_bug!(tok.span(), "Token should be a directive"));
-   					// unreachable!("Bug: Token should be a directive");
-   					Directive::Custom {
-   						name: "ERROR".to_string(),
-   						params: Vec::new(),
-   					}
-   				}
+			if let TokenKind::Directive(d) = tok.kind {
+				self.parse_directive_kind(d, Vec::new())?
+			} else {
+				self.diagnostics
+					.push(compiler_bug!(tok.span(), "Token should be a directive"));
+				// unreachable!("Bug: Token should be a directive");
+				Directive::Custom {
+					name: "ERROR".to_string(),
+					params: Vec::new(),
+				}
+			}
 		} else {
 			let tok: Token = self.next()?;
 			return Err(Box::new(
