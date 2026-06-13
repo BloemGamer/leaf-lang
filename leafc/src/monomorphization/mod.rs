@@ -104,6 +104,8 @@ pub struct MonoModule
 	pub const_bodies: Vec<MonoConstBody>,
 
 	pub entry: String,
+
+	pub option_symbol: Option<SymbolId>,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +157,17 @@ pub struct MonoTypeDef
 	pub mangled_name: String,
 	pub kind: MonoTypeDefKind,
 	pub span: Span,
+}
+
+impl MonoTypeDef
+{
+	pub fn is_option_variant(&self, option_symbol: Option<SymbolId>) -> bool
+	{
+		let Some(noption_symbol) = option_symbol else {
+			return false;
+		};
+		return self.symbol == noption_symbol && matches!(self.kind, MonoTypeDefKind::Variant { .. });
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -1078,6 +1091,7 @@ impl<'a> Monomorphizer<'a>
 				items: Vec::new(),
 				const_bodies: Vec::new(),
 				entry: String::new(),
+				option_symbol: None,
 			};
 		};
 
@@ -1098,6 +1112,8 @@ impl<'a> Monomorphizer<'a>
 		} else {
 			Subst::new()
 		};
+
+		let option_symbol = self.resolve_module_path(&["std", "Option"]);
 
 		let entry_heap_bindings: Vec<(String, MonoTy)> = {
 			let mut v: Vec<(String, MonoTy)> = entry_subst_extras.into_iter().collect();
@@ -1177,6 +1193,7 @@ impl<'a> Monomorphizer<'a>
 			items,
 			const_bodies,
 			entry: entry_mangled,
+			option_symbol,
 		};
 	}
 

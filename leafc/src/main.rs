@@ -128,6 +128,7 @@ use crate::{
 };
 
 use self::{
+	backend::{BackendInput, BackendOptions, CompilerBackend, c::CBackend},
 	config::ColourConf,
 	desugar::DesugaredAST,
 	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
@@ -141,6 +142,7 @@ use self::{
 	type_analysis::TypedModule,
 };
 
+mod backend;
 mod desugar;
 mod lexer;
 mod mir;
@@ -473,9 +475,55 @@ fn run(
 	let (mono_mod, mut diags) = monomorphization::monomorphize(&mir_modules, &global_symbols);
 	diagnostics.append(&mut diags);
 
-	if args.mono || args.all_false() {
+	if args.mono {
 		println!("{}", mono_mod);
 	}
 
+	let mut backend: CBackend = CBackend::new();
+	let backend_options: BackendOptions = BackendOptions::from_config(config);
+	let backend_input: BackendInput = BackendInput {
+		module: &mono_mod,
+		symbols: &global_symbols,
+		options: &backend_options,
+		source_map,
+	};
+	if let Err(diags) = backend.validate(&backend_input) {
+		diagnostics.extend(diags);
+		return (Err(None), diagnostics);
+	}
+	let backend_output: backend::BackendOutput = match backend.compile(&backend_input) {
+		Ok((output, diags)) => {
+			diagnostics.extend(diags);
+			output
+		}
+		Err(diags) => {
+			diagnostics.extend(diags);
+			return (Err(None), diagnostics);
+		}
+	};
+
+	if args.all_false() {
+		let _: std::io::Result<()> = print_backend_output(&backend_output);
+	}
+
 	return (Ok(()), diagnostics);
+}
+
+fn print_backend_output(output: &backend::BackendOutput) -> std::io::Result<()>
+{
+	println!(
+		"-------------------------------------------------------\nPrimary: {}",
+		output.primary.display()
+	);
+	println!("{}", std::fs::read_to_string(&output.primary)?);
+
+	for artifact in &output.artifacts {
+		println!(
+			"-------------------------------------------------------\nArtifact: {}",
+			artifact.display()
+		);
+		println!("{}", std::fs::read_to_string(artifact)?);
+	}
+
+	return Ok(());
 }
