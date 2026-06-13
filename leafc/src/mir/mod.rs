@@ -523,7 +523,9 @@ impl BodyBuilder
 		self.locals.push(MirLocal {
 			id,
 			ty,
-			is_temp: name.is_none(),
+			is_temp: name
+				.as_ref()
+				.is_none_or(|n| return n.chars().next().is_none_or(|c| return c == '#')),
 			name,
 			mutable,
 			span,

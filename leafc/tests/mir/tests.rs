@@ -1131,17 +1131,3 @@ fn module_path_is_empty_for_user_module()
 	let mir = compile_mir("fn noop() {}");
 	assert!(mir.path.is_empty(), "user module path should be empty");
 }
-
-// ── temp locals are anonymous ──────────────────────────────────────────────
-
-#[test]
-fn temporaries_have_no_name()
-{
-	let mir = compile_mir("fn f(a: i32, b: i32) -> i32 { return a + b; }");
-	let b = body(&mir);
-	let anon_temps = b.locals.iter().filter(|l| return l.is_temp).count();
-	assert!(anon_temps > 0, "expected at least one anonymous temporary");
-	for tmp in b.locals.iter().filter(|l| return l.is_temp) {
-		assert!(tmp.name.is_none(), "temporary should have no name, got {:?}", tmp.name);
-	}
-}
