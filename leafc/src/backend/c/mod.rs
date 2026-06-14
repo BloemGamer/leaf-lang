@@ -5,7 +5,12 @@ use crate::{
 	backend::{BackendInput, BackendOutput, BackendResult, CompilerBackend, OutputKind},
 	diagnostics::DiagnosticBuilder,
 	lexer::Spanned,
-	monomorphization::{MonoFunction, MonoGlobal, MonoItem, MonoLocal, MonoTy, MonoTypeDef, MonoTypeDefKind},
+	mir::MirLiteralValue,
+	monomorphization::{
+		MonoConstBody, MonoFunction, MonoGlobal, MonoItem, MonoLiteral, MonoLocal, MonoOperand, MonoPlaceBase,
+		MonoRvalue, MonoStmt, MonoTy, MonoTypeDef, MonoTypeDefKind,
+	},
+	parser::{Literal, read_radix_number},
 	source_map::{self, SourceMap},
 	type_analysis::Primitive,
 };
@@ -86,6 +91,7 @@ impl CBackend
 		let collected: Collected = self.collect(input);
 		self.write_header(&collected, input, &mut out)?;
 		self.write_types(&collected, input, &mut out)?;
+		self.write_globals(&collected, input, &mut out)?;
 		self.write_function_prototypes(&collected, input, &mut out)?;
 
 		return Ok(out);
@@ -252,8 +258,37 @@ impl CBackend
 					writeln!(out, "enum {} {{", td.mangled_name).map_err(|_| ())?;
 					for (name, init) in variants {
 						writeln!(out, "\t{},", name).map_err(|_| ())?;
-						if let Some(_i) = init {
-							todo!()
+						if let Some(ci) = init {
+							if let Some(cb) = input.module.const_bodies.get(ci.0 as usize) {
+								if let Some(value) = try_eval_simple_const(cb) {
+									match &value.value {
+										MirLiteralValue::Literal(literal) => match literal {
+											lit @ Literal::Int { .. } => {
+												write!(
+													out,
+													" = {}",
+													read_radix_number(lit)
+														.expect("literal should be valid, make better error")
+												)
+												.map_err(|_| ())?;
+											}
+											Literal::Float { .. }
+											| Literal::Bool { .. }
+											| Literal::String { .. }
+											| Literal::Char { .. } => todo!("enum value should be an int"),
+										},
+										MirLiteralValue::ZeroInit => {
+											unreachable!("should not be able to happen, make better error")
+										}
+										MirLiteralValue::Undef => {}
+										MirLiteralValue::ConstBody(_) => todo!("ConstBodyEval"),
+									}
+								} else {
+									todo!("ConstBodyEval")
+								}
+							} else {
+								todo!("ConstBodyId was not a valid index")
+							}
 						}
 					}
 					writeln!(out, "}};").map_err(|_| ())?;
@@ -292,6 +327,43 @@ impl CBackend
 		return Ok(());
 	}
 
+	fn write_globals(&mut self, collected: &Collected, input: &BackendInput<'_>, out: &mut impl Write)
+	-> Result<(), ()>
+	{
+		for global in &collected.globals {
+			write!(out, "{} {}", mono_ty_to_string(&global.ty), global.mangled_name).map_err(|_| ())?;
+			if let Some(cb) = input.module.const_bodies.get(global.init.0 as usize) {
+				if let Some(value) = try_eval_simple_const(cb) {
+					match &value.value {
+						MirLiteralValue::Literal(literal) => match literal {
+							lit @ Literal::Int { .. } => {
+								write!(
+									out,
+									" = {}",
+									read_radix_number(lit).expect("literal should be valid, make better error")
+								)
+								.map_err(|_| ())?;
+							}
+							Literal::Float { .. }
+							| Literal::Bool { .. }
+							| Literal::String { .. }
+							| Literal::Char { .. } => todo!("enum value should be an int"),
+						},
+						MirLiteralValue::ZeroInit => {
+							unreachable!("should not be able to happen, make better error")
+						}
+						MirLiteralValue::Undef => {}
+						MirLiteralValue::ConstBody(_) => todo!("ConstBodyEval"),
+					}
+				} else {
+					todo!("ConstBodyEval")
+				}
+			} else {
+				todo!("ConstBodyId was not a valid index")
+			}
+		}
+		return Ok(());
+	}
 	fn write_function_prototypes(
 		&mut self,
 		collected: &Collected,
@@ -443,7 +515,23 @@ fn collect_tuples(ty: &MonoTy, out: &mut Vec<MonoTy>)
 fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write) -> std::fmt::Result
 {
 	if let Some(file) = source_map.get(span.source_index) {
-		writeln!(out, "#line {} {}", span.start_line, file.path.display());
+		writeln!(out, "#line {} {}", span.start_line, file.path.display())?;
 	}
 	return Ok(());
+}
+
+fn try_eval_simple_const(cb: &MonoConstBody) -> Option<&MonoLiteral>
+{
+	let block0: &crate::monomorphization::MonoBasicBlock = cb.body.blocks.first()?;
+	for stmt in &block0.stmts {
+		if let MonoStmt::Assign {
+			place,
+			rvalue: MonoRvalue::Use(MonoOperand::Const(lit)),
+			..
+		} = stmt && matches!(place.base, MonoPlaceBase::Local(id) if id == cb.result)
+		{
+			return Some(lit);
+		}
+	}
+	return None;
 }

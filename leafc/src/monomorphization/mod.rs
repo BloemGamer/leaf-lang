@@ -138,7 +138,7 @@ pub struct MonoParam
 	pub mutable: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub struct MonoGlobal
 {
 	pub symbol: SymbolId,
