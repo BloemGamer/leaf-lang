@@ -116,7 +116,7 @@ pub enum MonoItem
 	TypeDef(MonoTypeDef),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub struct MonoFunction
 {
 	pub symbol: SymbolId,
