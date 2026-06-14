@@ -1,9 +1,12 @@
 use std::fmt::Write;
 
 use crate::{
+	Span,
 	backend::{BackendInput, BackendOutput, BackendResult, CompilerBackend, OutputKind},
 	diagnostics::DiagnosticBuilder,
+	lexer::Spanned,
 	monomorphization::{MonoFunction, MonoGlobal, MonoItem, MonoLocal, MonoTy, MonoTypeDef, MonoTypeDefKind},
+	source_map::{self, SourceMap},
 	type_analysis::Primitive,
 };
 
@@ -83,6 +86,7 @@ impl CBackend
 		let collected: Collected = self.collect(input);
 		self.write_header(&collected, input, &mut out)?;
 		self.write_types(&collected, input, &mut out)?;
+		self.write_function_prototypes(&collected, input, &mut out)?;
 
 		return Ok(out);
 	}
@@ -169,6 +173,7 @@ impl CBackend
 
 	fn write_types(&mut self, collected: &Collected, input: &BackendInput<'_>, out: &mut impl Write) -> Result<(), ()>
 	{
+		// TODO: this probably works, but maybe it sometimes fails
 		for td in &collected.types {
 			match &td.kind {
 				MonoTypeDefKind::Struct { .. } => {
@@ -286,6 +291,40 @@ impl CBackend
 		}
 		return Ok(());
 	}
+
+	fn write_function_prototypes(
+		&mut self,
+		collected: &Collected,
+		input: &BackendInput<'_>,
+		out: &mut impl Write,
+	) -> Result<(), ()>
+	{
+		for f in &collected.functions {
+			write_span(f.span(), input.source_map, out).map_err(|_| ())?;
+			if f.body.is_some() && f.mangled_name != "main" {
+				write!(out, "static ").map_err(|_| ())?;
+			}
+			if f.body.is_none() {
+				write!(out, "extern ").map_err(|_| ())?;
+			}
+			if let Some(ty) = &f.return_ty {
+				write!(out, "{} ", mono_ty_to_string(ty)).map_err(|_| ())?;
+			} else {
+				write!(out, "void ").map_err(|_| ())?;
+			}
+			write!(out, "{} (", f.mangled_name).map_err(|_| ())?;
+			if f.type_args.is_empty() {
+				write!(out, "void").map_err(|_| ())?;
+			} else {
+				write!(out, "{} {}", mono_ty_to_string(&f.params[0].ty), f.params[0].name).map_err(|_| ())?;
+				for arg in &f.params[1..] {
+					write!(out, ", {} {}", mono_ty_to_string(&arg.ty), arg.name).map_err(|_| ())?;
+				}
+			}
+			writeln!(out, ");").map_err(|_| ())?;
+		}
+		return Ok(());
+	}
 }
 
 fn mono_ty_to_string(ty: &MonoTy) -> String
@@ -399,4 +438,12 @@ fn collect_tuples(ty: &MonoTy, out: &mut Vec<MonoTy>)
 		}
 		_ => {}
 	}
+}
+
+fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write) -> std::fmt::Result
+{
+	if let Some(file) = source_map.get(span.source_index) {
+		writeln!(out, "#line {} {}", span.start_line, file.path.display());
+	}
+	return Ok(());
 }
