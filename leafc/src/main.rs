@@ -270,7 +270,7 @@ fn run(
 		// User entry module
 		modules::PendingModule {
 			logical_path: vec![],
-			file_path: filename.into(),
+			file_path: filename.clone().into(),
 			declared_at_span: Span {
 				source_index: SourceIndex::new(0),
 				start: 0,
@@ -480,7 +480,11 @@ fn run(
 	}
 
 	let mut backend: CBackend = CBackend::new();
-	let backend_options: BackendOptions = BackendOptions::from_config(config);
+	let mut backend_options: BackendOptions = BackendOptions::from_config(config);
+	backend_options.output_path = {
+		let tmp: path::PathBuf = filename.into();
+		tmp
+	};
 	let backend_input: BackendInput = BackendInput {
 		module: &mono_mod,
 		symbols: &global_symbols,
