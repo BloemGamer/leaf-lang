@@ -1476,3 +1476,18 @@ fn default_outside_of_struct()
 		"",
 	);
 }
+
+#[test]
+#[ignore = "will be added in the new version of the type checker"]
+fn tuple_unpacking()
+{
+	err(
+		"
+			fn a() {
+				var b: i64 = 0;
+				if var Some(c: i64) = b {};
+			}
+		",
+		"",
+	);
+}

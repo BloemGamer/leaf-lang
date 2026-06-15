@@ -5632,28 +5632,37 @@ impl<'a> Checker<'a>
 						base: receiver,
 						name: method_name,
 					} => {
-						let assoc_base: Option<SymbolId> = match &receiver.ty {
-							Ty::Named { symbol, .. } => {
-								let actual = self.resolve_to_struct_sym(*symbol);
-								self.caches
-									.method_fn
-									.get_sym(*symbol, &method_name)
-									.or_else(|| return self.caches.method_fn.get_sym(actual, &method_name))
-									.map(|_| return *symbol)
-							}
-							Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => {
-								bounds.iter().find_map(|bound| {
-									return if let TyBound::Trait { symbol: trait_sym, .. } = bound {
-										self.caches
+						let assoc_base: Option<SymbolId> = {
+							let mut probe: &Ty = &receiver.ty;
+							loop {
+								match probe {
+									Ty::Reference { inner, .. } | Ty::Mutable { inner } | Ty::Pointer { inner, .. } => {
+										probe = inner;
+									}
+									Ty::Named { symbol, .. } => {
+										let actual = self.resolve_to_struct_sym(*symbol);
+										break self
+											.caches
 											.method_fn
-											.get_sym(*trait_sym, &method_name)
-											.map(|_| return *trait_sym)
-									} else {
-										None
-									};
-								})
+											.get_sym(*symbol, &method_name)
+											.or_else(|| return self.caches.method_fn.get_sym(actual, &method_name))
+											.map(|_| return *symbol);
+									}
+									Ty::Generic { bounds, .. } | Ty::ImplTrait { bounds, .. } => {
+										break bounds.iter().find_map(|bound| {
+											return if let TyBound::Trait { symbol: trait_sym, .. } = bound {
+												self.caches
+													.method_fn
+													.get_sym(*trait_sym, &method_name)
+													.map(|_| return *trait_sym)
+											} else {
+												None
+											};
+										});
+									}
+									_ => break None,
+								}
 							}
-							_ => None,
 						};
 
 						match assoc_base {
@@ -5751,6 +5760,11 @@ impl<'a> Checker<'a>
 			ResolvedExpr::Field { base, name, .. } => {
 				let tbase: TypedExpr = self.check_expr(base, None)?;
 				let field_ty: Ty = self.check_field_access(&tbase.ty, name, span)?;
+				let tbase: TypedExpr = if self.name_is_field_of(&tbase.ty, name) {
+					self.auto_deref_for_field(tbase, span)
+				} else {
+					tbase
+				};
 				(
 					TypedExprKind::Field {
 						base: Box::new(tbase),
@@ -8098,6 +8112,50 @@ impl<'a> Checker<'a>
 			let (resolved, args) = self.resolve_assoc_path(*base, member, base_concrete);
 			*item = resolved;
 			*base_type_args = args;
+		}
+	}
+
+	fn auto_deref_for_field(&self, mut expr: TypedExpr, span: Span) -> TypedExpr
+	{
+		loop {
+			let (inner_ty, intrinsic) = match &expr.ty {
+				Ty::Reference { inner, .. } | Ty::Mutable { inner } => (*inner.clone(), Intrinsic::RefDeref),
+				Ty::Pointer { inner, .. } => (*inner.clone(), Intrinsic::PtrDeref),
+				_ => return expr,
+			};
+			let callee = TypedExpr {
+				kind: TypedExprKind::InternalCall { intrinsic },
+				ty: Ty::Infer,
+				span,
+			};
+			expr = TypedExpr {
+				ty: inner_ty,
+				kind: TypedExprKind::Call {
+					callee: Box::new(callee),
+					call_type: CallType::Regular,
+					named_generics: Vec::new(),
+					args: vec![expr],
+				},
+				span,
+			};
+		}
+	}
+
+	fn name_is_field_of(&self, base_ty: &Ty, name: &str) -> bool
+	{
+		let mut probe = base_ty;
+		loop {
+			match probe {
+				Ty::Reference { inner, .. } | Ty::Mutable { inner } | Ty::Pointer { inner, .. } => {
+					probe = inner;
+				}
+				Ty::Named { symbol, .. } => {
+					let actual = self.resolve_to_struct_sym(*symbol);
+					return self.caches.field.get(actual, name).is_some()
+						|| self.caches.field.get(*symbol, name).is_some();
+				}
+				_ => return false,
+			}
 		}
 	}
 }
