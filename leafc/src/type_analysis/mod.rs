@@ -6509,20 +6509,44 @@ impl<'a> Checker<'a>
 				})?;
 			}
 
+			let trait_sym = self
+				.traits
+				.op_symbols
+				.get(trait_name)
+				.copied()
+				.expect("operator trait must exist"); // TODO: error
+
 			let callee = TypedExpr {
-				ty: out_ty.clone(),
+				ty: Ty::Unit,
 				span,
-				kind: TypedExprKind::Field {
-					base: Box::new(tlhs),
-					name: method_name,
+				kind: TypedExprKind::Identifier {
+					path: ResolvedPath {
+						kind: ResolvedPathKind::AssocItem {
+							base: trait_sym,
+							member: method_name,
+							item: fn_sym,
+							base_type_args: Vec::new(),
+						},
+						original: parser::Path {
+							segments: vec![PathSegment {
+								name: self.global.symbol(trait_sym).name.clone(),
+								generics: Vec::new(),
+								span,
+							}],
+							glob: false,
+							global: false,
+							span,
+						},
+					},
 				},
 			};
+
 			return Ok(TypedExpr {
 				kind: TypedExprKind::Call {
 					callee: Box::new(callee),
 					call_type: CallType::Regular,
 					named_generics: Vec::new(),
-					args: vec![trhs],
+					args: vec![tlhs, trhs],
 				},
 				ty: out_ty,
 				span,
