@@ -1159,12 +1159,6 @@ impl<'a> Monomorphizer<'a>
 		self.enqueue_fn(entry_instance);
 		let entry_mangled = self.fn_mangled_name(entry_sym, &[], &entry_heap_bindings);
 
-		// Drain function and type worklists together: lowering a function body can
-		// discover new reachable types, and monomorphizing a type's fields can
-		// discover new reachable types (and, in principle, const bodies that touch
-		// functions). Processing types as they're discovered (rather than only at
-		// the end) means `typedef_kinds` is populated in time for `is_zst` queries
-		// made while lowering later functions/types.
 		loop {
 			if let Some(instance) = self.fn_worklist.pop_front() {
 				self.mono_one_function(instance);
@@ -1180,6 +1174,8 @@ impl<'a> Monomorphizer<'a>
 			}
 			break;
 		}
+
+		self.prune_zst();
 
 		let global_syms: Vec<SymbolId> = self.reachable_globals.iter().copied().collect();
 		for sym in global_syms {
@@ -2053,6 +2049,18 @@ impl<'a> Monomorphizer<'a>
 			span: Span::default(),
 		});
 	}
+
+	fn prune_zst(&mut self)
+	{
+		for f in &mut self.out_functions {
+			if let Some(body) = &mut f.body {
+				prune_zst_body(body, &self.typedef_kinds);
+			}
+		}
+		for cb in self.out_const_bodies.iter_mut().flatten() {
+			prune_zst_body(&mut cb.body, &self.typedef_kinds);
+		}
+	}
 }
 
 fn unify_generic(param: &Ty, arg: &MonoTy, out: &mut HashMap<String, MonoTy>)
@@ -2242,4 +2250,29 @@ pub fn monomorphize(modules: &[MirModule], global: &GlobalSymbolTable) -> (MonoM
 	let mut mono = Monomorphizer::new(global, modules);
 	let mono_mod = mono.run();
 	return (mono_mod, mono.diagnostics);
+}
+
+fn prune_zst_body(body: &mut MonoBody, typedef_kinds: &HashMap<(SymbolId, Vec<MonoTy>), MonoTypeDefKind>)
+{
+	body.locals.retain(|l| return !l.ty.is_zst(typedef_kinds));
+
+	for block in &mut body.blocks {
+		prune_zst_block(block, typedef_kinds);
+	}
+}
+
+fn prune_zst_block(block: &mut MonoBasicBlock, typedef_kinds: &HashMap<(SymbolId, Vec<MonoTy>), MonoTypeDefKind>)
+{
+	block.stmts.retain_mut(|stmt| match stmt {
+		MonoStmt::Assign { place, .. } => return !place.ty.is_zst(typedef_kinds),
+		MonoStmt::Call { args, .. } => {
+			args.retain(|a| return !a.ty().is_zst(typedef_kinds));
+			return true;
+		}
+		MonoStmt::Delete { .. } | MonoStmt::Nop => return true,
+	});
+
+	if let MonoTerminator::CallAndContinue { args, .. } = &mut block.terminator {
+		args.retain(|a| return !a.ty().is_zst(typedef_kinds));
+	}
 }
