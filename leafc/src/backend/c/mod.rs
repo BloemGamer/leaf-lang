@@ -1,22 +1,27 @@
 use std::fmt::Write;
 
+use leaf_proc::compiler_bug;
+
 use crate::{
 	Span,
 	backend::{BackendInput, BackendOutput, BackendResult, CompilerBackend, OutputKind},
 	diagnostics::DiagnosticBuilder,
 	lexer::Spanned,
-	mir::MirLiteralValue,
+	mir::{LocalId, MirLiteralValue},
 	monomorphization::{
-		MonoConstBody, MonoFunction, MonoGlobal, MonoItem, MonoLiteral, MonoLocal, MonoOperand, MonoPlaceBase,
-		MonoRvalue, MonoStmt, MonoTy, MonoTypeDef, MonoTypeDefKind,
+		MonoAggregateKind, MonoBasicBlock, MonoBody, MonoConstBody, MonoFunction, MonoGlobal, MonoItem, MonoLiteral,
+		MonoLocal, MonoOperand, MonoParam, MonoPlace, MonoPlaceBase, MonoProjection, MonoRvalue, MonoStmt, MonoTy,
+		MonoTypeDef, MonoTypeDefKind,
 	},
-	parser::{Literal, read_radix_number},
-	source_map::{self, SourceMap},
+	parser::{BinaryOp, Literal, UnaryOp, read_radix_number},
+	source_map::SourceMap,
+	symbol_collection::{SymbolId, SymbolKind},
 	type_analysis::Primitive,
 };
 
 const DEFAULT_C_HEADERS: &[&str] = &[
 	"<stdint.h>", // needed for the basic types
+	"<stddef.h>", // needed for size_t
 ];
 const DEFAULT_C_DEFINES: &[&str] = &[];
 
@@ -225,12 +230,12 @@ impl CBackend
 							continue;
 						}
 						if let Some(ty) = oty {
-							writeln!(out, "typedef {} {};", td.mangled_name, mono_ty_to_string(ty)).map_err(|_| ())?;
+							writeln!(out, "typedef {} {};", mono_ty_to_string(ty), td.mangled_name).map_err(|_| ())?;
 						}
 					}
 				}
 				MonoTypeDefKind::TypeAlias { ty } => {
-					writeln!(out, "typedef {} {};", td.mangled_name, mono_ty_to_string(ty)).map_err(|_| ())?;
+					writeln!(out, "typedef {} {};", mono_ty_to_string(ty), td.mangled_name).map_err(|_| ())?;
 				}
 				MonoTypeDefKind::Struct { .. }
 				| MonoTypeDefKind::Union { .. }
@@ -239,12 +244,21 @@ impl CBackend
 			}
 		}
 
+		for nt in &collected.tuples {
+			let MonoTy::Tuple(elems) = nt else { continue };
+			writeln!(out, "struct {} {{", tuple_type_name(elems)).map_err(|_| ())?;
+			for (i, e) in elems.iter().enumerate() {
+				writeln!(out, "\t{} _{};", mono_ty_to_string(e), i).map_err(|_| ())?;
+			}
+			writeln!(out, "}};").map_err(|_| ())?;
+		}
+
 		for td in &collected.types {
 			match &td.kind {
 				MonoTypeDefKind::Struct { fields } => {
 					writeln!(out, "struct {} {{", td.mangled_name).map_err(|_| ())?;
 					for (name, ty) in fields {
-						writeln!(out, "\t{} _{};", mono_ty_to_string(ty), name).map_err(|_| ())?;
+						writeln!(out, "\t{} {};", mono_ty_to_string(ty), name).map_err(|_| ())?;
 					}
 					writeln!(out, "}};").map_err(|_| ())?;
 				}
@@ -310,13 +324,13 @@ impl CBackend
 								writeln!(out, "\t\t{} {};", mono_ty_to_string(ty), name).map_err(|_| ())?;
 							}
 						}
-						writeln!(out, "\t}} data").map_err(|_| ())?;
+						writeln!(out, "\t}} data;").map_err(|_| ())?;
 
 						writeln!(out, "\tenum {{").map_err(|_| ())?;
 						for (name, _) in members {
 							writeln!(out, "\t\t{}_{},", td.mangled_name, name).map_err(|_| ())?;
 						}
-						writeln!(out, "\t}} tag").map_err(|_| ())?;
+						writeln!(out, "\t}} tag;").map_err(|_| ())?;
 					}
 					writeln!(out, "}};").map_err(|_| ())?;
 				}
@@ -331,6 +345,9 @@ impl CBackend
 	-> Result<(), ()>
 	{
 		for global in &collected.globals {
+			if matches!(&global.ty, MonoTy::Tuple(t) if t.is_empty()) {
+				continue;
+			}
 			write!(out, "{} {}", mono_ty_to_string(&global.ty), global.mangled_name).map_err(|_| ())?;
 			if let Some(cb) = input.module.const_bodies.get(global.init.0 as usize) {
 				if let Some(value) = try_eval_simple_const(cb) {
@@ -385,12 +402,18 @@ impl CBackend
 				write!(out, "void ").map_err(|_| ())?;
 			}
 			write!(out, "{} (", f.mangled_name).map_err(|_| ())?;
-			if f.type_args.is_empty() {
+			if f.params.is_empty() {
 				write!(out, "void").map_err(|_| ())?;
 			} else {
 				write!(out, "{} {}", mono_ty_to_string(&f.params[0].ty), f.params[0].name).map_err(|_| ())?;
 				for arg in &f.params[1..] {
 					write!(out, ", {} {}", mono_ty_to_string(&arg.ty), arg.name).map_err(|_| ())?;
+				}
+				if matches!(
+					input.symbols.symbol(f.symbol).kind,
+					SymbolKind::Function { variadic: true, .. }
+				) {
+					write!(out, ", ...").map_err(|_| ())?;
 				}
 			}
 			writeln!(out, ");").map_err(|_| ())?;
@@ -434,7 +457,7 @@ fn mono_ty_to_string(ty: &MonoTy) -> String
 		}
 
 		MonoTy::Reference { mutable, inner } | MonoTy::Pointer { mutable, inner } => {
-			format!("{}{}*", if *mutable { "mut " } else { "" }, mono_ty_to_string(inner))
+			format!("{}{}*", if *mutable { "" } else { "const " }, mono_ty_to_string(inner))
 		}
 
 		MonoTy::Array { inner, size } => size.as_ref().map_or_else(
@@ -515,7 +538,7 @@ fn collect_tuples(ty: &MonoTy, out: &mut Vec<MonoTy>)
 fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write) -> std::fmt::Result
 {
 	if let Some(file) = source_map.get(span.source_index) {
-		writeln!(out, "#line {} {}", span.start_line, file.path.display())?;
+		writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
 	}
 	return Ok(());
 }
