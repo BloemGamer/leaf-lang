@@ -196,7 +196,8 @@ impl Args
 			|| self.modules
 			|| self.symbols
 			|| self.name_resolution
-			|| self.mir);
+			|| self.mir
+			|| self.mono);
 	}
 }
 
@@ -269,7 +270,7 @@ fn run(
 		},
 		// User entry module
 		modules::PendingModule {
-			logical_path: vec![],
+			logical_path: vec!["module".to_string()],
 			file_path: filename.clone().into(),
 			declared_at_span: Span {
 				source_index: SourceIndex::new(0),
