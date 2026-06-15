@@ -87,12 +87,43 @@ impl MonoTy
 		return MonoTy::Tuple(Vec::new());
 	}
 
-	pub fn is_zst(&self) -> bool
+	/// Determines whether this type is zero-sized.
+	///
+	/// `typedefs` maps a monomorphized type instance `(symbol, type_args)` to its
+	/// lowered `MonoTypeDefKind`, used to recurse into struct/union/variant fields.
+	/// If an instance isn't present in the map (e.g. not yet monomorphized, or a
+	/// recursive type), it's conservatively treated as non-ZST.
+	///
+	/// Enums with at most one variant, and single-member variants whose member is
+	/// either absent or itself a ZST, are considered ZST.
+	pub fn is_zst(&self, typedefs: &HashMap<(SymbolId, Vec<MonoTy>), MonoTypeDefKind>) -> bool
 	{
 		return match self {
-			MonoTy::Tuple(elems) => elems.is_empty() || elems.iter().all(MonoTy::is_zst),
+			MonoTy::Tuple(elems) => elems.is_empty() || elems.iter().all(|t| return t.is_zst(typedefs)),
+
 			MonoTy::Array { size: Some(0), .. } => true,
-			_ => false,
+			MonoTy::Array {
+				size: Some(_), inner, ..
+			} => inner.is_zst(typedefs),
+			MonoTy::Array { size: None, .. }
+			| MonoTy::Reference { .. }
+			| MonoTy::Pointer { .. }
+			| MonoTy::Primitive(_) => false,
+
+			MonoTy::Named { symbol, type_args, .. } => {
+				let key = (*symbol, type_args.clone());
+				match typedefs.get(&key) {
+					None => false,
+					Some(MonoTypeDefKind::Struct { fields } | MonoTypeDefKind::Union { fields }) => {
+						fields.iter().all(|(_, t)| return t.is_zst(typedefs))
+					}
+					Some(MonoTypeDefKind::Enum { variants }) => variants.len() <= 1,
+					Some(MonoTypeDefKind::Variant { members }) => {
+						members.len() == 1 && members[0].1.as_ref().is_none_or(|t| return t.is_zst(typedefs))
+					}
+					Some(MonoTypeDefKind::TypeAlias { ty }) => ty.is_zst(typedefs),
+				}
+			}
 		};
 	}
 }
@@ -463,6 +494,7 @@ struct Monomorphizer<'a>
 	reachable_types: HashSet<Instance>,
 	reachable_globals: HashSet<SymbolId>,
 	fn_worklist: VecDeque<Instance>,
+	type_worklist: VecDeque<Instance>,
 
 	const_body_map: HashMap<ConstBodyKey, ConstBodyId>,
 	out_const_bodies: Vec<Option<MonoConstBody>>,
@@ -473,6 +505,11 @@ struct Monomorphizer<'a>
 	out_functions: Vec<MonoFunction>,
 	out_globals: Vec<MonoGlobal>,
 	out_typedefs: Vec<MonoTypeDef>,
+
+	/// Lowered `MonoTypeDefKind` for every monomorphized type instance, keyed by
+	/// `(symbol, type_args)`. Populated incrementally as types are monomorphized,
+	/// so that [`MonoTy::is_zst`] can be queried during body lowering.
+	typedef_kinds: HashMap<(SymbolId, Vec<MonoTy>), MonoTypeDefKind>,
 
 	method_dispatch: HashMap<(TyKey, String), SymbolId>,
 }
@@ -521,6 +558,7 @@ impl<'a> Monomorphizer<'a>
 			reachable_types: HashSet::new(),
 			reachable_globals: HashSet::new(),
 			fn_worklist: VecDeque::new(),
+			type_worklist: VecDeque::new(),
 			const_body_map: HashMap::new(),
 			out_const_bodies: Vec::new(),
 			fn_name_cache: HashMap::new(),
@@ -528,8 +566,20 @@ impl<'a> Monomorphizer<'a>
 			out_functions: Vec::new(),
 			out_globals: Vec::new(),
 			out_typedefs: Vec::new(),
+			typedef_kinds: HashMap::new(),
 			method_dispatch,
 		};
+	}
+
+	/// Returns whether `ty` is zero-sized, using the typedefs monomorphized so far.
+	///
+	/// Because type monomorphization and function body lowering are interleaved
+	/// (see [`Monomorphizer::run`]), a `Named` type reached during lowering may not
+	/// yet have an entry in `typedef_kinds` if it hasn't been processed off the
+	/// type worklist. In that case this conservatively returns `false`.
+	fn is_zst(&self, ty: &MonoTy) -> bool
+	{
+		return ty.is_zst(&self.typedef_kinds);
 	}
 
 	fn lookup_item(&self, sym: SymbolId) -> Option<ItemRef<'a>>
@@ -879,14 +929,14 @@ impl<'a> Monomorphizer<'a>
 			}
 
 			Ty::Reference { mutable, inner } => {
-				let inner_mono = self.lower_ty(inner, subst)?;
+				let inner_mono = self.lower_ty(inner, subst).unwrap_or_else(MonoTy::unit);
 				return Some(MonoTy::Reference {
 					mutable: *mutable,
 					inner: Box::new(inner_mono),
 				});
 			}
 			Ty::Pointer { mutable, inner } => {
-				let inner_mono = self.lower_ty(inner, subst)?;
+				let inner_mono = self.lower_ty(inner, subst).unwrap_or_else(MonoTy::unit);
 				return Some(MonoTy::Pointer {
 					mutable: *mutable,
 					inner: Box::new(inner_mono),
@@ -989,31 +1039,14 @@ impl<'a> Monomorphizer<'a>
 		if !self.reachable_types.insert(instance.clone()) {
 			return;
 		}
-
-		let Some(ItemRef::TypeDef(_mi, t)) = self.lookup_item(instance.0) else {
-			return;
-		};
-		let subst = self.build_type_subst(t, &instance.1, t.span);
-		match &t.kind {
-			MirTypeDefKind::Struct { fields } | MirTypeDefKind::Union { fields } => {
-				for (_, fty) in fields {
-					let _: Option<MonoTy> = self.lower_ty(fty, &subst);
-				}
-			}
-			MirTypeDefKind::Variant { members } => {
-				for (_, mty) in members {
-					if let Some(ty) = mty {
-						let _: Option<MonoTy> = self.lower_ty(ty, &subst);
-					}
-				}
-			}
-			MirTypeDefKind::Enum { .. } => {}
-			MirTypeDefKind::TypeAlias { ty } => {
-				let _: Option<MonoTy> = self.lower_ty(ty, &subst);
-			}
-		}
+		self.type_worklist.push_back(instance.clone());
 	}
 
+	/// Eagerly lowers the field/member/alias types of a type instance, so that any
+	/// `Named` types they reference are themselves enqueued. This must happen
+	/// before [`Monomorphizer::mono_typedef`] computes the final `MonoTypeDef`,
+	/// since that step also performs the lowering but its result is what gets
+	/// cached into `typedef_kinds`.
 	fn enqueue_global(&mut self, sym: SymbolId)
 	{
 		self.reachable_globals.insert(sym);
@@ -1126,21 +1159,32 @@ impl<'a> Monomorphizer<'a>
 		self.enqueue_fn(entry_instance);
 		let entry_mangled = self.fn_mangled_name(entry_sym, &[], &entry_heap_bindings);
 
-		while let Some(instance) = self.fn_worklist.pop_front() {
-			self.mono_one_function(instance);
+		// Drain function and type worklists together: lowering a function body can
+		// discover new reachable types, and monomorphizing a type's fields can
+		// discover new reachable types (and, in principle, const bodies that touch
+		// functions). Processing types as they're discovered (rather than only at
+		// the end) means `typedef_kinds` is populated in time for `is_zst` queries
+		// made while lowering later functions/types.
+		loop {
+			if let Some(instance) = self.fn_worklist.pop_front() {
+				self.mono_one_function(instance);
+				continue;
+			}
+			if let Some(instance) = self.type_worklist.pop_front() {
+				if let Some(td) = self.mono_typedef(instance.clone()) {
+					let key = (td.symbol, td.type_args.clone());
+					self.typedef_kinds.insert(key, td.kind.clone());
+					self.out_typedefs.push(td);
+				}
+				continue;
+			}
+			break;
 		}
 
 		let global_syms: Vec<SymbolId> = self.reachable_globals.iter().copied().collect();
 		for sym in global_syms {
 			if let Some(g) = self.mono_global(sym) {
 				self.out_globals.push(g);
-			}
-		}
-
-		let type_instances: Vec<Instance> = self.reachable_types.iter().cloned().collect();
-		for inst in type_instances {
-			if let Some(td) = self.mono_typedef(inst) {
-				self.out_typedefs.push(td);
 			}
 		}
 
@@ -1401,7 +1445,7 @@ impl<'a> Monomorphizer<'a>
 		return Some(match stmt {
 			MirStmt::Assign { place, rvalue, span } => {
 				let mono_place = self.lower_place(place, subst, module_idx);
-				if mono_place.ty.is_zst() {
+				if self.is_zst(&mono_place.ty) {
 					return None;
 				}
 				let mono_rvalue = self.lower_rvalue_with_hint(rvalue, subst, module_idx, &mono_place.ty);
@@ -1699,7 +1743,7 @@ impl<'a> Monomorphizer<'a>
 					.iter()
 					.filter_map(|(name, op)| {
 						let mono_op = self.lower_operand(op, subst, module_idx);
-						if mono_op.ty().is_zst() {
+						if self.is_zst(mono_op.ty()) {
 							return None;
 						}
 						return Some((name.clone(), mono_op));
@@ -1718,13 +1762,13 @@ impl<'a> Monomorphizer<'a>
 				count: self.lower_operand(count, subst, module_idx),
 				elem_ty: self.lower_ty_or_unit(elem_ty, subst),
 			},
-			MirRvalue::Tuple(elems) => MonoRvalue::Tuple(
-				elems
+			MirRvalue::Tuple(elems) => {
+				let lowered: Vec<MonoOperand> = elems
 					.iter()
 					.map(|e| return self.lower_operand(e, subst, module_idx))
-					.filter(|o| return !o.ty().is_zst())
-					.collect(),
-			),
+					.collect(); // TODO: useless collect, need to remove later, but don't have time to fix it atm
+				MonoRvalue::Tuple(lowered.into_iter().filter(|o| return !self.is_zst(o.ty())).collect())
+			}
 			MirRvalue::Discriminant(place) => MonoRvalue::Discriminant(self.lower_place(place, subst, module_idx)),
 		};
 	}
@@ -1762,7 +1806,7 @@ impl<'a> Monomorphizer<'a>
 					.iter()
 					.filter_map(|(name, op)| {
 						let mono_op = self.lower_operand(op, &extended, module_idx);
-						if mono_op.ty().is_zst() {
+						if self.is_zst(mono_op.ty()) {
 							return None;
 						}
 						return Some((name.clone(), mono_op));

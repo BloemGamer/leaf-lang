@@ -1,7 +1,7 @@
 #![allow(clippy::needless_raw_strings)]
 
 use std::{
-	collections::{HashSet, VecDeque},
+	collections::{HashMap, HashSet, VecDeque},
 	path,
 };
 
@@ -561,7 +561,7 @@ fn zst_assign_is_eliminated()
 			for stmt in &block.stmts {
 				if let MonoStmt::Assign { place, .. } = stmt {
 					assert!(
-						!place.ty.is_zst(),
+						!place.ty.is_zst(&HashMap::new()),
 						"ZST assign should have been eliminated, found assign to {:?}",
 						place.ty
 					);
@@ -594,7 +594,7 @@ fn zst_aggregate_fields_are_stripped()
 				{
 					for (name, op) in fields {
 						assert!(
-							!op.ty().is_zst(),
+							!op.ty().is_zst(&HashMap::new()),
 							"ZST field '{name}' should have been stripped from aggregate"
 						);
 					}
