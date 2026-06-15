@@ -5061,6 +5061,132 @@ impl<'a> Checker<'a>
 						span: callee.span(),
 					}
 				} else {
+					if let ResolvedExpr::Identifier { path, .. } = callee.as_ref() {
+						let ctor: Option<(SymbolId /*parent variant*/, SymbolId /*member*/)> = match &path.kind {
+							ResolvedPathKind::Resolved(id) => match self.global.symbol(*id).kind {
+								SymbolKind::VariantMember => {
+									let parent = self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+										if !matches!(s.kind, SymbolKind::Variant) {
+											return None;
+										}
+										let sc = s.introduced_scope?;
+										self.global.scope(sc).symbols.contains(id).then_some(SymbolId(i))
+									});
+									parent.map(|p| (p, *id))
+								}
+								SymbolKind::Variant => {
+									// Path resolved only to the parent; recover the member from the
+									// original path's last segment.
+									path.original.segments.last().and_then(|seg| {
+										let sc = self.global.symbol(*id).introduced_scope?;
+										self.global
+											.scope(sc)
+											.symbols
+											.iter()
+											.copied()
+											.find(|&m| {
+												let s = self.global.symbol(m);
+												s.name == seg.name && matches!(s.kind, SymbolKind::VariantMember)
+											})
+											.map(|m| (*id, m))
+									})
+								}
+								_ => None,
+							},
+							ResolvedPathKind::AssocItem { base, member, .. } => {
+								if matches!(self.global.symbol(*base).kind, SymbolKind::Variant) {
+									let sc = self.global.symbol(*base).introduced_scope;
+									sc.and_then(|sc| {
+										self.global.scope(sc).symbols.iter().copied().find(|&m| {
+											let s = self.global.symbol(m);
+											s.name == *member && matches!(s.kind, SymbolKind::VariantMember)
+										})
+									})
+									.map(|m| (*base, m))
+								} else {
+									None
+								}
+							}
+							ResolvedPathKind::Primitive(_) => None,
+						};
+
+						if let Some((parent_sym, member_sym)) = ctor {
+							// Parent type, honouring `hint` if it pins generics (e.g. Option<i64>).
+							let parent_ty: Ty = match hint {
+								Some(h @ Ty::Named { symbol, generics })
+									if *symbol == parent_sym && !generics.is_empty() =>
+								{
+									h.clone()
+								}
+								_ => Ty::named(parent_sym),
+							};
+
+							// Payload type for this member (stored by scan_variant); substitute the
+							// variant's generic parameters with the concrete args from `parent_ty`.
+							let raw_payload = self.caches.env.get(member_sym).cloned().unwrap_or(Ty::Unit);
+							let payload_ty = if let Ty::Named { generics, .. } = &parent_ty
+								&& !generics.is_empty() && let Some(param_names) =
+								self.caches.variant_generics.get(&parent_sym).cloned()
+							{
+								let subs: HashMap<String, Ty> =
+									param_names.into_iter().zip(generics.iter().cloned()).collect();
+								substitute_generics(&raw_payload, &subs)
+							} else {
+								raw_payload
+							};
+
+							// For now: niladic or single-payload variants.
+							if args.len() != usize::from(payload_ty != Ty::Unit) {
+								return Err(Self::err(
+									span,
+									TypeErrorKind::ArgCountMismatch {
+										expected: usize::from(payload_ty != Ty::Unit),
+										found: args.len(),
+									},
+								));
+							}
+
+							let targs: Vec<TypedExpr> = args
+								.iter()
+								.map(|a| {
+									let te = self.check_expr(a, Some(&payload_ty))?;
+									self.expect_ty(&te.ty, &payload_ty, a.span())?;
+									Ok(te)
+								})
+								.collect::<Result<_, TypeError>>()?;
+
+							// Synthesise a callee whose path points at the member, with the parent's
+							// generics carried on `base_type_args` so the backend can monomorphise.
+							let parent_generics = if let Ty::Named { generics, .. } = &parent_ty {
+								generics.clone()
+							} else {
+								Vec::new()
+							};
+							let mut new_path = path.clone();
+							new_path.kind = ResolvedPathKind::AssocItem {
+								base: parent_sym,
+								member: self.global.symbol(member_sym).name.clone(),
+								item: member_sym,
+								base_type_args: parent_generics,
+							};
+							let tcallee = TypedExpr {
+								kind: TypedExprKind::Identifier { path: new_path },
+								ty: parent_ty.clone(),
+								span: callee.span(),
+							};
+
+							return Ok(TypedExpr {
+								kind: TypedExprKind::Call {
+									callee: Box::new(tcallee),
+									call_type: *call_type,
+									named_generics: Vec::new(),
+									args: targs,
+								},
+								ty: parent_ty,
+								span,
+							});
+						}
+					}
 					self.check_expr(callee, None)?
 				};
 
@@ -7236,6 +7362,7 @@ impl<'a> Checker<'a>
 
 				let mut tpath = path.clone();
 				self.finalize_assoc_in_path(&mut tpath, Some(&variant_ty));
+				println!("{}", tpath);
 				TypedPattern::Variant {
 					path: tpath,
 					args: targs,
