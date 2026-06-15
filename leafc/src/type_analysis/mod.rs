@@ -5760,14 +5760,14 @@ impl<'a> Checker<'a>
 			ResolvedExpr::Field { base, name, .. } => {
 				let tbase: TypedExpr = self.check_expr(base, None)?;
 				let field_ty: Ty = self.check_field_access(&tbase.ty, name, span)?;
-				let tbase: TypedExpr = if self.name_is_field_of(&tbase.ty, name) {
+				let ntbase: TypedExpr = if self.name_is_field_of(&tbase.ty, name) {
 					self.auto_deref_for_field(tbase, span)
 				} else {
 					tbase
 				};
 				(
 					TypedExprKind::Field {
-						base: Box::new(tbase),
+						base: Box::new(ntbase),
 						name: name.clone(),
 					},
 					field_ty,
@@ -7084,6 +7084,9 @@ impl<'a> Checker<'a>
 
 			ResolvedPattern::Literal { value, span } => {
 				let ty: Ty = Self::type_of_literal(value, Some(scrutinee));
+				if ty != Ty::Infer && !ty.is_assignable_to(scrutinee) {
+					return Err(self.mismatch(*span, scrutinee, &ty));
+				}
 				TypedPattern::Literal {
 					value: value.clone(),
 					ty,
@@ -7102,6 +7105,9 @@ impl<'a> Checker<'a>
 				let final_ty: Ty = if declared == Ty::Infer {
 					scrutinee.clone()
 				} else {
+					if !declared.is_assignable_to(scrutinee) && !scrutinee.is_assignable_to(&declared) {
+						return Err(self.mismatch(*span, scrutinee, &declared));
+					}
 					declared
 				};
 				self.caches.env.insert(*symbol, final_ty.clone());
@@ -7115,8 +7121,39 @@ impl<'a> Checker<'a>
 			}
 
 			ResolvedPattern::Variant { path, args, span } => {
+				let find_member_in = |parent_id: SymbolId, name: &str| -> Option<SymbolId> {
+					return self.global.symbol(parent_id).introduced_scope.and_then(|sc| {
+						return self.global.scope(sc).symbols.iter().copied().find(|&s| {
+							let sym = self.global.symbol(s);
+							return sym.name == name
+								&& matches!(sym.kind, SymbolKind::VariantMember | SymbolKind::EnumVariant);
+						});
+					});
+				};
+
+				let parent_of_member = |member_id: SymbolId| -> Option<SymbolId> {
+					return self.global.symbols.iter().enumerate().find_map(|(i, s)| {
+						if !matches!(s.kind, SymbolKind::Variant | SymbolKind::Enum) {
+							return None;
+						}
+						let sc = s.introduced_scope?;
+						if self.global.scope(sc).symbols.contains(&member_id) {
+							return Some(SymbolId(i));
+						}
+						return None;
+					});
+				};
+
 				let variant_ty: Ty = match &path.kind {
-					ResolvedPathKind::Resolved(id) => Ty::named(*id),
+					ResolvedPathKind::Resolved(id) => {
+						let kind = &self.global.symbol(*id).kind;
+						match kind {
+							SymbolKind::VariantMember | SymbolKind::EnumVariant => {
+								parent_of_member(*id).map_or_else(|| return Ty::named(*id), Ty::named)
+							}
+							_ => Ty::named(*id),
+						}
+					}
 					ResolvedPathKind::AssocItem { base, .. } => Ty::named(*base),
 					ResolvedPathKind::Primitive(ty) => {
 						return Err(Self::err(
@@ -7129,17 +7166,31 @@ impl<'a> Checker<'a>
 					}
 				};
 
-				let member_sym: Option<SymbolId> = match &path.kind {
-					ResolvedPathKind::Resolved(id) => Some(*id),
-					ResolvedPathKind::AssocItem { item, .. } if *item != SymbolId::DUMMY => Some(*item),
-					ResolvedPathKind::AssocItem { base, member, .. } => {
-						self.global.symbol(*base).introduced_scope.and_then(|sc| {
-							return self.global.scope(sc).symbols.iter().copied().find(|&s| {
-								return self.global.symbol(s).name == *member
-									&& matches!(self.global.symbol(s).kind, SymbolKind::VariantMember);
-							});
-						})
+				let compatible = match (&variant_ty, scrutinee) {
+					(Ty::Named { symbol: a, .. }, Ty::Named { symbol: b, .. }) => {
+						a == b || self.resolve_to_struct_sym(*a) == self.resolve_to_struct_sym(*b)
 					}
+					_ => variant_ty.is_assignable_to(scrutinee) || scrutinee.is_assignable_to(&variant_ty),
+				};
+				if !compatible {
+					return Err(self.mismatch(*span, scrutinee, &variant_ty));
+				}
+
+				let member_sym: Option<SymbolId> = match &path.kind {
+					ResolvedPathKind::Resolved(id) => {
+						let kind = &self.global.symbol(*id).kind;
+						match kind {
+							SymbolKind::VariantMember | SymbolKind::EnumVariant => Some(*id),
+							SymbolKind::Variant | SymbolKind::Enum => path
+								.original
+								.segments
+								.last()
+								.and_then(|seg| return find_member_in(*id, &seg.name)),
+							_ => None,
+						}
+					}
+					ResolvedPathKind::AssocItem { item, .. } if *item != SymbolId::DUMMY => Some(*item),
+					ResolvedPathKind::AssocItem { base, member, .. } => find_member_in(*base, member),
 					ResolvedPathKind::Primitive(_) => None,
 				};
 
@@ -7230,6 +7281,17 @@ impl<'a> Checker<'a>
 						));
 					}
 				};
+				let pat_ty = Ty::named(struct_sym);
+				let compatible: bool = match scrutinee {
+					Ty::Named { symbol, .. } => {
+						*symbol == struct_sym
+							|| self.resolve_to_struct_sym(*symbol) == self.resolve_to_struct_sym(struct_sym)
+					}
+					_ => false,
+				};
+				if !compatible {
+					return Err(self.mismatch(*span, scrutinee, &pat_ty));
+				}
 				let mut tpath = path.clone();
 				self.finalize_assoc_in_path(&mut tpath, Some(&Ty::named(struct_sym)));
 				let tfields: Vec<(String, TypedPattern)> = fields

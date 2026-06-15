@@ -882,7 +882,7 @@ fn switch_variant_pattern()
 	// mirrors the `switch d { Option::Some(b: i64) => … }` in the sample
 	ok(r"
 			fn! main() {
-				var mut d: i64 = 0i64;
+				var mut d: Option<i64> = Some(0i64);
 				switch d {
 					Option::Some(b: i64) => {},
 					_ => {},
@@ -908,7 +908,7 @@ fn if_let_variant_pattern()
 	// `if var Option::Some(b: i64) = b {} else {}`
 	ok(r"
 			fn! main() {
-				var b: i64 = 0i64;
+				var b: Option<i64> = Some(0i64);
 				if var Option::Some(b: i64) = b {} else {}
 			}
 		");
@@ -1478,7 +1478,6 @@ fn default_outside_of_struct()
 }
 
 #[test]
-#[ignore = "will be added in the new version of the type checker"]
 fn tuple_unpacking()
 {
 	err(
