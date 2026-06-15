@@ -441,7 +441,7 @@ pub enum MirRvalue
 	ArrayRepeat
 	{
 		value: MirOperand,
-		count: MirOperand,
+		count: ConstBodyId,
 		elem_ty: Ty,
 	},
 
@@ -1596,10 +1596,10 @@ impl<'a> MirLowerer<'a>
 					}
 					TypedArrayLiteral::Repeat { value, count, .. } => {
 						let value_operand: MirOperand = self.lower_expr_into(builder, value);
-						let count_operand: MirOperand = self.lower_expr_into(builder, count);
+						let count_id: ConstBodyId = self.intern_const_body(count);
 						MirRvalue::ArrayRepeat {
 							value: value_operand,
-							count: count_operand,
+							count: count_id,
 							elem_ty,
 						}
 					}
@@ -2286,7 +2286,15 @@ impl<'a> MirLowerer<'a>
 							rvalue: MirRvalue::Use(self.copy_or_move(MirPlace {
 								base: MirPlaceBase::Local(scrutinee_local),
 								projections: vec![MirProjection::Field {
-									name: idx.to_string(),
+									name: {
+										let variant_sym: SymbolId = match &path.kind {
+											ResolvedPathKind::Resolved(s) => *s,
+											ResolvedPathKind::AssocItem { base, .. } => *base,
+											ResolvedPathKind::Primitive(_) => unreachable!(),
+										};
+
+										self.global.symbol(variant_sym).name.clone()
+									},
 									ty: elem_ty.clone(),
 								}],
 								ty: elem_ty.clone(),
@@ -2489,14 +2497,22 @@ impl<'a> MirLowerer<'a>
 				}
 			}
 
-			TypedPattern::Variant { args, .. } => {
+			TypedPattern::Variant { args, path, .. } => {
 				for (idx, sub) in args.iter().enumerate() {
 					let elem_ty: Ty = sub.ty().clone();
 					let elem_local: LocalId = builder.alloc_local(elem_ty.clone(), None, false, sub.span());
 					let operand: MirOperand = self.copy_or_move(MirPlace {
 						base: MirPlaceBase::Local(scrutinee_local),
 						projections: vec![MirProjection::Field {
-							name: idx.to_string(),
+							name: {
+								let variant_sym: SymbolId = match &path.kind {
+									ResolvedPathKind::Resolved(s) => *s,
+									ResolvedPathKind::AssocItem { base, .. } => *base,
+									ResolvedPathKind::Primitive(_) => unreachable!(),
+								};
+
+								self.global.symbol(variant_sym).name.clone()
+							},
 							ty: elem_ty.clone(),
 						}],
 						ty: elem_ty.clone(),

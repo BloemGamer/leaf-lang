@@ -453,7 +453,7 @@ pub fn write_mono_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MonoRvalue) -> fmt
 			write!(f, "[{:?}: ", elem_ty)?;
 			write_mono_operand(f, value)?;
 			write!(f, "; ")?;
-			write_mono_operand(f, count)?;
+			writeln!(f, "const#{},", count.0)?;
 			return write!(f, "]");
 		}
 

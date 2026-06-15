@@ -426,7 +426,7 @@ pub enum MonoRvalue
 	ArrayRepeat
 	{
 		value: MonoOperand,
-		count: MonoOperand,
+		count: ConstBodyId,
 		elem_ty: MonoTy,
 	},
 	Tuple(Vec<MonoOperand>),
@@ -1759,7 +1759,7 @@ impl<'a> Monomorphizer<'a>
 			},
 			MirRvalue::ArrayRepeat { value, count, elem_ty } => MonoRvalue::ArrayRepeat {
 				value: self.lower_operand(value, subst, module_idx),
-				count: self.lower_operand(count, subst, module_idx),
+				count: self.intern_const_body(module_idx, *count, subst),
 				elem_ty: self.lower_ty_or_unit(elem_ty, subst),
 			},
 			MirRvalue::Tuple(elems) => {

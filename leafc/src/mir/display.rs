@@ -598,7 +598,7 @@ pub fn write_mir_rvalue(f: &mut fmt::Formatter<'_>, rvalue: &MirRvalue) -> fmt::
 			write!(f, "[{}: ", elem_ty)?;
 			write_mir_operand(f, value)?;
 			write!(f, "; ")?;
-			write_mir_operand(f, count)?;
+			writeln!(f, "const#{},", count.0)?;
 			return write!(f, "]");
 		}
 
