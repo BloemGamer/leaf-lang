@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+// TODO: remove all `Stmt::Delete`
+
 #[cfg(test)]
 #[path = "../../tests/monomorphization/tests.rs"]
 mod tests;
@@ -16,7 +18,7 @@ use leaf_proc::{CompileErrorKind, Spanned, compiler_bug};
 use crate::{
 	CompileDiagnostic,
 	diagnostics::{CompileError, DiagnosticBuilder, ErrorCode},
-	lexer::{Span, Spanned},
+	lexer::{IntBase, IntSign, IntSize, IntType, Span, Spanned},
 	mir::{
 		BlockId, ConstBodyId, LocalId, MirAggregateKind, MirBasicBlock, MirBody, MirCallee, MirConstBody, MirFunction,
 		MirGlobal, MirItem, MirLiteral, MirLiteralValue, MirLocal, MirModule, MirOperand, MirParam, MirPlace,
@@ -211,7 +213,7 @@ pub struct MonoBody
 	pub return_local: Option<LocalId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Spanned)]
 pub struct MonoLocal
 {
 	pub id: LocalId,
@@ -1154,6 +1156,8 @@ impl<'a> Monomorphizer<'a>
 			.map(|m| return m.path.clone())
 			.unwrap_or_default();
 
+		self.synthesize_main_wrapper(entry_sym, &[], &entry_heap_bindings, &entry_mangled);
+
 		let mut items: Vec<MonoItem> = Vec::new();
 		for t in std::mem::take(&mut self.out_typedefs) {
 			items.push(MonoItem::TypeDef(t));
@@ -1869,6 +1873,140 @@ impl<'a> Monomorphizer<'a>
 			symbol: sym,
 			type_args: Vec::new(),
 			mangled_name: mangled,
+		});
+	}
+
+	fn synthesize_main_wrapper(
+		&mut self,
+		entry_sym: SymbolId,
+		entry_type_args: &[MonoTy],
+		entry_heap_bindings: &[(String, MonoTy)],
+		entry_mangled: &str,
+	)
+	{
+		const I32_TY: MonoTy = MonoTy::Primitive(Primitive::Int(IntType {
+			bits: IntSize::Fixed(32),
+			sign: IntSign::Signed,
+		}));
+
+		let entry_return_ty: Option<MonoTy> = self
+			.out_functions
+			.iter()
+			.find(|f| return f.mangled_name == entry_mangled)
+			.and_then(|f| return f.return_ty.clone());
+
+		let mut locals: Vec<MonoLocal> = Vec::new();
+		let result_local: LocalId = LocalId(0);
+
+		locals.push(MonoLocal {
+			id: result_local,
+			ty: I32_TY.clone(),
+			name: None,
+			mutable: false,
+			is_temp: true,
+			span: Span::default(),
+		});
+		let blocks: Vec<MonoBasicBlock> = if entry_return_ty
+			== Some(MonoTy::Primitive(Primitive::Int(IntType {
+				bits: IntSize::Fixed(32),
+				sign: IntSign::Signed,
+			}))) {
+			// User `main` returns i32: call it directly into the result local.
+
+			let dest: MonoPlace = MonoPlace {
+				base: MonoPlaceBase::Local(result_local),
+				projections: Vec::new(),
+				ty: I32_TY,
+			};
+
+			vec![
+				MonoBasicBlock {
+					id: BlockId(0),
+					stmts: Vec::new(),
+					terminator: MonoTerminator::CallAndContinue {
+						callee: MonoCallee::Direct {
+							symbol: entry_sym,
+							type_args: entry_type_args.to_vec(),
+							mangled_name: entry_mangled.to_string(),
+						},
+						args: Vec::new(),
+						dest,
+						next: BlockId(1),
+						unwind: None,
+						span: Span::default(),
+					},
+				},
+				MonoBasicBlock {
+					id: BlockId(1),
+					stmts: Vec::new(),
+					terminator: MonoTerminator::Return,
+				},
+			]
+		} else {
+			// User `main` returns unit/anything else: call as a statement, then return 0.
+
+			let stmts: Vec<MonoStmt> = vec![
+				MonoStmt::Call {
+					callee: MonoCallee::Direct {
+						symbol: entry_sym,
+						type_args: entry_type_args.to_vec(),
+						mangled_name: entry_mangled.to_string(),
+					},
+					args: Vec::new(),
+					span: Span::default(),
+				},
+				MonoStmt::Assign {
+					place: MonoPlace {
+						base: MonoPlaceBase::Local(result_local),
+						projections: Vec::new(),
+						ty: I32_TY,
+					},
+					rvalue: MonoRvalue::Use(MonoOperand::Const(MonoLiteral {
+						value: MirLiteralValue::Literal(parser::Literal::Int {
+							value: "0".to_string(),
+							base: crate::lexer::IntBase::Decimal,
+							ty: None,
+							span: Span::default(),
+						}),
+						ty: I32_TY,
+					})),
+					span: Span::default(),
+				},
+			];
+
+			vec![MonoBasicBlock {
+				id: BlockId(0),
+				stmts,
+				terminator: MonoTerminator::Return,
+			}]
+		};
+
+		self.push_main_wrapper(locals, blocks, Some(result_local), entry_sym, I32_TY);
+	}
+
+	fn push_main_wrapper(
+		&mut self,
+		locals: Vec<MonoLocal>,
+		blocks: Vec<MonoBasicBlock>,
+		return_local: Option<LocalId>,
+		entry_sym: SymbolId,
+		i32_ty: MonoTy,
+	)
+	{
+		self.out_functions.push(MonoFunction {
+			symbol: entry_sym,
+			type_args: Vec::new(),
+			mangled_name: "main".to_string(),
+			params: Vec::new(),
+			return_ty: Some(i32_ty),
+			body: Some(MonoBody {
+				locals,
+				param_count: 0,
+				blocks,
+				return_local,
+			}),
+			modifiers: Vec::new(),
+			span: Span::default(),
 		});
 	}
 }
