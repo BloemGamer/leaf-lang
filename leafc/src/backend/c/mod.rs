@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Write};
 
-use leaf_proc::compiler_bug;
+use leaf_proc::{compiler_bug, compiler_not_implemented};
 
 // TODO: const is ignored for now, at least for function parameters it should not
 
@@ -11,15 +11,17 @@ use crate::{
 	lexer::{Spanned, StringFlags},
 	mir::{LocalId, MirLiteralValue},
 	monomorphization::{
-		MonoAggregateKind, MonoBasicBlock, MonoBody, MonoConstBody, MonoFunction, MonoGlobal, MonoItem, MonoLiteral,
-		MonoLocal, MonoOperand, MonoParam, MonoPlace, MonoPlaceBase, MonoProjection, MonoRvalue, MonoStmt, MonoTy,
-		MonoTypeDef, MonoTypeDefKind,
+		MonoAggregateKind, MonoBasicBlock, MonoBody, MonoCallee, MonoConstBody, MonoFunction, MonoGlobal, MonoItem,
+		MonoLiteral, MonoLocal, MonoOperand, MonoParam, MonoPlace, MonoPlaceBase, MonoProjection, MonoRvalue, MonoStmt,
+		MonoTerminator, MonoTy, MonoTypeDef, MonoTypeDefKind,
 	},
 	parser::{BinaryOp, Literal, UnaryOp, read_radix_number},
 	source_map::SourceMap,
 	symbol_collection::{SymbolId, SymbolKind},
 	type_analysis::Primitive,
 };
+
+use super::BackendOptions;
 
 const DEFAULT_TYPE_DEFS: &[&str] = &["typedef struct LeafStr {
 \tsize_t len;
@@ -421,7 +423,7 @@ impl CBackend
 		out: &mut impl Write,
 	) -> Result<(), ()>
 	{
-		write_span(f.span(), input.source_map, out).map_err(|_| ())?;
+		write_span(f.span(), input.source_map, out, input.options).map_err(|_| ())?;
 		if f.body.is_some() && f.mangled_name != "main" {
 			write!(out, "static ").map_err(|_| ())?;
 		}
@@ -467,14 +469,13 @@ impl CBackend
 
 			self.write_function_prototype(f, input, out)?;
 			writeln!(out, " {{").map_err(|_| ())?;
-			// Build the discriminant-typed locals map AFTER opening the function body.
 			let tag_local_types: HashMap<LocalId, String> = collect_discriminant_local_types(body);
 
 			for local in &body.locals {
 				if matches!(&local.ty, MonoTy::Tuple(t) if t.is_empty()) {
 					continue;
 				}
-				write_span(local.span(), input.source_map, out).map_err(|_| ())?;
+				write_span(local.span(), input.source_map, out, input.options).map_err(|_| ())?;
 
 				let ty_str: String = tag_local_types
 					.get(&local.id)
@@ -507,10 +508,12 @@ impl CBackend
 		out: &mut impl Write,
 	) -> Result<(), ()>
 	{
+		writeln!(out, "bb{}: {{ (void)0;", block.id.0).map_err(|_| ())?;
+
 		for stmt in &block.stmts {
 			match stmt {
 				MonoStmt::Assign { place, rvalue, span } => {
-					write_span(*span, input.source_map, out).map_err(|_| ())?;
+					write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
 					write!(out, "\t").map_err(|_| ())?;
 					self.write_place(place, f, input, out).map_err(|_| ())?;
 					write!(out, " = ").map_err(|_| ())?;
@@ -530,9 +533,11 @@ impl CBackend
 								return false;
 							}
 							return td.is_option_variant(input.module.option_symbol)
-								&& matches!(&td.kind, MonoTypeDefKind::Variant { members } if members.iter().any(|(n, ty)|return n == "Some" && matches!(ty, Some(MonoTy::Pointer { .. }))));
+								&& matches!(&td.kind, MonoTypeDefKind::Variant { members }
+									if members.iter().any(|(n, ty)|
+										return n == "Some"
+										&& matches!(ty, Some(MonoTy::Pointer { .. }))));
 						});
-
 						if !is_opt_ptr {
 							write!(out, "\t").map_err(|_| ())?;
 							self.write_place(place, f, input, out).map_err(|_| ())?;
@@ -540,16 +545,118 @@ impl CBackend
 						}
 					}
 				}
+
 				MonoStmt::Call { callee, args, span } => {
-					// todo!()
+					write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
+					write!(out, "\t").map_err(|_| ())?;
+					self.write_callee(callee, f, out).map_err(|_| ())?;
+					write!(out, "(").map_err(|_| ())?;
+					for (i, arg) in args.iter().enumerate() {
+						if i > 0 {
+							write!(out, ", ").map_err(|_| ())?;
+						}
+						self.write_operand(arg, f, input, out).map_err(|_| ())?;
+					}
+					writeln!(out, ");").map_err(|_| ())?;
 				}
+
 				MonoStmt::Delete { span, .. } => self
 					.diagnostics
 					.push(compiler_bug!(*span, "`MonoStmt::Delete` should not be in the backend")),
 				MonoStmt::Nop => {}
 			}
 		}
+
+		match &block.terminator {
+			MonoTerminator::Goto { target } => {
+				writeln!(out, "\tgoto bb{};", target.0).map_err(|_| ())?;
+			}
+
+			MonoTerminator::Branch {
+				cond,
+				then_block,
+				else_block,
+			} => {
+				write!(out, "\tif (").map_err(|_| ())?;
+				self.write_operand(cond, f, input, out).map_err(|_| ())?;
+				writeln!(out, ") goto bb{}; else goto bb{};", then_block.0, else_block.0).map_err(|_| ())?;
+			}
+
+			MonoTerminator::CallAndContinue {
+				callee,
+				args,
+				dest,
+				next,
+				unwind: _,
+				span,
+			} => {
+				write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
+				let dest_is_unit: bool = matches!(&dest.ty, MonoTy::Tuple(t) if t.is_empty());
+				write!(out, "\t").map_err(|_| ())?;
+				if !dest_is_unit {
+					self.write_place(dest, f, input, out).map_err(|_| ())?;
+					write!(out, " = ").map_err(|_| ())?;
+				}
+				self.write_callee(callee, f, out).map_err(|_| ())?;
+				write!(out, "(").map_err(|_| ())?;
+				for (i, arg) in args.iter().enumerate() {
+					if i > 0 {
+						write!(out, ", ").map_err(|_| ())?;
+					}
+					self.write_operand(arg, f, input, out).map_err(|_| ())?;
+				}
+				writeln!(out, ");").map_err(|_| ())?;
+				writeln!(out, "\tgoto bb{};", next.0).map_err(|_| ())?;
+			}
+
+			MonoTerminator::Return => {
+				if let Some(ret) = f.body.as_ref().and_then(|b| b.return_local) {
+					writeln!(out, "\treturn {};", local_name(f, ret)).map_err(|_| ())?;
+				} else {
+					writeln!(out, "\treturn;").map_err(|_| ())?;
+				}
+			}
+
+			MonoTerminator::Unreachable => {
+				writeln!(out, "\t__builtin_unreachable();").map_err(|_| ())?;
+			}
+
+			MonoTerminator::Switch {
+				scrutinee,
+				arms,
+				otherwise,
+			} => {
+				write!(out, "\tswitch (").map_err(|_| ())?;
+				self.write_operand(scrutinee, f, input, out).map_err(|_| ())?;
+				writeln!(out, ") {{").map_err(|_| ())?;
+				for arm in arms {
+					write!(out, "\t\tcase ").map_err(|_| ())?;
+					self.write_operand(&arm.value, f, input, out).map_err(|_| ())?;
+					writeln!(out, ": goto bb{};", arm.target.0).map_err(|_| ())?;
+				}
+				writeln!(out, "\t\tdefault: goto bb{};", otherwise.0).map_err(|_| ())?;
+				writeln!(out, "\t}}").map_err(|_| ())?;
+			}
+		}
+
+		writeln!(out, "}}").map_err(|_| ())?;
 		return Ok(());
+	}
+
+	fn write_callee(&mut self, callee: &MonoCallee, f: &MonoFunction, out: &mut impl Write) -> std::fmt::Result
+	{
+		return match callee {
+			MonoCallee::Direct { mangled_name, .. } => write!(out, "{}", mangled_name),
+			MonoCallee::Indirect(l) => write!(out, "{}", local_name(f, *l)),
+			MonoCallee::Intrinsic(_) => {
+				self.diagnostics.push(compiler_not_implemented!(
+					Span::default(),
+					"intrinsics not yet implemented"
+				));
+				// TODO: real intrinsic lowering
+				write!(out, "/* intrinsic */ (void)")
+			}
+		};
 	}
 
 	fn write_place(
@@ -569,8 +676,6 @@ impl CBackend
 			}
 		}
 
-		// Track the current container type while walking projections.
-		// Must start from the BASE type, not place.ty (which is the final projected type).
 		let base_ty: &MonoTy = match &place.base {
 			MonoPlaceBase::Local(l) => {
 				let body = f.body.as_ref().expect("local reference outside a function body");
@@ -602,17 +707,12 @@ impl CBackend
 			match proj {
 				MonoProjection::Field { name, ty: field_ty } => {
 					match current_ty {
-						// Tuple: use _0, _1, etc.
 						MonoTy::Tuple(_) => {
 							write!(out, "._{}", name)?;
 						}
 
-						// Named types: need to check if it's a Variant
 						MonoTy::Named { symbol, type_args, .. } => {
 							if option_ptr_variant_typedef(*symbol, type_args, input).is_some() {
-								// Option<*T> is represented as a bare *T. `.Some` is a
-								// no-op projection — the place itself IS the pointer.
-								// `.None` never appears as a field projection.
 							} else {
 								let mut is_variant = false;
 								for item in &input.module.items {
@@ -634,7 +734,6 @@ impl CBackend
 							}
 						}
 
-						// Everything else
 						_ => {
 							write!(out, ".{}", name)?;
 						}
@@ -865,6 +964,16 @@ impl CBackend
 	}
 }
 
+fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write, options: &BackendOptions) -> std::fmt::Result
+{
+	if options.debug_info {
+		if let Some(file) = source_map.get(span.source_index) {
+			writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
+		}
+	}
+	return Ok(());
+}
+
 fn mono_ty_to_string(ty: &MonoTy) -> String
 {
 	return match ty {
@@ -980,14 +1089,6 @@ fn collect_tuples(ty: &MonoTy, out: &mut Vec<MonoTy>)
 		}
 		_ => {}
 	}
-}
-
-fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write) -> std::fmt::Result
-{
-	if let Some(file) = source_map.get(span.source_index) {
-		writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
-	}
-	return Ok(());
 }
 
 fn try_eval_simple_const(cb: &MonoConstBody) -> Option<&MonoLiteral>
@@ -1139,8 +1240,6 @@ fn option_ptr_variant_typedef<'a>(
 	return None;
 }
 
-/// Like `option_ptr_variant_typedef`, but takes a `MonoTy` and only matches
-/// `MonoTy::Named { .. }`.
 fn ty_is_option_ptr_variant<'a>(ty: &MonoTy, input: &'a BackendInput<'_>) -> Option<&'a MonoTypeDef>
 {
 	let MonoTy::Named { symbol, type_args, .. } = ty else {

@@ -129,7 +129,7 @@ use crate::{
 
 use self::{
 	backend::{BackendInput, BackendOptions, CompilerBackend, c::CBackend},
-	config::ColourConf,
+	config::{ColourConf, Optimization},
 	desugar::DesugaredAST,
 	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
 	lexer::{Lexer, Span, expander::ExpandedLexer},
@@ -182,6 +182,9 @@ struct Args
 	#[arg(long)]
 	mono: bool,
 
+	#[arg(short, long)]
+	release: bool,
+
 	#[arg(short, long, default_value_t = ColourConf::Auto)]
 	colour: ColourConf,
 }
@@ -212,6 +215,11 @@ fn main()
 			ColourConf::Always
 		} else {
 			ColourConf::Never
+		},
+		optimization: if args.release {
+			Optimization::Release
+		} else {
+			Optimization::Debug
 		},
 		..Default::default()
 	};
