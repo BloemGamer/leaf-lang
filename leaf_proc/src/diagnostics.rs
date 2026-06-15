@@ -80,6 +80,33 @@ pub fn compiler_bug(item: TokenStream2) -> TokenStream2
 	};
 }
 
+pub fn compiler_not_implemented(item: TokenStream2) -> TokenStream2
+{
+	let input = match syn::parse2::<CompilerBugInput>(item) {
+		Ok(v) => v,
+		Err(e) => return e.to_compile_error(),
+	};
+
+	let span = input.span;
+	let format_str = input.format_str;
+	let format_args = input.format_args;
+
+	let input_span = proc_macro::Span::call_site();
+
+	let source_file = input_span.file();
+	let line = input_span.line();
+
+	return quote! {
+		{
+			crate::diagnostics::DiagnosticBuilder::not_implemented("a not yet implemented feature")
+				.code(crate::diagnostics::ErrorCode::CompilerNotImplemented)
+				.primary(#span, Some(format!(#format_str #(, #format_args)*)))
+				.note("this feature is not yet implemented")
+				.note(format!("{}:{}", #source_file, #line))
+		}
+	};
+}
+
 struct ConstructorAttr
 {
 	fn_name: Ident,

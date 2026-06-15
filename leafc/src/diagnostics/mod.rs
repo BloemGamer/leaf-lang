@@ -79,6 +79,7 @@ pub enum ErrorCode
 
 	//
 	CompilerBug,
+	CompilerNotImplemented,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +89,7 @@ pub enum Severity
 	#[allow(unused)]
 	Warning,
 	Bug,
+	NotImplemented,
 }
 
 impl Severity
@@ -202,6 +204,15 @@ impl DiagnosticBuilder
 	{
 		return Self {
 			severity: Severity::Bug,
+			..Self::error(msg)
+		};
+	}
+
+	#[allow(unused)]
+	pub fn not_implemented<M: Into<Cow<'static, str>>>(msg: M) -> Self
+	{
+		return Self {
+			severity: Severity::NotImplemented,
 			..Self::error(msg)
 		};
 	}
@@ -544,6 +555,13 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 				s.to_string()
 			};
 		};
+		let magenta = |s: &str, config: &Config| {
+			return if use_colour_conf(config) {
+				format!("{MAGENTA}{s}{RESET}")
+			} else {
+				s.to_string()
+			};
+		};
 		let bold = |s: &str, config: &Config| {
 			return if use_colour_conf(config) {
 				format!("{BOLD}{s}{RESET}")
@@ -556,6 +574,7 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 			Severity::Error => red("error", self.config),
 			Severity::Warning => yellow("warning", self.config),
 			Severity::Bug => blue("bug", self.config),
+			Severity::NotImplemented => magenta("not_implemented", self.config),
 		};
 
 		let Some(primary): Option<&Label> = self

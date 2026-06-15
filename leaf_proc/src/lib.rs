@@ -144,6 +144,12 @@ pub fn compiler_bug(item: TokenStream) -> TokenStream
 	return diagnostics::compiler_bug(item.into()).into();
 }
 
+#[proc_macro]
+pub fn compiler_not_implemented(item: TokenStream) -> TokenStream
+{
+	return diagnostics::compiler_not_implemented(item.into()).into();
+}
+
 #[proc_macro_derive(
 	CompileErrorKind,
 	attributes(error_msg, error_code, constructor, label, note, help, compile_error_variant)
