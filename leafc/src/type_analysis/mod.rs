@@ -7360,9 +7360,8 @@ impl<'a> Checker<'a>
 					})
 					.collect::<Result<_, _>>()?;
 
-				let mut tpath = path.clone();
+				let mut tpath: ResolvedPath = path.clone();
 				self.finalize_assoc_in_path(&mut tpath, Some(&variant_ty));
-				println!("{}", tpath);
 				TypedPattern::Variant {
 					path: tpath,
 					args: targs,

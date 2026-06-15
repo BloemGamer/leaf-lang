@@ -1337,6 +1337,7 @@ impl<'a> MirLowerer<'a>
 						.collect();
 
 					let tmp = builder.alloc_local(expr.ty.clone(), None, false, expr.span());
+
 					builder.push_stmt(MirStmt::Assign {
 						place: MirPlace {
 							base: MirPlaceBase::Local(tmp),
@@ -1488,6 +1489,7 @@ impl<'a> MirLowerer<'a>
 			TypedExprKind::Field { base, name } => {
 				let base_place: MirPlace = self.lower_expr_as_place(builder, base);
 				let mut projections: Vec<MirProjection> = base_place.projections;
+				println!("{}", name);
 				projections.push(MirProjection::Field {
 					name: name.clone(),
 					ty: expr.ty.clone(),
@@ -2205,7 +2207,7 @@ impl<'a> MirLowerer<'a>
 
 				let variant_sym: SymbolId = match &path.kind {
 					ResolvedPathKind::Resolved(s) => *s,
-					ResolvedPathKind::AssocItem { base, .. } => *base,
+					ResolvedPathKind::AssocItem { base, member, item, .. } => *item,
 					ResolvedPathKind::Primitive(_) => {
 						self.diagnostics
 							.push(compiler_bug!(*span, "primitives can't be variants I think"));
@@ -2286,14 +2288,19 @@ impl<'a> MirLowerer<'a>
 							rvalue: MirRvalue::Use(self.copy_or_move(MirPlace {
 								base: MirPlaceBase::Local(scrutinee_local),
 								projections: vec![MirProjection::Field {
-									name: {
-										let variant_sym: SymbolId = match &path.kind {
-											ResolvedPathKind::Resolved(s) => *s,
-											ResolvedPathKind::AssocItem { base, .. } => *base,
-											ResolvedPathKind::Primitive(_) => unreachable!(),
-										};
-
-										self.global.symbol(variant_sym).name.clone()
+									name: match &path.kind {
+										ResolvedPathKind::Resolved(s)
+											if matches!(self.global.symbol(*s).kind, SymbolKind::VariantMember) =>
+										{
+											self.global.symbol(*s).name.clone()
+										}
+										ResolvedPathKind::Resolved(_) | ResolvedPathKind::AssocItem { .. } => path
+											.original
+											.segments
+											.last()
+											.map(|seg| return seg.name.clone())
+											.unwrap_or_default(),
+										ResolvedPathKind::Primitive(_) => unreachable!(),
 									},
 									ty: elem_ty.clone(),
 								}],
@@ -2504,14 +2511,19 @@ impl<'a> MirLowerer<'a>
 					let operand: MirOperand = self.copy_or_move(MirPlace {
 						base: MirPlaceBase::Local(scrutinee_local),
 						projections: vec![MirProjection::Field {
-							name: {
-								let variant_sym: SymbolId = match &path.kind {
-									ResolvedPathKind::Resolved(s) => *s,
-									ResolvedPathKind::AssocItem { base, .. } => *base,
-									ResolvedPathKind::Primitive(_) => unreachable!(),
-								};
-
-								self.global.symbol(variant_sym).name.clone()
+							name: match &path.kind {
+								ResolvedPathKind::Resolved(s)
+									if matches!(self.global.symbol(*s).kind, SymbolKind::VariantMember) =>
+								{
+									self.global.symbol(*s).name.clone()
+								}
+								ResolvedPathKind::Resolved(_) | ResolvedPathKind::AssocItem { .. } => path
+									.original
+									.segments
+									.last()
+									.map(|seg| return seg.name.clone())
+									.unwrap_or_default(),
+								ResolvedPathKind::Primitive(_) => unreachable!(),
 							},
 							ty: elem_ty.clone(),
 						}],
