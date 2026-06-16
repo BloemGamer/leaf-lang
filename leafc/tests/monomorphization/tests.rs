@@ -53,9 +53,19 @@ fn compile_mir_full(source: &str) -> (GlobalSymbolTable, Vec<MirModule>)
 	// Seed the module queue exactly like the driver does.
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
 		modules::PendingModule {
+			logical_path: vec!["core".to_string()],
+			file_path: {
+				let mut tmp = path::PathBuf::from("../std/core/core.leaf");
+				tmp.pop();
+				tmp.push("core.leaf");
+				tmp
+			},
+			declared_at_span: DUMMY_SPAN,
+		},
+		modules::PendingModule {
 			logical_path: vec!["std".to_string()],
 			file_path: {
-				let mut tmp = path::PathBuf::from("../std/std.leaf");
+				let mut tmp = path::PathBuf::from("../std/std/std.leaf");
 				tmp.pop();
 				tmp.push("std.leaf");
 				tmp

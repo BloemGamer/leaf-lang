@@ -948,7 +948,12 @@ impl Desugarer
 					path: Path {
 						segments: vec![
 							PathSegment {
-								name: "std".to_string(),
+								name: "core".to_string(),
+								generics: Vec::new(),
+								span: iter_span,
+							},
+							PathSegment {
+								name: "iterator".to_string(),
 								generics: Vec::new(),
 								span: iter_span,
 							},
@@ -1866,22 +1871,22 @@ impl Desugarer
 
 		return match (start, end, expr.inclusive) {
 			// a..b
-			(Some(a), Some(b), false) => call(&["std", "Range", "new"], vec![a, b], span),
+			(Some(a), Some(b), false) => call(&["core", "ranges", "Range", "new"], vec![a, b], span),
 
 			// a..=b
-			(Some(a), Some(b), true) => call(&["std", "RangeInclusive", "new"], vec![a, b], span),
+			(Some(a), Some(b), true) => call(&["core", "ranges", "RangeInclusive", "new"], vec![a, b], span),
 
 			// a..
-			(Some(a), None, _) => call(&["std", "RangeFrom", "new"], vec![a], span),
+			(Some(a), None, _) => call(&["core", "ranges", "RangeFrom", "new"], vec![a], span),
 
 			// ..b
-			(None, Some(b), false) => call(&["std", "RangeTo", "new"], vec![b], span),
+			(None, Some(b), false) => call(&["core", "ranges", "RangeTo", "new"], vec![b], span),
 
 			// ..=b
-			(None, Some(b), true) => call(&["std", "RangeToInclusive", "new"], vec![b], span),
+			(None, Some(b), true) => call(&["core", "ranges", "RangeToInclusive", "new"], vec![b], span),
 
 			// ..
-			(None, None, _) => call(&["std", "RangeFull", "new"], vec![], span),
+			(None, None, _) => call(&["core", "ranges", "RangeFull", "new"], vec![], span),
 		};
 	}
 

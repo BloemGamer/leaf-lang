@@ -1,45 +1,22 @@
-use std::path::PathBuf;
+use std::{
+	collections::{HashMap, HashSet, VecDeque},
+	path::PathBuf,
+};
 
 use crate::{
 	Config,
-	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, ErrorCode, OldStyleRenderer, Severity},
-	lexer::{Lexer, expander::ExpandedLexer},
+	desugar::{self, DesugaredAST},
+	diagnostics::{
+		CompileDiagnostic, CompileDiagnosticRenderer, CompileError, DiagnosticBuilder, ErrorCode, OldStyleRenderer,
+		Severity,
+	},
+	lexer::{Lexer, Span, expander::ExpandedLexer},
+	modules::{self, ModuleError, ModuleErrorKind},
 	name_resolution::{self, ResolvedModule},
 	parser::Parser,
-	source_map::SourceMap,
+	source_map::{SourceIndex, SourceMap},
 	symbol_collection::{self, LocalSymbolTable},
 };
-
-// ─── Standard library available to every test ────────────────────────────────
-
-// Iterator is declared both at root level (for plain `Iterator` references)
-// and inside `std` (for `::std::Iterator` references emitted by the desugarer
-// when it expands `for` loops).
-const STDLIB_SRC: &str = r"
-	pub @use Option::*;
-	pub @use Result::*;
-
-	pub variant Option<T> {
-		Some(T),
-		None,
-	}
-
-	pub variant Result<T, E> {
-		Ok(T),
-		Err(E),
-	}
-
-	pub module std {
-		pub trait Iterator {
-			fn next();
-		}
-	}
-
-	pub trait Iterator {
-		fn next();
-	}
-";
 
 // -------------------------------------------------------------------------
 // Helper
@@ -54,8 +31,7 @@ fn parse_and_resolve(source: &str, logical_path: &[&str]) -> Result<ResolvedModu
 	let pending = build_pending(modules, &config, &mut source_map)?;
 	let global = symbol_collection::merge_symbol_tables(&pending);
 
-	// The user's module is always last in pending (stdlib is first)
-	let (logical, desugared, local) = pending.last().unwrap();
+	let (logical, desugared, local) = pending.iter().find(|(l, _, _)| return l == logical_path).unwrap();
 
 	return name_resolution::resolve_names(logical, desugared, local, &global, &pending)
 		.inspect_err(|e| {
@@ -75,40 +51,91 @@ fn build_pending(
 	source_map: &mut SourceMap,
 ) -> Result<Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)>, Vec<DiagnosticBuilder>>
 {
+	let dummy_span = Span {
+		source_index: SourceIndex::new(0),
+		start: 0,
+		end: 0,
+		start_line: 0,
+		start_col: 0,
+		end_line: 0,
+		end_col: 0,
+	};
+
+	// Build a lookup for in-memory sources passed by the caller
+	let in_memory: HashMap<Vec<String>, &str> = modules
+		.iter()
+		.map(|(segs, src)| (segs.iter().map(ToString::to_string).collect(), *src))
+		.collect();
+
+	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
+		modules::PendingModule {
+			logical_path: vec!["core".to_string()],
+			file_path: PathBuf::from("../std/core/core.leaf"),
+			declared_at_span: dummy_span,
+		},
+		modules::PendingModule {
+			logical_path: vec!["std".to_string()],
+			file_path: PathBuf::from("../std/std/std.leaf"),
+			declared_at_span: dummy_span,
+		},
+	]);
+
+	// Enqueue caller-supplied modules
+	for (segs, _) in modules {
+		let logical: Vec<String> = segs.iter().map(ToString::to_string).collect();
+		queue.push_back(modules::PendingModule {
+			logical_path: logical,
+			file_path: PathBuf::from("<in-memory>"),
+			declared_at_span: dummy_span,
+		});
+	}
+
+	let mut visited: HashSet<Vec<String>> = HashSet::new();
 	let mut pending = Vec::new();
 
-	for (path_segs, source) in modules {
-		let logical: Vec<String> = path_segs.iter().map(ToString::to_string).collect();
+	while let Some(pm) = queue.pop_front() {
+		if !visited.insert(pm.logical_path.clone()) {
+			continue;
+		}
 
-		// Prepend stdlib only into the root module (empty logical path)
-		let full_source = if logical.is_empty() {
-			format!("{}\n{}", STDLIB_SRC, source)
+		let raw: String = if let Some(src) = in_memory.get(&pm.logical_path) {
+			src.to_string()
 		} else {
-			source.to_string()
+			std::fs::read_to_string(&pm.file_path).map_err(|e| {
+				let kind = if e.kind() == std::io::ErrorKind::NotFound {
+					ModuleErrorKind::FileNotFound(pm.file_path.clone())
+				} else {
+					ModuleErrorKind::IoError(e.to_string())
+				};
+				vec![
+					ModuleError {
+						logical_path: pm.logical_path.clone(),
+						span: pm.declared_at_span,
+						kind,
+						context: Vec::new(),
+					}
+					.build(),
+				]
+			})?
 		};
 
-		let lexer = Lexer::new_add_to_source_map(
-			config,
-			full_source,
-			PathBuf::from(format!(
-				"<{}>",
-				if logical.is_empty() {
-					"root".to_string()
-				} else {
-					logical.join("::")
-				}
-			)),
-			source_map,
-		);
+		let lexer = Lexer::new_add_to_source_map(config, raw, pm.file_path.clone(), source_map);
 		let (ast, _) = Parser::from(ExpandedLexer::new(lexer)).parse_program().unwrap();
-		let res = crate::desugar::desugar_program(ast);
-		assert!(res.is_ok());
-		let desugared = res.unwrap();
-		println!("{}", desugared.0);
-		let local = symbol_collection::collect_symbols(&desugared.0, logical.clone()).unwrap();
-		pending.push((logical, desugared.0, local.0));
+
+		let children = modules::collect_pending(&ast, &pm.file_path, &pm.logical_path)
+			.map_err(|e| vec![CompileError::Module(e).build()])?;
+		queue.extend(children);
+
+		let desugared = desugar::desugar_program(ast).unwrap().0;
+		println!("{}", desugared);
+		let local = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone())
+			.unwrap()
+			.0;
+
+		pending.push((pm.logical_path, desugared, local));
 	}
-	return Ok(pending);
+
+	Ok(pending)
 }
 
 // -------------------------------------------------------------------------
@@ -570,6 +597,7 @@ fn resolves_switch_with_wildcard_arm()
 fn resolves_for_loop_range()
 {
 	let src = r"
+		@use core::prelude::*;
             fn main() {
                 for i: i64 in 1..10 {
                 }
@@ -736,7 +764,9 @@ fn error_kind_is_private_symbol()
 		// }
 		// Some resolvers leave this as an unresolved identifier rather than
 		// a hard error — treat Ok as a known-lenient behaviour.
-		Ok(_) => {}
+		Ok(_) => {
+			panic!("expected NameResolutionPrivateSymbol, got no error")
+		}
 		Err(other) => {
 			if matches!(
 				other
@@ -761,12 +791,12 @@ fn error_kind_is_private_symbol()
 fn error_on_shadow()
 {
 	let src = r"
-            fn main() {
-                var a: i64();
-				{
-					var a: i32();
-				}
-            }
+		fn main() {
+			var a: i64();
+			{
+				var a: i32();
+			}
+		}
         ";
 	match parse_and_resolve(src, &[]) {
 		// Err(CompileError::NameResolution(e)) => {
@@ -900,6 +930,7 @@ fn integration_resolves_nested_modules_and_use()
 fn integration_resolves_generic_variant_with_switch()
 {
 	let src = r"
+		@use core::prelude::*;
         fn main() {
             var mut a: i64 = 0;
             switch a {
@@ -915,6 +946,7 @@ fn integration_resolves_generic_variant_with_switch()
 fn integration_resolves_for_range_loop()
 {
 	let src = r"
+		@use core::prelude::*;
         fn main() {
             for i: i64 in 1..10 {
             }
@@ -927,6 +959,7 @@ fn integration_resolves_for_range_loop()
 fn integration_resolves_if_var_pattern()
 {
 	let src = r"
+		@use core::prelude::*;
         fn maybe() -> Option<i64> { return Option::None; }
         fn main() {
             var a: Option<i64> = maybe();
@@ -1015,7 +1048,6 @@ fn integration_multi_module_deeply_nested()
 			&[],
 			r"
                 module t2 {
-                    pub module t;
                     pub @use t;
                     pub fn test() {
                         t::test();
@@ -1039,7 +1071,11 @@ fn integration_multi_module_deeply_nested()
             ",
 		),
 	];
-	assert!(parse_and_resolve_multi(modules).is_ok());
+	assert!(
+		parse_and_resolve_multi(modules)
+			.inspect_err(|e| println!("{:?}", e))
+			.is_ok()
+	);
 }
 
 #[test]

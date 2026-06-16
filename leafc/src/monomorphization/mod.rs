@@ -1148,7 +1148,7 @@ impl<'a> Monomorphizer<'a>
 			Subst::new()
 		};
 
-		let option_symbol = self.resolve_module_path(&["std", "Option"]);
+		let option_symbol = self.resolve_module_path(&["core", "options", "Option"]);
 
 		let entry_heap_bindings: Vec<(String, MonoTy)> = {
 			let mut v: Vec<(String, MonoTy)> = entry_subst_extras.into_iter().collect();

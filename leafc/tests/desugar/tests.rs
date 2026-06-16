@@ -2554,7 +2554,7 @@ fn test_desugar_range_full()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "Range", "new"]
+						vec!["core", "ranges", "Range", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2588,7 +2588,7 @@ fn test_desugar_range_inclusive()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "RangeInclusive", "new"]
+						vec!["core", "ranges", "RangeInclusive", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2622,7 +2622,7 @@ fn test_desugar_range_from()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "RangeFrom", "new"]
+						vec!["core", "ranges", "RangeFrom", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2656,7 +2656,7 @@ fn test_desugar_range_to()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "RangeTo", "new"]
+						vec!["core", "ranges", "RangeTo", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2690,7 +2690,7 @@ fn test_desugar_range_to_inclusive()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "RangeToInclusive", "new"]
+						vec!["core", "ranges", "RangeToInclusive", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2724,7 +2724,7 @@ fn test_desugar_range_full_unbounded()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "RangeFull", "new"]
+						vec!["core", "ranges", "RangeFull", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2768,7 +2768,7 @@ fn test_desugar_range_with_complex_expressions()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "Range", "new"]
+						vec!["core", "ranges", "Range", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2805,7 +2805,7 @@ fn test_desugar_range_with_identifiers()
 				Expr::Identifier { path, .. } => {
 					assert_eq!(
 						path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-						vec!["std", "Range", "new"]
+						vec!["core", "ranges", "Range", "new"]
 					);
 				}
 				_ => panic!("Expected identifier callee"),
@@ -2856,7 +2856,7 @@ fn test_desugar_range_in_for_loop()
 							Expr::Identifier { path, .. } => {
 								assert_eq!(
 									path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-									vec!["std", "Range", "new"]
+									vec!["core", "ranges", "Range", "new"]
 								);
 							}
 							_ => panic!("Expected Range::new identifier"),
@@ -2901,7 +2901,7 @@ fn test_desugar_range_in_array_index()
 					Expr::Identifier { path, .. } => {
 						assert_eq!(
 							path.segments.iter().map(|s| return s.name.as_str()).collect::<Vec<_>>(),
-							vec!["std", "Range", "new"]
+							vec!["core", "ranges", "Range", "new"]
 						);
 					}
 					_ => panic!("Expected Range::new"),

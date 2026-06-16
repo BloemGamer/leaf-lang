@@ -204,7 +204,8 @@ impl Args
 	}
 }
 
-const STDLIB_PATH: &str = "std/std.leaf";
+const STDLIB_PATH: &str = "std/std/std.leaf";
+const CORELIB_PATH: &str = "std/core/core.leaf";
 
 fn main()
 {
@@ -264,6 +265,24 @@ fn run(
 				let mut tmp = path::PathBuf::from(STDLIB_PATH);
 				tmp.pop();
 				tmp.push("std.leaf");
+				tmp
+			},
+			declared_at_span: Span {
+				source_index: SourceIndex::new(0),
+				start: 0,
+				end: 0,
+				start_line: 0,
+				start_col: 0,
+				end_line: 0,
+				end_col: 0,
+			},
+		},
+		modules::PendingModule {
+			logical_path: vec!["core".to_string()],
+			file_path: {
+				let mut tmp = path::PathBuf::from(CORELIB_PATH);
+				tmp.pop();
+				tmp.push("core.leaf");
 				tmp
 			},
 			declared_at_span: Span {
@@ -494,6 +513,7 @@ fn run(
 		let tmp: path::PathBuf = filename.into();
 		tmp
 	};
+	backend_options.emit_dir = Some(path::PathBuf::from("build"));
 	let backend_input: BackendInput = BackendInput {
 		module: &mono_mod,
 		symbols: &global_symbols,

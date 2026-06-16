@@ -8591,7 +8591,7 @@ pub fn check_types(
 ) -> Result<TypedModule, CompileError>
 {
 	let mut checker = Checker::new(global, module.ast.source_index);
-	checker.traits.op_symbols = resolve_ops_module(global, &["std".to_string(), "ops".to_string()]);
+	checker.traits.op_symbols = resolve_ops_module(global, &["core".to_string(), "ops".to_string()]);
 	checker.traits.heap_syms = HeapTraitSyms {
 		alloc: resolve_trait_at_path(global, ALLOC_TRAIT_PATH),
 		io: resolve_trait_at_path(global, IO_TRAIT_PATH),

@@ -44,9 +44,19 @@ fn parse_and_analyse<const TYPE_INFERENCE: bool>(
 
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
 		modules::PendingModule {
+			logical_path: vec!["core".to_string()],
+			file_path: {
+				let mut tmp = path::PathBuf::from("../std/core/core.leaf");
+				tmp.pop();
+				tmp.push("core.leaf");
+				tmp
+			},
+			declared_at_span: dummy_span,
+		},
+		modules::PendingModule {
 			logical_path: vec!["std".to_string()],
 			file_path: {
-				let mut tmp = path::PathBuf::from("../std/std.leaf");
+				let mut tmp = path::PathBuf::from("../std/std/std.leaf");
 				tmp.pop();
 				tmp.push("std.leaf");
 				tmp
@@ -192,7 +202,7 @@ fn parse_and_analyse<const TYPE_INFERENCE: bool>(
 /// Prepend the std import every snippet needs.
 fn src(body: &str) -> String
 {
-	return format!("@use std::*;\n{body}");
+	return format!("@use std::prelude::*;@use core::prelude::*;\n{body}");
 }
 
 /// Assert that the snippet type-checks without errors.
@@ -526,11 +536,11 @@ fn trait_impl_return_type_mismatch_is_error()
 #[test]
 fn add_operator_via_trait()
 {
-	// mirrors `impl std::ops::Add<B> for B` from the sample
+	// mirrors `impl core::ops::Add<B> for B` from the sample
 	ok(r"
 			struct A { a: i64 }
 			type B = A;
-			impl std::ops::Add<B> for B {
+			impl core::ops::Add<B> for B {
 				assoc Output = Self;
 				fn add(self, other: Self) -> Self::Output { return self; }
 			}
@@ -672,7 +682,7 @@ fn generic_struct_explicit_param()
 {
 	ok(r"
 			fn! main() {
-				var r: Range<i64> = std::Range::new(1i64, 10i64);
+				var r: core::ranges::Range<i64> = core::ranges::Range::new(1i64, 10i64);
 			}
 		");
 }
@@ -682,7 +692,7 @@ fn generic_struct_i32()
 {
 	ok(r"
 			fn! main() {
-				var r: Range<i32> = std::Range::new(1, 2);
+				var r: core::ranges::Range<i32> = core::ranges::Range::new(1, 2);
 			}
 		");
 }
@@ -728,7 +738,7 @@ fn generic_not_the_same_generic_var()
 {
 	err(
 		r"
-			fn! f<T: Iterator<Item = i64>>(input: T) { var b: Range<i64> = input; }
+			fn! f<T: core::iterator::Iterator<Item = i64>>(input: T) { var b: core::ranges::Range<i64> = input; }
 		",
 		"",
 	);
@@ -739,7 +749,7 @@ fn generic_not_the_same_generic_change_input()
 {
 	err(
 		r"
-			fn! f<T: Iterator<Item = i64>>(input: &mut T) { *input = 0..10; }
+			fn! f<T: core::iterator::Iterator<Item = i64>>(input: &mut T) { *input = 0..10; }
 		",
 		"",
 	);
@@ -797,15 +807,15 @@ fn impl_trait_var_wrong_concrete_type_is_error()
 	);
 }
 
-// ── impl Iterator / ranges ───────────────────────────────────────────────
+// ── impl core::iterator::Iterator / ranges ───────────────────────────────────────────────
 
 #[test]
 fn range_assigned_to_impl_iterator()
 {
-	// `var mut a: impl Iterator<Item = i64> = 0..10`
+	// `var mut a: impl core::iterator::Iterator<Item = i64> = 0..10`
 	ok(r"
 			fn!<alloc -> std::CAlloc> test() {
-				var mut a: impl Iterator<Item = i64> = 0..10;
+				var mut a: impl core::iterator::Iterator<Item = i64> = 0..10;
 				a = 0..10;
 			}
 		");
@@ -816,7 +826,7 @@ fn impl_iterator_next_via_question_mark()
 {
 	// mirrors `fn! test7`
 	ok(r"
-			fn! test7(inp: impl Iterator<Item = i64>) -> Option<i64> {
+			fn! test7(inp: impl core::iterator::Iterator<Item = i64>) -> Option<i64> {
 				var a: Option<i64> = inp.next?();
 				return a;
 			}
@@ -1115,7 +1125,7 @@ fn assoc_type_in_trait_impl()
 	ok(r"
 			struct A { a: i64 }
 			type B = A;
-			impl std::ops::Add<B> for B {
+			impl core::ops::Add<B> for B {
 				assoc Output = Self;
 				fn add(self, other: Self) -> Self::Output { return self; }
 			}
@@ -1132,7 +1142,7 @@ fn self_output_assoc_type_resolves()
 	// Self::Output in return position should resolve to the implementing type
 	ok(r"
 			struct Val { v: i64 }
-			impl std::ops::Add<Val> for Val {
+			impl core::ops::Add<Val> for Val {
 				assoc Output = Self;
 				fn add(self, _other: Self) -> Self::Output { return self; }
 			}
@@ -1210,19 +1220,6 @@ fn heap_fn_named_generic_alloc_call()
 		");
 }
 
-// ── `std::Q` and other stdlib constructors ───────────────────────────────
-
-#[test]
-fn std_q_new()
-{
-	// `std::Q::new(0)` from the sample
-	ok(r"
-			fn! main() {
-				std::Q::new(0i64);
-			}
-		");
-}
-
 // ── printf / extern-C variadic ───────────────────────────────────────────
 
 #[test]
@@ -1230,6 +1227,7 @@ fn printf_cstring_format()
 {
 	// `printf(c"%d\n")` — extern(C) variadic; only the format arg is required
 	ok(r#"
+			@mangle_name("printf") extern(C) fn printf(fmt: &cstr, ...) -> i32;
 			fn! main() {
 				printf(c"%d\n");
 			}
@@ -1240,6 +1238,7 @@ fn printf_cstring_format()
 fn printf_with_integer_arg()
 {
 	ok(r#"
+			@mangle_name("printf") extern(C) fn printf(fmt: &cstr, ...) -> i32;
 			fn! main() {
 				var n: i64 = 42i64;
 				printf(c"%d\n", n);
@@ -1322,7 +1321,7 @@ fn exclusive_range_i64()
 {
 	ok(r"
 			fn! main() {
-				var r: Range<i64> = std::Range::new(1i64, 10i64);
+				var r: core::ranges::Range<i64> = core::ranges::Range::new(1i64, 10i64);
 			}
 		");
 }
@@ -1407,9 +1406,9 @@ fn call_non_imported_item_is_error()
 #[test]
 fn generic_fn_with_multiple_bounds()
 {
-	// mirrors `fn!<…> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int`
+	// mirrors `fn!<…> test3<T: core::iterator::Iterator<Item = i64> + Create>(input: T) -> impl Int`
 	ok(r"
-			fn!<alloc -> std::CAlloc> test3<T: Iterator<Item = i64> + Create>(input: T) -> impl Int {
+			fn!<alloc -> std::CAlloc> test3<T: core::iterator::Iterator<Item = i64> + Create>(input: T) -> impl Int {
 				var a: T = input;
 				input = T::create();
 				return 0i64;
@@ -1422,7 +1421,7 @@ fn generic_missing_bound_is_error()
 {
 	err(
 		r"
-			fn!<alloc -> std::CAlloc> test3<T: Iterator<Item = i64>>(input: T) -> impl Int {
+			fn!<alloc -> std::CAlloc> test3<T: core::iterator::Iterator<Item = i64>>(input: T) -> impl Int {
 				input = T::create();   // Create bound missing → T::create() unresolved
 				return 0i64;
 			}
