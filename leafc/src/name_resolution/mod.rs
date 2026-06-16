@@ -1771,14 +1771,16 @@ impl<'a> Resolver<'a>
 			let mut scope: ScopeId = root_scope;
 			let mut ok: Bool = Bool::True;
 			for seg in &target_path[prefix_len..] {
-				let sym_id: SymbolId = self.find_sym_in_global_scope(scope, seg)?;
-				if let Some(s) = self.global.symbol(sym_id).introduced_scope {
-					scope = s;
+				if let Some(sym_id) = self.find_sym_in_global_scope(scope, seg) {
+					if let Some(s) = self.global.symbol(sym_id).introduced_scope {
+						scope = s;
+					}
 				} else {
 					ok = Bool::False;
 					break;
 				}
 			}
+
 			if ok == Bool::False {
 				continue;
 			}
@@ -1839,6 +1841,7 @@ impl<'a> Resolver<'a>
 			else {
 				continue;
 			};
+
 			if !matches!(*visibility, Visibility::Public | Visibility::Export) {
 				continue;
 			}
@@ -1852,49 +1855,44 @@ impl<'a> Resolver<'a>
 					}
 				} else {
 					let mut scope: ScopeId = root_scope;
-					let mut ok: Bool = Bool::True;
-					for seg in &target {
-						let sym_id: SymbolId = if let Some(id) = self.find_sym_in_global_scope(scope, seg) {
-							id
-						} else {
-							let mut found = None;
-							'outer: for prefix_len in (1..=target.len()).rev() {
-								let prefix = &target[..prefix_len];
-								let Some(&mod_root) = self.global.module_roots.get(prefix) else {
-									continue;
-								};
-								found = Some(mod_root);
-								break 'outer;
-							}
-							if let Some(s) = found {
-								scope = s;
-								break;
-							}
-							ok = Bool::False;
-							break;
-						};
-						if let Some(s) = self.global.symbol(sym_id).introduced_scope {
-							scope = s;
-						} else {
-							ok = Bool::False;
+					let mut start_idx: usize = 0;
+					for prefix_len in (1..=target.len()).rev() {
+						if let Some(&mod_root) = self.global.module_roots.get(&target[..prefix_len]) {
+							scope = mod_root;
+							start_idx = prefix_len;
 							break;
 						}
 					}
 
-					if ok == Bool::True
-						&& let Some(sym_id) = self
+					let mut ok = true;
+					for seg in &target[start_idx..] {
+						if let Some(sym_id) = self.find_sym_in_global_scope(scope, seg) {
+							if let Some(s) = self.global.symbol(sym_id).introduced_scope {
+								scope = s;
+							} else {
+								ok = false;
+								break;
+							}
+						} else {
+							ok = false;
+							break;
+						}
+					}
+
+					if ok {
+						if let Some(sym_id) = self
 							.global
 							.scope(scope)
 							.symbols
 							.iter()
 							.find(|&&id| {
 								let sym = self.global.symbol(id);
-								return sym.name == name
-									&& matches!(sym.visibility, Visibility::Public | Visibility::Export);
+								sym.name == name && matches!(sym.visibility, Visibility::Public | Visibility::Export)
 							})
 							.copied()
-					{
-						return Some(sym_id);
+						{
+							return Some(sym_id);
+						}
 					}
 				}
 			} else if target.last().map(String::as_str) == Some(name)
