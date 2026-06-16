@@ -504,7 +504,7 @@ impl CBackend
 			}
 
 			for arg in &f.params {
-				writeln!(out, "{}_{} = {};", arg.name, arg.local.0, arg.name).map_err(|_| ())?;
+				writeln!(out, "\t{}_{} = {};", arg.name, arg.local.0, arg.name).map_err(|_| ())?;
 			}
 
 			for block in &body.blocks {
@@ -982,7 +982,7 @@ impl CBackend
 			match stmt {
 				MonoStmt::Assign { place, rvalue, span } => {
 					write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
-					write!(out, "\t").map_err(|_| ())?;
+					write!(out, "\t\t").map_err(|_| ())?;
 					self.write_place(place, f, input, out).map_err(|_| ())?;
 					write!(out, " = ").map_err(|_| ())?;
 					self.write_rvalue(rvalue, f, input, out).map_err(|_| ())?;
@@ -1007,7 +1007,7 @@ impl CBackend
 										&& matches!(ty, Some(MonoTy::Pointer { .. }))));
 						});
 						if !is_opt_ptr {
-							write!(out, "\t").map_err(|_| ())?;
+							write!(out, "\t\t").map_err(|_| ())?;
 							self.write_place(place, f, input, out).map_err(|_| ())?;
 							writeln!(out, ".tag = {}_{};", parent_mangled, member).map_err(|_| ())?;
 						}
@@ -1016,7 +1016,7 @@ impl CBackend
 
 				MonoStmt::Call { callee, args, span } => {
 					write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
-					write!(out, "\t").map_err(|_| ())?;
+					write!(out, "\t\t").map_err(|_| ())?;
 					match callee {
 						MonoCallee::Intrinsic(intr) => {
 							self.write_intrinsic_call(intr, args, None, f, input, out)
@@ -1046,7 +1046,7 @@ impl CBackend
 
 		match &block.terminator {
 			MonoTerminator::Goto { target } => {
-				writeln!(out, "\tgoto bb{};", target.0).map_err(|_| ())?;
+				writeln!(out, "\t\tgoto bb{};", target.0).map_err(|_| ())?;
 			}
 
 			MonoTerminator::Branch {
@@ -1054,9 +1054,14 @@ impl CBackend
 				then_block,
 				else_block,
 			} => {
-				write!(out, "\tif (").map_err(|_| ())?;
+				write!(out, "\t\tif (").map_err(|_| ())?;
 				self.write_operand(cond, f, input, out).map_err(|_| ())?;
-				writeln!(out, ") goto bb{}; else goto bb{};", then_block.0, else_block.0).map_err(|_| ())?;
+				writeln!(
+					out,
+					") {{ goto bb{}; }} else {{ goto bb{}; }}",
+					then_block.0, else_block.0
+				)
+				.map_err(|_| ())?;
 			}
 
 			MonoTerminator::CallAndContinue {
@@ -1072,7 +1077,7 @@ impl CBackend
 
 				match callee {
 					MonoCallee::Intrinsic(intr) => {
-						write!(out, "\t").map_err(|_| ())?;
+						write!(out, "\t\t").map_err(|_| ())?;
 						if dest_is_unit {
 							// `Unreachable`, `Memcpy`, `Fence`, etc. — emit as a statement.
 							self.write_intrinsic_call(intr, args, None, f, input, out)
@@ -1086,7 +1091,7 @@ impl CBackend
 						writeln!(out, ";").map_err(|_| ())?;
 					}
 					_ => {
-						write!(out, "\t").map_err(|_| ())?;
+						write!(out, "\t\t").map_err(|_| ())?;
 						if !dest_is_unit {
 							self.write_place(dest, f, input, out).map_err(|_| ())?;
 							write!(out, " = ").map_err(|_| ())?;
@@ -1102,19 +1107,19 @@ impl CBackend
 						writeln!(out, ");").map_err(|_| ())?;
 					}
 				}
-				writeln!(out, "\tgoto bb{};", next.0).map_err(|_| ())?;
+				writeln!(out, "\t\tgoto bb{};", next.0).map_err(|_| ())?;
 			}
 
 			MonoTerminator::Return => {
 				if let Some(ret) = f.body.as_ref().and_then(|b| b.return_local) {
-					writeln!(out, "\treturn {};", local_name(f, ret)).map_err(|_| ())?;
+					writeln!(out, "\t\treturn {};", local_name(f, ret)).map_err(|_| ())?;
 				} else {
-					writeln!(out, "\treturn;").map_err(|_| ())?;
+					writeln!(out, "\t\treturn;").map_err(|_| ())?;
 				}
 			}
 
 			MonoTerminator::Unreachable => {
-				writeln!(out, "\t__builtin_unreachable();").map_err(|_| ())?;
+				writeln!(out, "\t\t__builtin_unreachable();").map_err(|_| ())?; // TODO: intrinsic
 			}
 
 			MonoTerminator::Switch {
@@ -1122,20 +1127,20 @@ impl CBackend
 				arms,
 				otherwise,
 			} => {
-				write!(out, "\tswitch (").map_err(|_| ())?;
+				write!(out, "\t\tswitch (").map_err(|_| ())?;
 				self.write_operand(scrutinee, f, input, out).map_err(|_| ())?;
 				writeln!(out, ") {{").map_err(|_| ())?;
 				for arm in arms {
-					write!(out, "\t\tcase ").map_err(|_| ())?;
+					write!(out, "\t\t\tcase ").map_err(|_| ())?;
 					self.write_operand(&arm.value, f, input, out).map_err(|_| ())?;
 					writeln!(out, ": goto bb{};", arm.target.0).map_err(|_| ())?;
 				}
-				writeln!(out, "\t\tdefault: goto bb{};", otherwise.0).map_err(|_| ())?;
-				writeln!(out, "\t}}").map_err(|_| ())?;
+				writeln!(out, "\t\t\tdefault: goto bb{};", otherwise.0).map_err(|_| ())?;
+				writeln!(out, "\t\t}}").map_err(|_| ())?;
 			}
 		}
 
-		writeln!(out, "}}").map_err(|_| ())?;
+		writeln!(out, "\t}}").map_err(|_| ())?;
 		return Ok(());
 	}
 
