@@ -48,6 +48,7 @@ impl Architecture
 	/// Parse the architecture field of an LLVM triple. Accepts the common
 	/// aliases LLVM itself accepts (e.g. `amd64` for `x86_64`, `arm64` for
 	/// `aarch64`, `i686`/`i386` for `x86`). Returns `None` if unrecognised.
+	#[allow(unused)]
 	pub fn parse(s: &str) -> Option<Self>
 	{
 		return Some(match s {
@@ -65,6 +66,7 @@ impl Architecture
 
 	/// If `s` is one of the 32-bit ARM variants, return the sub-arch tag
 	/// (`v7`, `thumbv7m`, ...) so the caller can attach it to `Target::sub_arch`.
+	#[allow(unused)]
 	pub fn extract_sub_arch(s: &str) -> Option<String>
 	{
 		return match s {
@@ -142,6 +144,7 @@ pub enum Vendor
 
 impl Vendor
 {
+	#[allow(unused)]
 	pub fn parse(s: &str) -> Option<Self>
 	{
 		return Some(match s {
@@ -179,6 +182,7 @@ impl OperatingSystem
 {
 	/// Parse the OS field of an LLVM triple. Accepts `darwin` and `macosx`
 	/// as aliases for macOS.
+	#[allow(unused)]
 	pub fn parse(s: &str) -> Option<Self>
 	{
 		return Some(match s {
@@ -261,6 +265,7 @@ pub enum Environment
 
 impl Environment
 {
+	#[allow(unused)]
 	pub fn parse(s: &str) -> Option<Self>
 	{
 		return Some(match s {
@@ -328,6 +333,7 @@ impl Target
 	/// `Unknown` / `None`, and field order is the canonical
 	/// `arch-vendor-os-env`. Returns `Err` if the architecture field can't
 	/// be recognised, since without it the rest is meaningless.
+	#[allow(unused)]
 	pub fn parse(s: &str) -> Result<Self, String>
 	{
 		let parts: Vec<&str> = s.split('-').collect();
@@ -460,12 +466,14 @@ pub struct Config
 impl Config
 {
 	/// Convenience accessor: the target architecture.
+	#[allow(unused)]
 	pub const fn arch(&self) -> &Architecture
 	{
 		return &self.target.arch;
 	}
 
 	/// Convenience accessor: the target operating system.
+	#[allow(unused)]
 	pub const fn os(&self) -> &OperatingSystem
 	{
 		return &self.target.os;

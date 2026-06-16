@@ -12,6 +12,7 @@ use crate::{
 
 /// What kind of artifact the backend should emit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(unused)]
 pub enum OutputKind
 {
 	/// A standalone executable.
@@ -76,38 +77,43 @@ impl BackendOptions
 	}
 
 	/// Convenience: architecture of the configured target.
-	pub fn arch(&self) -> &Architecture
+	#[allow(unused)]
+	pub const fn arch(&self) -> &Architecture
 	{
 		return &self.target.arch;
 	}
 
 	/// Convenience: OS of the configured target.
-	pub fn os(&self) -> &OperatingSystem
+	#[allow(unused)]
+	pub const fn os(&self) -> &OperatingSystem
 	{
 		return &self.target.os;
 	}
 
 	/// Convenience: vendor of the configured target.
-	pub fn vendor(&self) -> &Vendor
+	#[allow(unused)]
+	pub const fn vendor(&self) -> &Vendor
 	{
 		return &self.target.vendor;
 	}
 
 	/// Convenience: ABI/environment of the configured target.
-	pub fn env(&self) -> &Environment
+	#[allow(unused)]
+	pub const fn env(&self) -> &Environment
 	{
 		return &self.target.env;
 	}
 
 	/// The LLVM-style triple string. Backends shelling out to `clang`,
 	/// `llc`, or feeding `TargetMachine::create` want exactly this.
+	#[allow(unused)]
 	pub fn llvm_triple(&self) -> String
 	{
 		return self.target.to_llvm_triple();
 	}
 }
 
-fn default_exe_name(os: &OperatingSystem) -> &'static str
+const fn default_exe_name(os: &OperatingSystem) -> &'static str
 {
 	return match os {
 		OperatingSystem::Windows => "a.exe",
@@ -147,15 +153,18 @@ pub type BackendResult<T> = Result<(T, Vec<DiagnosticBuilder>), Vec<DiagnosticBu
 pub trait CompilerBackend
 {
 	/// Short identifier shown to users, e.g. `"llvm"`, `"c"`, `"cranelift"`.
+	#[allow(unused)]
 	fn name(&self) -> &'static str;
 
 	/// Output kinds this backend can emit. The driver uses this to validate
 	/// `BackendOptions::output_kind` before invoking `compile`.
+	#[allow(unused)]
 	fn supported_outputs(&self) -> &'static [OutputKind];
 
 	/// Architectures this backend can target. Default impl returns an empty
 	/// slice meaning "ask via `supports_target` instead"; most real backends
 	/// should override one or the other.
+	#[allow(unused)]
 	fn supported_arches(&self) -> &'static [Architecture]
 	{
 		return &[];
@@ -164,6 +173,7 @@ pub trait CompilerBackend
 	/// Whether this backend can target the given configuration. Default impl
 	/// consults `supported_arches`; override for finer-grained control (e.g.
 	/// "LLVM supports almost anything, but our C backend has no msvc glue").
+	#[allow(unused)]
 	fn supports_target(&self, target: &Target) -> bool
 	{
 		let arches = self.supported_arches();
@@ -184,9 +194,11 @@ pub trait CompilerBackend
 
 /// Convenience wrapper that boxes a backend so the driver can store a list of
 /// them keyed by name without generics infecting everything upstream.
+#[allow(unused)]
 pub type DynBackend = Box<dyn CompilerBackend>;
 
 /// Helper for drivers: pick a backend by name from a registry.
+#[allow(unused)]
 pub fn select_backend<'a>(backends: &'a mut [DynBackend], name: &str) -> Option<&'a mut dyn CompilerBackend>
 {
 	for b in backends {
@@ -194,5 +206,5 @@ pub fn select_backend<'a>(backends: &'a mut [DynBackend], name: &str) -> Option<
 			return Some(b.as_mut());
 		}
 	}
-	None
+	return None;
 }

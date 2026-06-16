@@ -1,14 +1,10 @@
 #![allow(clippy::unused_self)]
+#![allow(clippy::needless_pass_by_ref_mut)]
 
 pub mod compiler;
 
-use std::default;
-use std::env;
-use std::fs;
 use std::io::{self};
 use std::path::PathBuf;
-use std::process::{Command, Output};
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, fmt::Write};
 
 use clap::builder::OsStr;
@@ -20,7 +16,7 @@ use crate::{
 	Span,
 	backend::{BackendInput, BackendOutput, BackendResult, CompilerBackend, OutputKind},
 	diagnostics::DiagnosticBuilder,
-	lexer::{IntSize, IntType, Spanned, StringFlags},
+	lexer::{Spanned, StringFlags},
 	mir::{LocalId, MirLiteralValue},
 	monomorphization::{
 		MonoAggregateKind, MonoBasicBlock, MonoBody, MonoCallee, MonoConstBody, MonoFunction, MonoGlobal, MonoItem,
@@ -34,7 +30,7 @@ use crate::{
 };
 
 use self::compiler::CompilerToolChain;
-use self::compiler::{CCompiler, CCompilers, gcc::GCCCompiler};
+use self::compiler::{CCompilers, gcc::GCCCompiler};
 
 use super::BackendOptions;
 
@@ -186,13 +182,13 @@ impl CompilerBackend for CBackend
 		// 	artifacts.extend(mirrored);
 		// }
 
-		Ok((
+		return Ok((
 			BackendOutput {
 				primary: final_path,
 				artifacts,
 			},
 			std::mem::take(&mut self.diagnostics),
-		))
+		));
 	}
 }
 
@@ -287,8 +283,12 @@ impl CBackend
 		return collected;
 	}
 
-	fn write_header(&mut self, collected: &Collected, input: &BackendInput<'_>, out: &mut impl Write)
-	-> Result<(), ()>
+	fn write_header(
+		&mut self,
+		_collected: &Collected,
+		_input: &BackendInput<'_>,
+		out: &mut impl Write,
+	) -> Result<(), ()>
 	{
 		for header in DEFAULT_C_HEADERS {
 			writeln!(out, "#include {}", header).map_err(|_| ())?;
@@ -630,76 +630,6 @@ impl CBackend
 		return res;
 	}
 
-	// ---------- small helpers for the intrinsic emitter ----------
-
-	fn binop(
-		&mut self,
-		op: &str,
-		args: &[MonoOperand],
-		f: &MonoFunction,
-		input: &BackendInput<'_>,
-		out: &mut impl Write,
-	) -> std::fmt::Result
-	{
-		write!(out, "(")?;
-		self.write_operand(&args[0], f, input, out)?;
-		write!(out, " {} ", op)?;
-		self.write_operand(&args[1], f, input, out)?;
-		write!(out, ")")
-	}
-
-	fn named_call(
-		&mut self,
-		name: &str,
-		args: &[MonoOperand],
-		f: &MonoFunction,
-		input: &BackendInput<'_>,
-		out: &mut impl Write,
-	) -> std::fmt::Result
-	{
-		write!(out, "{}(", name)?;
-		for (i, a) in args.iter().enumerate() {
-			if i > 0 {
-				write!(out, ", ")?;
-			}
-			self.write_operand(a, f, input, out)?;
-		}
-		write!(out, ")")
-	}
-
-	fn libm_call(
-		&mut self,
-		name: &str,
-		args: &[MonoOperand],
-		f: &MonoFunction,
-		input: &BackendInput<'_>,
-		out: &mut impl Write,
-	) -> std::fmt::Result
-	{
-		// Identical to named_call today; kept separate so we can later add
-		// `<math.h>` to the header set when any libm call is emitted.
-		self.named_call(name, args, f, input, out)
-	}
-
-	fn atomic_rmw(
-		&mut self,
-		builtin: &str,
-		args: &[MonoOperand],
-		f: &MonoFunction,
-		input: &BackendInput<'_>,
-		out: &mut impl Write,
-	) -> std::fmt::Result
-	{
-		// (ptr, val, ordering)
-		write!(out, "{}(", builtin)?;
-		self.write_operand(&args[0], f, input, out)?;
-		write!(out, ", ")?;
-		self.write_operand(&args[1], f, input, out)?;
-		write!(out, ", ")?;
-		self.write_operand(&args[2], f, input, out)?;
-		write!(out, ")")
-	}
-
 	fn write_basic_block(
 		&mut self,
 		block: &MonoBasicBlock,
@@ -749,23 +679,20 @@ impl CBackend
 				MonoStmt::Call { callee, args, span } => {
 					write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
 					write!(out, "\t\t").map_err(|_| ())?;
-					match callee {
-						MonoCallee::Intrinsic(intr) => {
-							self.write_intrinsic_call(intr, args, None, f, input, out)
-								.map_err(|_| ())?;
-							writeln!(out, ";").map_err(|_| ())?;
-						}
-						_ => {
-							self.write_callee(callee, f, out).map_err(|_| ())?;
-							write!(out, "(").map_err(|_| ())?;
-							for (i, arg) in args.iter().enumerate() {
-								if i > 0 {
-									write!(out, ", ").map_err(|_| ())?;
-								}
-								self.write_operand(arg, f, input, out).map_err(|_| ())?;
+					if let MonoCallee::Intrinsic(intr) = callee {
+						self.write_intrinsic_call(intr, args, None, f, input, out)
+							.map_err(|_| ())?;
+						writeln!(out, ";").map_err(|_| ())?;
+					} else {
+						self.write_callee(callee, f, out).map_err(|_| ())?;
+						write!(out, "(").map_err(|_| ())?;
+						for (i, arg) in args.iter().enumerate() {
+							if i > 0 {
+								write!(out, ", ").map_err(|_| ())?;
 							}
-							writeln!(out, ");").map_err(|_| ())?;
+							self.write_operand(arg, f, input, out).map_err(|_| ())?;
 						}
+						writeln!(out, ");").map_err(|_| ())?;
 					}
 				}
 
@@ -807,43 +734,40 @@ impl CBackend
 				write_span(*span, input.source_map, out, input.options).map_err(|_| ())?;
 				let dest_is_unit = matches!(&dest.ty, MonoTy::Tuple(t) if t.is_empty());
 
-				match callee {
-					MonoCallee::Intrinsic(intr) => {
-						write!(out, "\t\t").map_err(|_| ())?;
-						if dest_is_unit {
-							// `Unreachable`, `Memcpy`, `Fence`, etc. — emit as a statement.
-							self.write_intrinsic_call(intr, args, None, f, input, out)
-								.map_err(|_| ())?;
-						} else {
-							self.write_place(dest, f, input, out).map_err(|_| ())?;
-							write!(out, " = ").map_err(|_| ())?;
-							self.write_intrinsic_call(intr, args, Some(&dest.ty), f, input, out)
-								.map_err(|_| ())?;
-						}
-						writeln!(out, ";").map_err(|_| ())?;
+				if let MonoCallee::Intrinsic(intr) = callee {
+					write!(out, "\t\t").map_err(|_| ())?;
+					if dest_is_unit {
+						// `Unreachable`, `Memcpy`, `Fence`, etc. — emit as a statement.
+						self.write_intrinsic_call(intr, args, None, f, input, out)
+							.map_err(|_| ())?;
+					} else {
+						self.write_place(dest, f, input, out).map_err(|_| ())?;
+						write!(out, " = ").map_err(|_| ())?;
+						self.write_intrinsic_call(intr, args, Some(&dest.ty), f, input, out)
+							.map_err(|_| ())?;
 					}
-					_ => {
-						write!(out, "\t\t").map_err(|_| ())?;
-						if !dest_is_unit {
-							self.write_place(dest, f, input, out).map_err(|_| ())?;
-							write!(out, " = ").map_err(|_| ())?;
-						}
-						self.write_callee(callee, f, out).map_err(|_| ())?;
-						write!(out, "(").map_err(|_| ())?;
-						for (i, arg) in args.iter().enumerate() {
-							if i > 0 {
-								write!(out, ", ").map_err(|_| ())?;
-							}
-							self.write_operand(arg, f, input, out).map_err(|_| ())?;
-						}
-						writeln!(out, ");").map_err(|_| ())?;
+					writeln!(out, ";").map_err(|_| ())?;
+				} else {
+					write!(out, "\t\t").map_err(|_| ())?;
+					if !dest_is_unit {
+						self.write_place(dest, f, input, out).map_err(|_| ())?;
+						write!(out, " = ").map_err(|_| ())?;
 					}
+					self.write_callee(callee, f, out).map_err(|_| ())?;
+					write!(out, "(").map_err(|_| ())?;
+					for (i, arg) in args.iter().enumerate() {
+						if i > 0 {
+							write!(out, ", ").map_err(|_| ())?;
+						}
+						self.write_operand(arg, f, input, out).map_err(|_| ())?;
+					}
+					writeln!(out, ");").map_err(|_| ())?;
 				}
 				writeln!(out, "\t\tgoto bb{};", next.0).map_err(|_| ())?;
 			}
 
 			MonoTerminator::Return => {
-				if let Some(ret) = f.body.as_ref().and_then(|b| b.return_local) {
+				if let Some(ret) = f.body.as_ref().and_then(|b| return b.return_local) {
 					writeln!(out, "\t\treturn {};", local_name(f, ret)).map_err(|_| ())?;
 				} else {
 					writeln!(out, "\t\treturn;").map_err(|_| ())?;
@@ -985,7 +909,7 @@ impl CBackend
 			}
 		}
 
-		Ok(())
+		return Ok(());
 	}
 
 	fn write_operand(
@@ -1087,7 +1011,7 @@ impl CBackend
 					}
 					let is_opt_ptr = td.is_option_variant(input.module.option_symbol)
 						&& matches!(&td.kind, MonoTypeDefKind::Variant { members }
-					if members.iter().any(|(n, ty)| n == "Some" && matches!(ty, Some(MonoTy::Pointer { .. }))));
+					if members.iter().any(|(n, ty)| return n == "Some" && matches!(ty, Some(MonoTy::Pointer { .. }))));
 					return if is_opt_ptr { Some(td) } else { None };
 				}) {
 					return if member == "Some" {
@@ -1171,7 +1095,7 @@ impl CBackend
 			}
 
 			MonoRvalue::Tuple(elems) => {
-				let tys: Vec<MonoTy> = elems.iter().map(|op| operand_ty(op, f, input)).collect();
+				let tys: Vec<MonoTy> = elems.iter().map(|op| return operand_ty(op, f, input)).collect();
 				write!(out, "({}){{ ", tuple_type_name(&tys))?;
 				for (i, e) in elems.iter().enumerate() {
 					if i > 0 {
@@ -1199,10 +1123,10 @@ impl CBackend
 
 fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write, options: &BackendOptions) -> std::fmt::Result
 {
-	if options.debug_info {
-		if let Some(file) = source_map.get(span.source_index) {
-			writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
-		}
+	if options.debug_info
+		&& let Some(file) = source_map.get(span.source_index)
+	{
+		writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
 	}
 	return Ok(());
 }
@@ -1439,7 +1363,7 @@ fn resolve_place_ty(place: &MonoPlace) -> &MonoTy
 	return &place.ty;
 }
 
-fn operand_ty<'a>(op: &'a MonoOperand, f: &'a MonoFunction, input: &'a BackendInput<'_>) -> MonoTy
+fn operand_ty<'a>(op: &'a MonoOperand, _f: &'a MonoFunction, _input: &'a BackendInput<'_>) -> MonoTy
 {
 	return match op {
 		MonoOperand::Copy(p) | MonoOperand::Move(p) => p.ty.clone(),
@@ -1481,33 +1405,6 @@ fn ty_is_option_ptr_variant<'a>(ty: &MonoTy, input: &'a BackendInput<'_>) -> Opt
 	return option_ptr_variant_typedef(*symbol, type_args, input);
 }
 
-fn with_temp_c_file<F, R>(source: &str, f: F) -> io::Result<R>
-where
-	F: FnOnce(&std::path::Path, &std::path::Path) -> io::Result<R>,
-{
-	let mut src_path = env::temp_dir();
-	let unique = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.expect("now should be later than `UNIX_EPOCH`")
-		.as_nanos();
-
-	src_path.push(format!("temp_{unique}.c"));
-
-	let bin_path = src_path.with_extension("out");
-
-	{
-		let mut file = fs::File::create(&src_path)?;
-		io::Write::write_all(&mut file, source.as_bytes())?;
-	}
-
-	let result = f(&src_path, &bin_path);
-
-	let _: Result<(), io::Error> = fs::remove_file(&src_path);
-	let _: Result<(), io::Error> = fs::remove_file(&bin_path);
-
-	return result;
-}
-
 fn final_artifact_path(base: &std::path::Path, kind: OutputKind) -> std::path::PathBuf
 {
 	let mut p: std::path::PathBuf = base.to_path_buf();
@@ -1547,13 +1444,13 @@ fn final_artifact_path(base: &std::path::Path, kind: OutputKind) -> std::path::P
 
 fn intermediate_c_path(final_path: &std::path::Path, input: &BackendInput<'_>) -> std::path::PathBuf
 {
-	let mut dir = if let Some(d) = input.options.emit_dir.clone() {
-		d
-	} else {
-		PathBuf::from(".")
-	};
+	let mut dir = input
+		.options
+		.emit_dir
+		.clone()
+		.unwrap_or_else(|| return PathBuf::from("."));
 	let default = OsStr::from("a");
-	dir.set_file_name(&final_path.file_name().unwrap_or(&default));
+	dir.set_file_name(final_path.file_name().unwrap_or(&default));
 	dir.set_extension("c");
 	return dir;
 }

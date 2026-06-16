@@ -1879,20 +1879,20 @@ impl<'a> Resolver<'a>
 						}
 					}
 
-					if ok {
-						if let Some(sym_id) = self
+					if ok
+						&& let Some(sym_id) = self
 							.global
 							.scope(scope)
 							.symbols
 							.iter()
 							.find(|&&id| {
 								let sym = self.global.symbol(id);
-								sym.name == name && matches!(sym.visibility, Visibility::Public | Visibility::Export)
+								return sym.name == name
+									&& matches!(sym.visibility, Visibility::Public | Visibility::Export);
 							})
 							.copied()
-						{
-							return Some(sym_id);
-						}
+					{
+						return Some(sym_id);
 					}
 				}
 			} else if target.last().map(String::as_str) == Some(name)

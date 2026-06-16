@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, Meta, parse_macro_input};
+use syn::{DeriveInput, Meta, parse_macro_input};
 
 #[allow(clippy::module_name_repetitions)]
 pub fn c_compiler(item: TokenStream) -> TokenStream

@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::module_inception)]
+#![allow(clippy::module_name_repetitions)]
 
 use std::fmt::Write;
 
@@ -9,7 +11,6 @@ use crate::{
 		c::{mono_ty_to_string, tuple_type_name},
 	},
 	diagnostics::DiagnosticBuilder,
-	lexer::{IntSize, IntType},
 	monomorphization::{MonoFunction, MonoOperand, MonoTy},
 	type_analysis::{Primitive, intrinsics::Intrinsic},
 };
@@ -18,6 +19,7 @@ pub mod gcc;
 pub mod gcc_like;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum CCompilers
 {
 	GCC(gcc::GCCCompiler),
@@ -50,7 +52,7 @@ impl CCompilers
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		delegate!(self, write_intrinsic(intr, args, result_ty, f, input, backend, out,))
+		return delegate!(self, write_intrinsic(intr, args, result_ty, f, input, backend, out,));
 	}
 }
 
@@ -58,8 +60,8 @@ impl CompilerToolChain for CCompilers
 {
 	fn build_executable(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -69,8 +71,8 @@ impl CompilerToolChain for CCompilers
 
 	fn build_object(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -80,8 +82,8 @@ impl CompilerToolChain for CCompilers
 
 	fn build_static_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -91,8 +93,8 @@ impl CompilerToolChain for CCompilers
 
 	fn build_dynamic_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -102,8 +104,8 @@ impl CompilerToolChain for CCompilers
 
 	fn build_asm(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -232,7 +234,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		backend.write_operand(op, f, input, out)
+		return backend.write_operand(op, f, input, out);
 	}
 
 	fn write_intr_add(
@@ -245,7 +247,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("+", args, f, input, backend, out)
+		return self.write_binop("+", args, f, input, backend, out);
 	}
 
 	fn write_intr_sub(
@@ -258,7 +260,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("-", args, f, input, backend, out)
+		return self.write_binop("-", args, f, input, backend, out);
 	}
 
 	fn write_intr_mul(
@@ -271,7 +273,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("*", args, f, input, backend, out)
+		return self.write_binop("*", args, f, input, backend, out);
 	}
 
 	fn write_intr_div(
@@ -284,7 +286,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("/", args, f, input, backend, out)
+		return self.write_binop("/", args, f, input, backend, out);
 	}
 
 	fn write_intr_rem(
@@ -297,7 +299,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("%", args, f, input, backend, out)
+		return self.write_binop("%", args, f, input, backend, out);
 	}
 
 	fn write_intr_add_checked(
@@ -363,7 +365,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("<<", args, f, input, backend, out)
+		return self.write_binop("<<", args, f, input, backend, out);
 	}
 
 	fn write_intr_shr(
@@ -376,7 +378,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop(">>", args, f, input, backend, out)
+		return self.write_binop(">>", args, f, input, backend, out);
 	}
 
 	fn write_intr_ushr(
@@ -394,7 +396,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ") >> ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, "))")
+		return write!(out, "))");
 	}
 
 	fn write_intr_int_eq(
@@ -407,7 +409,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("==", args, f, input, backend, out)
+		return self.write_binop("==", args, f, input, backend, out);
 	}
 	fn write_intr_int_ne(
 		&mut self,
@@ -419,7 +421,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("!=", args, f, input, backend, out)
+		return self.write_binop("!=", args, f, input, backend, out);
 	}
 	fn write_intr_int_lt(
 		&mut self,
@@ -431,7 +433,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("<", args, f, input, backend, out)
+		return self.write_binop("<", args, f, input, backend, out);
 	}
 	fn write_intr_int_le(
 		&mut self,
@@ -443,7 +445,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("<=", args, f, input, backend, out)
+		return self.write_binop("<=", args, f, input, backend, out);
 	}
 	fn write_intr_int_gt(
 		&mut self,
@@ -455,7 +457,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop(">", args, f, input, backend, out)
+		return self.write_binop(">", args, f, input, backend, out);
 	}
 	fn write_intr_int_ge(
 		&mut self,
@@ -467,7 +469,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop(">=", args, f, input, backend, out)
+		return self.write_binop(">=", args, f, input, backend, out);
 	}
 
 	fn write_intr_fadd(
@@ -480,7 +482,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("+", args, f, input, backend, out)
+		return self.write_binop("+", args, f, input, backend, out);
 	}
 	fn write_intr_fsub(
 		&mut self,
@@ -492,7 +494,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("-", args, f, input, backend, out)
+		return self.write_binop("-", args, f, input, backend, out);
 	}
 	fn write_intr_fmul(
 		&mut self,
@@ -504,7 +506,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("*", args, f, input, backend, out)
+		return self.write_binop("*", args, f, input, backend, out);
 	}
 	fn write_intr_fdiv(
 		&mut self,
@@ -516,7 +518,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_binop("/", args, f, input, backend, out)
+		return self.write_binop("/", args, f, input, backend, out);
 	}
 
 	fn write_intr_frem(
@@ -529,7 +531,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "fmodf", "fmod"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "fmodf", "fmod"), args, f, input, backend, out);
 	}
 
 	fn write_intr_fneg(
@@ -544,7 +546,7 @@ pub trait IntrinsicWriter
 	{
 		write!(out, "(-")?;
 		self.write_operand(&args[0], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_fma(
@@ -557,7 +559,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "fmaf", "fma"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "fmaf", "fma"), args, f, input, backend, out);
 	}
 
 	fn write_intr_sqrt(
@@ -570,7 +572,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "sqrtf", "sqrt"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "sqrtf", "sqrt"), args, f, input, backend, out);
 	}
 
 	fn write_intr_fabs(
@@ -583,7 +585,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "fabsf", "fabs"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "fabsf", "fabs"), args, f, input, backend, out);
 	}
 
 	fn write_intr_fmin(
@@ -596,7 +598,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "fminf", "fmin"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "fminf", "fmin"), args, f, input, backend, out);
 	}
 
 	fn write_intr_fmax(
@@ -609,7 +611,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "fmaxf", "fmax"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "fmaxf", "fmax"), args, f, input, backend, out);
 	}
 
 	fn write_intr_floor(
@@ -622,14 +624,14 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(
+		return self.write_libm_call(
 			f32_or_f64(args[0].ty(), "floorf", "floor"),
 			args,
 			f,
 			input,
 			backend,
 			out,
-		)
+		);
 	}
 
 	fn write_intr_ceil(
@@ -642,7 +644,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "ceilf", "ceil"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "ceilf", "ceil"), args, f, input, backend, out);
 	}
 
 	fn write_intr_fround(
@@ -655,7 +657,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(f32_or_f64(args[0].ty(), "rintf", "rint"), args, f, input, backend, out)
+		return self.write_libm_call(f32_or_f64(args[0].ty(), "rintf", "rint"), args, f, input, backend, out);
 	}
 
 	fn write_intr_ftrunc(
@@ -668,14 +670,14 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_libm_call(
+		return self.write_libm_call(
 			f32_or_f64(args[0].ty(), "truncf", "trunc"),
 			args,
 			f,
 			input,
 			backend,
 			out,
-		)
+		);
 	}
 
 	fn write_intr_ctz(
@@ -747,7 +749,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		write!(out, "sizeof({})", mono_ty_to_string(args[0].ty()))
+		return write!(out, "sizeof({})", mono_ty_to_string(args[0].ty()));
 	}
 
 	fn write_intr_align_of(
@@ -759,7 +761,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		write!(out, "alignof({})", mono_ty_to_string(args[0].ty()))
+		return write!(out, "alignof({})", mono_ty_to_string(args[0].ty()));
 	}
 
 	fn write_intr_transmute(
@@ -774,12 +776,10 @@ pub trait IntrinsicWriter
 	) -> std::fmt::Result
 	{
 		let from_ty = mono_ty_to_string(args[0].ty());
-		let to_ty = result_ty
-			.map(mono_ty_to_string)
-			.unwrap_or_else(|| "/* unknown */".to_string());
+		let to_ty = result_ty.map_or_else(|| return "/* unknown */".to_string(), mono_ty_to_string);
 		write!(out, "({{ union {{ {from_ty} _f; {to_ty} _t; }} _u; _u._f = ")?;
 		self.write_operand(&args[0], f, input, backend, out)?;
-		write!(out, "; _u._t; }})")
+		return write!(out, "; _u._t; }})");
 	}
 
 	fn write_intr_memcpy(
@@ -792,7 +792,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_named_call("memcpy", args, f, input, backend, out)
+		return self.write_named_call("memcpy", args, f, input, backend, out);
 	}
 
 	fn write_intr_memmove(
@@ -805,7 +805,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_named_call("memmove", args, f, input, backend, out)
+		return self.write_named_call("memmove", args, f, input, backend, out);
 	}
 
 	fn write_intr_memset(
@@ -818,7 +818,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_named_call("memset", args, f, input, backend, out)
+		return self.write_named_call("memset", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_load(
@@ -835,7 +835,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ", ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_atomic_store(
@@ -854,7 +854,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[1], f, input, backend, out)?;
 		write!(out, ", ")?;
 		self.write_operand(&args[2], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_atomic_swap(
@@ -867,7 +867,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_exchange_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_exchange_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_add(
@@ -880,7 +880,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_fetch_add_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_fetch_add_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_sub(
@@ -893,7 +893,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_fetch_sub_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_fetch_sub_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_and(
@@ -906,7 +906,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_fetch_and_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_fetch_and_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_or(
@@ -919,7 +919,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_fetch_or_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_fetch_or_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_xor(
@@ -932,7 +932,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_atomic_rmw("atomic_fetch_xor_explicit", args, f, input, backend, out)
+		return self.write_atomic_rmw("atomic_fetch_xor_explicit", args, f, input, backend, out);
 	}
 
 	fn write_intr_atomic_cas(
@@ -961,7 +961,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[3], f, input, backend, out)?;
 		write!(out, ", ")?;
 		self.write_operand(&args[4], f, input, backend, out)?;
-		write!(out, "); ({tuple_name}){{ ._0 = _exp, ._1 = _ok }}; }})")
+		return write!(out, "); ({tuple_name}){{ ._0 = _exp, ._1 = _ok }}; }})");
 	}
 
 	fn write_intr_fence(
@@ -976,7 +976,7 @@ pub trait IntrinsicWriter
 	{
 		write!(out, "atomic_thread_fence(")?;
 		self.write_operand(&args[0], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_volatile_load(
@@ -992,7 +992,7 @@ pub trait IntrinsicWriter
 		let inner_ty = volatile_inner_ty(args[0].ty());
 		write!(out, "(*(volatile {inner_ty} *)(")?;
 		self.write_operand(&args[0], f, input, backend, out)?;
-		write!(out, "))")
+		return write!(out, "))");
 	}
 
 	fn write_intr_volatile_store(
@@ -1010,7 +1010,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ") = ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_ptr_offset(
@@ -1027,7 +1027,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, " + ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_intr_unreachable(&mut self, _backend: &mut CBackend, out: &mut impl Write) -> std::fmt::Result;
@@ -1046,7 +1046,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ".len, ")?;
 		self.write_operand(&args[0], f, input, backend, out)?;
-		write!(out, ".data), abort(), 0)")
+		return write!(out, ".data), abort(), 0)");
 	}
 
 	fn write_binop(
@@ -1064,7 +1064,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, " {op} ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_named_call(
@@ -1085,7 +1085,7 @@ pub trait IntrinsicWriter
 			}
 			self.write_operand(a, f, input, backend, out)?;
 		}
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_libm_call(
@@ -1099,7 +1099,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		self.write_named_call(name, args, f, input, backend, out)
+		return self.write_named_call(name, args, f, input, backend, out);
 	}
 
 	fn write_atomic_rmw(
@@ -1119,7 +1119,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[1], f, input, backend, out)?;
 		write!(out, ", ")?;
 		self.write_operand(&args[2], f, input, backend, out)?;
-		write!(out, ")")
+		return write!(out, ")");
 	}
 
 	fn write_checked_arith(
@@ -1143,7 +1143,7 @@ pub trait IntrinsicWriter
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ", ")?;
 		self.write_operand(&args[1], f, input, backend, out)?;
-		write!(out, ", &_r); ({tuple_name}){{ ._0 = _r, ._1 = _o }}; }})")
+		return write!(out, ", &_r); ({tuple_name}){{ ._0 = _r, ._1 = _o }}; }})");
 	}
 
 	fn write_saturating_arith(
@@ -1158,19 +1158,19 @@ pub trait IntrinsicWriter
 	) -> std::fmt::Result;
 }
 
-fn f32_or_f64<'a>(ty: &MonoTy, f32_name: &'a str, f64_name: &'a str) -> &'a str
+const fn f32_or_f64<'a>(ty: &MonoTy, f32_name: &'a str, f64_name: &'a str) -> &'a str
 {
 	match ty {
-		MonoTy::Primitive(Primitive::F32) => f32_name,
-		_ => f64_name,
+		MonoTy::Primitive(Primitive::F32) => return f32_name,
+		_ => return f64_name,
 	}
 }
 
 fn volatile_inner_ty(ty: &MonoTy) -> String
 {
 	match ty {
-		MonoTy::Pointer { inner, .. } | MonoTy::Reference { inner, .. } => mono_ty_to_string(inner),
-		_ => "/* not a pointer */".to_string(),
+		MonoTy::Pointer { inner, .. } | MonoTy::Reference { inner, .. } => return mono_ty_to_string(inner),
+		_ => return "/* not a pointer */".to_string(),
 	}
 }
 
@@ -1178,40 +1178,40 @@ pub trait CompilerToolChain
 {
 	fn build_executable(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
 
 	fn build_object(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
 
 	fn build_static_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
 
 	fn build_dynamic_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
 
 	fn build_asm(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;

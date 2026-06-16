@@ -5070,39 +5070,42 @@ impl<'a> Checker<'a>
 											return None;
 										}
 										let sc = s.introduced_scope?;
-										self.global.scope(sc).symbols.contains(id).then_some(SymbolId(i))
+										return self.global.scope(sc).symbols.contains(id).then_some(SymbolId(i));
 									});
-									parent.map(|p| (p, *id))
+									parent.map(|p| return (p, *id))
 								}
 								SymbolKind::Variant => {
 									// Path resolved only to the parent; recover the member from the
 									// original path's last segment.
 									path.original.segments.last().and_then(|seg| {
 										let sc = self.global.symbol(*id).introduced_scope?;
-										self.global
+										return self
+											.global
 											.scope(sc)
 											.symbols
 											.iter()
 											.copied()
 											.find(|&m| {
 												let s = self.global.symbol(m);
-												s.name == seg.name && matches!(s.kind, SymbolKind::VariantMember)
+												return s.name == seg.name
+													&& matches!(s.kind, SymbolKind::VariantMember);
 											})
-											.map(|m| (*id, m))
+											.map(|m| return (*id, m));
 									})
 								}
 								_ => None,
 							},
 							ResolvedPathKind::AssocItem { base, member, .. } => {
+								#[allow(clippy::redundant_else)]
 								if matches!(self.global.symbol(*base).kind, SymbolKind::Variant) {
 									let sc = self.global.symbol(*base).introduced_scope;
-									sc.and_then(|sc| {
-										self.global.scope(sc).symbols.iter().copied().find(|&m| {
+									sc.and_then(|nsc| {
+										return self.global.scope(nsc).symbols.iter().copied().find(|&m| {
 											let s = self.global.symbol(m);
-											s.name == *member && matches!(s.kind, SymbolKind::VariantMember)
-										})
+											return s.name == *member && matches!(s.kind, SymbolKind::VariantMember);
+										});
 									})
-									.map(|m| (*base, m))
+									.map(|m| return (*base, m))
 								} else {
 									None
 								}
@@ -5151,7 +5154,7 @@ impl<'a> Checker<'a>
 								.map(|a| {
 									let te = self.check_expr(a, Some(&payload_ty))?;
 									self.expect_ty(&te.ty, &payload_ty, a.span())?;
-									Ok(te)
+									return Ok(te);
 								})
 								.collect::<Result<_, TypeError>>()?;
 
@@ -5817,18 +5820,20 @@ impl<'a> Checker<'a>
 
 								let resolved_fn_sym: Option<SymbolId> = callee_fn_sym.or_else(|| {
 									let actual = self.resolve_to_struct_sym(type_sym);
-									self.caches
+									return self
+										.caches
 										.method_fn
 										.get_sym(type_sym, &method_name)
 										.or_else(|| return self.caches.method_fn.get_sym(actual, &method_name))
-										.copied()
+										.copied();
 								});
 
+								#[allow(clippy::option_if_let_else)]
 								let adjusted_receiver: TypedExpr = match resolved_fn_sym
 									.and_then(|fn_sym| return self.caches.param.get(fn_sym, 0).cloned())
 								{
 									Some(expected_self) => {
-										self.auto_ref_receiver(*receiver, &expected_self, receiver_span)
+										Self::auto_ref_receiver(*receiver, &expected_self, receiver_span)
 									}
 									None => *receiver,
 								};
@@ -5906,7 +5911,7 @@ impl<'a> Checker<'a>
 				let tbase: TypedExpr = self.check_expr(base, None)?;
 				let field_ty: Ty = self.check_field_access(&tbase.ty, name, span)?;
 				let ntbase: TypedExpr = if self.name_is_field_of(&tbase.ty, name) {
-					self.auto_deref_for_field(tbase, span)
+					Self::auto_deref_for_field(tbase, span)
 				} else {
 					tbase
 				};
@@ -8322,7 +8327,7 @@ impl<'a> Checker<'a>
 		}
 	}
 
-	fn auto_deref_for_field(&self, mut expr: TypedExpr, span: Span) -> TypedExpr
+	fn auto_deref_for_field(mut expr: TypedExpr, span: Span) -> TypedExpr
 	{
 		loop {
 			let (inner_ty, intrinsic) = match &expr.ty {
@@ -8348,7 +8353,7 @@ impl<'a> Checker<'a>
 		}
 	}
 
-	fn auto_ref_receiver(&self, receiver: TypedExpr, expected: &Ty, span: Span) -> TypedExpr
+	fn auto_ref_receiver(receiver: TypedExpr, expected: &Ty, span: Span) -> TypedExpr
 	{
 		return match (expected, &receiver.ty) {
 			(Ty::Reference { .. }, Ty::Reference { .. } | Ty::Pointer { .. } | Ty::Mutable { .. }) => receiver,

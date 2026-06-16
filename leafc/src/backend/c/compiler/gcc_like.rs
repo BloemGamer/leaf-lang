@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::process::{Command, Output};
 
 use leaf_proc::{compiler_bug, compiler_unable_intrinsic};
@@ -30,6 +32,7 @@ pub trait GCCLike
 		let mut out: Vec<String> = Vec::new();
 
 		// Arch / bitness.
+		#[allow(clippy::match_same_arms)]
 		match target.arch {
 			Architecture::X86_64 => out.push("-m64".into()),
 			Architecture::X86 => out.push("-m32".into()),
@@ -310,7 +313,7 @@ fn gcc_int_builtin(base: &'static str, ty: &MonoTy) -> &'static str
 	};
 }
 
-fn gcc_bswap_builtin(ty: &MonoTy) -> &'static str
+const fn gcc_bswap_builtin(ty: &MonoTy) -> &'static str
 {
 	return match int_size_bits(ty) {
 		Some(16) => "__builtin_bswap16",
@@ -393,8 +396,8 @@ impl<T: GCCLike> CompilerToolChain for T
 {
 	fn build_executable(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut crate::backend::c::CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -483,8 +486,8 @@ impl<T: GCCLike> CompilerToolChain for T
 
 	fn build_object(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut crate::backend::c::CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -494,8 +497,8 @@ impl<T: GCCLike> CompilerToolChain for T
 
 	fn build_static_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut crate::backend::c::CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -505,8 +508,8 @@ impl<T: GCCLike> CompilerToolChain for T
 
 	fn build_dynamic_lib(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut crate::backend::c::CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
@@ -516,8 +519,8 @@ impl<T: GCCLike> CompilerToolChain for T
 
 	fn build_asm(
 		&mut self,
-		c_source_path: &std::path::PathBuf,
-		final_path: &std::path::PathBuf,
+		c_source_path: &std::path::Path,
+		final_path: &std::path::Path,
 		input: &BackendInput<'_>,
 		backend: &mut crate::backend::c::CBackend,
 	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>

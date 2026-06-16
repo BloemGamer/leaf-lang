@@ -64,7 +64,7 @@ fn build_pending(
 	// Build a lookup for in-memory sources passed by the caller
 	let in_memory: HashMap<Vec<String>, &str> = modules
 		.iter()
-		.map(|(segs, src)| (segs.iter().map(ToString::to_string).collect(), *src))
+		.map(|(segs, src)| return (segs.iter().map(ToString::to_string).collect(), *src))
 		.collect();
 
 	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
@@ -107,7 +107,7 @@ fn build_pending(
 				} else {
 					ModuleErrorKind::IoError(e.to_string())
 				};
-				vec![
+				return vec![
 					ModuleError {
 						logical_path: pm.logical_path.clone(),
 						span: pm.declared_at_span,
@@ -115,7 +115,7 @@ fn build_pending(
 						context: Vec::new(),
 					}
 					.build(),
-				]
+				];
 			})?
 		};
 
@@ -135,7 +135,7 @@ fn build_pending(
 		pending.push((pm.logical_path, desugared, local));
 	}
 
-	Ok(pending)
+	return Ok(pending);
 }
 
 // -------------------------------------------------------------------------
