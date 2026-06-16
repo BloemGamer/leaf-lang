@@ -5798,7 +5798,7 @@ impl<'a> Checker<'a>
 									path: ResolvedPath {
 										kind: ResolvedPathKind::AssocItem {
 											base: type_sym,
-											member: method_name,
+											member: method_name.clone(),
 											item: SymbolId::DUMMY,
 											base_type_args: Vec::new(),
 										},
@@ -5814,8 +5814,27 @@ impl<'a> Checker<'a>
 										},
 									},
 								};
+
+								let resolved_fn_sym: Option<SymbolId> = callee_fn_sym.or_else(|| {
+									let actual = self.resolve_to_struct_sym(type_sym);
+									self.caches
+										.method_fn
+										.get_sym(type_sym, &method_name)
+										.or_else(|| return self.caches.method_fn.get_sym(actual, &method_name))
+										.copied()
+								});
+
+								let adjusted_receiver: TypedExpr = match resolved_fn_sym
+									.and_then(|fn_sym| return self.caches.param.get(fn_sym, 0).cloned())
+								{
+									Some(expected_self) => {
+										self.auto_ref_receiver(*receiver, &expected_self, receiver_span)
+									}
+									None => *receiver,
+								};
+
 								let mut new_args = Vec::with_capacity(targs.len() + 1);
-								new_args.push(*receiver);
+								new_args.push(adjusted_receiver);
 								new_args.extend(targs);
 								(new_callee, new_args)
 							}
@@ -8327,6 +8346,53 @@ impl<'a> Checker<'a>
 				span,
 			};
 		}
+	}
+
+	fn auto_ref_receiver(&self, receiver: TypedExpr, expected: &Ty, span: Span) -> TypedExpr
+	{
+		return match (expected, &receiver.ty) {
+			(Ty::Reference { .. }, Ty::Reference { .. } | Ty::Pointer { .. } | Ty::Mutable { .. }) => receiver,
+
+			(Ty::Reference { mutable, .. }, _)
+				if !matches!(&receiver.ty, Ty::Infer | Ty::Generic { .. } | Ty::SelfTy) =>
+			{
+				let ref_ty = Ty::Reference {
+					mutable: *mutable,
+					inner: Box::new(receiver.ty.clone()),
+				};
+				TypedExpr {
+					kind: TypedExprKind::Unary {
+						op: UnaryOp::Addr { mutable: *mutable },
+						expr: Box::new(receiver),
+					},
+					ty: ref_ty,
+					span,
+				}
+			}
+
+			(_, Ty::Reference { inner, .. }) if !matches!(expected, Ty::Reference { .. }) => {
+				let inner_ty = (**inner).clone();
+				let callee = TypedExpr {
+					kind: TypedExprKind::InternalCall {
+						intrinsic: Intrinsic::RefDeref,
+					},
+					ty: Ty::Infer,
+					span,
+				};
+				TypedExpr {
+					ty: inner_ty,
+					kind: TypedExprKind::Call {
+						callee: Box::new(callee),
+						call_type: CallType::Regular,
+						named_generics: Vec::new(),
+						args: vec![receiver],
+					},
+					span,
+				}
+			}
+
+			_ => receiver,
+		};
 	}
 
 	fn name_is_field_of(&self, base_ty: &Ty, name: &str) -> bool
