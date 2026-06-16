@@ -107,6 +107,33 @@ pub fn compiler_not_implemented(item: TokenStream2) -> TokenStream2
 	};
 }
 
+pub fn compiler_unable_intrinsic(item: TokenStream2) -> TokenStream2
+{
+	let input = match syn::parse2::<CompilerBugInput>(item) {
+		Ok(v) => v,
+		Err(e) => return e.to_compile_error(),
+	};
+
+	let span = input.span;
+	let format_str = input.format_str;
+	let format_args = input.format_args;
+
+	let input_span = proc_macro::Span::call_site();
+
+	let source_file = input_span.file();
+	let line = input_span.line();
+
+	return quote! {
+		{
+			crate::diagnostics::DiagnosticBuilder::unable_intrinsic("compiler backend can't implement this intrinsic")
+				.code(crate::diagnostics::ErrorCode::CompilerUnableIntrinsic)
+				.primary(#span, Some(format!(#format_str #(, #format_args)*)))
+				.note("compiler backend can't implement this intrinsic")
+				.note(format!("{}:{}", #source_file, #line))
+		}
+	};
+}
+
 struct ConstructorAttr
 {
 	fn_name: Ident,

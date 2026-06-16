@@ -116,6 +116,7 @@ use syn::{DeriveInput, parse_macro_input};
 
 use self::diagnostics::impl_parse_errors;
 
+mod backend;
 mod diagnostics;
 mod gen_lex;
 mod spanned;
@@ -150,6 +151,12 @@ pub fn compiler_not_implemented(item: TokenStream) -> TokenStream
 	return diagnostics::compiler_not_implemented(item.into()).into();
 }
 
+#[proc_macro]
+pub fn compiler_unable_intrinsic(item: TokenStream) -> TokenStream
+{
+	return diagnostics::compiler_unable_intrinsic(item.into()).into();
+}
+
 #[proc_macro_derive(
 	CompileErrorKind,
 	attributes(error_msg, error_code, constructor, label, note, help, compile_error_variant)
@@ -162,4 +169,10 @@ pub fn compile_error_kind(vinput: TokenStream) -> TokenStream
 		Ok(ts) => ts.into(),
 		Err(e) => e.to_compile_error().into(),
 	};
+}
+
+#[proc_macro_derive(CCompiler, attributes(name))]
+pub fn c_compiler(item: TokenStream) -> TokenStream
+{
+	return backend::c::c_compiler(item);
 }
