@@ -1,0 +1,63 @@
+@use core::prelude::*;
+
+pub struct RangeInclusive<T>
+where
+	T: Int
+{
+	start: T,
+	end: T,
+}
+
+impl<T> RangeInclusive<T>
+where T: core::ops::Add<T, Output = T>
+{
+	pub fn new(start: T, end: T) -> Self<T>
+	{
+		return RangeInclusive{start, end};
+	}
+	pub fn t(self) {}
+}
+
+impl<T> core::iterator::Iterator for RangeInclusive<T>
+where T: core::ops::Add<T, Output = T>
+{
+	assoc Item = T;
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.start + 1 == self.end {
+			return None;
+		}
+		self.start = self.start + 1;
+		return Some(self.start);
+	}
+}
+
+pub struct Range<T>
+where
+	T: Int
+{
+	start: T,
+	end: T,
+}
+
+impl<T> Range<T>
+where T: core::ops::Add<T, Output = T>
+{
+	pub fn new(start: T, end: T) -> Self<T>
+	{
+		return Range{start, end};
+	}
+	pub fn t(self) {}
+}
+
+impl<T> core::iterator::Iterator for Range<T>
+where T: core::ops::Add<T, Output = T>
+{
+	assoc Item = T;
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.start + 1 == self.end {
+			return None;
+		}
+		self.start =  self.start + 1;
+		return Some(self.start);
+	}
+}

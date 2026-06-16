@@ -1,0 +1,6 @@
+@use core::prelude::*;
+
+export trait Iterator {
+	assoc Item;
+	fn? next(&mut self) -> Option<Self::Item>;
+}

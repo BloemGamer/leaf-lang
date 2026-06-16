@@ -1,0 +1,56 @@
+@use core::prelude::*;
+
+@builtin
+pub trait Int {
+	const size: u16;
+	const signed: bool;
+}
+
+impl<T: Int> core::ops::Add for T {
+	assoc Output = Self;
+	fn add(self, other: Self) -> Self::Output {
+		//var (result: Self, overflow: bool) = #add_checked(self, other);
+		//if overflow {
+		//	return 0; // implement a better thing later
+		//}
+		//return result;
+		return #add_unchecked(self, other);
+	}
+}
+
+impl<T: Int> core::ops::Sub for T {
+	assoc Output = Self;
+	fn sub(self, other: Self) -> Self::Output {
+		var (result: Self, overflow: bool) = #sub_checked(self, other);
+		if overflow {
+			return 0; // implement a better thing later
+		}
+		return result;
+	}
+}
+
+impl<T: Int> core::ops::Eq for T {
+	fn eq(self, other: Self) -> bool {
+		return self == other;
+	}
+}
+
+impl<T: Int> core::ops::Neg for T {
+	fn neg(self) -> Self {
+		return self * -1;
+	}
+}
+
+
+impl<T: Int> core::ops::Mul for T {
+	assoc Output = Self;
+	fn mul(self, other: T) -> Self {
+		return #mul_unchecked(self, other);
+	}
+}
+
+impl<T: Int> Create for T {
+	fn create() -> Self {
+		return 0;
+	}
+}

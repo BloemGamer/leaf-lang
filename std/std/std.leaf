@@ -1,0 +1,80 @@
+pub module prelude;
+
+export @use core::*;
+export @use std::prelude::*;
+export @use core::prelude::*;
+
+pub variant Result<T, E> {
+	Ok(T),
+	Err(E),
+}
+
+
+pub trait Alloc {
+	fn! alloc<T>(&mut self, size: usize) -> *mut T;
+	fn! realloc<T>(&mut self, data: *T, size: usize) -> *mut T;
+	fn! free<T>(&mut self, data: *T);
+}
+
+@mangle_name("malloc") extern(C) fn malloc(size: usize) -> *mut ();
+@mangle_name("free") extern(C) fn free(p: *());
+@mangle_name("realloc") extern(C) fn realloc(p: *(), size: usize) -> *mut ();
+@mangle_name("printf") extern(C) pub fn printf(fmt: &cstr, ...) -> i32;
+
+pub struct CAlloc { }
+
+impl Alloc for CAlloc {
+	fn! alloc<T>(&mut self, size: usize) -> *mut T {
+		return <*mut T>malloc(size);
+	}
+	fn! free<T>(&mut self, p: *T) {
+		return free(<*()>p);
+	}
+	fn! realloc<T>(&mut self, p: *T, size: usize) -> *mut T {
+		//return <*mut T>realloc(<*()>p, size);
+		return <*mut T>p;
+	}
+}
+
+impl CAlloc {
+	fn new() -> Self{return Self{};}
+}
+
+pub struct StdIo { }
+
+impl StdIo {
+	fn new() -> Self{return Self{};}
+}
+
+impl IO for StdIo {
+	fn! print(){}
+	fn! println(){}
+	fn! eprint(){}
+	fn! eprintln(){}
+	fn! read(){}
+}
+
+
+@builtin
+pub trait IO<Out: Write, Err: Write, In: Read> {
+	fn! print();
+	fn! println();
+	fn! eprint();
+	fn! eprintln();
+	fn! read();
+}
+
+@builtin
+trait Write {
+	fn! write();
+}
+
+@builtin
+trait Read {
+	fn! read();
+}
+
+
+
+pub trait Copy{
+}
