@@ -80,6 +80,7 @@ pub enum ErrorCode
 	//
 	CompilerBug,
 	CompilerNotImplemented,
+	CompilerUnableIntrinsic,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +91,7 @@ pub enum Severity
 	Warning,
 	Bug,
 	NotImplemented,
+	UnableIntrinsic,
 }
 
 impl Severity
@@ -213,6 +215,15 @@ impl DiagnosticBuilder
 	{
 		return Self {
 			severity: Severity::NotImplemented,
+			..Self::error(msg)
+		};
+	}
+
+	#[allow(unused)]
+	pub fn unable_intrinsic<M: Into<Cow<'static, str>>>(msg: M) -> Self
+	{
+		return Self {
+			severity: Severity::UnableIntrinsic,
 			..Self::error(msg)
 		};
 	}
@@ -575,6 +586,7 @@ impl std::fmt::Display for OldStyleRenderer<'_>
 			Severity::Warning => yellow("warning", self.config),
 			Severity::Bug => blue("bug", self.config),
 			Severity::NotImplemented => magenta("not_implemented", self.config),
+			Severity::UnableIntrinsic => magenta("unable_intrinsic", self.config),
 		};
 
 		let Some(primary): Option<&Label> = self
