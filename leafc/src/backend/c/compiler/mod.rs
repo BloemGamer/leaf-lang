@@ -1042,7 +1042,7 @@ pub trait IntrinsicWriter
 		out: &mut impl Write,
 	) -> std::fmt::Result
 	{
-		write!(out, r#"(printf("%*.s", (int)"#)?;
+		write!(out, r#"(fprintf(stderr, "%.*s\n", (int)"#)?;
 		self.write_operand(&args[0], f, input, backend, out)?;
 		write!(out, ".len, ")?;
 		self.write_operand(&args[0], f, input, backend, out)?;

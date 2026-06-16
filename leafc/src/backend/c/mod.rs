@@ -2,13 +2,16 @@
 
 pub mod compiler;
 
+use std::default;
 use std::env;
 use std::fs;
 use std::io::{self};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, fmt::Write};
 
+use clap::builder::OsStr;
 use leaf_proc::{compiler_bug, compiler_not_implemented};
 
 // TODO: const is ignored for now, at least for function parameters it should not
@@ -46,9 +49,10 @@ const DEFAULT_ASSERTS: &[&str] = &[
 ];
 
 const DEFAULT_C_HEADERS: &[&str] = &[
-	"<stdint.h>", // needed for the basic types
-	"<stddef.h>", // needed for size_t
-	"<stdlib.h>", // needed for abort
+	"<stdint.h>", // basic types
+	"<stddef.h>", // size_t
+	"<stdlib.h>", // abort
+	"<stdio.h>",  // fprintf
 ];
 const DEFAULT_C_DEFINES: &[&str] = &[];
 
@@ -101,7 +105,7 @@ impl CompilerBackend for CBackend
 		let c_source_path: std::path::PathBuf = if matches!(output_kind, OutputKind::Ir) {
 			final_path.clone()
 		} else {
-			intermediate_c_path(&final_path)
+			intermediate_c_path(&final_path, input)
 		};
 
 		if let Err(e) = std::fs::write(&c_source_path, &c_source) {
@@ -148,37 +152,39 @@ impl CompilerBackend for CBackend
 				}
 			}
 
-			let _: Result<(), io::Error> = std::fs::remove_file(&c_source_path);
+			if input.options.emit_dir.is_none() {
+				let _: Result<(), io::Error> = std::fs::remove_file(&c_source_path);
+			}
 		}
 
-		if let Some(dir) = input.options.emit_dir.clone() {
-			if let Err(e) = std::fs::create_dir_all(&dir) {
-				self.diagnostics.push(compiler_bug!(
-					Span::default(),
-					"failed to create emit dir {}: {e}",
-					dir.display()
-				));
-				return Err(std::mem::take(&mut self.diagnostics));
-			}
-
-			let mut mirrored: Vec<std::path::PathBuf> = Vec::new();
-			for art in &artifacts {
-				let file_name: &std::ffi::OsStr = art.file_name().unwrap_or_default();
-				let mut dst: std::path::PathBuf = dir.clone();
-				dst.push(file_name);
-				if let Err(e) = std::fs::copy(art, &dst) {
-					self.diagnostics.push(compiler_bug!(
-						Span::default(),
-						"failed to mirror {} to {}: {e}",
-						art.display(),
-						dst.display()
-					));
-					return Err(std::mem::take(&mut self.diagnostics));
-				}
-				mirrored.push(dst);
-			}
-			artifacts.extend(mirrored);
-		}
+		// if let Some(dir) = input.options.emit_dir.clone() {
+		// 	if let Err(e) = std::fs::create_dir_all(&dir) {
+		// 		self.diagnostics.push(compiler_bug!(
+		// 			Span::default(),
+		// 			"failed to create emit dir {}: {e}",
+		// 			dir.display()
+		// 		));
+		// 		return Err(std::mem::take(&mut self.diagnostics));
+		// 	}
+		//
+		// 	let mut mirrored: Vec<std::path::PathBuf> = Vec::new();
+		// 	for art in &artifacts {
+		// 		let file_name: &std::ffi::OsStr = art.file_name().unwrap_or_default();
+		// 		let mut dst: std::path::PathBuf = dir.clone();
+		// 		dst.push(file_name);
+		// 		if let Err(e) = std::fs::copy(art, &dst) {
+		// 			self.diagnostics.push(compiler_bug!(
+		// 				Span::default(),
+		// 				"failed to mirror {} to {}: {e}",
+		// 				art.display(),
+		// 				dst.display()
+		// 			));
+		// 			return Err(std::mem::take(&mut self.diagnostics));
+		// 		}
+		// 		mirrored.push(dst);
+		// 	}
+		// 	artifacts.extend(mirrored);
+		// }
 
 		Ok((
 			BackendOutput {
@@ -622,366 +628,6 @@ impl CBackend
 		let res: Result<(), std::fmt::Error> = compiler.write_intrinsic(intr, args, result_ty, f, input, self, out);
 		self.c_compilers[0] = Some(compiler);
 		return res;
-		// use crate::type_analysis::intrinsics::Intrinsic;
-		//
-		// match intr {
-		// 	// ---------- plain arithmetic ----------
-		// 	Intrinsic::AddUnchecked | Intrinsic::WrappingAdd => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " + ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::SubUnchecked | Intrinsic::WrappingSub => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " - ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::MulUnchecked | Intrinsic::WrappingMul => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " * ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::Div | Intrinsic::DivUnchecked => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " / ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::Rem | Intrinsic::RemUnchecked => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " % ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		//
-		// 	// ---------- checked arithmetic (statement-expression) ----------
-		// 	// Emits: ({ T r; bool o = __builtin_*_overflow(a, b, &r); (LeafTuple…){ ._0 = r, ._1 = o }; })
-		// 	Intrinsic::AddChecked | Intrinsic::SubChecked | Intrinsic::MulChecked => {
-		// 		let builtin = match intr {
-		// 			Intrinsic::AddChecked => "__builtin_add_overflow",
-		// 			Intrinsic::SubChecked => "__builtin_sub_overflow",
-		// 			Intrinsic::MulChecked => "__builtin_mul_overflow",
-		// 			_ => unreachable!(),
-		// 		};
-		// 		let elem_ty_str = mono_ty_to_string(args[0].ty());
-		// 		// result_ty is `(T, bool)` → look up its tuple name.
-		// 		let tuple_name = match result_ty {
-		// 			Some(MonoTy::Tuple(elems)) => tuple_type_name(elems),
-		// 			_ => "/* unknown checked return */".to_string(),
-		// 		};
-		// 		write!(out, "({{ {0} _r; bool _o = {1}(", elem_ty_str, builtin)?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ", ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ", &_r); ({}){{ ._0 = _r, ._1 = _o }}; }})", tuple_name)?;
-		// 	}
-		//
-		// 	// ---------- saturating ----------
-		// 	// No portable C builtin; expand inline using a conditional.
-		// 	Intrinsic::SaturatingAdd | Intrinsic::SaturatingSub => {
-		// 		// TODO: this is wrong for signed types and only handles unsigned cleanly.
-		// 		// For now: fall back to wrapping; revisit when there's a runtime helper.
-		// 		let opstr = if matches!(intr, Intrinsic::SaturatingAdd) {
-		// 			"+"
-		// 		} else {
-		// 			"-"
-		// 		};
-		// 		write!(out, "(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " {} ", opstr)?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ") /* TODO: saturating */")?;
-		// 	}
-		//
-		// 	// ---------- shifts ----------
-		// 	Intrinsic::Shl => {
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " << ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::Shr => {
-		// 		// Arithmetic on signed, logical on unsigned — C already does this
-		// 		// based on the LHS type, so a plain `>>` is correct.
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " >> ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 	}
-		// 	Intrinsic::UShr => {
-		// 		// Force logical: cast to the unsigned equivalent of the operand type.
-		// 		let t = mono_ty_to_string(args[0].ty());
-		// 		write!(out, "(({}) ((u{}) (", t, t)?; // crude; see TODO
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ") >> ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, "))")?;
-		// 		// TODO: the `u{}` prefix is wrong for non-`intN_t` names; needs a
-		// 		// real "unsigned twin" helper on MonoTy.
-		// 	}
-		//
-		// 	// ---------- integer comparisons ----------
-		// 	Intrinsic::IntEq => self.binop("==", args, f, input, out)?,
-		// 	Intrinsic::IntNe => self.binop("!=", args, f, input, out)?,
-		// 	Intrinsic::IntLt => self.binop("<", args, f, input, out)?,
-		// 	Intrinsic::IntLe => self.binop("<=", args, f, input, out)?,
-		// 	Intrinsic::IntGt => self.binop(">", args, f, input, out)?,
-		// 	Intrinsic::IntGe => self.binop(">=", args, f, input, out)?,
-		//
-		// 	// ---------- float arithmetic ----------
-		// 	Intrinsic::FAdd => self.binop("+", args, f, input, out)?,
-		// 	Intrinsic::FSub => self.binop("-", args, f, input, out)?,
-		// 	Intrinsic::FMul => self.binop("*", args, f, input, out)?,
-		// 	Intrinsic::FDiv => self.binop("/", args, f, input, out)?,
-		// 	Intrinsic::FRem => {
-		// 		// C `%` doesn't work on floats; use fmod/fmodf based on type.
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "fmodf",
-		// 			_ => "fmod",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FNeg => {
-		// 		write!(out, "(-")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		// 	Intrinsic::Fma => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "fmaf",
-		// 			_ => "fma",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::Sqrt => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "sqrtf",
-		// 			_ => "sqrt",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FAbs => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "fabsf",
-		// 			_ => "fabs",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FMin => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "fminf",
-		// 			_ => "fmin",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FMax => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "fmaxf",
-		// 			_ => "fmax",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::Floor => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "floorf",
-		// 			_ => "floor",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::Ceil => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "ceilf",
-		// 			_ => "ceil",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FRound => {
-		// 		// round-to-nearest, ties to even = `rint` family (assuming default rounding mode)
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "rintf",
-		// 			_ => "rint",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		// 	Intrinsic::FTrunc => {
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::F32) => "truncf",
-		// 			_ => "trunc",
-		// 		};
-		// 		self.libm_call(fname, args, f, input, out)?;
-		// 	}
-		//
-		// 	// ---------- bit manipulation ----------
-		// 	Intrinsic::Ctz => {
-		// 		// __builtin_ctzll is undefined on 0; consumers should guard.
-		// 		write!(out, "((uint32_t)__builtin_ctzll((unsigned long long)(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")))")?;
-		// 	}
-		// 	Intrinsic::Clz => {
-		// 		write!(out, "((uint32_t)__builtin_clzll((unsigned long long)(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")))")?;
-		// 	}
-		// 	Intrinsic::Popcount => {
-		// 		write!(out, "((uint32_t)__builtin_popcountll((unsigned long long)(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")))")?;
-		// 	}
-		// 	Intrinsic::Bswap => {
-		// 		// Pick the right __builtin_bswap* by operand width.
-		// 		let fname = match args[0].ty() {
-		// 			MonoTy::Primitive(Primitive::Int(IntType {
-		// 				bits: IntSize::Fixed(16),
-		// 				..
-		// 			})) => "__builtin_bswap16",
-		// 			MonoTy::Primitive(Primitive::Int(IntType {
-		// 				bits: IntSize::Fixed(32),
-		// 				..
-		// 			})) => "__builtin_bswap32",
-		// 			MonoTy::Primitive(Primitive::Int(IntType {
-		// 				bits: IntSize::Fixed(64),
-		// 				..
-		// 			})) => "__builtin_bswap64",
-		// 			_ => "__builtin_bswap64", // TODO: handle 8/size variants properly
-		// 		};
-		// 		write!(out, "{}(", fname)?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		// 	Intrinsic::BitReverse => {
-		// 		// No portable builtin; emit a TODO so it's visible at compile time.
-		// 		write!(out, "/* TODO: bit_reverse */ (")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		//
-		// 	// ---------- deref ----------
-		// 	Intrinsic::RefDeref | Intrinsic::PtrDeref => {
-		// 		// Leaf represents references/pointers as `T*`, so deref is `(*p)`.
-		// 		write!(out, "(*")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		//
-		// 	// ---------- size_of / align_of / transmute ----------
-		// 	Intrinsic::SizeOf => {
-		// 		// The value argument is discarded; we use the argument's *type*.
-		// 		write!(out, "sizeof({})", mono_ty_to_string(args[0].ty()))?;
-		// 	}
-		// 	Intrinsic::AlignOf => {
-		// 		write!(out, "_Alignof({})", mono_ty_to_string(args[0].ty()))?;
-		// 	}
-		// 	Intrinsic::Transmute => {
-		// 		// Use a union pun via statement-expression to avoid strict-aliasing UB.
-		// 		let from_ty = mono_ty_to_string(args[0].ty());
-		// 		let to_ty = result_ty
-		// 			.map(mono_ty_to_string)
-		// 			.unwrap_or_else(|| "/* unknown */".to_string());
-		// 		write!(out, "({{ union {{ {} _f; {} _t; }} _u; _u._f = ", from_ty, to_ty)?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, "; _u._t; }})")?;
-		// 	}
-		//
-		// 	// ---------- memory ops ----------
-		// 	Intrinsic::Memcpy => self.named_call("memcpy", args, f, input, out)?,
-		// 	Intrinsic::Memmove => self.named_call("memmove", args, f, input, out)?,
-		// 	Intrinsic::Memset => {
-		// 		// memset(dst, val, count) — same signature, same order.
-		// 		self.named_call("memset", args, f, input, out)?;
-		// 	}
-		//
-		// 	// ---------- atomics ----------
-		// 	Intrinsic::AtomicLoad => {
-		// 		write!(out, "__atomic_load_n(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ", ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		// 	Intrinsic::AtomicStore => {
-		// 		write!(out, "__atomic_store_n(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ", ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ", ")?;
-		// 		self.write_operand(&args[2], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		// 	Intrinsic::AtomicSwap => self.atomic_rmw("__atomic_exchange_n", args, f, input, out)?,
-		// 	Intrinsic::AtomicAdd => self.atomic_rmw("__atomic_fetch_add", args, f, input, out)?,
-		// 	Intrinsic::AtomicSub => self.atomic_rmw("__atomic_fetch_sub", args, f, input, out)?,
-		// 	Intrinsic::AtomicAnd => self.atomic_rmw("__atomic_fetch_and", args, f, input, out)?,
-		// 	Intrinsic::AtomicOr => self.atomic_rmw("__atomic_fetch_or", args, f, input, out)?,
-		// 	Intrinsic::AtomicXor => self.atomic_rmw("__atomic_fetch_xor", args, f, input, out)?,
-		// 	Intrinsic::AtomicCas => {
-		// 		// ({ T exp = expected; bool ok = __atomic_compare_exchange_n(
-		// 		//       ptr, &exp, desired, false, success, fail);
-		// 		//    (Tuple){ ._0 = exp, ._1 = ok }; })
-		// 		let val_ty = mono_ty_to_string(args[1].ty());
-		// 		let tuple_name = match result_ty {
-		// 			Some(MonoTy::Tuple(elems)) => tuple_type_name(elems),
-		// 			_ => "/* unknown cas return */".to_string(),
-		// 		};
-		// 		write!(out, "({{ {} _exp = ", val_ty)?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, "; bool _ok = __atomic_compare_exchange_n(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ", &_exp, ")?;
-		// 		self.write_operand(&args[2], f, input, out)?;
-		// 		write!(out, ", false, ")?;
-		// 		self.write_operand(&args[3], f, input, out)?;
-		// 		write!(out, ", ")?;
-		// 		self.write_operand(&args[4], f, input, out)?;
-		// 		write!(out, "); ({}){{ ._0 = _exp, ._1 = _ok }}; }})", tuple_name)?;
-		// 	}
-		// 	Intrinsic::Fence => {
-		// 		write!(out, "__atomic_thread_fence(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		//
-		// 	// ---------- volatile ----------
-		// 	Intrinsic::VolatileLoad => {
-		// 		let inner_ty = match args[0].ty() {
-		// 			MonoTy::Pointer { inner, .. } | MonoTy::Reference { inner, .. } => mono_ty_to_string(inner),
-		// 			_ => "/* not a pointer */".to_string(),
-		// 		};
-		// 		write!(out, "(*(volatile {} *)(", inner_ty)?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, "))")?;
-		// 	}
-		// 	Intrinsic::VolatileStore => {
-		// 		let inner_ty = match args[0].ty() {
-		// 			MonoTy::Pointer { inner, .. } | MonoTy::Reference { inner, .. } => mono_ty_to_string(inner),
-		// 			_ => "/* not a pointer */".to_string(),
-		// 		};
-		// 		write!(out, "(*(volatile {} *)(", inner_ty)?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ") = ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		//
-		// 	// ---------- pointer arithmetic ----------
-		// 	Intrinsic::PtrOffset => {
-		// 		write!(out, "(")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, " + ")?;
-		// 		self.write_operand(&args[1], f, input, out)?;
-		// 		write!(out, ")")?;
-		// 	}
-		//
-		// 	// ---------- control flow ----------
-		// 	Intrinsic::Unreachable => {
-		// 		write!(out, "__builtin_unreachable()")?;
-		// 	}
-		// 	Intrinsic::Panic => {
-		// 		// No runtime panic infrastructure yet; abort with the message
-		// 		// ignored. Wire this up to a real handler later.
-		// 		write!(out, "(/* panic */ (void)")?;
-		// 		self.write_operand(&args[0], f, input, out)?;
-		// 		write!(out, ", abort(), 0)")?;
-		// 	}
-		// }
-		//
-		// Ok(())
 	}
 
 	// ---------- small helpers for the intrinsic emitter ----------
@@ -1899,11 +1545,15 @@ fn final_artifact_path(base: &std::path::Path, kind: OutputKind) -> std::path::P
 	return p;
 }
 
-fn intermediate_c_path(final_path: &std::path::Path) -> std::path::PathBuf
+fn intermediate_c_path(final_path: &std::path::Path, input: &BackendInput<'_>) -> std::path::PathBuf
 {
-	// Sit the .c file next to the final artifact so the C compiler's
-	// working directory doesn't matter and debuggers can find the source.
-	let mut p: std::path::PathBuf = final_path.to_path_buf();
-	p.set_extension("c");
-	return p;
+	let mut dir = if let Some(d) = input.options.emit_dir.clone() {
+		d
+	} else {
+		PathBuf::from(".")
+	};
+	let default = OsStr::from("a");
+	dir.set_file_name(&final_path.file_name().unwrap_or(&default));
+	dir.set_extension("c");
+	return dir;
 }
