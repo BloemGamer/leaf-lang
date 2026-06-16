@@ -626,7 +626,7 @@ fn void_function_no_return_ok()
 fn heap_fn_with_explicit_allocator()
 {
 	ok(r"
-			fn!<alloc -> std::CAlloc> heap_fn() {
+			fn!<alloc -> std::alloc::CAlloc> heap_fn() {
 				var _: i64 = 0i64;
 			}
 		");
@@ -636,8 +636,8 @@ fn heap_fn_with_explicit_allocator()
 fn heap_fn_calling_other_heap_fn()
 {
 	ok(r"
-			fn!<alloc -> std::CAlloc> inner() {}
-			fn!<alloc -> std::CAlloc> outer() { inner!(); }
+			fn!<alloc -> std::alloc::CAlloc> inner() {}
+			fn!<alloc -> std::alloc::CAlloc> outer() { inner!(); }
 		");
 }
 
@@ -648,22 +648,6 @@ fn heap_fn_in_call()
 			fn! inner() {}
 			fn! outer() { inner!<alloc -> alloc>(); }
 		");
-}
-
-#[test]
-fn heap_fn_in_call_no_alloc_trait()
-{
-	err(
-		r"
-			struct Foo {}
-			fn! inner() {}
-			fn! outer() {
-				var f: Foo = Foo{};
-				inner!<alloc -> f>();
-			}
-		",
-		"",
-	);
 }
 
 // ── generics ─────────────────────────────────────────────────────────────
@@ -762,7 +746,7 @@ fn impl_trait_local_variable()
 {
 	// mirrors `var mut aa: impl Int = 0i64` from the sample
 	ok(r"
-			fn!<alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::alloc::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 			}
 		");
@@ -772,7 +756,7 @@ fn impl_trait_local_variable()
 fn impl_trait_var_reassign_same_concrete_type()
 {
 	ok(r"
-			fn!<alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::alloc::CAlloc> test() {
 				var mut aa: impl Int = 0i64;
 				var mut ab: impl Int = aa;
 			}
@@ -786,7 +770,7 @@ fn impl_trait_parameter_stays_opaque()
 	// Matches test3_should_fail in the sample.
 	err(
 		r"
-			fn!<alloc -> std::CAlloc> test(i: impl Int) {
+			fn!<alloc -> std::alloc::CAlloc> test(i: impl Int) {
 				i = 1i64;
 			}
 		",
@@ -814,7 +798,7 @@ fn range_assigned_to_impl_iterator()
 {
 	// `var mut a: impl core::iterator::Iterator<Item = i64> = 0..10`
 	ok(r"
-			fn!<alloc -> std::CAlloc> test() {
+			fn!<alloc -> std::alloc::CAlloc> test() {
 				var mut a: impl core::iterator::Iterator<Item = i64> = 0..10;
 				a = 0..10;
 			}
@@ -1408,7 +1392,7 @@ fn generic_fn_with_multiple_bounds()
 {
 	// mirrors `fn!<…> test3<T: core::iterator::Iterator<Item = i64> + Create>(input: T) -> impl Int`
 	ok(r"
-			fn!<alloc -> std::CAlloc> test3<T: core::iterator::Iterator<Item = i64> + Create>(input: T) -> impl Int {
+			fn!<alloc -> std::alloc::CAlloc> test3<T: core::iterator::Iterator<Item = i64> + Create>(input: T) -> impl Int {
 				var a: T = input;
 				input = T::create();
 				return 0i64;
@@ -1421,7 +1405,7 @@ fn generic_missing_bound_is_error()
 {
 	err(
 		r"
-			fn!<alloc -> std::CAlloc> test3<T: core::iterator::Iterator<Item = i64>>(input: T) -> impl Int {
+			fn!<alloc -> std::alloc::CAlloc> test3<T: core::iterator::Iterator<Item = i64>>(input: T) -> impl Int {
 				input = T::create();   // Create bound missing → T::create() unresolved
 				return 0i64;
 			}

@@ -1,0 +1,9 @@
+@use core::prelude::*;
+
+
+pub trait Alloc {
+	fn! alloc<T>(&mut self, size: usize) -> *mut T;
+	fn! realloc<T>(&mut self, data: *T, size: usize) -> *mut T;
+	fn! free<T>(&mut self, data: *T);
+}
+

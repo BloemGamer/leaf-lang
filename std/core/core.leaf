@@ -5,3 +5,5 @@ export module int;
 export module create;
 export module iterator;
 export module ranges;
+export module alloc;
+export module io;

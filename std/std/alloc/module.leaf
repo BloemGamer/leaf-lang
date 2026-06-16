@@ -1,0 +1,26 @@
+@use core::prelude::*;
+@use std::prelude::*;
+
+@mangle_name("malloc") extern(C) fn malloc(size: usize) -> *mut ();
+@mangle_name("free") extern(C) fn free(p: *());
+@mangle_name("realloc") extern(C) fn realloc(p: *(), size: usize) -> *mut ();
+
+
+pub struct CAlloc { }
+
+impl core::alloc::Alloc for CAlloc {
+	fn! alloc<T>(&mut self, size: usize) -> *mut T {
+		return <*mut T>malloc(size);
+	}
+	fn! free<T>(&mut self, p: *T) {
+		return free(<*()>p);
+	}
+	fn! realloc<T>(&mut self, p: *T, size: usize) -> *mut T {
+		//return <*mut T>realloc(<*()>p, size);
+		return <*mut T>p;
+	}
+}
+
+impl CAlloc {
+	fn new() -> Self{return Self{};}
+}
