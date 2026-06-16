@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// What kind of artifact the backend should emit.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OutputKind
 {
 	/// A standalone executable.

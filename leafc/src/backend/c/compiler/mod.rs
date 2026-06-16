@@ -54,7 +54,65 @@ impl CCompilers
 	}
 }
 
-pub trait CCompiler: IntrinsicWriter {}
+impl CompilerToolChain for CCompilers
+{
+	fn build_executable(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		return delegate!(self, build_executable(c_source_path, final_path, input, backend));
+	}
+
+	fn build_object(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		return delegate!(self, build_object(c_source_path, final_path, input, backend));
+	}
+
+	fn build_static_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		return delegate!(self, build_static_lib(c_source_path, final_path, input, backend));
+	}
+
+	fn build_dynamic_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		return delegate!(self, build_dynamic_lib(c_source_path, final_path, input, backend));
+	}
+
+	fn build_asm(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		return delegate!(self, build_asm(c_source_path, final_path, input, backend));
+	}
+}
+
+pub trait CCompiler: IntrinsicWriter + CompilerToolChain {}
 
 pub trait IntrinsicWriter
 {
@@ -1114,4 +1172,47 @@ fn volatile_inner_ty(ty: &MonoTy) -> String
 		MonoTy::Pointer { inner, .. } | MonoTy::Reference { inner, .. } => mono_ty_to_string(inner),
 		_ => "/* not a pointer */".to_string(),
 	}
+}
+
+pub trait CompilerToolChain
+{
+	fn build_executable(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
+
+	fn build_object(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
+
+	fn build_static_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
+
+	fn build_dynamic_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
+
+	fn build_asm(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>;
 }

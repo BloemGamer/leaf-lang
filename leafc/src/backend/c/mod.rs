@@ -2,6 +2,11 @@
 
 pub mod compiler;
 
+use std::env;
+use std::fs;
+use std::io::{self};
+use std::process::{Command, Output};
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, fmt::Write};
 
 use leaf_proc::{compiler_bug, compiler_not_implemented};
@@ -25,6 +30,7 @@ use crate::{
 	type_analysis::Primitive,
 };
 
+use self::compiler::CompilerToolChain;
 use self::compiler::{CCompiler, CCompilers, gcc::GCCCompiler};
 
 use super::BackendOptions;
@@ -58,7 +64,7 @@ struct Collected
 #[allow(clippy::module_name_repetitions)]
 pub struct CBackend
 {
-	/// Option only used for when you need to call functions on the CCompiler that depend on the backend itself, most of the time, if you need the backend, you may panic if it's None
+	/// Option only used for when you need to call functions on the `CCompiler` that depend on the backend itself, most of the time, if you need the backend, you may panic if it's None
 	c_compilers: Vec<Option<CCompilers>>,
 	diagnostics: Vec<DiagnosticBuilder>,
 }
@@ -84,23 +90,103 @@ impl CompilerBackend for CBackend
 
 	fn compile(&mut self, input: &BackendInput<'_>) -> BackendResult<BackendOutput>
 	{
-		let c_path: std::path::PathBuf = input.options.output_path.with_extension("c");
-
-		let Ok(file) = self.codegen_module(input) else {
-			return Err(std::mem::take(&mut self.diagnostics));
+		let c_source: String = match self.codegen_module(input) {
+			Ok(s) => s,
+			Err(()) => return Err(std::mem::take(&mut self.diagnostics)),
 		};
 
-		if let Err(e) = std::fs::write(&c_path, file) {
-			todo!("couldn't write file: {e}");
+		let output_kind: OutputKind = input.options.output_kind;
+		let final_path: std::path::PathBuf = final_artifact_path(&input.options.output_path, output_kind);
+
+		let c_source_path: std::path::PathBuf = if matches!(output_kind, OutputKind::Ir) {
+			final_path.clone()
+		} else {
+			intermediate_c_path(&final_path)
+		};
+
+		if let Err(e) = std::fs::write(&c_source_path, &c_source) {
+			self.diagnostics.push(compiler_bug!(
+				Span::default(),
+				"failed to write C source to {}: {e}",
+				c_source_path.display()
+			));
+			return Err(std::mem::take(&mut self.diagnostics));
 		}
 
-		return Ok((
+		let mut artifacts: Vec<std::path::PathBuf> = Vec::new();
+		artifacts.push(final_path.clone());
+
+		if !matches!(output_kind, OutputKind::Ir) {
+			if self.c_compilers.len() != 1 {
+				self.diagnostics.push(compiler_not_implemented!(
+					Span::default(),
+					"multiple C compiler support at the same time is not yet supported"
+				));
+				return Err(std::mem::take(&mut self.diagnostics));
+			}
+
+			let mut compiler: CCompilers = self.c_compilers[0]
+				.take()
+				.expect("there should be a C compiler configured");
+
+			let invoke_result: Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>> = match output_kind {
+				OutputKind::Executable => compiler.build_executable(&c_source_path, &final_path, input, self),
+				OutputKind::Object => compiler.build_object(&c_source_path, &final_path, input, self),
+				OutputKind::StaticLib => compiler.build_static_lib(&c_source_path, &final_path, input, self),
+				OutputKind::DynamicLib => compiler.build_dynamic_lib(&c_source_path, &final_path, input, self),
+				OutputKind::Asm => compiler.build_asm(&c_source_path, &final_path, input, self),
+				OutputKind::Ir => unreachable!("handled above"),
+			};
+
+			self.c_compilers[0] = Some(compiler);
+
+			match invoke_result {
+				Ok(extra) => artifacts.extend(extra),
+				Err(diags) => {
+					self.diagnostics.extend(diags);
+					return Err(std::mem::take(&mut self.diagnostics));
+				}
+			}
+
+			let _: Result<(), io::Error> = std::fs::remove_file(&c_source_path);
+		}
+
+		if let Some(dir) = input.options.emit_dir.clone() {
+			if let Err(e) = std::fs::create_dir_all(&dir) {
+				self.diagnostics.push(compiler_bug!(
+					Span::default(),
+					"failed to create emit dir {}: {e}",
+					dir.display()
+				));
+				return Err(std::mem::take(&mut self.diagnostics));
+			}
+
+			let mut mirrored: Vec<std::path::PathBuf> = Vec::new();
+			for art in &artifacts {
+				let file_name: &std::ffi::OsStr = art.file_name().unwrap_or_default();
+				let mut dst: std::path::PathBuf = dir.clone();
+				dst.push(file_name);
+				if let Err(e) = std::fs::copy(art, &dst) {
+					self.diagnostics.push(compiler_bug!(
+						Span::default(),
+						"failed to mirror {} to {}: {e}",
+						art.display(),
+						dst.display()
+					));
+					return Err(std::mem::take(&mut self.diagnostics));
+				}
+				mirrored.push(dst);
+			}
+			artifacts.extend(mirrored);
+		}
+
+		Ok((
 			BackendOutput {
-				primary: c_path,
-				artifacts: Vec::new(),
+				primary: final_path,
+				artifacts,
 			},
 			std::mem::take(&mut self.diagnostics),
-		));
+		))
 	}
 }
 
@@ -1747,4 +1833,77 @@ fn ty_is_option_ptr_variant<'a>(ty: &MonoTy, input: &'a BackendInput<'_>) -> Opt
 		return None;
 	};
 	return option_ptr_variant_typedef(*symbol, type_args, input);
+}
+
+fn with_temp_c_file<F, R>(source: &str, f: F) -> io::Result<R>
+where
+	F: FnOnce(&std::path::Path, &std::path::Path) -> io::Result<R>,
+{
+	let mut src_path = env::temp_dir();
+	let unique = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.expect("now should be later than `UNIX_EPOCH`")
+		.as_nanos();
+
+	src_path.push(format!("temp_{unique}.c"));
+
+	let bin_path = src_path.with_extension("out");
+
+	{
+		let mut file = fs::File::create(&src_path)?;
+		io::Write::write_all(&mut file, source.as_bytes())?;
+	}
+
+	let result = f(&src_path, &bin_path);
+
+	let _: Result<(), io::Error> = fs::remove_file(&src_path);
+	let _: Result<(), io::Error> = fs::remove_file(&bin_path);
+
+	return result;
+}
+
+fn final_artifact_path(base: &std::path::Path, kind: OutputKind) -> std::path::PathBuf
+{
+	let mut p: std::path::PathBuf = base.to_path_buf();
+	match kind {
+		OutputKind::Executable => {
+			#[cfg(windows)]
+			p.set_extension("exe");
+			#[cfg(not(target_os = "windows"))]
+			p.set_extension("");
+		}
+		OutputKind::Object => {
+			p.set_extension("o");
+		}
+		OutputKind::StaticLib => {
+			#[cfg(target_os = "windows")]
+			p.set_extension("lib");
+			#[cfg(not(target_os = "windows"))]
+			p.set_extension("a");
+		}
+		OutputKind::DynamicLib => {
+			#[cfg(target_os = "windows")]
+			p.set_extension("dll");
+			#[cfg(target_os = "macos")]
+			p.set_extension("dylib");
+			#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+			p.set_extension("so");
+		}
+		OutputKind::Ir => {
+			p.set_extension("c");
+		}
+		OutputKind::Asm => {
+			p.set_extension("s");
+		}
+	}
+	return p;
+}
+
+fn intermediate_c_path(final_path: &std::path::Path) -> std::path::PathBuf
+{
+	// Sit the .c file next to the final artifact so the C compiler's
+	// working directory doesn't matter and debuggers can find the source.
+	let mut p: std::path::PathBuf = final_path.to_path_buf();
+	p.set_extension("c");
+	return p;
 }

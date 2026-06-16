@@ -1,16 +1,94 @@
-use leaf_proc::compiler_unable_intrinsic;
+use std::process::{Command, Output};
 
-use super::{CCompiler, IntrinsicWriter};
+use leaf_proc::{compiler_bug, compiler_unable_intrinsic};
+
+use super::{CCompiler, CompilerToolChain, IntrinsicWriter};
 use crate::{
 	Span,
 	backend::{BackendInput, c::mono_ty_to_string},
+	config::{Architecture, Environment, OperatingSystem, Optimization, Target},
 	diagnostics::DiagnosticBuilder,
 	lexer::{IntSign, IntSize, IntType},
 	monomorphization::{MonoFunction, MonoOperand, MonoTy},
 	type_analysis::Primitive,
 };
 
-pub trait GCCLike {}
+pub trait GCCLike
+{
+	fn driver_for_target(&self, target: &Target) -> String;
+
+	fn optimization_flags(&self, opt: &Optimization) -> Vec<String>
+	{
+		return match opt {
+			Optimization::Debug => vec!["-O0".to_string()],
+			Optimization::Release => vec!["-O3".to_string()],
+		};
+	}
+
+	fn target_flags(&self, target: &Target) -> Vec<String>
+	{
+		let mut out: Vec<String> = Vec::new();
+
+		// Arch / bitness.
+		match target.arch {
+			Architecture::X86_64 => out.push("-m64".into()),
+			Architecture::X86 => out.push("-m32".into()),
+			Architecture::Aarch64 => { /* gcc default on aarch64 hosts */ }
+			Architecture::Arm => {
+				// Default to a reasonable hard-float ARMv7 baseline; users
+				// can override via `cpu`/`features`.
+				out.push("-march=armv7-a".into());
+			}
+			Architecture::RiscV64 => {
+				out.push("-march=rv64gc".into());
+				out.push("-mabi=lp64d".into());
+			}
+			Architecture::Wasm32 => {
+				// Plain gcc can't target wasm; the driver lookup should
+				// have picked `emcc` or similar. Nothing to add here.
+			}
+			Architecture::RiscV32 => todo!(),
+			Architecture::Unknown => {}
+		}
+
+		// OS / ABI quirks.
+		match target.os {
+			OperatingSystem::Windows => {
+				// MinGW: make sure we don't accidentally link MSVC-style.
+				if matches!(target.env, Environment::Gnu) {
+					out.push("-mthreads".into());
+				}
+			}
+			OperatingSystem::MacOS => {
+				// TODO: I don't have a mac
+			}
+			OperatingSystem::Linux => {
+				out.push("-fPIC".into());
+			}
+			OperatingSystem::Unknown => {
+				// Freestanding: no libc, no startup files.
+				out.push("-ffreestanding".into());
+				out.push("-nostdlib".into());
+			}
+		}
+
+		// Environment / ABI.
+		match target.env {
+			Environment::Musl => out.push("-D_GNU_SOURCE".into()),
+			Environment::Gnu | Environment::Msvc | Environment::None => {}
+			Environment::Gnueabi => todo!(),
+			Environment::Gnueabihf => todo!(),
+		}
+
+		return out;
+	}
+
+	/// For now, returns nothing, untill features are given
+	fn feature_flags(&self, _features: &str) -> Vec<String>
+	{
+		return Vec::new();
+	}
+}
 
 impl<T: GCCLike> CCompiler for T {}
 impl<T: GCCLike> IntrinsicWriter for T
@@ -309,4 +387,141 @@ const fn int_size_bits(ty: &MonoTy) -> Option<u32>
 		})) => Some(*size as u32),
 		_ => None,
 	};
+}
+
+impl<T: GCCLike> CompilerToolChain for T
+{
+	fn build_executable(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut crate::backend::c::CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		let program: String = self.driver_for_target(&input.options.target);
+
+		let mut cmd: Command = Command::new(&program);
+
+		// Input + output.
+		cmd.arg(c_source_path);
+		cmd.arg("-o").arg(final_path);
+
+		// Language: we always feed it C23
+		cmd.arg("-std=c23");
+
+		// Optimisation level.
+		cmd.args(self.optimization_flags(&input.options.optimization));
+
+		// Debug info.
+		if input.options.debug_info {
+			cmd.arg("-g");
+		}
+
+		// Target triple / arch tuning (cross compiles, -march, -mcpu, ...).
+		cmd.args(self.target_flags(&input.options.target));
+		if let Some(cpu) = &input.options.cpu {
+			cmd.arg(format!("-mcpu={cpu}"));
+		}
+		if let Some(features) = &input.options.features {
+			cmd.args(self.feature_flags(features));
+		}
+
+		// Warnings/diagnostics knobs we always want on generated C so the
+		// user sees codegen bugs rather than silent UB.
+		cmd.args([
+			// "-Wall",
+			// "-Wextra",
+			// "-Wno-unused-parameter",
+			// "-Wno-unused-variable",
+			// "-Wno-unused-but-set-variable",
+			// "-Wno-builtin-declaration-mismatch",
+			"-fno-strict-aliasing", // we punt on TBAA via union puns
+		]);
+
+		cmd.arg("-lm");
+		cmd.arg("-lpthread");
+
+		let output: Output = match cmd.output() {
+			Ok(o) => o,
+			Err(e) => {
+				return Err(vec![compiler_bug!(Span::default(), "failed to spawn `{program}`: {e}")]);
+			}
+		};
+
+		if !output.status.success() {
+			let stderr: String = String::from_utf8_lossy(&output.stderr).into_owned();
+			let stdout: String = String::from_utf8_lossy(&output.stdout).into_owned();
+			let code: String = output
+				.status
+				.code()
+				.map_or_else(|| return "<signal>".to_string(), |c| return c.to_string());
+			return Err(vec![compiler_bug!(
+				Span::default(),
+				"`{program}` exited with status {code}\n\
+					 --- stderr ---\n{stderr}\n\
+					 --- stdout ---\n{stdout}"
+			)]);
+		}
+
+		if !output.stderr.is_empty() {
+			let stderr: String = String::from_utf8_lossy(&output.stderr).into_owned();
+			backend
+				.diagnostics
+				.push(compiler_bug!(Span::default(), "`{program}` warnings:\n{stderr}"));
+		}
+
+		let mut extras: Vec<std::path::PathBuf> = Vec::new();
+		if input.options.debug_info {
+			let dwo: std::path::PathBuf = final_path.with_extension("dwo");
+			if dwo.exists() {
+				extras.push(dwo);
+			}
+		}
+		return Ok(extras);
+	}
+
+	fn build_object(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut crate::backend::c::CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		todo!()
+	}
+
+	fn build_static_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut crate::backend::c::CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		todo!()
+	}
+
+	fn build_dynamic_lib(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut crate::backend::c::CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		todo!()
+	}
+
+	fn build_asm(
+		&mut self,
+		c_source_path: &std::path::PathBuf,
+		final_path: &std::path::PathBuf,
+		input: &BackendInput<'_>,
+		backend: &mut crate::backend::c::CBackend,
+	) -> Result<Vec<std::path::PathBuf>, Vec<DiagnosticBuilder>>
+	{
+		todo!()
+	}
 }
