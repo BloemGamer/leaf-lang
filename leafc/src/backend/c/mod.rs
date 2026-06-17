@@ -1126,7 +1126,7 @@ fn write_span(span: Span, source_map: &SourceMap, out: &mut impl Write, options:
 	if options.debug_info
 		&& let Some(file) = source_map.get(span.source_index)
 	{
-		writeln!(out, "#line {} \"{}\"", span.start_line, file.path.display())?;
+		writeln!(out, "#line {} {:?}", span.start_line, file.path.display())?;
 	}
 	return Ok(());
 }
