@@ -1902,8 +1902,8 @@ impl<'a> Monomorphizer<'a>
 	fn default_for_heap_param(&mut self, hp_name: &str) -> Option<MonoTy>
 	{
 		let default_path: &[&str] = match hp_name {
-			"alloc" => &["std", "CAlloc"],
-			"io" => &["std", "StdIo"],
+			"alloc" => &["std", "alloc", "CAlloc"],
+			"io" => &["std", "io", "StdIo"],
 			_ => return None,
 		};
 		let sym = self.resolve_module_path(default_path)?;

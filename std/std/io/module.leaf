@@ -1,0 +1,15 @@
+@use core::prelude::*;
+
+pub struct StdIo { }
+
+impl StdIo {
+	fn new() -> Self{return Self{};}
+}
+
+impl core::io::IO for StdIo {
+	fn! print(){}
+	fn! println(){}
+	fn! eprint(){}
+	fn! eprintln(){}
+	fn! read(){}
+}

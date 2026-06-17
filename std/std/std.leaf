@@ -1,5 +1,6 @@
 pub module prelude;
 pub module alloc;
+pub module io;
 
 export @use core::*;
 export @use std::prelude::*;
