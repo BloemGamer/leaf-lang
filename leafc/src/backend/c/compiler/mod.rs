@@ -16,6 +16,7 @@ use crate::{
 };
 
 pub mod gcc;
+pub mod clang;
 pub mod gcc_like;
 
 #[derive(Clone, Debug)]
@@ -23,18 +24,21 @@ pub mod gcc_like;
 pub enum CCompilers
 {
 	GCC(gcc::GCCCompiler),
+	Clang(clang::ClangCompiler),
 }
 
 macro_rules! delegate {
     ($self:ident, $method:ident ( $($args:expr),* $(,)? )) => {
         match $self {
             Self::GCC(e) => e.$method($($args),*),
+            Self::Clang(e) => e.$method($($args),*),
         }
     };
 
     ($self:ident, $method:ident) => {
         match $self {
             Self::GCC(e) => e.$method(),
+            Self::Clang(e) => e.$method(),
         }
     };
 }

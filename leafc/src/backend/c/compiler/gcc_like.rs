@@ -442,8 +442,8 @@ impl<T: GCCLike> CompilerToolChain for T
 			"-fno-strict-aliasing", // we punt on TBAA via union puns
 		]);
 
-		cmd.arg("-lm");
-		cmd.arg("-lpthread");
+		// cmd.arg("-lm");
+		// cmd.arg("-lpthread");
 
 		let output: Output = match cmd.output() {
 			Ok(o) => o,

@@ -30,6 +30,7 @@ use crate::{
 };
 
 use self::compiler::CompilerToolChain;
+use self::compiler::clang::ClangCompiler;
 use self::compiler::{CCompilers, gcc::GCCCompiler};
 
 use super::BackendOptions;
@@ -197,7 +198,7 @@ impl CBackend
 	pub fn new() -> CBackend
 	{
 		return CBackend {
-			c_compilers: vec![Some(CCompilers::GCC(GCCCompiler {}))],
+			c_compilers: vec![Some(CCompilers::Clang(ClangCompiler {}))],
 			diagnostics: Vec::new(),
 		};
 	}
