@@ -544,7 +544,7 @@ pub struct ResolvedFunctionSignature
 #[allow(unused)]
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Spanned, PartialEq)]
-pub struct ResolvedAST
+pub struct ResolvedHIR
 {
 	pub top_level_block: ResolvedTopLevelBlock,
 	pub source_index: SourceIndex,
@@ -823,7 +823,7 @@ pub struct ResolvedImplDecl
 pub struct ResolvedModule
 {
 	pub path: Vec<String>,
-	pub ast: ResolvedAST,
+	pub ast: ResolvedHIR,
 	pub symbols: LocalSymbolTable,
 }
 
@@ -3673,7 +3673,7 @@ pub fn resolve_names(
 	return Ok((
 		ResolvedModule {
 			path: logical_path.to_vec(),
-			ast: ResolvedAST {
+			ast: ResolvedHIR {
 				span,
 				top_level_block: resolved_block,
 				source_index: ast.source_index,

@@ -15,8 +15,8 @@ use crate::{
 	type_analysis::{Primitive, intrinsics::Intrinsic},
 };
 
-pub mod gcc;
 pub mod clang;
+pub mod gcc;
 pub mod gcc_like;
 
 #[derive(Clone, Debug)]

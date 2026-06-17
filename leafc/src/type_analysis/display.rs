@@ -4,9 +4,9 @@ use crate::{
 	lexer::{IntSign, IntSize, IntType},
 	parser::display::write_docs,
 	type_analysis::{
-		Primitive, Ty, TyBound, TyDisplay, TyGenericArg, TypedAST, TypedArrayLiteral, TypedAssocTypeDecl, TypedBlock,
+		Primitive, Ty, TyBound, TyDisplay, TyGenericArg, TypedArrayLiteral, TypedAssocTypeDecl, TypedBlock,
 		TypedDirective, TypedDirectiveNode, TypedEnumDecl, TypedEnumVariant, TypedExpr, TypedExprKind,
-		TypedFunctionDecl, TypedFunctionSignature, TypedImplDecl, TypedImplItem, TypedModuleDecl, TypedParam,
+		TypedFunctionDecl, TypedFunctionSignature, TypedHIR, TypedImplDecl, TypedImplItem, TypedModuleDecl, TypedParam,
 		TypedPattern, TypedRangeExpr, TypedStmt, TypedStructDecl, TypedStructField, TypedSwitchArm, TypedSwitchBody,
 		TypedTopLevelBlock, TypedTopLevelDecl, TypedTraitDecl, TypedTraitItem, TypedTypeAliasDecl, TypedUnionDecl,
 		TypedUnionField, TypedVariableDecl, TypedVariantDecl, TypedVariantMember, TypedWhereConstraint,
@@ -180,7 +180,7 @@ impl fmt::Display for Ty
 	}
 }
 
-impl fmt::Display for TypedAST
+impl fmt::Display for TypedHIR
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{

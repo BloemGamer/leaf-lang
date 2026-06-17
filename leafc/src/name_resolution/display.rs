@@ -2,21 +2,20 @@ use std::fmt;
 
 use crate::{
 	name_resolution::{
-		CallType, ResolvedAST, ResolvedArrayLiteral, ResolvedAssocTypeDecl, ResolvedBlock, ResolvedDirective,
-		ResolvedDirectiveNode, ResolvedEnumDecl, ResolvedEnumVariant, ResolvedExpr, ResolvedFuncBound,
-		ResolvedFunctionDecl, ResolvedFunctionSignature, ResolvedGenericArg, ResolvedGenericHeapKind,
-		ResolvedGenericHeapParam, ResolvedImplDecl, ResolvedImplItem, ResolvedModuleDecl, ResolvedParam, ResolvedPath,
-		ResolvedPathKind, ResolvedPattern, ResolvedRangeExpr, ResolvedStmt, ResolvedStructDecl, ResolvedStructField,
-		ResolvedSwitchArm, ResolvedSwitchBody, ResolvedTopLevelBlock, ResolvedTopLevelDecl, ResolvedTraitDecl,
-		ResolvedTraitItem, ResolvedType, ResolvedTypeAliasDecl, ResolvedTypeCore, ResolvedUnionDecl,
-		ResolvedUnionField, ResolvedVariableDecl, ResolvedVariantDecl, ResolvedVariantMember, ResolvedWhereBound,
-		ResolvedWhereConstraint,
+		CallType, ResolvedArrayLiteral, ResolvedAssocTypeDecl, ResolvedBlock, ResolvedDirective, ResolvedDirectiveNode,
+		ResolvedEnumDecl, ResolvedEnumVariant, ResolvedExpr, ResolvedFuncBound, ResolvedFunctionDecl,
+		ResolvedFunctionSignature, ResolvedGenericArg, ResolvedGenericHeapKind, ResolvedGenericHeapParam, ResolvedHIR,
+		ResolvedImplDecl, ResolvedImplItem, ResolvedModuleDecl, ResolvedParam, ResolvedPath, ResolvedPathKind,
+		ResolvedPattern, ResolvedRangeExpr, ResolvedStmt, ResolvedStructDecl, ResolvedStructField, ResolvedSwitchArm,
+		ResolvedSwitchBody, ResolvedTopLevelBlock, ResolvedTopLevelDecl, ResolvedTraitDecl, ResolvedTraitItem,
+		ResolvedType, ResolvedTypeAliasDecl, ResolvedTypeCore, ResolvedUnionDecl, ResolvedUnionField,
+		ResolvedVariableDecl, ResolvedVariantDecl, ResolvedVariantMember, ResolvedWhereBound, ResolvedWhereConstraint,
 	},
 	parser::display::write_docs,
 	utils::indent_writer::IndentWriter,
 };
 
-impl fmt::Display for ResolvedAST
+impl fmt::Display for ResolvedHIR
 {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
 	{

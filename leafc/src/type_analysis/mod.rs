@@ -479,13 +479,13 @@ impl FieldTypeCache
 pub struct TypedModule
 {
 	pub path: Vec<String>,
-	pub ast: TypedAST,
+	pub ast: TypedHIR,
 	pub caches: TypeCaches,
 }
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, PartialEq, Spanned)]
-pub struct TypedAST
+pub struct TypedHIR
 {
 	pub top_level_block: TypedTopLevelBlock,
 	pub source_index: SourceIndex,
@@ -8625,7 +8625,7 @@ pub fn check_types(
 
 	return Ok(TypedModule {
 		path: module.path.clone(),
-		ast: TypedAST {
+		ast: TypedHIR {
 			top_level_block: top,
 			source_index: module.ast.source_index,
 			span: module.ast.span,
