@@ -1,25 +1,29 @@
 pub trait Add <Rhs> {
 	assoc Output;
 
-	fn add(self, other: Rhs) -> Self::Output;
+	fn? add(self, other: Rhs) -> Self::Output;
 }
 
 pub trait Sub <Rhs> {
 	assoc Output;
 
-	fn sub(self, other: Rhs) -> Self::Output;
+	fn? sub(self, other: Rhs) -> Self::Output;
 }
 
 pub trait Mul <Rhs> {
 	assoc Output;
 
-	fn mul(self, other: Rhs) -> Self::Output;
+	fn? mul(self, other: Rhs) -> Self::Output;
 }
 
 pub trait Eq<Rhs> {
-	fn eq(self, other: Rhs) -> bool;
+	fn? eq(self, other: Rhs) -> bool;
 }
 
 pub trait Neg {
-	fn neg(self) -> Self;
+	fn? neg(self) -> Self;
+}
+
+pub trait AddAssign <Rhs> {
+	fn? add_assign(self, other: Rhs) -> Self;
 }

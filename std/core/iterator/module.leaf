@@ -4,3 +4,10 @@ export trait Iterator {
 	assoc Item;
 	fn? next(&mut self) -> Option<Self::Item>;
 }
+
+export trait IntoIterator {
+	assoc Iter;
+	assoc IntoIter /*: Iterator<Item = Self::Item>*/;
+
+	fn? into_iter(self) -> Self::IntoIter;
+}
