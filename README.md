@@ -6,7 +6,8 @@
 
 
 > [!NOTE]
-> Leaf-lang is still in active development and is not yet ready to be used.
+> Leaf-lang is still in active development.
+> It technically works, but is not ready to be used.
 
 # Leaf-lang
 Leaf-lang is a systems programming language designed for interoperability with C,
@@ -36,22 +37,14 @@ fn! main()
 <br/>
 
 ### Current focus
-- [ ] MIR generation
 - [ ] Small improvements in the compiler
 - [ ] Improve diagnostics
 
 ### Still actively being developed
-- [x] Lexer
-- [x] Parser
-- [x] Desugarer
-- [x] Symbol collections
-- [x] Name resolution
-- [x] Type resolutions
-- [ ] MIR generation
 - [ ] Refining the syntax
 
 ### Short-term
-- [ ] Finish first compiler version
+- [x] Finish first compiler version
 
 ### Long-term
 
@@ -102,13 +95,11 @@ Each stage transforms the program into a simpler or more constrained form.
 - [x] **Symbol Collection**
 	- Scope creation
 	- Symbol tables
-- [x] **Name Resolution** (DesugaredAST -> ResolvedAST)
+- [x] **Name Resolution** (DesugaredAST -> ResolvedHIR)
 	- Identifier binding
 	- Shadowing rules
-- [ ] **Type Analysis** (ResolvedAST -> TypedAST)
+- [x] **Type Analysis** (ResolvedHIR -> TypedHIR)
 	- Type checking
-- [ ] **Lowering to HIR**
-	- AST -> High-Level IR (HIR)
 
 ---
 
@@ -117,7 +108,8 @@ Each stage transforms the program into a simpler or more constrained form.
 - [ ] **Lifetime Analysis**
 	- Ownership rules
 	- Destructor insertion
-- [ ] **Function generation**
+- [ ] **HIR Optimizations** (low priority)
+- [x] **Function generation**
 	- For each generic, generate a specialized function
 	- Name mangling
 - [ ] **HIR Optimizations** (low priority)
@@ -126,14 +118,14 @@ Each stage transforms the program into a simpler or more constrained form.
 
 ### Lowering (HIR -> MIR)
 
-- [ ] **Lowering to MIR**
+- [x] **Lowering to MIR**
 	- Control-flow normalization
 
 
 ### Backend (MIR -> C)
-- [ ] **Code Generation**
+- [x] **Code Generation**
 	- MIR -> C source code
-- [ ] **C Compilation**
+- [x] **C Compilation**
 	- Invoke system C compiler (C23)
 
 
@@ -154,8 +146,7 @@ Each stage transforms the program into a simpler or more constrained form.
 - Compiler
 	- **Cargo** that supports the newest rust version
 - Generated C code
-	- **CMake** >= 3.10
-	- **C compiler** with full C23 support (fully tested with GCC 16.1.1)
+	- **C compiler** with full C23 support (fully tested with GCC 16 and Clang 22, and for now, only those 2 work)
 
 Leaf-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. MacOS is **not currently supported**.
