@@ -2630,6 +2630,9 @@ impl<'a> Checker<'a>
 					.insert(s.resolved_name, bounds_for_struct);
 			}
 		}
+		self.caches
+			.variant_generics
+			.insert(s.resolved_name, s.generics.iter().map(|g| g.name.clone()).collect());
 
 		self.generic_scope.pop();
 		return Ok(());
@@ -5993,7 +5996,37 @@ impl<'a> Checker<'a>
 							generics: h_gens,
 						},
 					) if (*h_sym == raw_sym || *h_sym == struct_sym) && !h_gens.is_empty() => h.clone(),
-					_ => Ty::named(raw_sym),
+					_ => {
+						// Try to infer generics from field types
+						let generic_names: Vec<String> = self
+							.caches
+							.variant_generics
+							.get(&struct_sym)
+							.cloned()
+							.unwrap_or_default();
+
+						if generic_names.is_empty() {
+							Ty::named(raw_sym)
+						} else {
+							let mut subs: HashMap<String, Ty> = HashMap::new();
+							for (fname, fexpr) in fields {
+								if let Some(declared_field_ty) = self.caches.field.get(struct_sym, fname).cloned() {
+									let checked = self.check_expr(fexpr, Some(&declared_field_ty));
+									if let Ok(te) = checked {
+										extract_hint_generics(&declared_field_ty, &te.ty, &mut subs);
+									}
+								}
+							}
+							let generics: Vec<Ty> = generic_names
+								.iter()
+								.map(|n| subs.get(n).cloned().unwrap_or(Ty::Infer))
+								.collect();
+							Ty::Named {
+								symbol: raw_sym,
+								generics,
+							}
+						}
+					}
 				};
 
 				let mut tfields: Vec<(String, TypedExpr)> = fields
