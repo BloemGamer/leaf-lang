@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::VecDeque};
 use leaf_proc::generate_lexer;
 
 use crate::{
-	diagnostics::DiagnosticBuilder,
+	diagnostics::Diagnostic,
 	source_map::SourceIndex,
 	util::{
 		backup::Backup,
@@ -101,18 +101,18 @@ impl Spanned for Token<'_>
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[generate_lexer(BasicLexer<'s>)]
 #[automatic_test(
-	mod(generated_tests),
-	function(
-		fn #test_name() {
-			let mut lexer: BasicLexer<'_> = BasicLexer::new(#token_str, SourceIndex::DUMMY);
-			println!("`{}` == `TokenKind::{:?}`",#token_str, TokenKind::#variant);
-			assert_eq!(lexer.next().unwrap().kind, TokenKind::#variant);
-		}
-	)
-)]
+ 	mod(generated_tests),
+ 	function(
+ 		fn #test_name() {
+ 			let mut lexer: BasicLexer<'_> = BasicLexer::new(#token_str, SourceIndex::DUMMY);
+ 			println!("`{}` == `TokenKind::{:?}`",#token_str, TokenKind::#variant);
+ 			assert_eq!(lexer.next().unwrap().kind, TokenKind::#variant);
+ 		}
+ 	)
+ )]
 pub enum TokenKind<'s>
 {
 	// ===== Literals =====
@@ -456,7 +456,7 @@ pub enum TokenKind<'s>
 	Eof,
 	Invalid,
 	/// Used for warnings and errors, should be catched by the parser, and ignored
-	Diag(DiagnosticBuilder),
+	Diag(Diagnostic),
 	// ===== Reserved =====
 }
 
@@ -831,7 +831,7 @@ impl<'s> BasicLexer<'s>
 									string.push(escaped);
 								} else {
 									self.diagnostics.push_back(TokenKind::Diag(
-										DiagnosticBuilder::error("invalid escape sequence").primary(
+										Diagnostic::error("invalid escape sequence").primary(
 											Span {
 												file: self.file_id,
 												line: start_line,
@@ -860,8 +860,8 @@ impl<'s> BasicLexer<'s>
 		}
 
 		// Unterminated string
-		self.diagnostics.push_back(TokenKind::Diag(
-			DiagnosticBuilder::error("Unterminated string").primary(
+		self.diagnostics
+			.push_back(TokenKind::Diag(Diagnostic::error("Unterminated string").primary(
 				Span {
 					file: self.file_id,
 					line: start_line,
@@ -869,8 +869,7 @@ impl<'s> BasicLexer<'s>
 					end: start + 1,
 				},
 				Some("Unterminated string".to_string()),
-			),
-		));
+			)));
 		return TokenKind::Invalid;
 	}
 
@@ -922,8 +921,8 @@ impl<'s> BasicLexer<'s>
 			self.advance();
 			let Some(ch) = self.lex_escape_sequence() else {
 				self.advance();
-				self.diagnostics.push_back(TokenKind::Diag(
-					DiagnosticBuilder::error("invalid escape sequence").primary(
+				self.diagnostics
+					.push_back(TokenKind::Diag(Diagnostic::error("invalid escape sequence").primary(
 						Span {
 							file: self.file_id,
 							line: start_line,
@@ -931,8 +930,7 @@ impl<'s> BasicLexer<'s>
 							end: self.position,
 						},
 						Some("invalid escape sequence".to_string()),
-					),
-				));
+					)));
 				if self.current_char == Some('\'') {
 					self.advance();
 				}
@@ -942,7 +940,7 @@ impl<'s> BasicLexer<'s>
 		} else {
 			let Some(ch) = self.current_char else {
 				self.diagnostics
-					.push_back(TokenKind::Diag(DiagnosticBuilder::error("reached EOF").primary(
+					.push_back(TokenKind::Diag(Diagnostic::error("reached EOF").primary(
 						Span {
 							file: self.file_id,
 							line: start_line,
@@ -962,7 +960,7 @@ impl<'s> BasicLexer<'s>
 			return TokenKind::CharLiteral(ch);
 		}
 		self.diagnostics
-			.push_back(TokenKind::Diag(DiagnosticBuilder::error("reached EOF").primary(
+			.push_back(TokenKind::Diag(Diagnostic::error("reached EOF").primary(
 				Span {
 					file: self.file_id,
 					line: start_line,
@@ -1090,7 +1088,7 @@ impl<'s> BasicLexer<'s>
 					};
 					let second_span: Span = self.next_token().span;
 					self.diagnostics.push_back(TokenKind::Diag(
-						DiagnosticBuilder::warning("number is split") // TODO: make the error message better
+						Diagnostic::warning("number is split") // TODO: make the error message better
 							.primary(first_span, Some("first token".to_string()))
 							.secondary(second_span, Some("second token".to_string())),
 					));
@@ -1187,7 +1185,7 @@ impl<'s> BasicLexer<'s>
 					};
 					let second_span: Span = self.next_token().span;
 					self.diagnostics.push_back(TokenKind::Diag(
-						DiagnosticBuilder::warning("number is split") // TODO: make the error message better
+						Diagnostic::warning("number is split") // TODO: make the error message better
 							.primary(first_span, Some("first token".to_string()))
 							.secondary(second_span, Some("second token".to_string())),
 					));
@@ -1224,7 +1222,7 @@ impl<'s> BasicLexer<'s>
 						};
 						let second_span: Span = self.next_token().span;
 						self.diagnostics.push_back(TokenKind::Diag(
-							DiagnosticBuilder::warning("number is split") // TODO: make the error message better
+							Diagnostic::warning("number is split") // TODO: make the error message better
 								.primary(first_span, Some("first token".to_string()))
 								.secondary(second_span, Some("second token".to_string())),
 						));
@@ -1378,7 +1376,7 @@ fn check_irregular_number_splitting<const FORWARDS: bool>(
 	input: &str,
 	span: Span,
 	idx: Option<usize>,
-) -> Option<DiagnosticBuilder>
+) -> Option<Diagnostic>
 {
 	let nidx: usize = idx.unwrap_or_else(|| {
 		if FORWARDS {
@@ -1411,7 +1409,7 @@ fn check_irregular_number_splitting<const FORWARDS: bool>(
 	};
 	if !valid {
 		return Some(
-			DiagnosticBuilder::warning("irregular number splitting")
+			Diagnostic::warning("irregular number splitting")
 				.primary(span, Some("irregular number splitting".to_string())),
 		);
 	}
