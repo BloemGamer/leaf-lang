@@ -22,6 +22,7 @@
 .clang-tidy
 .nvim.lua
 name_ideas.txt
+syntax.ebnf
 
 Cargo.lock
 git_conventions.md
