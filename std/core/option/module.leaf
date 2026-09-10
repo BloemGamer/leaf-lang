@@ -1,4 +1,0 @@
-export variant Option<T> {
-	Some(T),
-	None,
-}

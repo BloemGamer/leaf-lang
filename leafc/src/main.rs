@@ -107,7 +107,7 @@
 // Allow
 #![allow(clippy::needless_return)]
 #![allow(clippy::use_self)]
-#![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
+// #![allow(clippy::result_large_err)] // TODO: in the future, maybe fix all of them
 #![allow(clippy::self_named_module_files)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::similar_names)]
@@ -116,47 +116,30 @@
 
 // #![warn(clippy::todo)]
 
-use std::{
-	collections::{HashSet, VecDeque},
-	fs, path,
-	process::exit,
-};
-
-use crate::{
-	config::Config,
-	diagnostics::{CompileDiagnostic, CompileError},
-};
+use std::{borrow::Cow, error::Error, fs, path};
 
 use self::{
-	backend::{BackendInput, BackendOptions, CompilerBackend, c::CBackend},
-	config::{ColourConf, Optimization},
-	desugar::DesugaredAST,
-	diagnostics::{CompileDiagnosticRenderer, DiagnosticBuilder, OldStyleRenderer, use_colour},
-	lexer::{Lexer, Span, expander::ExpandedLexer},
-	mir::MirModule,
-	modules::{ModuleError, ModuleErrorKind},
-	name_resolution::ResolvedModule,
-	parser::{AST, ExprEnum, Parser},
+	diagnostics::{Diagnostic, DiagnosticRenderer, TextRenderer},
+	parser::Parser,
 	source_map::{SourceIndex, SourceMap},
-	symbol_collection::{GlobalSymbolTable, LocalSymbolTable},
-	type_analysis::TypedModule,
+	symbol_collection::{ExportSymbol, ExportTable, SymbolCollectionResult},
+	type_analysis::{DependencyTypeExportRef, ExportTypeTable},
 };
 
 mod backend;
 mod desugar;
 mod lexer;
 mod mir;
-mod modules;
 mod monomorphization;
 mod name_resolution;
 mod parser;
 mod symbol_collection;
 mod type_analysis;
 
-mod config;
 mod diagnostics;
+mod modules;
 mod source_map;
-mod utils;
+mod util;
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Parser, Debug)]
@@ -182,11 +165,16 @@ struct Args
 	#[arg(long)]
 	mono: bool,
 
+	/// Emit GCC/Clang-compatible C after MIR monomorphization.
+	#[arg(long)]
+	emit_c: bool,
+
+	/// Output path for --emit-c. Defaults to leaf-out.c.
+	#[arg(long, default_value = "leaf-out.c")]
+	c_out: path::PathBuf,
+
 	#[arg(short, long)]
 	release: bool,
-
-	#[arg(short, long, default_value_t = ColourConf::Auto)]
-	colour: ColourConf,
 }
 
 impl Args
@@ -199,364 +187,363 @@ impl Args
 			|| self.modules
 			|| self.symbols
 			|| self.name_resolution
+			|| self.types
 			|| self.mir
-			|| self.mono);
+			|| self.mono
+			|| self.emit_c);
 	}
 }
 
-const STDLIB_PATH: &str = "std/std/std.leaf";
-const CORELIB_PATH: &str = "std/core/core.leaf";
+const CORELIB_PATH: &str = "std/core";
+const STDLIB_PATH: &str = "std/std";
+const PROJECT_ROOT: &str = "leaf-test";
+
+const CORE_CRATE_NAME: &str = "core";
+const STD_CRATE_NAME: &str = "std";
+const PROJECT_CRATE_NAME: &str = "main";
+
+type CompilerResult<T> = Result<T, Box<dyn Error>>;
+
+#[derive(Debug)]
+struct CrateInput
+{
+	name: String,
+	root: path::PathBuf,
+}
+
+#[derive(Debug)]
+struct CompiledCrate
+{
+	name: String,
+	root: path::PathBuf,
+	files: Vec<CompiledFile>,
+	diagnostics: Vec<Diagnostic>,
+	export_table: ExportTable<'static>,
+	type_export_table: ExportTypeTable<'static>,
+	c_translation_unit: Option<String>,
+}
+
+#[derive(Debug)]
+struct CompiledFile
+{
+	file_id: SourceIndex,
+	path: path::PathBuf,
+	module_path: Vec<String>,
+}
 
 fn main()
 {
-	const FILE_NAME: &str = "leaf-test/main.leaf";
-	let args: Args = <Args as clap::Parser>::parse();
-	let config: Config = Config {
-		colour: if use_colour(args.colour) {
-			ColourConf::Always
-		} else {
-			ColourConf::Never
-		},
-		optimization: if args.release {
-			Optimization::Release
-		} else {
-			Optimization::Debug
-		},
-		..Default::default()
-	};
-	let mut source_map: SourceMap = SourceMap::default();
-
-	let (res, diagnostics) = run(&args, &config, FILE_NAME, &mut source_map);
-
-	for d in diagnostics {
-		let diag = d.finish();
-		let renderer = OldStyleRenderer::new(&diag, &source_map, &config);
-		eprintln!("{}", renderer);
-	}
-	match res.inspect_err(|e| {
-		let Some(err) = e.as_ref() else {
-			return;
-		};
-		let diag: diagnostics::Diagnostic = err.to_diagnostic();
-		let renderer: OldStyleRenderer<'_> = OldStyleRenderer::new(&diag, &source_map, &config);
-		eprintln!("{}", renderer);
-	}) {
-		Ok(()) => {}
-		Err(e) => {
-			eprintln!("{:?}", e);
-			exit(1)
-		}
+	if let Err(error) = run().map(|_| ()) {
+		eprintln!("error: {error}");
+		std::process::exit(1);
 	}
 }
 
-fn run(
-	args: &Args,
-	config: &Config,
-	filename: impl Into<path::PathBuf> + Clone,
-	source_map: &mut SourceMap,
-) -> (Result<(), Option<CompileError>>, Vec<DiagnosticBuilder>)
+fn run() -> CompilerResult<(Vec<Diagnostic>, Vec<Diagnostic>)>
 {
-	let mut diagnostics = Vec::new();
-	let mut queue: VecDeque<modules::PendingModule> = VecDeque::from([
-		//Stdlib root namespace
-		modules::PendingModule {
-			logical_path: vec!["std".to_string()],
-			file_path: {
-				let mut tmp = path::PathBuf::from(STDLIB_PATH);
-				tmp.pop();
-				tmp.push("std.leaf");
-				tmp
-			},
-			declared_at_span: Span {
-				source_index: SourceIndex::new(0),
-				start: 0,
-				end: 0,
-				start_line: 0,
-				start_col: 0,
-				end_line: 0,
-				end_col: 0,
-			},
-		},
-		modules::PendingModule {
-			logical_path: vec!["core".to_string()],
-			file_path: {
-				let mut tmp = path::PathBuf::from(CORELIB_PATH);
-				tmp.pop();
-				tmp.push("core.leaf");
-				tmp
-			},
-			declared_at_span: Span {
-				source_index: SourceIndex::new(0),
-				start: 0,
-				end: 0,
-				start_line: 0,
-				start_col: 0,
-				end_line: 0,
-				end_col: 0,
-			},
-		},
-		// User entry module
-		modules::PendingModule {
-			logical_path: vec!["module".to_string()],
-			file_path: filename.clone().into(),
-			declared_at_span: Span {
-				source_index: SourceIndex::new(0),
-				start: 0,
-				end: 0,
-				start_line: 0,
-				start_col: 0,
-				end_line: 0,
-				end_col: 0,
-			},
-		},
-	]);
-	let mut visited: HashSet<Vec<String>> = HashSet::new();
+	let args: Args = <Args as clap::Parser>::parse();
+	let mut source_map: SourceMap = SourceMap::new();
 
-	let mut pending_modules: Vec<(Vec<String>, DesugaredAST, LocalSymbolTable)> = Vec::new();
+	let crate_inputs = [
+		CrateInput {
+			name: CORE_CRATE_NAME.to_owned(),
+			root: path::PathBuf::from(CORELIB_PATH),
+		},
+		CrateInput {
+			name: STD_CRATE_NAME.to_owned(),
+			root: path::PathBuf::from(STDLIB_PATH),
+		},
+		CrateInput {
+			name: PROJECT_CRATE_NAME.to_owned(),
+			root: path::PathBuf::from(PROJECT_ROOT),
+		},
+	];
 
-	while let Some(pm) = queue.pop_front() {
+	let mut compiled_crates = Vec::<CompiledCrate>::new();
+	let mut diagnostics = Vec::<Diagnostic>::new();
+	let module_diagnostics = Vec::<Diagnostic>::new();
+
+	for crate_input in crate_inputs {
+		let compiled_crate = compile_crate(&crate_input, &compiled_crates, &mut source_map, &args)?;
+
 		if args.modules {
-			println!("::{}", pm.logical_path.join("::"));
-		}
-		if !visited.insert(pm.logical_path.clone()) {
-			continue;
+			print_crate_modules(&compiled_crate);
 		}
 
-		let res = fs::read_to_string(&pm.file_path).map_err(|e| {
-			let kind: ModuleErrorKind = if e.kind() == std::io::ErrorKind::NotFound {
-				ModuleErrorKind::FileNotFound(pm.file_path.clone())
-			} else {
-				ModuleErrorKind::IoError(e.to_string())
-			};
-			return CompileError::from(ModuleError {
-				logical_path: pm.logical_path.clone(),
-				span: pm.declared_at_span,
-				kind,
-				context: Vec::new(),
-			});
-		});
-		let source: String = match res {
-			Ok(s) => s,
-			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
-		};
-
-		let lexer: Lexer<'_, '_> = Lexer::new_add_to_source_map(config, source, pm.file_path.clone(), source_map);
-		if args.lexed {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{:#?}",
-				pm.logical_path.join("::"),
-				lexer.clone().collect::<Vec<_>>()
-			);
-		}
-		let expanded_lexer: ExpandedLexer = ExpandedLexer::new(lexer);
-
-		let mut parser = Parser::from(expanded_lexer);
-		parser.allow_type_inference = true;
-		let res = parser.parse_program();
-		let ast: AST = match res {
-			Ok((ast, diags)) => {
-				diagnostics.extend(diags);
-				ast
-			}
-			Err(err) => {
-				diagnostics.extend(err);
-				return (Err(None), diagnostics);
-			}
-		};
-		if args.parsed {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{}",
-				pm.logical_path.join("::"),
-				ast
-			);
-		}
-
-		let ret = modules::collect_pending(&ast, &pm.file_path, &pm.logical_path);
-		queue.extend(match ret {
-			Ok(p) => p,
-			e @ Err(_) => {
-				return (
-					e.map(|_| ()).map_err(CompileError::Module).map_err(Option::Some),
-					diagnostics,
-				);
-			}
-		});
-
-		let res = desugar::desugar_program(ast);
-		let desugared: DesugaredAST = match res {
-			Ok((ast, mut diags)) => {
-				diagnostics.append(&mut diags);
-				ast
-			}
-			Err(mut diags) => {
-				diagnostics.append(&mut diags);
-				return (Err(None), diagnostics);
-			}
-		};
-		if args.desugared {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{}",
-				pm.logical_path.join("::"),
-				desugared
-			);
-		}
-
-		let ret = symbol_collection::collect_symbols(&desugared, pm.logical_path.clone());
-		let local_symbols: LocalSymbolTable = match ret {
-			Ok((ls, mut diags)) => {
-				diagnostics.append(&mut diags);
-				ls
-			}
-			Err(mut diags) => {
-				diagnostics.append(&mut diags);
-				return (Err(None), diagnostics);
-			}
-		};
-		if args.symbols {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{:#?}",
-				pm.logical_path.join("::"),
-				local_symbols
-			);
-		}
-
-		pending_modules.push((pm.logical_path, desugared, local_symbols));
+		diagnostics.extend(compiled_crate.diagnostics.clone());
+		compiled_crates.push(compiled_crate);
 	}
 
-	let global_symbols: GlobalSymbolTable = symbol_collection::merge_symbol_tables(&pending_modules);
+	if args.emit_c {
+		let mut c_source = String::from(backend::emit_prelude());
 
-	if args.symbols {
-		println!(
-			"-------------------------------------------------------\n(global symbols) =>\n{:#?}",
-			global_symbols
-		);
-	}
-
-	let mut resolved_modules: Vec<ResolvedModule> = Vec::new();
-	for (path, desugared, symbols) in &pending_modules {
-		let ret = name_resolution::resolve_names(path, desugared, symbols, &global_symbols, &pending_modules);
-		let resolved: ResolvedModule = match ret {
-			Ok((rm, mut diags)) => {
-				diagnostics.append(&mut diags);
-				rm
+		for compiled_crate in &compiled_crates {
+			if let Some(c_translation_unit) = &compiled_crate.c_translation_unit {
+				c_source.push_str("\n/* crate: ");
+				c_source.push_str(&compiled_crate.name);
+				c_source.push_str(" */\n");
+				c_source.push_str(c_translation_unit);
+				c_source.push('\n');
 			}
-			Err(mut diags) => {
-				diagnostics.append(&mut diags);
-				return (Err(None), diagnostics);
-			}
-		};
-		resolved_modules.push(resolved);
-	}
-
-	if args.name_resolution {
-		for ResolvedModule { ast, path, symbols: _ } in &resolved_modules {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{}",
-				path.join("::"),
-				ast
-			);
 		}
-	}
 
-	let mut typed_modules: Vec<type_analysis::TypedModule> = Vec::new();
-	for resolved in &resolved_modules {
-		let ret = type_analysis::check_types(resolved, &global_symbols, &resolved_modules);
-		let typed: TypedModule = match ret {
-			Ok(t) => t,
-			e @ Err(_) => return (e.map(|_| ()).map_err(Option::Some), diagnostics),
-		};
-		typed_modules.push(typed);
+		fs::write(&args.c_out, c_source)?;
+		println!("wrote C translation unit: {}", args.c_out.display());
 	}
-
-	if args.types {
-		for TypedModule { ast, path, caches: _ } in &typed_modules {
-			println!(
-				"-------------------------------------------------------\n::{} =>\n{}",
-				path.join("::"),
-				ast
-			);
-		}
-	}
-
-	let mut mir_modules: Vec<MirModule> = Vec::new();
-	for tmod in &typed_modules {
-		let ret = mir::lower_module(tmod, &global_symbols);
-		let mir_mod: MirModule = match ret {
-			Ok((mm, mut diags)) => {
-				diagnostics.append(&mut diags);
-				mm
-			}
-			Err(mut diags) => {
-				diagnostics.append(&mut diags);
-				return (Err(None), diagnostics);
-			}
-		};
-		mir_modules.push(mir_mod);
-	}
-
-	if args.mir {
-		for m in &mir_modules {
-			println!("{}", m);
-		}
-	}
-
-	let (mono_mod, mut diags) = monomorphization::monomorphize(&mir_modules, &global_symbols);
-	diagnostics.append(&mut diags);
-
-	if args.mono {
-		println!("{}", mono_mod);
-	}
-
-	let mut backend: CBackend = CBackend::new();
-	let mut backend_options: BackendOptions = BackendOptions::from_config(config);
-	backend_options.output_path = {
-		let tmp: path::PathBuf = filename.into();
-		tmp
-	};
-	backend_options.emit_dir = Some(path::PathBuf::from("build"));
-	let backend_input: BackendInput = BackendInput {
-		module: &mono_mod,
-		symbols: &global_symbols,
-		options: &backend_options,
-		source_map,
-	};
-	if let Err(diags) = backend.validate(&backend_input) {
-		diagnostics.extend(diags);
-		return (Err(None), diagnostics);
-	}
-	let backend_output: backend::BackendOutput = match backend.compile(&backend_input) {
-		Ok((output, diags)) => {
-			diagnostics.extend(diags);
-			output
-		}
-		Err(diags) => {
-			diagnostics.extend(diags);
-			return (Err(None), diagnostics);
-		}
-	};
 
 	if args.all_false() {
-		let _: std::io::Result<()> = print_backend_output(&backend_output);
+		render_diagnostics(&diagnostics, &source_map);
 	}
 
-	return (Ok(()), diagnostics);
+	return Ok((diagnostics, module_diagnostics));
 }
 
-fn print_backend_output(output: &backend::BackendOutput) -> std::io::Result<()>
+fn compile_crate(
+	crate_input: &CrateInput,
+	dependencies: &[CompiledCrate],
+	source_map: &mut SourceMap,
+	args: &Args,
+) -> CompilerResult<CompiledCrate>
 {
-	println!(
-		"-------------------------------------------------------\nPrimary: {}",
-		output.primary.display()
-	);
-	println!("{}", std::fs::read_to_string(&output.primary)?);
+	let files = modules::find_all_files(&crate_input.root, crate_input.name.clone());
+	let mut compiled_files = Vec::<CompiledFile>::new();
+	let mut crate_diagnostics = Vec::<Diagnostic>::new();
+	let mut crate_export_table = ExportTable::default();
+	let mut crate_type_export_table = ExportTypeTable::default();
+	let mut c_translation_units = Vec::<String>::new();
 
-	for artifact in &output.artifacts {
-		println!(
-			"-------------------------------------------------------\nArtifact: {}",
-			artifact.display()
+	for file in files {
+		let file_source = fs::read_to_string(&file.path)?;
+		let file_name = file.path.to_string_lossy().into_owned();
+
+		// Keep a copy in SourceMap for diagnostics.
+		let file_id = source_map.add_file(file_name, file_source.clone());
+
+		// Feed the compiler pipeline from a stable 'static string instead of borrowing
+		// from SourceMap. This prevents long-lived HIR/export data from holding an
+		// immutable borrow of source_map across loop iterations.
+		//
+		// This intentionally leaks source text for the duration of the compiler run,
+		// which is acceptable for a short-lived compiler process. A cleaner long-term
+		// design is to make exported metadata deeply owned instead.
+		let lexer_source: &'static str = Box::leak(file_source.into_boxed_str());
+
+		let lexer = lexer::BasicLexer::new(lexer_source, file_id);
+
+		let parser = Parser::new(lexer);
+		let (mut parser_diagnostics, program) = parser.parse_program();
+		crate_diagnostics.append(&mut parser_diagnostics);
+
+		if args.parsed {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("parsed {}", format_module_path(&file.module_path));
+			println!("{program}");
+		}
+
+		let (mut desugar_diagnostics, desugared) = desugar::Desugarer::new().lower_program_with_diagnostics(program);
+		crate_diagnostics.append(&mut desugar_diagnostics);
+
+		if args.desugared {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("desugared {}", format_module_path(&file.module_path));
+			println!("{desugared}");
+		}
+
+		let SymbolCollectionResult {
+			table: symbols,
+			diagnostics: mut symbol_diagnostics,
+			exports,
+		} = symbol_collection::collect_symbols(&desugared);
+		crate_diagnostics.append(&mut symbol_diagnostics);
+
+		merge_export_table(&mut crate_export_table, export_table_to_owned(&exports));
+
+		if args.symbols {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("crate: {}", crate_input.name);
+			println!("module: {}", format_module_path(&file.module_path));
+			println!("dependencies: {}", format_dependencies(dependencies));
+			println!("symbols:\n{symbols:#?}");
+			println!("exports:\n{crate_export_table:#?}");
+		}
+
+		let dependency_exports = dependencies
+			.iter()
+			.map(|dependency| name_resolution::DependencyExportRef {
+				crate_name: dependency.name.as_str(),
+				exports: &dependency.export_table,
+			})
+			.collect::<Vec<_>>();
+
+		let dependency_type_exports = dependencies
+			.iter()
+			.map(|dependency| DependencyTypeExportRef {
+				crate_name: dependency.name.as_str(),
+				type_exports: &dependency.type_export_table,
+			})
+			.collect::<Vec<_>>();
+
+		let name_resolution::NameResolutionResult {
+			program: named_hir,
+			diagnostics: mut name_resolution_diagnostics,
+		} = name_resolution::resolve_names(&desugared, &symbols, &dependency_exports);
+		crate_diagnostics.append(&mut name_resolution_diagnostics);
+
+		if args.name_resolution {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("crate: {}", crate_input.name);
+			println!("module: {}", format_module_path(&file.module_path));
+			println!("dependencies: {}", format_dependencies(dependencies));
+			println!("named HIR:\n{}", named_hir);
+		}
+
+		let type_analysis::TypeResolutionResult {
+			program: typed_hir,
+			diagnostics: mut type_diagnostics,
+			exports: type_exports,
+		} = type_analysis::resolve_types(&named_hir, &symbols, &dependency_type_exports);
+		crate_diagnostics.append(&mut type_diagnostics);
+
+		merge_type_export_table(&mut crate_type_export_table, type_exports.clone());
+
+		if args.types {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("crate: {}", crate_input.name);
+			println!("module: {}", format_module_path(&file.module_path));
+			println!("dependencies: {}", format_dependencies(dependencies));
+			println!("type exports:\n{crate_type_export_table:#?}");
+			println!("typed HIR:\n{typed_hir}");
+		}
+
+		let mir_program = mir::lower_to_mir(&typed_hir);
+
+		if args.mir {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("crate: {}", crate_input.name);
+			println!("module: {}", format_module_path(&file.module_path));
+			println!("block MIR:\n{mir_program}");
+		}
+
+		let mono_program = monomorphization::monomorphize(
+			mir_program,
+			monomorphization::MonoOptions {
+				emit_c_main: crate_input.name == PROJECT_CRATE_NAME,
+			},
 		);
-		println!("{}", std::fs::read_to_string(artifact)?);
+
+		if args.mono {
+			render_diagnostics(&crate_diagnostics, source_map);
+			println!("crate: {}", crate_input.name);
+			println!("module: {}", format_module_path(&file.module_path));
+			println!("monomorphized MIR:\n{mono_program}");
+		}
+
+		if args.emit_c {
+			c_translation_units.push(backend::emit_c(
+				&mono_program,
+				backend::CBackendOptions { emit_prelude: false },
+			));
+		}
+
+		compiled_files.push(CompiledFile {
+			file_id,
+			path: file.path,
+			module_path: file.module_path,
+		});
 	}
 
-	return Ok(());
+	return Ok(CompiledCrate {
+		name: crate_input.name.clone(),
+		root: crate_input.root.clone(),
+		files: compiled_files,
+		diagnostics: crate_diagnostics,
+		export_table: crate_export_table,
+		type_export_table: crate_type_export_table,
+		c_translation_unit: if c_translation_units.is_empty() {
+			None
+		} else {
+			Some(c_translation_units.join("\n"))
+		},
+	});
+}
+
+fn export_table_to_owned(exports: &ExportTable<'_>) -> ExportTable<'static>
+{
+	let mut owned = ExportTable::default();
+
+	for symbol in &exports.symbols {
+		let id = owned.symbols.len();
+		let full_path = symbol
+			.full_path
+			.iter()
+			.map(|segment| Cow::Owned(segment.to_string()))
+			.collect::<Vec<_>>();
+
+		owned.by_path.insert((symbol.namespace, full_path.clone()), id);
+		owned.symbols.push(ExportSymbol {
+			name: Cow::Owned(symbol.name.to_string()),
+			kind: symbol.kind,
+			namespace: symbol.namespace,
+			defined_at: symbol.defined_at,
+			full_path,
+		});
+	}
+
+	return owned;
+}
+
+fn merge_export_table(target: &mut ExportTable<'static>, source: ExportTable<'static>)
+{
+	for symbol in source.symbols {
+		let id = target.symbols.len();
+		target.by_path.insert((symbol.namespace, symbol.full_path.clone()), id);
+		target.symbols.push(symbol);
+	}
+}
+
+fn merge_type_export_table(target: &mut ExportTypeTable<'static>, source: ExportTypeTable<'static>)
+{
+	target.values.extend(source.values);
+	target.types.extend(source.types);
+	target.interfaces.extend(source.interfaces);
+}
+
+fn print_crate_modules(compiled_crate: &CompiledCrate)
+{
+	println!("crate {} modules:", compiled_crate.name);
+	println!("  root => {}", compiled_crate.root.display());
+
+	for file in &compiled_crate.files {
+		println!("  {} => {}", format_module_path(&file.module_path), file.path.display());
+	}
+}
+
+fn format_dependencies(dependencies: &[CompiledCrate]) -> String
+{
+	if dependencies.is_empty() {
+		return "<none>".to_owned();
+	}
+
+	return dependencies
+		.iter()
+		.map(|compiled_crate| return compiled_crate.name.as_str())
+		.collect::<Vec<_>>()
+		.join(", ");
+}
+
+fn format_module_path(module_path: &[String]) -> String
+{
+	if module_path.is_empty() {
+		return "<root>".to_owned();
+	}
+
+	return module_path.join("::");
+}
+
+fn render_diagnostics(diagnostics: &[Diagnostic], source_map: &SourceMap)
+{
+	for diagnostic in diagnostics {
+		let renderer = TextRenderer::new(diagnostic, source_map, diagnostics::ColorChoice::Auto);
+		println!("{renderer}");
+	}
 }

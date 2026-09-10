@@ -92,9 +92,9 @@ additive_op    = "+" | "-" ;
 multiplicative_op = "*" | "/" | "%" ;
 
 // Unary operators
-unary_op = "-"           // negation
-         | "!"           // logical NOT
-         | "*"           // dereference
+unary_op = "-"               // negation
+         | "!"               // logical NOT
+         | "*"               // dereference
          | "&" , [ "mut" ] ; // address-of
 
 // ============================================================================

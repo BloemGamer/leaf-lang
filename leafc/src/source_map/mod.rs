@@ -7,11 +7,13 @@ pub struct SourceFile
 	pub src: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceIndex(usize);
 
 impl SourceIndex
 {
+	pub const DUMMY: SourceIndex = SourceIndex(usize::MAX);
+
 	pub const fn new(index: usize) -> SourceIndex
 	{
 		return SourceIndex(index);
