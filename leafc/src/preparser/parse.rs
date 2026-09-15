@@ -2,13 +2,13 @@ use crate::{
 	diagnostics::{self, Diagnostic},
 	lexer::{Lexer, Token, TokenKind},
 	preparser::{
-		Attribute, Docs, FunctionDecl, InterfaceDecl, ModuleDecl, PreParsedUnit, PreParsedUnitResult, SpanNoEq,
-		TypeDecl, VariableDecl,
+		Attribute, DeclMeta, Docs, FunctionDecl, InterfaceDecl, Modifier, ModifierKind, ModuleDecl, PreParsedUnit,
+		PreParsedUnitResult, SpanNoEq, TypeDecl, VariableDecl,
 	},
 	util::span::{Span, Spanned},
 };
 
-use super::DeclMeta;
+use super::ExternLanguage;
 
 struct PreParser<'s, L>
 where
@@ -54,6 +54,81 @@ where
 		return token;
 	}
 
+	#[track_caller]
+	fn unexpected_top_level_token(&self, token: &Token<'s>) -> Diagnostic
+	{
+		return Diagnostic::error("got unexpected token")
+			.primary(token.span(), Some(format!("got `{:?}`", token.kind)));
+	}
+
+	#[track_caller]
+	fn expect(&mut self, kind: &TokenKind) -> Option<Token<'s>>
+	{
+		if self.peek().kind == *kind {
+			return Some(self.bump());
+		}
+		let tok: Token<'s> = self.peek().clone();
+		let diagnostic: Diagnostic = self.expected_token(&kind, &tok);
+		self.diagnostics.push(diagnostic);
+		return None;
+	}
+
+	#[track_caller]
+	fn expect_and_recover(&mut self, kind: &TokenKind) -> Option<Token<'s>>
+	{
+		if self.peek().kind == *kind {
+			return Some(self.bump());
+		}
+		let bad: Token<'s> = self.bump();
+		let diagnostic: Diagnostic = self.expected_token(&kind, &bad);
+		self.diagnostics.push(diagnostic);
+		return None;
+	}
+
+	#[track_caller]
+	fn expect_one_of(&mut self, kinds: &[TokenKind]) -> Option<Token<'s>>
+	{
+		if kinds.iter().any(|kind| return *kind == self.peek().kind) {
+			return Some(self.bump());
+		}
+		let tok: Token<'s> = self.peek().clone();
+		let diagnostic: Diagnostic = self.expected_one_of_tokens(kinds, &tok);
+		self.diagnostics.push(diagnostic);
+		return None;
+	}
+
+	fn eat(&mut self, kind: &TokenKind) -> bool
+	{
+		if self.peek().kind == *kind {
+			self.bump();
+			return true;
+		}
+		return false;
+	}
+
+	#[track_caller]
+	fn expected_token(&self, expected: &TokenKind, got: &Token<'s>) -> Diagnostic
+	{
+		return Diagnostic::error("unexpected token").primary(
+			got.span(),
+			Some(format!("expected `{:?}`, got `{:?}`", expected, got.kind)),
+		);
+	}
+
+	#[track_caller]
+	fn expected_one_of_tokens(&self, expected: &[TokenKind], got: &Token<'s>) -> Diagnostic
+	{
+		let expected_str: String = expected
+			.iter()
+			.map(|kind| return format!("`{:?}`", kind))
+			.collect::<Vec<_>>()
+			.join(", ");
+		return Diagnostic::error("unexpected token").primary(
+			got.span(),
+			Some(format!("expected one of {}, got `{:?}`", expected_str, got.kind)),
+		);
+	}
+
 	fn parse(&mut self) -> PreParsedUnit<'s>
 	{
 		let start_span: Span = self.peek().span;
@@ -72,6 +147,7 @@ where
 			let meta: DeclMeta<'s> = {
 				let docs: Docs<'s> = self.parse_leading_docs();
 				let attributes: Vec<Attribute<'s>> = self.parse_attributes();
+				let modifiers: Vec<Modifier> = self.parse_modifier();
 				let span: Span = if self.last_span == Span::DUMMY {
 					decl_start_span
 				} else {
@@ -81,6 +157,7 @@ where
 					span: decl_start_span.to(span).into(),
 					docs,
 					attributes,
+					modifiers,
 				}
 			};
 
@@ -170,6 +247,75 @@ where
 		todo!()
 	}
 
+	fn parse_modifier(&mut self) -> Vec<Modifier>
+	{
+		let mut modifiers: Vec<Modifier> = Vec::new();
+		if matches!(self.peek().kind, TokenKind::Pub | TokenKind::Export) {
+			match self.bump() {
+				Token {
+					kind: TokenKind::Export,
+					span,
+				} => {
+					modifiers.push(Modifier {
+						span: span.into(),
+						kind: ModifierKind::Export,
+					});
+				}
+				Token {
+					kind: TokenKind::Pub,
+					span,
+				} => {
+					modifiers.push(Modifier {
+						span: span.into(),
+						kind: ModifierKind::Pub,
+					});
+				}
+				_ => unreachable!(),
+			}
+		}
+
+		if matches!(self.peek().kind, TokenKind::Export) {
+			let span_start: Span = self.bump().span(); // export
+			self.expect(&TokenKind::LeftParen); // (
+			let lang: ExternLanguage = match self.bump() {
+				Token {
+					kind: TokenKind::Identifier("C"),
+					..
+				} => ExternLanguage::C,
+				tok => {
+					self.diagnostics.push(
+						Diagnostic::error("expected a valid language")
+							.primary(tok.span(), Some(format!("got {:?}", tok.kind))),
+					);
+					ExternLanguage::C
+				}
+			};
+			self.expect(&TokenKind::RightParen); // )
+			modifiers.push(Modifier {
+				span: span_start.to(self.last_span).into(),
+				kind: ModifierKind::Extern(lang),
+			});
+		}
+
+		if matches!(self.peek().kind, TokenKind::Unsafe) {
+			let span: Span = self.bump().span();
+			modifiers.push(Modifier {
+				span: span.into(),
+				kind: ModifierKind::Unsafe,
+			});
+		}
+
+		if matches!(self.peek().kind, TokenKind::Const) {
+			let span: Span = self.bump().span();
+			modifiers.push(Modifier {
+				span: span.into(),
+				kind: ModifierKind::Const,
+			});
+		}
+
+		return modifiers;
+	}
+
 	fn parse_module_decl(&mut self, meta: DeclMeta<'s>) -> ModuleDecl<'s>
 	{
 		todo!()
@@ -213,13 +359,6 @@ where
 	fn parse_union_decl(&mut self, meta: DeclMeta<'s>) -> TypeDecl<'s>
 	{
 		todo!()
-	}
-
-	#[track_caller]
-	fn unexpected_top_level_token(&self, token: &Token<'s>) -> Diagnostic
-	{
-		return Diagnostic::error("got unexpected token")
-			.primary(token.span(), Some(format!("got `{:?}`", token.kind)));
 	}
 }
 

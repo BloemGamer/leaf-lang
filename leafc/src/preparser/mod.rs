@@ -36,6 +36,7 @@ pub struct DeclMeta<'s>
 
 	pub docs: Docs<'s>,
 	pub attributes: Vec<Attribute<'s>>,
+	pub modifiers: Vec<Modifier>,
 }
 
 #[derive(Clone, PartialEq, Spanned)]
@@ -65,6 +66,30 @@ pub enum AttributeArg<'s>
 	Bool(bool),
 
 	Expression(LexerSlice<'s>),
+}
+
+#[derive(Clone, PartialEq, Spanned)]
+pub struct Modifier
+{
+	pub span: SpanNoEq,
+
+	pub kind: ModifierKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ModifierKind
+{
+	Const,
+	Pub,
+	Export,
+	Unsafe,
+	Extern(ExternLanguage),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ExternLanguage
+{
+	C,
 }
 
 #[derive(Clone, PartialEq, Spanned)]
