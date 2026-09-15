@@ -1,5 +1,7 @@
 use std::{fs, path};
 
+use crate::CrateInput;
+
 #[derive(Debug)]
 pub struct File
 {
@@ -7,7 +9,12 @@ pub struct File
 	pub module_path: Vec<String>,
 }
 
-pub fn find_all_files(start_dir: &path::Path, name: String) -> impl Iterator<Item = File>
+pub fn find_all_files(crate_input: &CrateInput) -> impl Iterator<Item = File>
+{
+	return find_all_files_internal(&crate_input.root, crate_input.name.clone());
+}
+
+fn find_all_files_internal(start_dir: &path::Path, name: String) -> impl Iterator<Item = File>
 {
 	let mut stack = vec![(fs::read_dir(start_dir).expect("no directory path"), vec![name])];
 
