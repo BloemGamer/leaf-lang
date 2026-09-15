@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::VecDeque};
+use std::collections::VecDeque;
 
 use leaf_proc::generate_lexer;
 
@@ -18,7 +18,7 @@ mod lexer_tests;
 pub const INTERNAL_CHAR: char = '#';
 
 #[allow(unused)]
-pub trait Lexer<'s>: Iterator<Item = Token<'s>> + Backup {}
+pub trait Lexer<'s>: Iterator<Item = Token<'s>> + Backup + From<LexerSlice<'s>> {}
 
 #[derive(Clone)]
 pub struct BasicLexer<'s>
@@ -32,6 +32,16 @@ pub struct BasicLexer<'s>
 	diagnostics: VecDeque<TokenKind<'s>>,
 	last_span: Span,
 	reached_eof: bool,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct LexerSlice<'s>
+{
+	source: &'s str,
+	file_id: SourceIndex,
+	position: usize,
+	line: usize,
+	column: usize,
 }
 
 crate::bit_enum!(
@@ -63,6 +73,28 @@ impl StringFlags
 }
 
 impl<'s> Lexer<'s> for BasicLexer<'s> {}
+
+impl<'s> From<LexerSlice<'s>> for BasicLexer<'s>
+{
+	fn from(value: LexerSlice<'s>) -> Self
+	{
+		let mut lexer: Self = Self {
+			source: value.source,
+			file_id: value.file_id,
+			position: value.position,
+			current_char: None,
+			line: value.line,
+			column: value.column,
+			diagnostics: VecDeque::new(),
+			last_span: Span::DUMMY,
+			reached_eof: false,
+		};
+
+		lexer.current_char = lexer.source.chars().next();
+
+		return lexer;
+	}
+}
 
 impl<'s> Iterator for BasicLexer<'s>
 {
@@ -118,14 +150,14 @@ pub enum TokenKind<'s>
 	// ===== Literals =====
 	IntLiteral
 	{
-		value: Cow<'s, str>,
+		value: &'s str,
 		base: IntBase,
 		ty: Option<IntType>,
 	},
 
 	FloatLiteral
 	{
-		value: Cow<'s, str>,
+		value: &'s str,
 		bits: Option<u16>,
 	},
 
@@ -133,7 +165,7 @@ pub enum TokenKind<'s>
 
 	StringLiteral
 	{
-		string: Cow<'s, str>,
+		string: &'s str,
 		flags: StringFlags,
 	},
 
@@ -144,11 +176,11 @@ pub enum TokenKind<'s>
 	False,
 
 	// ===== Identifiers =====
-	Identifier(Cow<'s, str>),
+	Identifier(&'s str),
 
-	Attribute(Cow<'s, str>),
+	Attribute(&'s str),
 
-	Label(Cow<'s, str>),
+	Label(&'s str),
 
 	#[keyword("_")]
 	Underscore,
@@ -448,9 +480,10 @@ pub enum TokenKind<'s>
 	// ===== Special Tokens =====
 
 	// ===== Comments =====
-	LineComment(Cow<'s, str>),
-	BlockComment(Cow<'s, str>),
-	DocsComment(Cow<'s, str>),
+	LineComment(&'s str),
+	BlockComment(&'s str),
+	DocsComment(&'s str),
+	EnclosedDocsComment(&'s str),
 
 	// ===== End/Error =====
 	Eof,
@@ -689,12 +722,12 @@ impl<'s> BasicLexer<'s>
 			return keyword;
 		}
 		if ident.as_bytes().first().copied() == Some(b'@') {
-			return TokenKind::Attribute(Cow::Borrowed(ident));
+			return TokenKind::Attribute(ident);
 		}
 		if self.current_char == Some('"') {
 			return self.lex_string_literal(Some(ident));
 		}
-		return TokenKind::Identifier(Cow::Borrowed(ident));
+		return TokenKind::Identifier(ident);
 	}
 
 	fn lex_escape_sequence(&mut self) -> Option<char>
@@ -785,74 +818,39 @@ impl<'s> BasicLexer<'s>
 
 		self.advance(); // `"`
 
-		let flags: StringFlags =
-			flags_str.map_or_else(StringFlags::default, |str| return StringFlags::from_string(&str));
+		let flags: StringFlags = flags_str.map_or_else(StringFlags::default, |str| StringFlags::from_string(&str));
 
 		let start_string: usize = self.position;
 
-		'string_loop: while let Some(ch) = self.current_char {
+		while let Some(ch) = self.current_char {
 			match ch {
 				'"' => {
 					let end: usize = self.position;
 					self.advance(); // `"`
 
 					return TokenKind::StringLiteral {
-						string: Cow::Borrowed(&self.source[start_string..end]),
+						string: &self.source[start_string..end],
 						flags,
 					};
 				}
 
 				'\\' => {
-					// escape squence -> need to make an owning string
-					let mut string: String = self.source[start_string..self.position].to_owned();
-
 					self.advance(); // `\`
 
-					if let Some(escaped) = self.lex_escape_sequence() {
-						string.push(escaped);
-					} else {
+					if self.lex_escape_sequence().is_none() {
+						self.diagnostics.push_back(TokenKind::Diag(
+							Diagnostic::error("invalid escape sequence").primary(
+								Span {
+									file: self.file_id,
+									line: start_line,
+									start,
+									end: self.position,
+								},
+								Some("invalid escape sequence".to_string()),
+							),
+						));
 						return TokenKind::Invalid;
 					}
-
-					while let Some(ch) = self.current_char {
-						match ch {
-							'"' => {
-								self.advance(); // `"`
-								return TokenKind::StringLiteral {
-									string: Cow::Owned(string),
-									flags,
-								};
-							}
-
-							'\\' => {
-								self.advance();
-
-								if let Some(escaped) = self.lex_escape_sequence() {
-									string.push(escaped);
-								} else {
-									self.diagnostics.push_back(TokenKind::Diag(
-										Diagnostic::error("invalid escape sequence").primary(
-											Span {
-												file: self.file_id,
-												line: start_line,
-												start,
-												end: self.position,
-											},
-											Some("invalid escape sequence".to_string()),
-										),
-									));
-									return TokenKind::Invalid;
-								}
-							}
-
-							_ => {
-								string.push(ch);
-								self.advance();
-							}
-						}
-					}
-
-					break 'string_loop;
 				}
 
 				_ => self.advance(),
@@ -896,12 +894,12 @@ impl<'s> BasicLexer<'s>
 							break;
 						}
 					}
-					return TokenKind::Label(Cow::Borrowed(&self.source[start..self.position]));
+					return TokenKind::Label(&self.source[start..self.position]);
 				} else if self.current_char == Some('\'') {
 					self.load_backup(backup);
 					return self.lex_char_literal();
 				}
-				return TokenKind::Label(Cow::Borrowed(&self.source[start..self.position]));
+				return TokenKind::Label(&self.source[start..self.position]);
 			}
 			_ => {
 				self.load_backup(backup);
@@ -1069,9 +1067,6 @@ impl<'s> BasicLexer<'s>
 
 		while let Some(ch) = self.current_char {
 			if valid(ch) || ch == '_' {
-				if ch == '_' {
-					has_underscore = true;
-				}
 				self.advance();
 			} else {
 				end = self.position;
@@ -1098,30 +1093,7 @@ impl<'s> BasicLexer<'s>
 			}
 		}
 
-		let value: Cow<'_, str> = if has_underscore {
-			if let Some(diag) = check_irregular_number_splitting::<false>(
-				&self.source[start..self.position],
-				Span {
-					file: self.file_id,
-					line: self.line,
-					start,
-					end: self.position,
-				},
-				None,
-			) {
-				self.diagnostics.push_back(TokenKind::Diag(diag));
-			}
-
-			Cow::Owned(
-				self.source[start..if end == start { self.position } else { end }]
-					.bytes() // bytes is fine, because only ascii and or a digit, or `_`
-					.filter(|&ch| return ch != b'_')
-					.map(|c| return c as char)
-					.collect(),
-			)
-		} else {
-			Cow::Borrowed(&self.source[start..if end == start { self.position } else { end }])
-		};
+		let value: &str = &self.source[start..if end == start { self.position } else { end }];
 
 		let base: IntBase = match radix {
 			2 => IntBase::Binary,
@@ -1163,9 +1135,6 @@ impl<'s> BasicLexer<'s>
 
 		while let Some(ch) = self.current_char {
 			if ch.is_ascii_digit() || ch == '_' {
-				if ch == '_' {
-					has_underscore = true;
-				}
 				self.advance();
 			} else {
 				if self.current_char == Some('.') {
@@ -1232,69 +1201,12 @@ impl<'s> BasicLexer<'s>
 				}
 			}
 
-			let value: Cow<'_, str> = if has_underscore {
-				let (before, after) = self.source[start..if end == start { self.position } else { end }]
-					.split_once('.')
-					.expect("a float should have a decimal place");
-				let idx: Option<usize> = Some(
-					before
-						.bytes()
-						.rev()
-						.position(|ch| return ch == b'_')
-						.map_or_else(|| return after.bytes().position(|ch| return ch == b'_'), Some)
-						.expect("previous checks should have determined that there are underscores"),
-				);
-
-				let span: Span = Span {
-					file: self.file_id,
-					line: self.line,
-					start,
-					end: self.position,
-				};
-				if let Some(diag) = check_irregular_number_splitting::<false>(before, span, idx) {
-					println!("before");
-					self.diagnostics.push_back(TokenKind::Diag(diag));
-				} else if let Some(diag) = check_irregular_number_splitting::<true>(after, span, idx) {
-					println!("after");
-					self.diagnostics.push_back(TokenKind::Diag(diag));
-				}
-
-				Cow::Owned(
-					self.source[start..self.position]
-						.bytes() // bytes is fine, because only ascii and or a digit, or `_`
-						.filter(|&ch| return ch != b'_')
-						.map(|c| return c as char)
-						.collect(),
-				)
-			} else {
-				Cow::Borrowed(&self.source[start..if end == start { self.position } else { end }])
-			};
+			let value: &str = &self.source[start..if end == start { self.position } else { end }];
 
 			return TokenKind::FloatLiteral { value, bits };
 		}
 
-		let value: Cow<'_, str> = if has_underscore {
-			if let Some(diag) = check_irregular_number_splitting::<false>(
-				&self.source[start..self.position],
-				Span {
-					file: self.file_id,
-					line: self.line,
-					start,
-					end: self.position,
-				},
-				None,
-			) {
-				self.diagnostics.push_back(TokenKind::Diag(diag));
-			}
-			Cow::Owned(
-				self.source[start..if end == start { self.position } else { end }]
-					.chars()
-					.filter(|&ch| return ch != '_')
-					.collect(),
-			)
-		} else {
-			Cow::Borrowed(&self.source[start..if end == start { self.position } else { end }])
-		};
+		let value: &str = &self.source[start..if end == start { self.position } else { end }];
 
 		return TokenKind::IntLiteral {
 			value,
@@ -1325,8 +1237,13 @@ impl<'s> BasicLexer<'s>
 
 	fn lex_line_comment(&mut self) -> TokenKind<'s>
 	{
-		let is_doc: bool = self.current_char == Some('/');
-		if is_doc {
+		let mut is_doc: bool = false;
+		let mut is_encloded_doc: bool = false;
+		if self.current_char == Some('/') {
+			is_doc = true;
+			self.advance();
+		} else if self.current_char == Some('!') {
+			is_encloded_doc = true;
 			self.advance();
 		}
 
@@ -1340,9 +1257,12 @@ impl<'s> BasicLexer<'s>
 		}
 
 		if is_doc {
-			return TokenKind::DocsComment(Cow::Borrowed(&self.source[start..self.position]));
+			return TokenKind::DocsComment(&self.source[start..self.position]);
 		}
-		return TokenKind::LineComment(Cow::Borrowed(&self.source[start..self.position]));
+		if is_encloded_doc {
+			return TokenKind::EnclosedDocsComment(&self.source[start..self.position]);
+		}
+		return TokenKind::LineComment(&self.source[start..self.position]);
 	}
 
 	fn lex_block_comment(&mut self) -> TokenKind<'s>
@@ -1366,52 +1286,52 @@ impl<'s> BasicLexer<'s>
 		}
 
 		if is_doc {
-			return TokenKind::DocsComment(Cow::Borrowed(&self.source[start..end]));
+			return TokenKind::DocsComment(&self.source[start..end]);
 		}
-		return TokenKind::BlockComment(Cow::Borrowed(&self.source[start..end]));
+		return TokenKind::BlockComment(&self.source[start..end]);
 	}
 }
 
-fn check_irregular_number_splitting<const FORWARDS: bool>(
-	input: &str,
-	span: Span,
-	idx: Option<usize>,
-) -> Option<Diagnostic>
-{
-	let nidx: usize = idx.unwrap_or_else(|| {
-		if FORWARDS {
-			return input
-				.bytes()
-				.position(|ch| return ch == b'_')
-				.expect("previous checks should have determined that there are underscores");
-		}
-		return input
-			.bytes()
-			.rev()
-			.position(|ch| return ch == b'_')
-			.expect("previous checks should have determined that there are underscores");
-	});
-
-	let valid: bool = if FORWARDS {
-		input.bytes().enumerate().all(|(i, ch)| {
-			if (i + 1) % (nidx + 1) == 0 {
-				return ch == b'_';
-			}
-			return ch != b'_';
-		})
-	} else {
-		input.bytes().rev().enumerate().all(|(i, ch)| {
-			if (i + 1) % (nidx + 1) == 0 {
-				return ch == b'_';
-			}
-			return ch != b'_';
-		})
-	};
-	if !valid {
-		return Some(
-			Diagnostic::warning("irregular number splitting")
-				.primary(span, Some("irregular number splitting".to_string())),
-		);
-	}
-	return None;
-}
+// fn check_irregular_number_splitting<const FORWARDS: bool>(
+// 	input: &str,
+// 	span: Span,
+// 	idx: Option<usize>,
+// ) -> Option<Diagnostic>
+// {
+// 	let nidx: usize = idx.unwrap_or_else(|| {
+// 		if FORWARDS {
+// 			return input
+// 				.bytes()
+// 				.position(|ch| return ch == b'_')
+// 				.expect("previous checks should have determined that there are underscores");
+// 		}
+// 		return input
+// 			.bytes()
+// 			.rev()
+// 			.position(|ch| return ch == b'_')
+// 			.expect("previous checks should have determined that there are underscores");
+// 	});
+//
+// 	let valid: bool = if FORWARDS {
+// 		input.bytes().enumerate().all(|(i, ch)| {
+// 			if (i + 1) % (nidx + 1) == 0 {
+// 				return ch == b'_';
+// 			}
+// 			return ch != b'_';
+// 		})
+// 	} else {
+// 		input.bytes().rev().enumerate().all(|(i, ch)| {
+// 			if (i + 1) % (nidx + 1) == 0 {
+// 				return ch == b'_';
+// 			}
+// 			return ch != b'_';
+// 		})
+// 	};
+// 	if !valid {
+// 		return Some(
+// 			Diagnostic::warning("irregular number splitting")
+// 				.primary(span, Some("irregular number splitting".to_string())),
+// 		);
+// 	}
+// 	return None;
+// }
