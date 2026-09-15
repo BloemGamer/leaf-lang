@@ -158,7 +158,7 @@ impl Diagnostic
 	}
 }
 
-struct DiagnosticPrettyRenderer<'s>
+pub struct DiagnosticPrettyRenderer<'s>
 {
 	diagnostic: &'s Diagnostic,
 	source_map: &'s SourceMap,
