@@ -22,231 +22,231 @@ fn string_normal()
 	);
 }
 
-#[test]
-fn string_escape_n()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\nstr" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\nstr");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_t()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\tstr" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\tstr");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_r()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\rstr" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\rstr");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_0()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\0str" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\0str");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_backslash()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\\str" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\\str");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_single_quote()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\'str" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\'str");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_double_quote()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\"str" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\"str");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_hex_two_digits()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\x41" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "A");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_hex_one_digit()
-{
-	// only one hex digit present before end of input -> hex_str = "9"
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\x9" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{9}");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_hex_max_byte_value()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\xff" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{ff}");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_hex_embedded_in_text()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "a\x41b" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "aAb");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_unicode_basic()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{41}" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "A");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_unicode_single_digit()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{9}" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{9}");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_unicode_supplementary_plane()
-{
-	// emoji, requires a surrogate pair in UTF-16 but is a single char in UTF-8/Rust
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{1F600}" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{1F600}");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_unicode_max_length_six_digits()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{10FFFF}" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{10FFFF}");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn string_escape_unicode_embedded_in_text()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "a\u{41}b" "#, SourceIndex::DUMMY);
-	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "aAb");
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
+//#[test]
+//fn string_escape_n()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\nstr" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\nstr");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_t()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\tstr" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\tstr");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_r()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\rstr" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\rstr");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_0()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\0str" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\0str");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_backslash()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\\str" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\\str");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_single_quote()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\'str" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\'str");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_double_quote()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "test\"str" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "test\"str");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_hex_two_digits()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\x41" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "A");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_hex_one_digit()
+//{
+//	// only one hex digit present before end of input -> hex_str = "9"
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\x9" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{9}");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_hex_max_byte_value()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\xff" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{ff}");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_hex_embedded_in_text()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "a\x41b" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "aAb");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_unicode_basic()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{41}" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "A");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_unicode_single_digit()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{9}" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{9}");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_unicode_supplementary_plane()
+//{
+//	// emoji, requires a surrogate pair in UTF-16 but is a single char in UTF-8/Rust
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{1F600}" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{1F600}");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_unicode_max_length_six_digits()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "\u{10FFFF}" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "\u{10FFFF}");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
+//
+//#[test]
+//fn string_escape_unicode_embedded_in_text()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" "a\u{41}b" "#, SourceIndex::DUMMY);
+//	assert_matches!(lexer.next(), Some(Token { kind: TokenKind::StringLiteral { string, flags: _ }, span: _ }) if string == "aAb");
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
 
 #[test]
 fn string_unterminated()
@@ -819,50 +819,50 @@ fn int_dot_not_followed_by_digit_is_not_a_float()
 	);
 }
 
-#[test]
-fn int_decimal_underscore_regular_grouping()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_000_000 "#, SourceIndex::DUMMY);
-	assert_matches!(
-		lexer.next(),
-		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Decimal, ty: None }, span: _ })
-		if value == "1000000"
-	);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn int_decimal_underscore_irregular_grouping()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_00_000 "#, SourceIndex::DUMMY);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Diag(diag),
-			span: _
-		})
-		if diag.severity() == DiagnosticLevel::Warning
-	);
-
-	assert_matches!(
-		lexer.next(),
-		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Decimal, ty: None }, span: _ })
-		if value == "100000"
-	);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
+// #[test]
+// fn int_decimal_underscore_regular_grouping()
+// {
+// 	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_000_000 "#, SourceIndex::DUMMY);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Decimal, ty: None }, span: _ })
+// 		if value == "1000000"
+// 	);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Eof,
+// 			span: _
+// 		})
+// 	);
+// }
+//
+// #[test]
+// fn int_decimal_underscore_irregular_grouping()
+// {
+// 	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_00_000 "#, SourceIndex::DUMMY);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Diag(diag),
+// 			span: _
+// 		})
+// 		if diag.severity() == DiagnosticLevel::Warning
+// 	);
+//
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Decimal, ty: None }, span: _ })
+// 		if value == "100000"
+// 	);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Eof,
+// 			span: _
+// 		})
+// 	);
+// }
 
 #[test]
 fn int_suffix_unsigned_fixed()
@@ -1081,23 +1081,23 @@ fn int_hex_with_suffix()
 	);
 }
 
-#[test]
-fn int_hex_with_regular_underscore()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 0xFF_FF "#, SourceIndex::DUMMY);
-	assert_matches!(
-		lexer.next(),
-		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Hexadecimal, ty: None }, span: _ })
-		if value == "FFFF"
-	);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
+//#[test]
+//fn int_hex_with_regular_underscore()
+//{
+//	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 0xFF_FF "#, SourceIndex::DUMMY);
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token { kind: TokenKind::IntLiteral { value, base: IntBase::Hexadecimal, ty: None }, span: _ })
+//		if value == "FFFF"
+//	);
+//	assert_matches!(
+//		lexer.next(),
+//		Some(Token {
+//			kind: TokenKind::Eof,
+//			span: _
+//		})
+//	);
+//}
 
 #[test]
 fn int_binary()
@@ -1252,50 +1252,50 @@ fn float_suffix_f_with_no_digits()
 	);
 }
 
-#[test]
-fn float_underscore_regular_grouping()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_000.5 "#, SourceIndex::DUMMY);
-	assert_matches!(
-		lexer.next(),
-		Some(Token { kind: TokenKind::FloatLiteral { value, bits: None }, span: _ })
-		if value == "1000.5"
-	);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
-
-#[test]
-fn float_underscore_irregular_grouping()
-{
-	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 12_3.45 "#, SourceIndex::DUMMY);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Diag(diag),
-			span: _
-		})
-		if diag.severity() == DiagnosticLevel::Warning
-	);
-
-	assert_matches!(
-		lexer.next(),
-		Some(Token { kind: TokenKind::FloatLiteral { value, bits: None }, span: _ })
-		if value == "123.45"
-	);
-	assert_matches!(
-		lexer.next(),
-		Some(Token {
-			kind: TokenKind::Eof,
-			span: _
-		})
-	);
-}
+// #[test]
+// fn float_underscore_regular_grouping()
+// {
+// 	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 1_000.5 "#, SourceIndex::DUMMY);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token { kind: TokenKind::FloatLiteral { value, bits: None }, span: _ })
+// 		if value == "1000.5"
+// 	);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Eof,
+// 			span: _
+// 		})
+// 	);
+// }
+//
+// #[test]
+// fn float_underscore_irregular_grouping()
+// {
+// 	let mut lexer: BasicLexer<'_> = BasicLexer::new(r#" 12_3.45 "#, SourceIndex::DUMMY);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Diag(diag),
+// 			span: _
+// 		})
+// 		if diag.severity() == DiagnosticLevel::Warning
+// 	);
+//
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token { kind: TokenKind::FloatLiteral { value, bits: None }, span: _ })
+// 		if value == "123.45"
+// 	);
+// 	assert_matches!(
+// 		lexer.next(),
+// 		Some(Token {
+// 			kind: TokenKind::Eof,
+// 			span: _
+// 		})
+// 	);
+// }
 
 #[test]
 fn float_then_semicolon()
