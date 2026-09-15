@@ -5,6 +5,7 @@ edition = "2024"
 repository = "https://github.com/BloemGamer/leaf-lang/tree/main/leafc"
 
 [features]
+default = ["diag_source"]
 diag_source = []
 
 [dependencies]
