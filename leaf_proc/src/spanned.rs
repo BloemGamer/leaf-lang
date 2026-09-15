@@ -40,54 +40,52 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 ///     Delegated(SomeSpannedType),
 /// }
 /// ```
-pub fn derive_spanned(input: TokenStream) -> TokenStream {
-    let vinput: DeriveInput = parse_macro_input!(input as DeriveInput);
-    let name: &syn::Ident = &vinput.ident;
-    let (impl_generics, ty_generics, where_clause) = vinput.generics.split_for_impl();
+pub fn derive_spanned(input: TokenStream) -> TokenStream
+{
+	let vinput: DeriveInput = parse_macro_input!(input as DeriveInput);
+	let name: &syn::Ident = &vinput.ident;
+	let (impl_generics, ty_generics, where_clause) = vinput.generics.split_for_impl();
 
-    let body: proc_macro2::TokenStream = match &vinput.data {
-        Data::Struct(data_struct) => match &data_struct.fields {
-            Fields::Named(fields) => {
-                let has_span: bool = fields.named.iter().any(|f| {
-                    return f.ident.as_ref().is_some_and(|i| return i == "span");
-                });
+	let body: proc_macro2::TokenStream = match &vinput.data {
+		Data::Struct(data_struct) => match &data_struct.fields {
+			Fields::Named(fields) => {
+				let has_span: bool = fields.named.iter().any(|f| {
+					return f.ident.as_ref().is_some_and(|i| return i == "span");
+				});
 
-                if has_span {
-                    quote! { self.span.span() }
-                } else {
-                    return syn::Error::new_spanned(
-                        name,
-                        "#[derive(Spanned)] on a named-field struct requires a field named `span`",
-                    )
-                    .to_compile_error()
-                    .into();
-                }
-            }
-            Fields::Unnamed(fields) => {
-                if fields.unnamed.len() == 1 {
-                    quote! { self.0.span() }
-                } else {
-                    return syn::Error::new_spanned(
+				if has_span {
+					quote! { self.span.span() }
+				} else {
+					return syn::Error::new_spanned(
+						name,
+						"#[derive(Spanned)] on a named-field struct requires a field named `span`",
+					)
+					.to_compile_error()
+					.into();
+				}
+			}
+			Fields::Unnamed(fields) => {
+				if fields.unnamed.len() == 1 {
+					quote! { self.0.span() }
+				} else {
+					return syn::Error::new_spanned(
 						name,
 						"#[derive(Spanned)] on a tuple struct requires exactly one field \
                              (which itself implements Spanned), or use a named struct with a `span` field",
 					)
 					.to_compile_error()
 					.into();
-                }
-            }
-            Fields::Unit => {
-                return syn::Error::new_spanned(
-                    name,
-                    "#[derive(Spanned)] cannot be applied to a unit struct",
-                )
-                .to_compile_error()
-                .into();
-            }
-        },
+				}
+			}
+			Fields::Unit => {
+				return syn::Error::new_spanned(name, "#[derive(Spanned)] cannot be applied to a unit struct")
+					.to_compile_error()
+					.into();
+			}
+		},
 
-        Data::Enum(data_enum) => {
-            let arms = data_enum.variants.iter().map(|variant| {
+		Data::Enum(data_enum) => {
+			let arms = data_enum.variants.iter().map(|variant| {
 				let variant_name = &variant.ident;
 
 				match &variant.fields {
@@ -145,27 +143,27 @@ pub fn derive_spanned(input: TokenStream) -> TokenStream {
 				}
 			});
 
-            quote! {
-                match self {
-                    #(#arms)*
-                }
-            }
-        }
+			quote! {
+				match self {
+					#(#arms)*
+				}
+			}
+		}
 
-        Data::Union(_) => {
-            return syn::Error::new_spanned(name, "#[derive(Spanned)] is not supported on unions")
-                .to_compile_error()
-                .into();
-        }
-    };
+		Data::Union(_) => {
+			return syn::Error::new_spanned(name, "#[derive(Spanned)] is not supported on unions")
+				.to_compile_error()
+				.into();
+		}
+	};
 
-    let expanded: proc_macro2::TokenStream = quote! {
-        impl #impl_generics Spanned for #name #ty_generics #where_clause {
-            fn span(&self) -> Span {
-                #body
-            }
-        }
-    };
+	let expanded: proc_macro2::TokenStream = quote! {
+		impl #impl_generics Spanned for #name #ty_generics #where_clause {
+			fn span(&self) -> Span {
+				#body
+			}
+		}
+	};
 
-    return expanded.into();
+	return expanded.into();
 }

@@ -1,6 +1,7 @@
-pub trait Backup {
-    type Backup;
+pub trait Backup
+{
+	type Backup;
 
-    fn make_backup(&self) -> Self::Backup;
-    fn load_backup(&mut self, backup: Self::Backup);
+	fn make_backup(&self) -> Self::Backup;
+	fn load_backup(&mut self, backup: Self::Backup);
 }
