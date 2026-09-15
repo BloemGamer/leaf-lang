@@ -10,26 +10,29 @@
 > It technically works, but is not ready to be used.
 
 # Leaf-lang
-Leaf-lang is a systems programming language designed for interoperability with C,
-predictable memory behavior, and educational compiler architecture.
-
-Inspired by Rust, but designed with its own tradeoffs and goals.
+Leaf-lang is a functional systems programming language designed for interoperability with C, inspired by Rust and Haskell.
 
 ## Code preview
 ```leaf
 // Note: Leaf-lang compiler is under development. This example is illustrative only.
-fn! main()
+fn main :: ()
 {
-	var a: i64 = 0;
-	var v: Vec<i64> = Vec::with_len!(5);
-	print!("{}", a);
+	let a: u64 = 10 :> fib(); // pipe 10 into fib(), equivalent to fib(10)
+}
+
+fn fib :: n: u64 -> u64 {
+	return switch n {
+		0 => 0,
+		1 => 1,
+		_ => fib(n - 1) + fib(n - 2),
+	};
 }
 ```
 
-# Features
-- **Simple language**: No hidden control flow. Simple but powerful preprocessor.
-- **Explicit memory**: No hidden memory allocations, deallocations are predictable.
-- **Fast by design**: No garbage collector. Strong compile-time execution and lazy evaluation.
+<!-- # Features -->
+<!-- - **Simple language**: No hidden control flow. Simple but powerful preprocessor. -->
+<!-- - **Explicit memory**: No hidden memory allocations, deallocations are predictable. -->
+<!-- - **Fast by design**: No garbage collector. Strong compile-time execution and lazy evaluation. -->
 
 <details>
 <summary><strong>Roadmap</strong></summary>
@@ -37,30 +40,18 @@ fn! main()
 <br/>
 
 ### Current focus
-- [ ] Small improvements in the compiler
-- [ ] Improve diagnostics
-
-### Still actively being developed
 - [ ] Refining the syntax
 
+### Still actively being developed
+
 ### Short-term
-- [x] Finish first compiler version
+- [ ] Finish first compiler version
 
 ### Long-term
 
 ### Language features
-- [ ] Adding lambda functions
-- [ ] Dynamic dispatch
-- [ ] Compile-time execution
-	- [ ] Reflection system
-- [ ] Borrow checker
 
 ### Compiler infrastructure
-- [ ] Moving conditional compilation to compile-time execution
-- [ ] Code optimisations
-- [ ] C parser integration
-- [ ] Design a build system
-- [ ] Adding a LLVM backend (very low priority)
 
 </details>
 
@@ -70,66 +61,55 @@ fn! main()
 
 <br/>
 
-Leaf-lang uses a multi-stage compiler pipeline with explicit lowering steps.
-Each stage transforms the program into a simpler or more constrained form.
+## Frontend (Source -> Mir)
 
-### Frontend (Source -> AST)
-
+### Pre-parsing (Source -> PreParsed)
 - [x] **Lexing**
 	- Source text -> tokens
-- [ ] **Preprocessing** (low priority)
-	- Macro expansion
-- [x] **Parsing**
-	- Tokens -> Abstract Syntax Tree (AST)
-- [ ] **AST-macros** (low priority)
-	- Another macro expansion round (AST -> AST)
-- [x] **AST Normalization**
-	- AST -> simplified AST
-	- Syntax sugar removal (Desugaring)
-	- Normalizes multiple ways to write the same thing
+- [ ] **Pre-parsing**
+	- Tokens -> top-level definitions + map of all definitions
+- [ ] **Reflection**
+	- top-level definitions -> more top-level definitions
+- [ ] **Pre-parser Collection**
+	- top-level definitions -> top-level definitions with ID
 
 ---
 
-### Semantic Analysis (AST -> HIR)
+### Parsing + Semantic Analysis (PreParsed -> TypedHIR)
+- [ ] **Full Parsing + Collection**
+	- collecting local symbols
+	- mapping all locals
+	- generating block-based UntypedHIR
 
-- [x] **Symbol Collection**
-	- Scope creation
-	- Symbol tables
-- [x] **Name Resolution** (DesugaredAST -> ResolvedHIR)
-	- Identifier binding
-	- Shadowing rules
-- [x] **Type Analysis** (ResolvedHIR -> TypedHIR)
-	- Type checking
+- [ ] **Type Checking + Resolution**
+	- UntypedHIR -> TypedHIR
 
----
-
-### Lifetime Analysis + Optimization (HIR)
-
-- [ ] **Lifetime Analysis**
-	- Ownership rules
-	- Destructor insertion
-- [ ] **HIR Optimizations** (low priority)
-- [x] **Function generation**
-	- For each generic, generate a specialized function
-	- Name mangling
-- [ ] **HIR Optimizations** (low priority)
+- [ ] **Borrow Checking**
+	- Lifetime resolution
 
 ---
 
-### Lowering (HIR -> MIR)
+### Optimisations + Lowering
+- [ ] **Generic Sea of Nodes**
+	- TypedHIR -> Generic Sea of Nodes (GSoNMIR)
+- [ ] **Optimisations**
+- [ ] **Monomorphisation**
+	- Solving all generics in the SoNMIR (GSoNMIR -> MSoNMIR)
+	- Removing unused functions
+- [ ] **Optimisations**
+- [ ] **MIR**
+	- MSoNMIR -> block-based MIR
 
-- [x] **Lowering to MIR**
-	- Control-flow normalization
+---
 
-
-### Backend (MIR -> C)
-- [x] **Code Generation**
+## Backend (MIR -> C)
+- [ ] **Code Generation**
 	- MIR -> C source code
-- [x] **C Compilation**
+- [ ] **C Compilation**
 	- Invoke system C compiler (C23)
 
 
-### Backend (MIR -> LLVM) (low priority)
+## Backend (MIR -> LLVM) (low priority)
 - [ ] **Code Generation**
 	- MIR -> LLVM IR
 - [ ] **LLVM Compilation**
@@ -144,9 +124,9 @@ Each stage transforms the program into a simpler or more constrained form.
 
 ### Prerequisites
 - Compiler
-	- **Cargo** that supports the newest rust version
+	- **Cargo** that supports the latest Rust version
 - Generated C code
-	- **C compiler** with full C23 support (fully tested with GCC 16 and Clang 22, and for now, only those 2 work)
+	- **C compiler** with full C23 support (currently tested and supported with GCC 16 and Clang 22)
 
 Leaf-lang is currently under development, but you can build it from source.
 The build is tested on **Linux** and **Windows**. MacOS is **not currently supported**.
@@ -171,12 +151,6 @@ cargo build --release
 ```sh
 cargo run --release
 ```
-
-## Syntax
-The full language grammar is in [syntax.ebnf](syntax.ebnf).
-
-> [!NOTE]
-> The syntax will most likely change in the future, and the `syntax.ebnf` is not always very up to date
 
 
 ## License
